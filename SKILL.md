@@ -35,21 +35,30 @@ Create operational context files for AI coding agents. Use facts from the reposi
 5. **Generate**
    - Run `python scripts/render_agents.py <project> --profile <project>/.agents/agents-control.json` first; default is dry-run.
    - Use `--write` only after reviewing the draft and confirming the target path is inside the intended repository.
-   - Strong-control generation creates or requires `.agents/agents-control.json` and `experience/`.
+   - Strong-control generation creates or requires `.agents/agents-control.json`, compatibility `experience/`, and the `docs/` governance tree.
+   - `render_agents.py --write` writes AGENTS.md and scoped AGENTS.md files, then runs docs scaffolding for handoff, experience, development, install configuration, and git manager records.
    - Templates in `assets/templates/` define the intended root/scoped shape.
    - Use `--template-dir <dir>` only for controlled tests or intentional template overrides.
 
-6. **Verify**
+6. **Docs Governance**
+   - Run `python scripts/manage_docs.py scaffold <project>` when docs governance must be prepared without rewriting AGENTS.md.
+   - At task completion, run `python scripts/manage_docs.py handoff <project> --input handoff.json`; the current `docs/handoff/HANDOFF.md` is archived before the new latest handoff is written.
+   - Every five handoffs, the script summarizes lessons under `docs/experience/` and archives old lesson files under `docs/experience/history_experience/<timestamp>/`.
+   - At installable release or stage completion, run `python scripts/manage_docs.py development <project> --stage <name> --input stage.json`.
+   - Keep install setup for Codex, Claude, and OpenClaw under `docs/install_configuration/`; keep branch, release, dist, package naming, and current version rules under `docs/git_manager/`.
+
+7. **Verify**
    - Run `python scripts/verify_agents.py <project>` after generation or edits.
+   - Run `python scripts/manage_docs.py verify <project>` when debugging docs governance failures directly.
    - Use `python scripts/audit_skill.py <skill-dir>` when changing this skill itself.
    - Use `python scripts/evaluate_skill.py <skill-dir> <project>` for the full fact-level validation chain after skill edits.
    - Run `python scripts/check_freshness.py <project>` when updating an existing AGENTS.md.
    - Run `python scripts/create_agent_shims.py <project>` only when the user wants CLAUDE.md/GEMINI.md compatibility.
 
-7. **Final Evidence**
+8. **Final Evidence**
    - Report generated files, unresolved warnings, and verification command output.
    - Never label commands verified unless they were actually run.
-   - Ensure each completed development conversation writes an `experience/YYYY-MM-DD-<topic>.md` lesson file in the target project.
+   - Ensure each completed development conversation writes `docs/handoff/HANDOFF.md`; every fifth handoff must also refresh `docs/experience/` lessons.
 
 ## Rules
 
@@ -72,3 +81,4 @@ Create operational context files for AI coding agents. Use facts from the reposi
 | `references/evaluation-scenarios.md` | Regression scenarios to forward-test the skill |
 | `assets/templates/root-agents.md` | Root AGENTS.md structure |
 | `assets/templates/scoped-agents.md` | Directory-scoped AGENTS.md structure |
+| `scripts/manage_docs.py` | Docs governance scaffold, handoff rotation, experience summaries, development records, and verification |

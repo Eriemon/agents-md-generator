@@ -8,6 +8,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents_common import SKIP_DIRS, emit_json, resolve_project
+from manage_docs import verify_docs
 
 
 COMMAND_RE = re.compile(r"`([^`\n]+)`")
@@ -38,7 +39,7 @@ def validate_strong_control(text: str, file: str, project: Path, errors: list[st
         "## Release Contract",
         "## Engineering Rule Contract",
         "## Conversation Completion Contract",
-        "## Experience Log Contract",
+        "## Documentation Governance Contract",
     ]
     if "Strong control: complete" not in text:
         return
@@ -47,8 +48,8 @@ def validate_strong_control(text: str, file: str, project: Path, errors: list[st
             errors.append(f"{file}: missing strong-control section {section}")
     if not (project / ".agents" / "agents-control.json").exists():
         errors.append(f"{file}: strong control requires .agents/agents-control.json")
-    if not (project / "experience").is_dir():
-        errors.append(f"{file}: strong control requires experience/ directory")
+    docs_result = verify_docs(project)
+    errors.extend(f"{file}: {item}" for item in docs_result["errors"])
     profile = read_json(project / ".agents" / "agents-control.json")
     if profile.get("kind") == "skill":
         contract_body = section_body(text, "## Skill Design Contract")

@@ -15,6 +15,7 @@ Use external AGENTS.md generator projects as capability references, not as code 
 | GitHub settings | `extract_context.py` collects CODEOWNERS, Copilot instructions, dependency configs, and rulesets |
 | Directory coverage | `extract_context.py` reports major directories that may need scoped AGENTS.md files |
 | Generation | `render_agents.py` renders root/scoped AGENTS.md from templates and extracted facts |
+| Docs governance | `manage_docs.py` scaffolds `docs/`, rotates handoff files, writes experience summaries, records development stages, and verifies governance files |
 | Structure/content validation | `verify_agents.py`, `audit_skill.py`, and `evaluate_skill.py` gate markers, placeholders, paths, commands, skipped directories, and skill structure |
 | Compatibility shims | `create_agent_shims.py` creates CLAUDE.md and GEMINI.md only when requested, preserving non-managed files |
 | Hooks guidance | Rendered AGENTS.md includes hook policy and forbids bypassing hooks |
@@ -26,3 +27,4 @@ Use external AGENTS.md generator projects as capability references, not as code 
 - Do not hard-code local reference paths in skill files or generated AGENTS.md.
 - Do not install hooks automatically; detect and document them, then let the user choose setup.
 - Do not duplicate every agent-specific proprietary rule format; keep AGENTS.md canonical and provide shims only for requested compatibility.
+- Do not overwrite hand-written docs governance records; archive handoff and experience history before writing new current files.

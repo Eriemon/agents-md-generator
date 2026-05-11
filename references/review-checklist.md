@@ -13,6 +13,7 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 | Context | `python scripts/extract_context.py <project>` output reviewed |
 | Scopes | `python scripts/detect_scopes.py <project>` output reviewed |
 | Content | `python scripts/verify_agents.py <project>` has no errors and does not scan skipped development/reference trees by default |
+| Docs governance | `python scripts/manage_docs.py verify <project>` has no errors for strong-control projects |
 | Book rules | `python scripts/select_engineering_rules.py --list` or `--task <type>` used when a book-derived engineering rule set is selected |
 | Skill design | `references/skill-design-coverage.md` reviewed when the target is Skill development |
 | Freshness | `python scripts/check_freshness.py <project>` reviewed for existing AGENTS.md |
@@ -31,9 +32,9 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - Directory Coverage identifies major directories that may need scoped AGENTS.md files.
 - Capability coverage has been checked against `references/capability-coverage.md` before claiming parity with another generator.
 - Book-derived engineering rules use exactly one primary active rule set, mode `mini` or `nano`, explicit scope, and no full material in AGENTS.md.
-- Strong-control AGENTS.md includes Control Profile, Directory Contract, Release Contract, Engineering Rule Contract, Conversation Completion Contract, and Experience Log Contract.
+- Strong-control AGENTS.md includes Control Profile, Directory Contract, Release Contract, Engineering Rule Contract, Conversation Completion Contract, and Documentation Governance Contract.
 - Strong-control Skill AGENTS.md includes Skill Design Contract with design patterns, resource boundaries, progressive disclosure, validation gates, and forward-testing policy.
-- Strong control requires `.agents/agents-control.json`; local reference paths may stay in that profile but must not be copied into AGENTS.md.
+- Strong control requires `.agents/agents-control.json` and the docs governance tree; local reference paths may stay in that profile but must not be copied into AGENTS.md.
 - Directory Contract fixes local structure, remote structure, and future feature-addition structure before implementation.
 - Release Contract fixes `dist/<name>-vx.x.x` and matching zip package expectations without remote push.
 - Commands are labeled verified only when actually executed.
@@ -53,7 +54,7 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - Always / Ask First / Never rules are present.
 - Secrets, generated files, dependency changes, migrations, CI changes, destructive git operations, and public API changes have clear rules.
 - Completion claims require verification output.
-- Every completed development conversation adds or updates an `experience/YYYY-MM-DD-<topic>.md` lesson file.
+- Every completed development conversation writes `docs/handoff/HANDOFF.md`, archives the previous handoff, and refreshes `docs/experience/` lessons every five handoffs.
 
 ## Update Checks
 

@@ -57,10 +57,10 @@
 {{CONVERSATION_COMPLETION_CONTRACT}}
 <!-- AGENTS-GENERATED:END conversation-completion-contract -->
 
-<!-- AGENTS-GENERATED:START experience-log-contract -->
-## Experience Log Contract
-{{EXPERIENCE_LOG_CONTRACT}}
-<!-- AGENTS-GENERATED:END experience-log-contract -->
+<!-- AGENTS-GENERATED:START documentation-governance-contract -->
+## Documentation Governance Contract
+{{DOCUMENTATION_GOVERNANCE_CONTRACT}}
+<!-- AGENTS-GENERATED:END documentation-governance-contract -->
 
 <!-- AGENTS-GENERATED:START file-map -->
 ## File Map

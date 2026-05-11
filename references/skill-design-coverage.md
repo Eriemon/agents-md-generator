@@ -33,12 +33,15 @@ For Skill development, generated AGENTS.md should include a Skill Design Contrac
 - Validation gates such as `quick_validate.py`, skill audit, AGENTS.md verification, and full evaluate chain.
 - Forward-testing policy for complex or high-risk Skills.
 
+Strong-control generated AGENTS.md should also include a Documentation Governance Contract. This contract records `docs/handoff/HANDOFF.md` as the newest handoff, requires time-suffixed handoff history, refreshes `docs/experience/` lessons every five handoffs, and points stage, install, and git management records to `docs/development/`, `docs/install_configuration/`, and `docs/git_manager/`.
+
 ## AGENTS.md Principles
 
 - Use Map, not manual: point agents to files, scripts, docs, and examples instead of pasting long manuals.
 - Aggregate scripts: give agents one reliable command or wrapper instead of scattered shell fragments.
 - Require a verification loop: code or content changes are not complete until the relevant checks run.
 - Prefer automated rule checks when a rule can be verified mechanically.
+- Keep task handoff and lesson capture in the docs governance tree instead of relying on memory.
 - Keep local reference paths and temporary source folders out of generated AGENTS.md.
 
 ## Review Gate
@@ -48,4 +51,5 @@ Before claiming a Skill AGENTS.md is strict, verify that:
 - The Skill Design Contract is generated from `.agents/agents-control.json`.
 - The contract contains design patterns, resource boundaries, progressive disclosure, validation gates, and forward-testing policy.
 - Temporary reference material is distilled into stable guidance and not copied as local paths.
+- Docs governance verification confirms handoff, history, experience, development, install configuration, and git manager files exist.
 - The full validation chain reports no unresolved placeholders or local reference leaks.

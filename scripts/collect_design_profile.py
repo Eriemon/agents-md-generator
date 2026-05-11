@@ -8,6 +8,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents_common import emit_json, resolve_project
+from manage_docs import scaffold as scaffold_docs
 
 
 COMMON_QUESTIONS = [
@@ -197,6 +198,48 @@ def skill_design_contract(answers: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def docs_contract(name: str) -> dict[str, Any]:
+    return {
+        "root": "docs",
+        "handoff": {
+            "current": "docs/handoff/HANDOFF.md",
+            "history": "docs/handoff/history_handoff",
+            "archive_pattern": "HANDOFF-YYYYMMDD-HHMMSS.md",
+            "required_sections": [
+                "original_plan_and_steps",
+                "current_step",
+                "problems",
+                "resolved_problems",
+                "remaining_problems",
+                "next_work",
+                "verification_evidence",
+            ],
+        },
+        "experience": {
+            "folder": "docs/experience",
+            "history": "docs/experience/history_experience",
+            "summarize_every_handoffs": 5,
+            "topic_policy": "Choose one or more lesson files from the current work content, such as testing, release, or docs governance lessons.",
+        },
+        "development": {
+            "folder": "docs/development",
+            "when": "Write records at installable release time or stage completion.",
+            "file_pattern": "YYYYMMDD-HHMMSS-<stage>.md",
+        },
+        "install_configuration": {
+            "folder": "docs/install_configuration",
+            "targets": ["Codex", "Claude", "OpenClaw"],
+        },
+        "git_manager": {
+            "folder": "docs/git_manager",
+            "branch_model": "master-and-dist-release",
+            "dist_folder": "dist",
+            "release_folder_pattern": f"{name}-vx.x.x",
+            "zip_required": True,
+        },
+    }
+
+
 def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
     kind = answers.get("development_type", infer_kind(project))
     if kind not in {"skill", "engineering"}:
@@ -247,11 +290,12 @@ def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any
             "feature_rules": answers.get("feature_directory_rules", ""),
         },
         "experience_contract": {
-            "folder": "experience",
+            "folder": "docs/experience",
             "file_pattern": "YYYY-MM-DD-<topic>.md",
             "required_each_development_conversation": True,
             "required_sections": ["background", "changes", "verification", "lessons", "reusable_experience", "risks"],
         },
+        "docs_contract": docs_contract(name),
         "engineering_rule_contract": rule_contract,
     }
     if kind == "skill":
@@ -267,6 +311,7 @@ def write_profile(project: Path, profile: dict[str, Any]) -> Path:
     path = agents_dir / "agents-control.json"
     path.write_text(json.dumps(profile, indent=2, sort_keys=True), encoding="utf-8")
     (project / "experience").mkdir(exist_ok=True)
+    scaffold_docs(project)
     return path
 
 
@@ -275,7 +320,7 @@ def main() -> None:
     parser.add_argument("project", nargs="?", default=".")
     parser.add_argument("--kind", choices=["skill", "engineering"], default=None, help="User-confirmed development type after question 1.")
     parser.add_argument("--answers", default=None, help="JSON file containing user answers.")
-    parser.add_argument("--write", action="store_true", help="Write .agents/agents-control.json and create experience/.")
+    parser.add_argument("--write", action="store_true", help="Write .agents/agents-control.json and create docs governance artifacts.")
     args = parser.parse_args()
     project = resolve_project(args.project)
 

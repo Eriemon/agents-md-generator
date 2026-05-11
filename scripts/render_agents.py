@@ -8,6 +8,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents_common import detect_scopes, extract_commands, extract_context, inspect_project, resolve_project, today
+from manage_docs import scaffold as scaffold_docs
 
 
 GENERATED_START = "<!-- AGENTS-GENERATED:START"
@@ -303,6 +304,40 @@ def experience_log_contract(profile: dict | None) -> str:
     ])
 
 
+def documentation_governance_contract(profile: dict | None) -> str:
+    if not profile:
+        return "\n".join([
+            "- Docs governance: not configured.",
+            "- Strong-control runs must create `docs/handoff/`, `docs/experience/`, `docs/development/`, `docs/install_configuration/`, and `docs/git_manager/`.",
+            "- Run `python scripts/manage_docs.py scaffold <project>` before claiming docs governance is ready.",
+        ])
+    contract = profile.get("docs_contract", {})
+    handoff = contract.get("handoff", {})
+    experience = contract.get("experience", {})
+    development = contract.get("development", {})
+    install = contract.get("install_configuration", {})
+    git = contract.get("git_manager", {})
+    targets = install.get("targets", ["Codex", "Claude", "OpenClaw"])
+    if isinstance(targets, list):
+        targets_text = ", ".join(str(item) for item in targets)
+    else:
+        targets_text = str(targets)
+    return "\n".join([
+        f"- Docs root: `{contract.get('root', 'docs')}`.",
+        f"- Latest handoff: `{handoff.get('current', 'docs/handoff/HANDOFF.md')}` is always the newest task handoff.",
+        f"- Handoff history: archive the previous HANDOFF.md to `{handoff.get('history', 'docs/handoff/history_handoff')}` with `{handoff.get('archive_pattern', 'HANDOFF-YYYYMMDD-HHMMSS.md')}` before writing a new one.",
+        "- Handoff sections: original plan and steps, current step, problems, resolved problems, remaining problems, next work, verification evidence.",
+        f"- Experience folder: `{experience.get('folder', 'docs/experience')}`.",
+        f"- Experience cadence: summarize lessons every {experience.get('summarize_every_handoffs', 5)} completed handoffs.",
+        f"- Experience history: move old lesson files to `{experience.get('history', 'docs/experience/history_experience')}/YYYYMMDD-HHMMSS/` before writing the new summary.",
+        f"- Experience topics: {experience.get('topic_policy', 'Choose lesson files from the current work content.')}",
+        f"- Development records: write `{development.get('file_pattern', 'YYYYMMDD-HHMMSS-<stage>.md')}` under `{development.get('folder', 'docs/development')}` at installable releases or stage completion.",
+        f"- Install configuration: document skill installation and {targets_text} adapters under `{install.get('folder', 'docs/install_configuration')}`.",
+        f"- Git manager: document branch, master, release, dist, installable version naming, and current version rules under `{git.get('folder', 'docs/git_manager')}`.",
+        "- Use `python scripts/manage_docs.py handoff <project> --input handoff.json` at task completion.",
+    ])
+
+
 def template_values(project: Path, profile: dict | None = None) -> dict[str, str]:
     facts = inspect_project(project)
     commands = extract_commands(project)["commands"]
@@ -320,6 +355,7 @@ def template_values(project: Path, profile: dict | None = None) -> dict[str, str
         "SKILL_DESIGN_CONTRACT": skill_design_contract(profile),
         "CONVERSATION_COMPLETION_CONTRACT": conversation_completion_contract(profile),
         "EXPERIENCE_LOG_CONTRACT": experience_log_contract(profile),
+        "DOCUMENTATION_GOVERNANCE_CONTRACT": documentation_governance_contract(profile),
         "VERIFICATION_STATUS": "unverified",
         "COMMAND_SOURCE": command_source,
         "COMMAND_ROWS": command_rows(commands),
@@ -419,6 +455,7 @@ def main() -> None:
 
     if profile:
         (project / "experience").mkdir(exist_ok=True)
+        scaffold_docs(project)
     (project / "AGENTS.md").write_text(root_text, encoding="utf-8")
     for scope in detect_scopes(project)["scopes"]:
         scope_dir = project / scope["path"]
