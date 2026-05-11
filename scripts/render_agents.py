@@ -206,12 +206,17 @@ def directory_contract(profile: dict | None) -> str:
     if not profile:
         return "- Directory contract: not confirmed. Do not freeze structure until the user confirms local, remote, and feature-addition layout."
     contract = profile.get("directory_contract", {})
+    dir_contract = profile.get("dir_manager_contract", {})
     return "\n".join([
         f"- Confirmed: {contract.get('confirmed', False)}.",
         f"- Local structure: {contract.get('local', 'not specified')}.",
         f"- Remote structure: {contract.get('remote', 'not specified')}.",
         f"- New feature structure: {contract.get('feature_rules', 'not specified')}.",
         "- Do not add new top-level directories or move ownership boundaries without updating this contract.",
+        f"- Dir manager gate: review directory create/move/delete/rename plans with `{dir_contract.get('folder', 'docs/dir_manager')}/DIR_MANAGER.md` before changing folder structure.",
+        "- Required command before folder changes: `python scripts/manage_dirs.py review <project> --input change.json`.",
+        "- If directory review blocks the change, refuse default execution, explain the risk, and ask for explicit user force-confirmation before proceeding.",
+        f"- After user force-confirmation and before applying the blocked folder change, archive old dir manager content to `{dir_contract.get('history', 'docs/dir_manager/history_dir_manager')}/YYYYMMDD-HHMMSS/` with `python scripts/manage_dirs.py archive <project> --reason \"force-confirmed directory override\"`.",
     ])
 
 
@@ -308,7 +313,7 @@ def documentation_governance_contract(profile: dict | None) -> str:
     if not profile:
         return "\n".join([
             "- Docs governance: not configured.",
-            "- Strong-control runs must create `docs/handoff/`, `docs/experience/`, `docs/development/`, `docs/install_configuration/`, and `docs/git_manager/`.",
+            "- Strong-control runs must create `docs/handoff/`, `docs/experience/`, `docs/development/`, `docs/install_configuration/`, `docs/git_manager/`, and `docs/dir_manager/`.",
             "- Run `python scripts/manage_docs.py scaffold <project>` before claiming docs governance is ready.",
         ])
     contract = profile.get("docs_contract", {})
@@ -317,6 +322,7 @@ def documentation_governance_contract(profile: dict | None) -> str:
     development = contract.get("development", {})
     install = contract.get("install_configuration", {})
     git = contract.get("git_manager", {})
+    dir_manager = contract.get("dir_manager", {})
     targets = install.get("targets", ["Codex", "Claude", "OpenClaw"])
     if isinstance(targets, list):
         targets_text = ", ".join(str(item) for item in targets)
@@ -334,6 +340,9 @@ def documentation_governance_contract(profile: dict | None) -> str:
         f"- Development records: write `{development.get('file_pattern', 'YYYYMMDD-HHMMSS-<stage>.md')}` under `{development.get('folder', 'docs/development')}` at installable releases or stage completion.",
         f"- Install configuration: document skill installation and {targets_text} adapters under `{install.get('folder', 'docs/install_configuration')}`.",
         f"- Git manager: document branch, master, release, dist, installable version naming, and current version rules under `{git.get('folder', 'docs/git_manager')}`.",
+        f"- Dir manager: keep strict folder review rules under `{dir_manager.get('folder', 'docs/dir_manager')}/` with current and planned structure JSON files.",
+        "- Directory changes require `python scripts/manage_dirs.py review <project> --input change.json`; blocked reviews require explicit user force-confirmation and risk capture in handoff.",
+        f"- Force-confirmed directory overrides must archive old dir manager content to `{dir_manager.get('history', 'docs/dir_manager/history_dir_manager')}/YYYYMMDD-HHMMSS/` before applying the folder change.",
         "- Use `python scripts/manage_docs.py handoff <project> --input handoff.json` at task completion.",
     ])
 

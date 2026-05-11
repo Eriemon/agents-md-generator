@@ -15,5 +15,6 @@ Use these scenarios to forward-test the skill after changes.
 | Scoped directories | Creates scoped files only for distinct local rules |
 | Cross-agent shims | Creates CLAUDE.md/GEMINI.md without overwriting existing non-managed files |
 | Docs governance | Strong-control generation creates `docs/handoff/HANDOFF.md`, archives old handoffs under `history_handoff`, writes experience summaries, archives old lessons under `history_experience`, and records development stages |
+| Directory governance | Strong-control generation creates `docs/dir_manager/`; planned directory changes pass review, unsafe top-level, governance, or project-outside path changes are blocked, and force-confirmed blocked changes archive old dir manager content under `history_dir_manager/<timestamp>/` |
 | Bad paths | Verification reports missing or suspicious path references |
 | Placeholder leak | Verification reports unresolved `{{PLACEHOLDER}}` tokens |

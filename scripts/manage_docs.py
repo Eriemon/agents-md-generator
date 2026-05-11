@@ -11,6 +11,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents_common import emit_json, read_json, resolve_project
+from manage_dirs import init_dir_manager, verify_dir_manager
 
 
 DOC_DIRS = [
@@ -21,6 +22,9 @@ DOC_DIRS = [
     "docs/development",
     "docs/install_configuration",
     "docs/git_manager",
+    "docs/dir_manager",
+    "docs/dir_manager/change_reviews",
+    "docs/dir_manager/history_dir_manager",
 ]
 STATE_PATH = ".agents/docs-governance-state.json"
 HANDOFF_SECTIONS = [
@@ -168,7 +172,10 @@ def scaffold(project: Path) -> dict[str, Any]:
     state = load_state(project)
     state.setdefault("handoff_count", 0)
     state.setdefault("last_experience_at", 0)
+    state["dir_manager_last_scan"] = datetime.now().isoformat(timespec="seconds")
     save_state(project, state)
+    dir_result = init_dir_manager(project)
+    created.extend(path for path in dir_result.get("written", []) if path not in created)
     return {"project": str(project), "created": created, "state": state}
 
 
@@ -346,6 +353,9 @@ def verify_docs(project: Path) -> dict[str, Any]:
         for section in HANDOFF_SECTIONS:
             if f"## {section}" not in text:
                 errors.append(f"docs/handoff/HANDOFF.md: missing section ## {section}")
+    dir_result = verify_dir_manager(project)
+    checked.extend(dir_result["checked"])
+    errors.extend(dir_result["errors"])
     return {"project": str(project), "checked": checked, "errors": errors}
 
 

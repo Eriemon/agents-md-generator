@@ -29,6 +29,7 @@ REQUIRED_FILES = [
     "scripts/detect_scopes.py",
     "scripts/render_agents.py",
     "scripts/manage_docs.py",
+    "scripts/manage_dirs.py",
     "scripts/select_engineering_rules.py",
     "scripts/verify_agents.py",
     "scripts/check_freshness.py",
@@ -118,6 +119,45 @@ def contains_local_reference(text: str) -> bool:
     return bool(LOCAL_REFERENCE_RE.search(text))
 
 
+def parse_openai_interface(text: str) -> dict[str, str] | None:
+    lines = text.splitlines()
+    try:
+        start = next(index for index, line in enumerate(lines) if line.strip() == "interface:")
+    except StopIteration:
+        return None
+    data: dict[str, str] = {}
+    for line in lines[start + 1:]:
+        if not line.strip():
+            continue
+        if not line.startswith((" ", "\t")):
+            break
+        stripped = line.strip()
+        if ":" not in stripped:
+            continue
+        key, value = stripped.split(":", 1)
+        data[key.strip()] = value.strip().strip('"').strip("'")
+    return data
+
+
+def validate_openai_yaml(path: Path, errors: list[str]) -> None:
+    if not path.exists():
+        return
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    interface = parse_openai_interface(text)
+    if interface is None:
+        errors.append("agents/openai.yaml: missing interface section")
+        return
+    for key in ("display_name", "short_description", "default_prompt"):
+        value = interface.get(key, "").strip()
+        if not value:
+            errors.append(f"agents/openai.yaml: missing interface.{key}")
+        elif value.lower() in {"todo", "tbd", "placeholder"}:
+            errors.append(f"agents/openai.yaml: interface.{key} is a placeholder")
+    default_prompt = interface.get("default_prompt", "")
+    if default_prompt and "$agents-md-generator" not in default_prompt:
+        errors.append("agents/openai.yaml: default_prompt must mention $agents-md-generator")
+
+
 def audit(skill_dir: Path) -> dict:
     errors: list[str] = []
     warnings: list[str] = []
@@ -154,6 +194,8 @@ def audit(skill_dir: Path) -> dict:
                 errors.append(f"SKILL.md references missing resource: {rel_path}")
         if contains_local_reference(text):
             errors.append("SKILL.md must not depend on local reference folders")
+
+    validate_openai_yaml(skill_dir / "agents" / "openai.yaml", errors)
 
     for script in sorted((skill_dir / "scripts").glob("*.py")):
         rel_path = script.relative_to(skill_dir).as_posix()

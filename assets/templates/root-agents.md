@@ -51,6 +51,8 @@
 3. Run the smallest relevant check after each change.
 4. Run final verification and show command output before claiming completion.
 5. Complete the full assigned development task in the current conversation whenever feasible; if blocked, report blockers, completed work, and exact next steps.
+6. Before changing folder structure, follow `docs/dir_manager/` and run `manage_dirs.py review` when directory governance is configured.
+7. If the user force-confirms a blocked folder change, archive old dir manager content under `docs/dir_manager/history_dir_manager/` before applying it.
 
 <!-- AGENTS-GENERATED:START conversation-completion-contract -->
 ## Conversation Completion Contract

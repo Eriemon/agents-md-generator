@@ -33,7 +33,7 @@ For Skill development, generated AGENTS.md should include a Skill Design Contrac
 - Validation gates such as `quick_validate.py`, skill audit, AGENTS.md verification, and full evaluate chain.
 - Forward-testing policy for complex or high-risk Skills.
 
-Strong-control generated AGENTS.md should also include a Documentation Governance Contract. This contract records `docs/handoff/HANDOFF.md` as the newest handoff, requires time-suffixed handoff history, refreshes `docs/experience/` lessons every five handoffs, and points stage, install, and git management records to `docs/development/`, `docs/install_configuration/`, and `docs/git_manager/`.
+Strong-control generated AGENTS.md should also include a Documentation Governance Contract. This contract records `docs/handoff/HANDOFF.md` as the newest handoff, requires time-suffixed handoff history, refreshes `docs/experience/` lessons every five handoffs, points stage, install, and git management records to `docs/development/`, `docs/install_configuration/`, and `docs/git_manager/`, requires `docs/dir_manager/` review before folder structure changes, and archives old dir manager content to `docs/dir_manager/history_dir_manager/<timestamp>/` before user force-confirmed blocked changes are applied.
 
 ## AGENTS.md Principles
 
@@ -42,6 +42,7 @@ Strong-control generated AGENTS.md should also include a Documentation Governanc
 - Require a verification loop: code or content changes are not complete until the relevant checks run.
 - Prefer automated rule checks when a rule can be verified mechanically.
 - Keep task handoff and lesson capture in the docs governance tree instead of relying on memory.
+- Use a strict directory governance gate for folder moves; blocked reviews require explicit user force-confirmation and old dir manager content archival before execution.
 - Keep local reference paths and temporary source folders out of generated AGENTS.md.
 
 ## Review Gate

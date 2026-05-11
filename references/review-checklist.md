@@ -14,6 +14,7 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 | Scopes | `python scripts/detect_scopes.py <project>` output reviewed |
 | Content | `python scripts/verify_agents.py <project>` has no errors and does not scan skipped development/reference trees by default |
 | Docs governance | `python scripts/manage_docs.py verify <project>` has no errors for strong-control projects |
+| Directory governance | `python scripts/manage_dirs.py verify <project>` passes, and folder changes have a passing `manage_dirs.py review` result |
 | Book rules | `python scripts/select_engineering_rules.py --list` or `--task <type>` used when a book-derived engineering rule set is selected |
 | Skill design | `references/skill-design-coverage.md` reviewed when the target is Skill development |
 | Freshness | `python scripts/check_freshness.py <project>` reviewed for existing AGENTS.md |
@@ -36,6 +37,9 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - Strong-control Skill AGENTS.md includes Skill Design Contract with design patterns, resource boundaries, progressive disclosure, validation gates, and forward-testing policy.
 - Strong control requires `.agents/agents-control.json` and the docs governance tree; local reference paths may stay in that profile but must not be copied into AGENTS.md.
 - Directory Contract fixes local structure, remote structure, and future feature-addition structure before implementation.
+- Directory changes must pass `docs/dir_manager/DIR_MANAGER.md` review and `python scripts/manage_dirs.py review <project> --input change.json`.
+- Blocked directory reviews require a clear refusal, severe-risk explanation, and explicit user force-confirmation before any folder structure change.
+- Force-confirmed blocked directory changes require `python scripts/manage_dirs.py archive <project> --reason "force-confirmed directory override"` before applying the change, preserving old content under `docs/dir_manager/history_dir_manager/<timestamp>/`.
 - Release Contract fixes `dist/<name>-vx.x.x` and matching zip package expectations without remote push.
 - Commands are labeled verified only when actually executed.
 - Generated markers are balanced and hand-written content outside markers is preserved.

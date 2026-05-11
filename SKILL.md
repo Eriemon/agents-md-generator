@@ -46,6 +46,9 @@ Create operational context files for AI coding agents. Use facts from the reposi
    - Every five handoffs, the script summarizes lessons under `docs/experience/` and archives old lesson files under `docs/experience/history_experience/<timestamp>/`.
    - At installable release or stage completion, run `python scripts/manage_docs.py development <project> --stage <name> --input stage.json`.
    - Keep install setup for Codex, Claude, and OpenClaw under `docs/install_configuration/`; keep branch, release, dist, package naming, and current version rules under `docs/git_manager/`.
+   - Keep folder governance under `docs/dir_manager/`; before creating, moving, deleting, or renaming project folders, run `python scripts/manage_dirs.py review <project> --input change.json`.
+   - If directory review is blocked, refuse default execution, explain the severe risks, and ask for explicit user force-confirmation before changing folder structure.
+   - After explicit user force-confirmation and before applying the blocked folder change, run `python scripts/manage_dirs.py archive <project> --reason "force-confirmed directory override"` so old dir manager content is preserved under `docs/dir_manager/history_dir_manager/<timestamp>/`.
 
 7. **Verify**
    - Run `python scripts/verify_agents.py <project>` after generation or edits.
@@ -82,3 +85,4 @@ Create operational context files for AI coding agents. Use facts from the reposi
 | `assets/templates/root-agents.md` | Root AGENTS.md structure |
 | `assets/templates/scoped-agents.md` | Directory-scoped AGENTS.md structure |
 | `scripts/manage_docs.py` | Docs governance scaffold, handoff rotation, experience summaries, development records, and verification |
+| `scripts/manage_dirs.py` | Strict folder structure scan, planning, review, blocking, and verification |

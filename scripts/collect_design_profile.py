@@ -237,6 +237,35 @@ def docs_contract(name: str) -> dict[str, Any]:
             "release_folder_pattern": f"{name}-vx.x.x",
             "zip_required": True,
         },
+        "dir_manager": {
+            "folder": "docs/dir_manager",
+            "current_structure": "docs/dir_manager/current_structure.json",
+            "planned_structure": "docs/dir_manager/planned_structure.json",
+            "history": "docs/dir_manager/history_dir_manager",
+            "review_required_for": ["create", "move", "delete", "rename"],
+            "block_on_failed_review": True,
+            "force_override_requires_user_confirmation": True,
+            "archive_before_force_override": True,
+        },
+    }
+
+
+def dir_manager_contract() -> dict[str, Any]:
+    return {
+        "folder": "docs/dir_manager",
+        "current_structure": "docs/dir_manager/current_structure.json",
+        "planned_structure": "docs/dir_manager/planned_structure.json",
+        "history": "docs/dir_manager/history_dir_manager",
+        "review_required_for": [
+            "create top-level directories",
+            "move directories",
+            "delete directories",
+            "rename directories",
+            "change ownership, generated, release, or governance directories",
+        ],
+        "block_on_failed_review": True,
+        "force_override_requires_user_confirmation": True,
+        "archive_before_force_override": True,
     }
 
 
@@ -296,6 +325,7 @@ def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any
             "required_sections": ["background", "changes", "verification", "lessons", "reusable_experience", "risks"],
         },
         "docs_contract": docs_contract(name),
+        "dir_manager_contract": dir_manager_contract(),
         "engineering_rule_contract": rule_contract,
     }
     if kind == "skill":

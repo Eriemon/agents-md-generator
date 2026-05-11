@@ -57,15 +57,22 @@ python scripts/manage_docs.py experience /path/to/project
 python scripts/manage_docs.py experience /path/to/project --force
 python scripts/manage_docs.py development /path/to/project --stage release --input stage.json
 python scripts/manage_docs.py verify /path/to/project
+python scripts/manage_dirs.py init /path/to/project
+python scripts/manage_dirs.py scan /path/to/project --write
+python scripts/manage_dirs.py review /path/to/project --input change.json
+python scripts/manage_dirs.py archive /path/to/project --reason "force-confirmed directory override"
+python scripts/manage_dirs.py verify /path/to/project
 ```
 
-`scaffold` creates `docs/handoff/`, `docs/handoff/history_handoff/`, `docs/experience/`, `docs/experience/history_experience/`, `docs/development/`, `docs/install_configuration/`, and `docs/git_manager/`. It also creates the latest handoff placeholder plus install and git manager baseline files.
+`scaffold` creates `docs/handoff/`, `docs/handoff/history_handoff/`, `docs/experience/`, `docs/experience/history_experience/`, `docs/development/`, `docs/install_configuration/`, `docs/git_manager/`, and `docs/dir_manager/` including `change_reviews/` and `history_dir_manager/`. It also creates the latest handoff placeholder plus install, git manager, and dir manager baseline files.
 
 `handoff` archives the previous `docs/handoff/HANDOFF.md` to `docs/handoff/history_handoff/HANDOFF-YYYYMMDD-HHMMSS.md`, writes the new latest handoff, increments `.agents/docs-governance-state.json`, and triggers an experience summary every five handoffs. The input JSON can include `original_plan`, `current_step`, `problems`, `resolved`, `remaining`, `next`, and `verification`.
 
 `experience` writes `docs/experience/docs-governance-lessons.md` when five new handoffs have accumulated, or immediately with `--force`. Existing lesson files are moved to `docs/experience/history_experience/YYYYMMDD-HHMMSS/` before the new summary is written.
 
 `development` writes a stage record under `docs/development/` for installable releases or stage completion. The input JSON can include `goal`, `completed_scope`, `verification`, `artifacts`, `version`, and `remaining_risks`.
+
+`manage_dirs.py` is the strict folder gate. `init` creates `DIR_MANAGER.md`, `current_structure.json`, `planned_structure.json`, `change_reviews/`, and `history_dir_manager/`. `review` accepts JSON such as `{"changes":[{"action":"create","path":"features"}]}` and returns `approved`, `decision`, `reasons`, `risks`, `user_message`, `force_confirmation_required`, and `force_override_archive_required`. Blocked reviews exit non-zero and must be shown to the user before any force-confirmed folder change. If the user explicitly force-confirms a blocked change, run `archive` before applying it; this preserves the old dir manager content under `docs/dir_manager/history_dir_manager/YYYYMMDD-HHMMSS/`.
 
 ## Verify
 
@@ -77,7 +84,7 @@ python scripts/audit_skill.py /path/to/agents-md-generator
 python scripts/evaluate_skill.py /path/to/agents-md-generator /path/to/project
 ```
 
-`verify_agents.py` checks generated markers, unresolved placeholders, path references, core structure, docs governance structure, and config-backed package/Make/composer commands. For strong-control Skill projects, it also requires an exact `## Skill Design Contract` section with design patterns, resource boundaries, progressive disclosure, validation gates, and forward-testing policy. By default it skips development/reference/build trees such as `ref/`, `.git/`, `vendor/`, `dist/`, `build/`, `target/`, and `node_modules/`; use `--include-skipped` only when intentionally auditing those directories. `check_freshness.py` compares Last updated metadata with git history when available. `audit_skill.py` checks this skill's structure, frontmatter, referenced resources, and Python script compilation.
+`verify_agents.py` checks generated markers, unresolved placeholders, path references, core structure, docs governance structure, dir manager files, and config-backed package/Make/composer commands. For strong-control Skill projects, it also requires an exact `## Skill Design Contract` section with design patterns, resource boundaries, progressive disclosure, validation gates, and forward-testing policy. By default it skips development/reference/build trees such as `ref/`, `.git/`, `vendor/`, `dist/`, `build/`, `target/`, and `node_modules/`; use `--include-skipped` only when intentionally auditing those directories. `check_freshness.py` compares Last updated metadata with git history when available. `audit_skill.py` checks this skill's structure, frontmatter, referenced resources, and Python script compilation.
 
 `evaluate_skill.py` runs the fact-level validation chain in one read-only command: unit tests, official skill quick validation, skill audit, AGENTS.md verification, and a render leak check. It emits JSON with each command, exit code, parsed errors, checked files, unresolved template placeholders, and local-reference leaks.
 
