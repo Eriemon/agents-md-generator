@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agents-md-generator-skill"
+version = "0.1.0"
+description = "Agent skill for generating and verifying AGENTS.md files for coding agents."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+authors = [{ name = "Jiyuan Liu", email = "erie@seu.edu.cn" }]
+keywords = ["codex-skill", "agent-skill", "agents-md", "ai-coding-agents", "repository-onboarding", "documentation"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Documentation",
+]
+
+[project.urls]
+Homepage = "https://github.com/Eriemon/agents-md-generator"
+Repository = "https://github.com/Eriemon/agents-md-generator"
+
+[tool.setuptools]
+py-modules = []

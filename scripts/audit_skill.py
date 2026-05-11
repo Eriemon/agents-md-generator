@@ -36,7 +36,7 @@ REQUIRED_FILES = [
     "scripts/evaluate_skill.py",
 ]
 
-DISALLOWED_ROOT_DOCS = {"README.md", "CHANGELOG.md", "INSTALL.md", "INSTALLATION.md"}
+DISALLOWED_ROOT_DOCS = {"INSTALL.md", "INSTALLATION.md"}
 LOCAL_REFERENCE_RE = re.compile(r"G:[/\\]html|ref[/\\](agent-rules|html)", flags=re.IGNORECASE)
 TEMPLATE_PLACEHOLDER_RE = re.compile(r"{{([A-Z0-9_]+)}}")
 KNOWN_TEMPLATE_PLACEHOLDERS = {
