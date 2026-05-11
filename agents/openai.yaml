@@ -1,0 +1,4 @@
+interface:
+  display_name: "AGENTS.md Generator"
+  short_description: "Guide agents to draft verified AGENTS.md files"
+  default_prompt: "Use $agents-md-generator to create an AGENTS.md for this repository."

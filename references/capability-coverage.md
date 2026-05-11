@@ -1,0 +1,28 @@
+# Capability Coverage
+
+Use external AGENTS.md generator projects as capability references, not as code to copy wholesale.
+
+## Integration Policy
+
+| Reference capability | This skill coverage |
+|----------------------|---------------------|
+| Project detection | `inspect_project.py` detects languages, framework, package manager, CI, AI configs, files, and directories |
+| Scope detection | `detect_scopes.py` proposes scoped AGENTS.md targets |
+| Command extraction | `extract_commands.py` reads Makefile, package.json, pyproject.toml, composer.json, go.mod, and workflow run lines |
+| Documentation extraction | `extract_context.py` collects README, docs, ADRs, architecture, ownership, utilities, and golden samples |
+| Platform and IDE extraction | `extract_context.py` collects platform files, dev-environment files, editor settings, and quality configs |
+| Hook detection | `extract_context.py` collects Lefthook, Husky, CaptainHook, pre-commit, and repo hook files |
+| GitHub settings | `extract_context.py` collects CODEOWNERS, Copilot instructions, dependency configs, and rulesets |
+| Directory coverage | `extract_context.py` reports major directories that may need scoped AGENTS.md files |
+| Generation | `render_agents.py` renders root/scoped AGENTS.md from templates and extracted facts |
+| Structure/content validation | `verify_agents.py`, `audit_skill.py`, and `evaluate_skill.py` gate markers, placeholders, paths, commands, skipped directories, and skill structure |
+| Compatibility shims | `create_agent_shims.py` creates CLAUDE.md and GEMINI.md only when requested, preserving non-managed files |
+| Hooks guidance | Rendered AGENTS.md includes hook policy and forbids bypassing hooks |
+
+## Deliberate Non-Copy Decisions
+
+- Do not copy Bash scripts when an equivalent Python standard-library implementation exists.
+- Do not include large example projects in the skill package.
+- Do not hard-code local reference paths in skill files or generated AGENTS.md.
+- Do not install hooks automatically; detect and document them, then let the user choose setup.
+- Do not duplicate every agent-specific proprietary rule format; keep AGENTS.md canonical and provide shims only for requested compatibility.
