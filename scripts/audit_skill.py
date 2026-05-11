@@ -39,7 +39,10 @@ REQUIRED_FILES = [
 ]
 
 DISALLOWED_ROOT_DOCS = {"INSTALL.md", "INSTALLATION.md"}
-LOCAL_REFERENCE_RE = re.compile(r"G:[/\\]html|ref[/\\](agent-rules|html)", flags=re.IGNORECASE)
+LOCAL_REFERENCE_RE = re.compile(
+    r"G:[/\\]html|ref[/\\](agent-rules|html)|\b[A-Za-z]:[/\\][^\s`'\"<>)]*",
+    flags=re.IGNORECASE,
+)
 TEMPLATE_PLACEHOLDER_RE = re.compile(r"{{([A-Z0-9_]+)}}")
 KNOWN_TEMPLATE_PLACEHOLDERS = {
     "root-agents.md": {
