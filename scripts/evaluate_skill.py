@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents_common import emit_json, resolve_project
 
@@ -38,13 +39,23 @@ def command_entry(name: str, argv: list[str], cwd: Path, result: subprocess.Comp
 
 
 def run_command(name: str, argv: list[str], cwd: Path, env: dict[str, str] | None = None) -> dict[str, Any]:
-    result = subprocess.run(argv, cwd=cwd, text=True, capture_output=True, check=False, env=env)
+    command_env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+    if env:
+        command_env.update(env)
+    result = subprocess.run(argv, cwd=cwd, text=True, capture_output=True, check=False, env=command_env)
     return command_entry(name, argv, cwd, result)
 
 
 def render_entry(skill_dir: Path, project: Path) -> dict[str, Any]:
     argv = [sys.executable, str(skill_dir / "scripts" / "render_agents.py"), str(project)]
-    result = subprocess.run(argv, cwd=project, text=True, capture_output=True, check=False)
+    result = subprocess.run(
+        argv,
+        cwd=project,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"),
+    )
     entry = command_entry("render_agents", argv, project, result)
     output = result.stdout
     entry["json"] = {

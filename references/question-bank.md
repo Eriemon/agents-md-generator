@@ -4,7 +4,7 @@ Ask only when repository inspection cannot answer the question.
 
 ## Mandatory Design Interview
 
-Run `python scripts/collect_design_profile.py <project>` first and ask question 1. After the user confirms the branch, rerun with `--kind skill` or `--kind engineering`, ask every returned question in order, then validate answers with `collect_design_profile.py --answers <answers.json> --write`.
+Run `python scripts/collect_design_profile.py <project>` first and ask question 1. After the user confirms the branch, rerun with `--kind skill` or `--kind engineering`, ask every returned question in order using the returned selectable `options`, then show `review_summary` and ask the yes/no `confirmation_question`. If the user says no, collect corrections and repeat the summary. Validate answers with `collect_design_profile.py --answers <answers.json>` first; use `--write` only after setting `alignment_confirmed=true`.
 
 | ID | Branch | Ask |
 |----|--------|-----|
@@ -24,6 +24,10 @@ Run `python scripts/collect_design_profile.py <project>` first and ask question 
 | 25 | skill | How will the skill enforce progressive disclosure and keep `SKILL.md` concise? |
 | 26 | skill | Which validation gates are mandatory before claiming the skill is ready? |
 | 27 | skill | When is forward-testing required, and how should it be performed? |
+| 28 | skill | What are the detailed development requirements? |
+| 29 | skill | What is the expected result after development is complete? |
+| 30 | skill | How should the completed skill be validated? |
+| 31 | skill | What validation granularity is required before final acceptance? |
 | 11 | engineering | What does this project do? |
 | 12 | engineering | Why build this project? |
 | 13 | engineering | What are the expected outcome and goals? |

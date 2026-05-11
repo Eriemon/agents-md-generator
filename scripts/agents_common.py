@@ -194,6 +194,7 @@ def inspect_project(root: Path) -> dict[str, Any]:
         framework = "go"
 
     skill_files = sorted(path for path in root.glob("*/SKILL.md") if path.is_file())
+    skill_files.extend(sorted(path for path in root.glob("skills/*/SKILL.md") if path.is_file()))
     if (root / "SKILL.md").exists() or skill_files:
         if "skill" not in languages:
             languages.append("skill")

@@ -204,6 +204,14 @@ def control_profile(profile: dict | None) -> str:
     audience = profile.get("audience_or_environment")
     if audience:
         lines.append(f"- Audience/environment: {audience}.")
+    if profile.get("development_requirements"):
+        lines.append(f"- Development requirements: {profile['development_requirements']}.")
+    if profile.get("expected_outcome"):
+        lines.append(f"- Expected outcome: {profile['expected_outcome']}.")
+    if profile.get("validation_method"):
+        lines.append(f"- Validation method: {profile['validation_method']}.")
+    if profile.get("validation_granularity"):
+        lines.append(f"- Validation granularity: {profile['validation_granularity']}.")
     if profile.get("reference_materials_temporary"):
         lines.append("- Temporary reference materials were used; remove them manually after development and do not copy local reference paths into AGENTS.md.")
     return "\n".join(lines)
@@ -284,6 +292,8 @@ def skill_design_contract(profile: dict | None) -> str:
         f"- Design patterns: {patterns_text or 'not specified'}.",
         f"- Resource boundaries: {contract.get('resource_plan', 'not specified')}.",
         f"- Progressive disclosure: {contract.get('progressive_disclosure_policy', 'not specified')}.",
+        f"- Validation method: {contract.get('validation_method', profile.get('validation_method', 'not specified'))}.",
+        f"- Validation granularity: {contract.get('validation_granularity', profile.get('validation_granularity', 'not specified'))}.",
         f"- Validation gates: {contract.get('validation_gates', 'not specified')}.",
         f"- Forward testing: {contract.get('forward_testing_policy', 'not specified')}.",
         f"- Reference material policy: {contract.get('reference_material_policy', 'temporary inputs only')}.",
@@ -300,7 +310,7 @@ def conversation_completion_contract(profile: dict | None) -> str:
 
 
 def experience_log_contract(profile: dict | None) -> str:
-    folder = "experience"
+    folder = "docs/experience"
     pattern = "YYYY-MM-DD-<topic>.md"
     sections = ["background", "changes", "verification", "lessons", "reusable_experience", "risks"]
     if profile:
@@ -479,7 +489,6 @@ def main() -> None:
                 "requires_user_confirmation": True,
             })
             raise SystemExit(1)
-        (project / "experience").mkdir(exist_ok=True)
         scaffold_docs(project)
     (project / "AGENTS.md").write_text(root_text, encoding="utf-8")
     for scope in detect_scopes(project)["scopes"]:

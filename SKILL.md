@@ -17,8 +17,11 @@ Create operational context files for AI coding agents. Use facts from the reposi
 2. **Design Interview**
    - Run `python scripts/collect_design_profile.py <project>` and ask question 1 first; do not rely on directory inference as the final answer.
    - After the user confirms the type, rerun with `--kind skill` or `--kind engineering` to get the mandatory branch questions.
-   - Ask every required question in order. Skill development follows questions 2-10, then 22-27, then 20-21; engineering development follows questions 11-19, then 20-21.
-   - Save answers to JSON and run `python scripts/collect_design_profile.py <project> --answers <answers.json> --write` before claiming strong-control AGENTS.md generation.
+   - Ask every required question in order and present each returned `options` list to the user. Prefer `request_user_input` when available so the user can choose an option or enter a custom answer.
+   - Skill development follows questions 2-10, then 22-31, then 20-21; engineering development follows questions 11-19, then 20-21.
+   - After each answer group, show the returned `review_summary` and `confirmed_so_far`, then ask the `confirmation_question`. If the user answers no, collect corrections and repeat the summary until the user confirms yes.
+   - Save answers to JSON only after the full design is aligned. Set `alignment_confirmed=true` only after user yes/no confirmation succeeds, then run `python scripts/collect_design_profile.py <project> --answers <answers.json> --write` before claiming strong-control AGENTS.md generation.
+   - For user-developed Skills, require `skills/<skill-name>/SKILL.md`; the frontmatter `name` must exactly match the folder name and use only lowercase letters, digits, and hyphens. The generator's own source may remain in `agents-md-generator/`.
 
 3. **Extract**
    - Run `python scripts/extract_commands.py <project>` to collect command candidates from Makefile, package.json, pyproject.toml, composer.json, go.mod, and visible CI workflow `run:` lines.
@@ -37,7 +40,7 @@ Create operational context files for AI coding agents. Use facts from the reposi
    - Run `python scripts/render_agents.py <project> --profile <project>/.agents/agents-control.json` first; default is dry-run.
    - Use `--write` only after reviewing the draft and confirming the target path is inside the intended repository.
    - Before `--write` with strong-control docs governance, run `python scripts/manage_docs.py preflight <project>`; if it requires user confirmation, ask before using the existing `docs/` layout.
-   - Strong-control generation creates or requires `.agents/agents-control.json`, compatibility `experience/`, and the `docs/` governance tree.
+   - Strong-control generation creates or requires `.agents/agents-control.json` and the `docs/` governance tree. Experience records must live under `docs/experience/`; do not create a root-level `experience/` folder.
    - `render_agents.py --write` writes AGENTS.md and scoped AGENTS.md files, then runs docs scaffolding for handoff, experience, development, install configuration, and git manager records.
    - Templates in `assets/templates/` define the intended root/scoped shape.
    - Use `--template-dir <dir>` only for controlled tests or intentional template overrides.

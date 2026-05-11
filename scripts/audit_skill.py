@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 import sys
 
+sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents_common import emit_json, resolve_project
 
@@ -39,6 +40,7 @@ REQUIRED_FILES = [
 ]
 
 DISALLOWED_ROOT_DOCS = {"INSTALL.md", "INSTALLATION.md"}
+DISALLOWED_CACHE_SUFFIXES = {".pyc", ".pyo"}
 LOCAL_REFERENCE_RE = re.compile(
     r"G:[/\\]html|ref[/\\](agent-rules|html)|\b[A-Za-z]:[/\\][^\s`'\"<>)]*",
     flags=re.IGNORECASE,
@@ -211,10 +213,14 @@ def audit(skill_dir: Path) -> dict:
             errors.append(f"{rel_path} does not compile: {exc.msg}")
 
     for path in skill_dir.rglob("*"):
-        if not path.is_file():
-            continue
         rel_path = path.relative_to(skill_dir).as_posix()
-        if any(part in {".git", "__pycache__"} for part in path.relative_to(skill_dir).parts):
+        rel_parts = path.relative_to(skill_dir).parts
+        if ".git" in rel_parts:
+            continue
+        if "__pycache__" in rel_parts or path.suffix in DISALLOWED_CACHE_SUFFIXES:
+            errors.append(f"disallowed generated cache artifact: {rel_path}")
+            continue
+        if not path.is_file():
             continue
         if path.suffix in {".md", ".yaml", ".yml", ".py"}:
             text = path.read_text(encoding="utf-8", errors="ignore")
