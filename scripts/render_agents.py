@@ -7,8 +7,8 @@ import re
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from agents_common import detect_scopes, extract_commands, extract_context, inspect_project, resolve_project, today
-from manage_docs import scaffold as scaffold_docs
+from agents_common import detect_scopes, emit_json, extract_commands, extract_context, inspect_project, resolve_project, today
+from manage_docs import preflight_docs, scaffold as scaffold_docs
 
 
 GENERATED_START = "<!-- AGENTS-GENERATED:START"
@@ -74,7 +74,14 @@ def replace_placeholders(template: str, values: dict[str, str]) -> str:
 
 
 def project_overview(facts: dict) -> str:
-    return f"Primary language: {facts['primary_language']}. Framework: {facts['framework']}. Project type: {facts['project_type']}."
+    lines = [
+        f"Primary language: {facts['primary_language']}. Framework: {facts['framework']}. Project type: {facts['project_type']}.",
+    ]
+    if facts.get("root_agents_md_exists"):
+        lines.append("Root AGENTS.md: present.")
+    else:
+        lines.append("Root AGENTS.md: missing. Ask the user whether to design AGENTS.md before writing project instructions.")
+    return "\n".join(lines)
 
 
 def golden_sample_rows() -> str:
@@ -452,6 +459,7 @@ def main() -> None:
     parser.add_argument("--write", action="store_true", help="Write AGENTS.md files. Default prints root draft only.")
     parser.add_argument("--template-dir", default=None, help="Directory containing root-agents.md and scoped-agents.md.")
     parser.add_argument("--profile", default=None, help="Path to .agents/agents-control.json for strong-control rendering.")
+    parser.add_argument("--confirm-docs-layout", action="store_true", help="User confirmed that docs governance may be added under the existing docs/ layout.")
     args = parser.parse_args()
     project = resolve_project(args.project)
     template_dir = Path(args.template_dir).resolve() if args.template_dir else None
@@ -463,6 +471,14 @@ def main() -> None:
         return
 
     if profile:
+        docs_preflight = preflight_docs(project)
+        if docs_preflight["requires_user_confirmation"] and not args.confirm_docs_layout:
+            emit_json({
+                "errors": ["docs layout requires user confirmation before writing AGENTS.md or docs governance"],
+                "docs_preflight": docs_preflight,
+                "requires_user_confirmation": True,
+            })
+            raise SystemExit(1)
         (project / "experience").mkdir(exist_ok=True)
         scaffold_docs(project)
     (project / "AGENTS.md").write_text(root_text, encoding="utf-8")

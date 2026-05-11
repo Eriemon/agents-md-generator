@@ -36,6 +36,13 @@ Run `python scripts/collect_design_profile.py <project>` first and ask question 
 | 20 | all | Does the current working folder already contain a project or skill? |
 | 21 | all | If yes, confirm the AGENTS.md is generated from current content and the local, remote, and feature-addition directory structures are fixed. |
 
+## Trigger And Docs Layout Questions
+
+| Need | Ask |
+|------|-----|
+| Root AGENTS.md missing | This work folder has no root `AGENTS.md`; should I design one for this project? |
+| Existing docs layout ambiguous | Existing `docs/` content may conflict with AGENTS.md governance. Is it acceptable to add governance subdirectories under the existing `docs/` folder? |
+
 ## Human Policy
 
 | Need | Ask |

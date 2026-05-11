@@ -1,6 +1,6 @@
 ---
 name: agents-md-generator
-description: Use when creating, updating, verifying, or reviewing AGENTS.md files and AI coding-agent rule files; when the user mentions AGENTS.md, agent rules, scoped AGENTS.md, AI coding context, repository onboarding for agents, stale agent docs, command verification, CLAUDE.md/GEMINI.md compatibility shims, or project instructions for Codex, Claude Code, Gemini CLI, GitHub Copilot, Cursor, and other coding agents.
+description: Use when creating, updating, verifying, or reviewing AGENTS.md files and AI coding-agent rule files; when a project or work folder root lacks AGENTS.md; when the user mentions AGENTS.md, agent rules, scoped AGENTS.md, AI coding context, repository onboarding for agents, stale agent docs, command verification, CLAUDE.md/GEMINI.md compatibility shims, or project instructions for Codex, Claude Code, Gemini CLI, GitHub Copilot, Cursor, and other coding agents.
 ---
 
 # AGENTS.md Generator
@@ -11,6 +11,7 @@ Create operational context files for AI coding agents. Use facts from the reposi
 
 1. **Detect**
    - Run `python scripts/inspect_project.py <project>` to gather language, framework, package manager, CI, AI configs, files, and directories.
+   - If `root_agents_md_exists` is false, ask the user whether they want AGENTS.md designed for this work folder before writing project instructions.
    - Run `python scripts/detect_scopes.py <project>` to find directories that may need scoped AGENTS.md files.
 
 2. **Design Interview**
@@ -35,6 +36,7 @@ Create operational context files for AI coding agents. Use facts from the reposi
 5. **Generate**
    - Run `python scripts/render_agents.py <project> --profile <project>/.agents/agents-control.json` first; default is dry-run.
    - Use `--write` only after reviewing the draft and confirming the target path is inside the intended repository.
+   - Before `--write` with strong-control docs governance, run `python scripts/manage_docs.py preflight <project>`; if it requires user confirmation, ask before using the existing `docs/` layout.
    - Strong-control generation creates or requires `.agents/agents-control.json`, compatibility `experience/`, and the `docs/` governance tree.
    - `render_agents.py --write` writes AGENTS.md and scoped AGENTS.md files, then runs docs scaffolding for handoff, experience, development, install configuration, and git manager records.
    - Templates in `assets/templates/` define the intended root/scoped shape.

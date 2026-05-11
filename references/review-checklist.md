@@ -13,6 +13,7 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 | Context | `python scripts/extract_context.py <project>` output reviewed |
 | Scopes | `python scripts/detect_scopes.py <project>` output reviewed |
 | Content | `python scripts/verify_agents.py <project>` has no errors and does not scan skipped development/reference trees by default |
+| Docs preflight | `python scripts/manage_docs.py preflight <project>` is safe, or user confirmation is recorded for an ambiguous/conflicting existing `docs/` layout |
 | Docs governance | `python scripts/manage_docs.py verify <project>` has no errors for strong-control projects |
 | Directory governance | `python scripts/manage_dirs.py verify <project>` passes, and folder changes have a passing `manage_dirs.py review` result |
 | Book rules | `python scripts/select_engineering_rules.py --list` or `--task <type>` used when a book-derived engineering rule set is selected |
@@ -35,6 +36,8 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - Book-derived engineering rules use exactly one primary active rule set, mode `mini` or `nano`, explicit scope, and no full material in AGENTS.md.
 - Strong-control AGENTS.md includes Control Profile, Directory Contract, Release Contract, Engineering Rule Contract, Conversation Completion Contract, and Documentation Governance Contract.
 - Strong-control Skill AGENTS.md includes Skill Design Contract with design patterns, resource boundaries, progressive disclosure, validation gates, and forward-testing policy.
+- Missing root `AGENTS.md` triggers an ask-first decision before writing project instructions.
+- Existing `docs/` layouts are preflighted; ambiguous or conflicting layouts require user confirmation before AGENTS.md or docs governance writes.
 - Strong control requires `.agents/agents-control.json` and the docs governance tree; local reference paths may stay in that profile but must not be copied into AGENTS.md.
 - Directory Contract fixes local structure, remote structure, and future feature-addition structure before implementation.
 - Directory changes must pass `docs/dir_manager/DIR_MANAGER.md` review and `python scripts/manage_dirs.py review <project> --input change.json`.

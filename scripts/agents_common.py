@@ -219,6 +219,7 @@ def inspect_project(root: Path) -> dict[str, Any]:
 
     return {
         "project_root": str(root),
+        "root_agents_md_exists": (root / "AGENTS.md").is_file(),
         "primary_language": languages[0] if languages else "unknown",
         "languages": sorted(set(languages)),
         "package_manager": package_manager(root),

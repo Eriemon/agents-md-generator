@@ -26,6 +26,11 @@ DOC_DIRS = [
     "docs/dir_manager/change_reviews",
     "docs/dir_manager/history_dir_manager",
 ]
+REQUIRED_DOC_FILES = [
+    "docs/handoff/HANDOFF.md",
+    "docs/install_configuration/INSTALL_CONFIGURATION.md",
+    "docs/git_manager/GIT_MANAGER.md",
+]
 STATE_PATH = ".agents/docs-governance-state.json"
 HANDOFF_SECTIONS = [
     "Original Plan And Steps",
@@ -150,6 +155,83 @@ def git_manager_doc() -> str:
         "- Record the active version and release notes here during release preparation.",
         "",
     ])
+
+
+def preflight_docs(project: Path) -> dict[str, Any]:
+    docs = docs_root(project)
+    question = "是否允许在现有 docs/ 下添加 AGENTS.md governance 子目录和记录文件？"
+    if not docs.exists():
+        return {
+            "project": str(project),
+            "status": "safe",
+            "docs_exists": False,
+            "safe_to_scaffold": True,
+            "conflicts": [],
+            "requires_user_confirmation": False,
+            "question": "",
+        }
+    if not docs.is_dir():
+        return {
+            "project": str(project),
+            "status": "conflict",
+            "docs_exists": True,
+            "safe_to_scaffold": False,
+            "conflicts": ["docs exists but is not a directory"],
+            "requires_user_confirmation": True,
+            "question": question,
+        }
+
+    reserved_paths = [*DOC_DIRS, *REQUIRED_DOC_FILES]
+    conflicts: list[str] = []
+    reserved_exists = False
+    for rel_path in reserved_paths:
+        path = project / rel_path
+        if path.exists():
+            reserved_exists = True
+            if rel_path in DOC_DIRS and not path.is_dir():
+                conflicts.append(f"{rel_path} exists but is not a directory")
+            if rel_path in REQUIRED_DOC_FILES and not path.is_file():
+                conflicts.append(f"{rel_path} exists but is not a file")
+
+    docs_result = verify_docs(project)
+    if not docs_result["errors"]:
+        return {
+            "project": str(project),
+            "status": "safe",
+            "docs_exists": True,
+            "safe_to_scaffold": True,
+            "conflicts": [],
+            "requires_user_confirmation": False,
+            "question": "",
+        }
+
+    if reserved_exists:
+        conflicts.extend(item for item in docs_result["errors"] if item not in conflicts)
+        return {
+            "project": str(project),
+            "status": "conflict",
+            "docs_exists": True,
+            "safe_to_scaffold": False,
+            "conflicts": conflicts,
+            "requires_user_confirmation": True,
+            "question": question,
+        }
+
+    existing = [
+        path.relative_to(project).as_posix()
+        for path in sorted(docs.rglob("*"))
+        if path.is_file() or path.is_dir()
+    ]
+    conflicts = existing or ["docs/ exists but AGENTS.md governance structure is not initialized"]
+    return {
+        "project": str(project),
+        "status": "ambiguous",
+        "docs_exists": True,
+        "safe_to_scaffold": False,
+        "conflicts": conflicts,
+        "requires_user_confirmation": True,
+        "question": question,
+    }
 
 
 def scaffold(project: Path) -> dict[str, Any]:
@@ -338,12 +420,7 @@ def verify_docs(project: Path) -> dict[str, Any]:
         checked.append(rel_path)
         if not (project / rel_path).is_dir():
             errors.append(f"missing docs governance directory: {rel_path}")
-    required_files = [
-        "docs/handoff/HANDOFF.md",
-        "docs/install_configuration/INSTALL_CONFIGURATION.md",
-        "docs/git_manager/GIT_MANAGER.md",
-    ]
-    for rel_path in required_files:
+    for rel_path in REQUIRED_DOC_FILES:
         checked.append(rel_path)
         if not (project / rel_path).is_file():
             errors.append(f"missing docs governance file: {rel_path}")
@@ -366,6 +443,9 @@ def main() -> None:
     scaffold_parser = subparsers.add_parser("scaffold")
     scaffold_parser.add_argument("project", nargs="?", default=".")
 
+    preflight_parser = subparsers.add_parser("preflight")
+    preflight_parser.add_argument("project", nargs="?", default=".")
+
     handoff_parser = subparsers.add_parser("handoff")
     handoff_parser.add_argument("project", nargs="?", default=".")
     handoff_parser.add_argument("--input", default=None)
@@ -386,6 +466,8 @@ def main() -> None:
     project = resolve_project(args.project)
     if args.command == "scaffold":
         emit_json(scaffold(project))
+    elif args.command == "preflight":
+        emit_json(preflight_docs(project))
     elif args.command == "handoff":
         emit_json(write_handoff(project, args.input))
     elif args.command == "experience":

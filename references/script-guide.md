@@ -9,7 +9,7 @@ python scripts/inspect_project.py /path/to/project
 python scripts/detect_scopes.py /path/to/project
 ```
 
-Outputs JSON facts for language, framework, package manager, CI, AI configs, directories, files, and suggested scoped AGENTS.md directories.
+Outputs JSON facts for language, framework, package manager, CI, AI configs, directories, files, whether root `AGENTS.md` exists, and suggested scoped AGENTS.md directories.
 
 ## Extract
 
@@ -43,14 +43,16 @@ Skill development profiles also require `trigger_scenarios`, `skill_design_patte
 python scripts/render_agents.py /path/to/project
 python scripts/render_agents.py /path/to/project --profile /path/to/project/.agents/agents-control.json
 python scripts/render_agents.py /path/to/project --write
+python scripts/render_agents.py /path/to/project --profile /path/to/project/.agents/agents-control.json --write --confirm-docs-layout
 python scripts/render_agents.py /path/to/project --template-dir /path/to/templates
 ```
 
-Default mode is dry-run and prints the root draft. `--profile` enables strong-control sections from `.agents/agents-control.json`; without it, output must say strong control is not configured. `--write` writes AGENTS.md files inside the target project, creates compatibility `experience/` and the `docs/` governance tree when a profile is present, and preserves hand-written content outside generated sections. `--template-dir` is mainly for tests or deliberate template overrides; otherwise use bundled templates in `assets/templates/`.
+Default mode is dry-run and prints the root draft. `--profile` enables strong-control sections from `.agents/agents-control.json`; without it, output must say strong control is not configured. `--write` writes AGENTS.md files inside the target project, creates compatibility `experience/` and the `docs/` governance tree when a profile is present, and preserves hand-written content outside generated sections. If docs preflight reports an ambiguous or conflicting existing `docs/` layout, `--write` exits before writing AGENTS.md or docs governance unless `--confirm-docs-layout` records explicit user confirmation. `--template-dir` is mainly for tests or deliberate template overrides; otherwise use bundled templates in `assets/templates/`.
 
 ## Docs Governance
 
 ```bash
+python scripts/manage_docs.py preflight /path/to/project
 python scripts/manage_docs.py scaffold /path/to/project
 python scripts/manage_docs.py handoff /path/to/project --input handoff.json
 python scripts/manage_docs.py experience /path/to/project
@@ -63,6 +65,8 @@ python scripts/manage_dirs.py review /path/to/project --input change.json
 python scripts/manage_dirs.py archive /path/to/project --reason "force-confirmed directory override"
 python scripts/manage_dirs.py verify /path/to/project
 ```
+
+`preflight` is read-only. It checks whether `docs/` is absent, already has a complete AGENTS.md governance tree, or has an ambiguous/conflicting existing layout. It returns `status`, `docs_exists`, `safe_to_scaffold`, `conflicts`, `requires_user_confirmation`, and `question`. If confirmation is required, ask the user before writing AGENTS.md or scaffolding docs governance.
 
 `scaffold` creates `docs/handoff/`, `docs/handoff/history_handoff/`, `docs/experience/`, `docs/experience/history_experience/`, `docs/development/`, `docs/install_configuration/`, `docs/git_manager/`, and `docs/dir_manager/` including `change_reviews/` and `history_dir_manager/`. It also creates the latest handoff placeholder plus install, git manager, and dir manager baseline files.
 
