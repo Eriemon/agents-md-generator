@@ -382,6 +382,7 @@ def skill_design_contract(answers: dict[str, Any]) -> dict[str, Any]:
 
 
 def docs_contract(name: str) -> dict[str, Any]:
+    branch_policy = git_branch_policy()
     return {
         "root": "docs",
         "handoff": {
@@ -423,6 +424,7 @@ def docs_contract(name: str) -> dict[str, Any]:
         "git_manager": {
             "folder": "docs/git_manager",
             "branch_model": "master-and-dist-release",
+            "branch_policy": branch_policy,
             "dist_folder": "dist",
             "release_folder_pattern": f"{name}-vx.x.x",
             "zip_required": True,
@@ -437,6 +439,18 @@ def docs_contract(name: str) -> dict[str, Any]:
             "force_override_requires_user_confirmation": True,
             "archive_before_force_override": True,
         },
+    }
+
+
+def git_branch_policy() -> dict[str, Any]:
+    return {
+        "protected_branches": ["master", "release"],
+        "development_branches_allowed": True,
+        "release_requires_committed_worktree": True,
+        "release_requires_merge_to_master": True,
+        "delete_other_local_branches_before_release": True,
+        "remote_branch_cleanup_allowed": False,
+        "rule": "Before releasing an installable dist package, commit all work, merge development branches into master, record the release, and delete local branches other than master and release.",
     }
 
 
@@ -500,6 +514,7 @@ def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any
         "notes": answers.get(notes_key, ""),
         "git_management": answers["git_management"],
         "branch_model": answers["branch_model"],
+        "git_branch_policy": git_branch_policy(),
         "release_contract": {
             "rule": answers["release_contract"],
             "dist_folder": "dist",

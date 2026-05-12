@@ -251,6 +251,9 @@ def install_configuration_doc() -> str:
         "",
         "## Skill Install Path",
         "- Install the skill folder into the target agent skill directory before use.",
+        "- When replacing an installed skill, first move the old skill to the sibling `skill_backups/<skill-name>-YYYYMMDD-HHMMSS/` folder.",
+        "- Never delete installed `assets/templates/evolution/engineering-template` or `assets/templates/evolution/skill-template` content during installation.",
+        "- If evolved template content conflicts, preserve both versions and report the conflict for manual merge.",
         "",
         "## Codex Adapter",
         "- Keep `SKILL.md`, `agents/openai.yaml`, `references/`, `scripts/`, and `assets/` together.",
@@ -275,12 +278,17 @@ def git_manager_doc() -> str:
         "- Keep current development work in the working folder unless the user requests a separate worktree.",
         "",
         "## Branch Configuration",
-        "- Master/main holds the editable source branch.",
-        "- Release branches or release folders are recorded before packaging.",
+        "- Protected branches: `master`, `release`.",
+        "- Development branches are allowed as temporary local work branches.",
+        "- Before releasing an installable `dist/` package, commit all work and merge development branches into `master`.",
+        "- If a branch has unmerged commits, merge it to `master` before cleanup; never discard it silently.",
+        "- After release preparation, delete local branches other than `master` and `release`.",
+        "- Do not delete remote branches unless the user explicitly requests remote cleanup.",
         "",
         "## Release Configuration",
         "- Place installable releases under `dist/`.",
         "- Name installable release folders as `<name>-vx.x.x` and create a matching zip when required.",
+        "- Package only after branch cleanup and release records are complete.",
         "",
         "## Current Version",
         "- Record the active version and release notes here during release preparation.",
@@ -673,6 +681,8 @@ def build_experience_request(project: Path, count: int) -> dict[str, Any]:
         "target_files": specs,
         "quality_rules": [
             "AI must generate topic-specific lessons; scripts only collect evidence and apply validated payloads.",
+            "Experience files should be detailed and project-specific; concise placeholders are not acceptable.",
+            "1-workflow.md must describe a complete skill or engineering development workflow, including the full process chain, logic chain, feedback/closure loops, and a Mermaid flowchart.",
             "Do not copy a full HANDOFF.md into experience files.",
             "Do not write highly similar content across the 10 experience files.",
             "4-design-ui.md must say 暂无 UI 经验 when no UI work was involved.",
@@ -736,6 +746,33 @@ def similarity(left: str, right: str) -> float:
     return len(a & b) / len(a | b)
 
 
+def workflow_experience_errors(content: str) -> list[str]:
+    errors: list[str] = []
+    lowered = content.lower()
+    if len(content.strip()) < 700:
+        errors.append("1-workflow.md: AI workflow experience content is too short")
+    if "```mermaid" not in lowered or "flowchart" not in lowered:
+        errors.append("1-workflow.md: must include a Mermaid flowchart")
+    required_terms = [
+        ("流程链", "process chain", "workflow chain"),
+        ("逻辑链", "logic chain"),
+        ("闭环", "closure loop", "feedback loop"),
+    ]
+    for terms in required_terms:
+        if not any(term in lowered for term in terms):
+            errors.append(f"1-workflow.md: must describe {terms[0]}")
+    phase_terms = [
+        ("plan", "计划", "规划"),
+        ("develop", "开发", "implementation"),
+        ("test", "测试", "验证", "仿真"),
+        ("release", "发布", "释放", "dist"),
+    ]
+    for terms in phase_terms:
+        if not any(term in lowered for term in terms):
+            errors.append(f"1-workflow.md: missing workflow phase {terms[0]}")
+    return errors
+
+
 def validate_experience_payload(project: Path, payload: dict[str, Any]) -> tuple[dict[str, str], list[str]]:
     expected = [spec["filename"] for spec in experience_file_specs(project)]
     entries = payload_entries(payload)
@@ -758,6 +795,8 @@ def validate_experience_payload(project: Path, payload: dict[str, Any]) -> tuple
             errors.append(f"{filename}: must not copy full HANDOFF.md sections")
         if filename == "4-design-ui.md" and "暂无 UI 经验" not in content and not re.search(r"\b(ui|gui|visual|design)\b", content, flags=re.IGNORECASE):
             errors.append("4-design-ui.md: must either record 暂无 UI 经验 or contain UI/design-specific lessons")
+        if filename == "1-workflow.md":
+            errors.extend(workflow_experience_errors(content))
     for index, left_name in enumerate(expected):
         for right_name in expected[index + 1:]:
             left = entries.get(left_name, "")
@@ -949,6 +988,8 @@ def validate_current_experience_quality(project: Path) -> list[str]:
             errors.append(f"{filename}: contains placeholder experience text")
         if "## Original Plan And Steps" in content and "## Verification Evidence" in content:
             errors.append(f"{filename}: must not copy full HANDOFF.md sections")
+        if filename == "1-workflow.md":
+            errors.extend(workflow_experience_errors(content))
     for index, left_name in enumerate(expected):
         for right_name in expected[index + 1:]:
             left = entries.get(left_name, "")

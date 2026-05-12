@@ -509,7 +509,6 @@ def extract_context(root: Path) -> dict[str, Any]:
         "internal",
         "pkg",
         ".github/workflows",
-        "agents-md-generator",
     ]
     directory_coverage_candidates = [
         name for name in coverage_names
@@ -571,7 +570,6 @@ def extract_context(root: Path) -> dict[str, Any]:
 
 def detect_scopes(root: Path) -> dict[str, Any]:
     candidates = {
-        "agents-md-generator": "skill implementation and bundled resources",
         "src": "source code patterns",
         "tests": "test conventions and fixtures",
         "test": "test conventions and fixtures",

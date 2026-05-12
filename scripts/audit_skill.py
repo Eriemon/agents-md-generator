@@ -182,6 +182,8 @@ def audit(skill_dir: Path) -> dict:
     for name in DISALLOWED_ROOT_DOCS:
         if (skill_dir / name).exists():
             errors.append(f"disallowed extra root documentation file: {name}")
+    if (skill_dir / "AGENTS.md").exists():
+        errors.append("disallowed skill root AGENTS.md")
 
     skill_path = skill_dir / "SKILL.md"
     if skill_path.exists():

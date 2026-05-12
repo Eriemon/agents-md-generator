@@ -20,7 +20,7 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 | Skill design | `references/skill-design-coverage.md` reviewed when the target is Skill development |
 | Freshness | `python scripts/check_freshness.py <project>` reviewed for existing AGENTS.md |
 | Compatibility | `python scripts/create_agent_shims.py <project>` used only when requested |
-| Install confirmation | `python scripts/install_skill.py <skill-dir> --target skip` or explicit install target recorded after release validation |
+| Install confirmation | `python scripts/install_skill.py <skill-dir> --target skip` or explicit install target recorded after release validation; replacement installs must show `backup_path` and no unreviewed template loss |
 | Skill self-audit | `python scripts/audit_skill.py agents-md-generator` has no errors after skill edits |
 | Fact-level validation | `python scripts/evaluate_skill.py agents-md-generator <project>` returns `"ok": true` after skill edits |
 
@@ -56,6 +56,8 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - Force-confirmed blocked directory changes require `python scripts/manage_dirs.py archive <project> --reason "force-confirmed directory override"` before applying the change, preserving old content under `docs/dir_manager/history_dir_manager/<timestamp>/`.
 - Release Contract fixes `dist/<name>-vx.x.x` and matching zip package expectations without remote push.
 - After release packaging and validation, the user is asked yes/no whether to install; no response or no means skip, and custom/Codex installs require an explicit target.
+- Before installable `dist/` release, local work is committed, development branches are merged into `master`, and local branches other than `master` and `release` are deleted unless the user explicitly changes the branch policy.
+- Replacement installs back up the old skill to `skill_backups/` and preserve installed evolution templates, reporting conflicts instead of silently overwriting them.
 - Commands are labeled verified only when actually executed.
 - Generated markers are balanced and hand-written content outside markers is preserved.
 - No `{{PLACEHOLDER}}` tokens remain in generated output.

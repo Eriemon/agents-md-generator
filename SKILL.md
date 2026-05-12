@@ -55,7 +55,7 @@ Create operational context files for AI coding agents. Use facts from the reposi
    - Apply AI-authored experience with `python scripts/manage_docs.py experience <project> --payload experience-payload.json`; scripts validate, archive, and write, but must not fabricate lesson content.
    - Every ten handoffs, accepted experience evolves indexed templates under assets/templates/evolution skill-template and engineering-template type folders.
    - At installable release or stage completion, run `python scripts/manage_docs.py development <project> --stage <name> --input stage.json`.
-   - Keep install setup for Codex, Claude, and OpenClaw under `docs/install_configuration/`; keep branch, release, dist, package naming, and current version rules under `docs/git_manager/`.
+   - Keep install setup for Codex, Claude, and OpenClaw under `docs/install_configuration/`; keep branch, release, dist, package naming, protected branch cleanup, and current version rules under `docs/git_manager/`.
    - Keep local and remote deployment folder governance under `docs/dir_manager/`; before creating, moving, deleting, or renaming governed folders, run `python scripts/manage_dirs.py review <project> --input change.json`.
    - For remote server deployment tasks, do not sync local skill-development content to servers; deploy only explicit runtime/deployment artifacts unless the user explicitly overrides.
    - If directory review is blocked, refuse default execution, explain the severe risks, and ask for explicit user force-confirmation before changing folder structure.
@@ -68,7 +68,7 @@ Create operational context files for AI coding agents. Use facts from the reposi
    - Use `python scripts/evaluate_skill.py <skill-dir> <project>` for the full fact-level validation chain after skill edits.
    - Run `python scripts/check_freshness.py <project>` when updating an existing AGENTS.md.
    - Run `python scripts/create_agent_shims.py <project>` only when the user wants CLAUDE.md/GEMINI.md compatibility.
-   - After release packaging and successful validation, ask the user yes/no whether to install. If yes, use `python scripts/install_skill.py <skill-dir> --target codex --write` or `--target custom --custom-root <dir> --write`; if no or no explicit response, skip installation.
+   - After release packaging and successful validation, ask the user yes/no whether to install. If yes, use `python scripts/install_skill.py <skill-dir> --target codex --write --replace` or `--target custom --custom-root <dir> --write --replace` when replacing an existing skill; the installer must back up the old skill and preserve evolution templates before replacing. If no or no explicit response, skip installation.
 
 8. **Final Evidence**
    - Report generated files, unresolved warnings, and verification command output.

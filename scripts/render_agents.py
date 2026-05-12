@@ -281,9 +281,15 @@ def release_contract(profile: dict | None) -> str:
     if not profile:
         return "- Release contract: not configured. Do not claim installable release packaging until the user confirms dist and zip rules."
     release = profile.get("release_contract", {})
+    policy = profile.get("git_branch_policy", {})
+    protected = policy.get("protected_branches", ["master", "release"])
+    protected_text = ", ".join(f"`{item}`" for item in protected)
     return "\n".join([
         f"- Git management: {profile.get('git_management', 'not specified')}.",
         f"- Branch model: {profile.get('branch_model', 'not specified')}.",
+        f"- Protected branches: {protected_text}.",
+        "- Development branches are allowed only as temporary local work branches.",
+        "- Before releasing an installable `dist/` package: commit all work, merge into `master`, record the release, then delete local branches other than `master` and `release`.",
         f"- Dist folder: `{release.get('dist_folder', 'dist')}`.",
         f"- Release folder pattern: `{release.get('release_folder_pattern', '<name>-vx.x.x')}`.",
         f"- Zip required: {release.get('zip_required', True)}.",
@@ -411,7 +417,7 @@ def documentation_governance_contract(profile: dict | None) -> str:
         f"- Handoff history: archive the previous HANDOFF.md to `{handoff.get('history', 'docs/handoff/history_handoff')}` with `{handoff.get('archive_pattern', 'HANDOFF-YYYYMMDD-HHMMSS.md')}` before writing a new one.",
         f"- Development records: write `{development.get('file_pattern', 'YYYYMMDD-HHMMSS-<stage>.md')}` under `{development.get('folder', 'docs/development')}` at installable releases or stage completion.",
         f"- Install configuration: document skill installation and {targets_text} adapters under `{install.get('folder', 'docs/install_configuration')}`.",
-        f"- Git manager: document branch, master, release, dist, installable version naming, and current version rules under `{git.get('folder', 'docs/git_manager')}`.",
+        f"- Git manager: document branch, master, release, dist, installable version naming, local branch cleanup, and current version rules under `{git.get('folder', 'docs/git_manager')}`.",
         "- Use `python scripts/manage_docs.py handoff <project> --input handoff.json` at task completion.",
     ])
 
@@ -535,9 +541,9 @@ def render_root(project: Path, template_dir: Path | None = None, profile: dict |
             "# AGENTS.md",
             "**Precedence:** the closest `AGENTS.md` to the files being changed wins. Explicit user prompts override this file.",
             compact_section("project-overview", "Project Overview", values["PROJECT_OVERVIEW"], 2),
-            compact_section("control-profile", "Control Profile", values["CONTROL_PROFILE"], 7),
+            compact_section("control-profile", "Control Profile", values["CONTROL_PROFILE"], 6),
             compact_section("directory-contract", "Directory Contract", values["DIRECTORY_CONTRACT"], 5),
-            compact_section("release-contract", "Release Contract", values["RELEASE_CONTRACT"], 5),
+            compact_section("release-contract", "Release Contract", values["RELEASE_CONTRACT"], 9),
             compact_section("engineering-rule-contract", "Engineering Rule Contract", values["ENGINEERING_RULE_CONTRACT"], engineering_max),
             compact_section("skill-design-contract", "Skill Design Contract", values["SKILL_DESIGN_CONTRACT"], skill_max),
             "\n".join([
@@ -549,7 +555,7 @@ def render_root(project: Path, template_dir: Path | None = None, profile: dict |
                 "<!-- AGENTS-GENERATED:END commands -->",
             ]),
             compact_section("conversation-completion-contract", "Conversation Completion Contract", values["CONVERSATION_COMPLETION_CONTRACT"], 2),
-            compact_section("documentation-governance-contract", "Documentation Governance Contract", values["DOCUMENTATION_GOVERNANCE_CONTRACT"], 9),
+            compact_section("documentation-governance-contract", "Documentation Governance Contract", values["DOCUMENTATION_GOVERNANCE_CONTRACT"], 8),
             compact_section("directory-coverage", "Directory Coverage", values["DIRECTORY_COVERAGE"], 2),
         ]
         if "Link ADRs or architecture docs here" not in values["KEY_DECISIONS"] or "Add migrations, tech debt" not in values["CODEBASE_STATE"] or "Existing utility" in values["UTILITY_ROWS"]:

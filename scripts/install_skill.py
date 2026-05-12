@@ -8,6 +8,7 @@ import re
 import shutil
 import sys
 from typing import Any
+from datetime import datetime
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -69,14 +70,88 @@ def target_path(skill_name: str, target: str, codex_home: str | None, custom_roo
     raise SystemExit(json.dumps({"errors": ["--target must be skip, codex, or custom"]}, indent=2))
 
 
-def copy_skill(skill_dir: Path, destination: Path, replace: bool) -> None:
+def stamp() -> str:
+    return datetime.now().strftime("%Y%m%d-%H%M%S")
+
+
+def backup_root_for(destination: Path) -> Path:
+    return destination.parent.parent / "skill_backups"
+
+
+def unique_backup_path(destination: Path) -> Path:
+    root = backup_root_for(destination)
+    base = root / f"{destination.name}-{stamp()}"
+    candidate = base
+    index = 2
+    while candidate.exists():
+        candidate = Path(f"{base}-{index}")
+        index += 1
+    return candidate
+
+
+def protected_evolution_files(root: Path) -> list[Path]:
+    evolution = root / "assets" / "templates" / "evolution"
+    candidates: list[Path] = []
+    for family in ("engineering-template", "skill-template"):
+        family_root = evolution / family
+        if family_root.is_dir():
+            candidates.extend(path for path in sorted(family_root.rglob("*")) if path.is_file())
+    return candidates
+
+
+def conflict_copy_path(target: Path) -> Path:
+    candidate = target.with_name(f"{target.stem}.installed-template-conflict{target.suffix}")
+    index = 2
+    while candidate.exists():
+        candidate = target.with_name(f"{target.stem}.installed-template-conflict-{index}{target.suffix}")
+        index += 1
+    return candidate
+
+
+def preserve_evolution_templates(backup: Path, destination: Path) -> tuple[list[str], list[dict[str, str]]]:
+    preserved: list[str] = []
+    conflicts: list[dict[str, str]] = []
+    for old_path in protected_evolution_files(backup):
+        relative = old_path.relative_to(backup)
+        target = destination / relative
+        if not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(old_path, target)
+            preserved.append(relative.as_posix())
+            continue
+        if target.read_bytes() == old_path.read_bytes():
+            preserved.append(relative.as_posix())
+            continue
+        conflict_target = conflict_copy_path(target)
+        shutil.copy2(old_path, conflict_target)
+        conflicts.append({
+            "relative_path": relative.as_posix(),
+            "installed_version": str(conflict_target),
+            "new_version": str(target),
+        })
+    return preserved, conflicts
+
+
+def copy_skill(skill_dir: Path, destination: Path, replace: bool) -> dict[str, Any]:
+    backup_path: Path | None = None
+    preserved: list[str] = []
+    conflicts: list[dict[str, str]] = []
     if destination.exists():
         if not replace:
             raise FileExistsError(f"target already exists: {destination}")
-        shutil.rmtree(destination)
+        backup_path = unique_backup_path(destination)
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(destination), str(backup_path))
     destination.parent.mkdir(parents=True, exist_ok=True)
     ignore = shutil.ignore_patterns("__pycache__", "*.pyc", ".git")
     shutil.copytree(skill_dir, destination, ignore=ignore)
+    if backup_path is not None:
+        preserved, conflicts = preserve_evolution_templates(backup_path, destination)
+    return {
+        "backup_path": str(backup_path) if backup_path else "",
+        "template_preserved": preserved,
+        "template_conflicts": conflicts,
+    }
 
 
 def main() -> None:
@@ -102,6 +177,9 @@ def main() -> None:
         "destination": str(destination) if destination else "",
         "installed": False,
         "skipped": args.target == "skip" or not args.write,
+        "backup_path": "",
+        "template_preserved": [],
+        "template_conflicts": [],
         "confirmation_question": "发布包验证完成。是否安装这个技能？请选择是或否；默认是否，跳过安装。",
         "options": install_options(),
     }
@@ -110,12 +188,13 @@ def main() -> None:
         return
     assert destination is not None
     try:
-        copy_skill(skill_dir, destination, args.replace)
+        install_details = copy_skill(skill_dir, destination, args.replace)
     except SystemExit:
         raise
     except Exception as exc:
         emit_json({"errors": [str(exc)], **result})
         raise SystemExit(1)
+    result.update(install_details)
     result["installed"] = True
     result["skipped"] = False
     emit_json(result)
