@@ -34,7 +34,7 @@ For Skill development, generated AGENTS.md should include a Skill Design Contrac
 - Validation method and validation granularity, including whether acceptance is automated, manual, forward-tested, or a combination.
 - Forward-testing policy for complex or high-risk Skills.
 
-Strong-control generated AGENTS.md should also include a Documentation Governance Contract. This contract records `docs/handoff/HANDOFF.md` as the newest handoff, requires time-suffixed handoff history, refreshes `docs/experience/` lessons every five handoffs, points stage, install, and git management records to `docs/development/`, `docs/install_configuration/`, and `docs/git_manager/`, requires `docs/dir_manager/` review before folder structure changes, and archives old dir manager content to `docs/dir_manager/history_dir_manager/<timestamp>/` before user force-confirmed blocked changes are applied.
+Strong-control generated AGENTS.md should also include a Documentation Governance Contract. This contract records `docs/handoff/HANDOFF.md` as the newest handoff, requires time-suffixed handoff history, refreshes 10 numbered `docs/experience/` files every five handoffs, points stage, install, and git management records to `docs/development/`, `docs/install_configuration/`, and `docs/git_manager/`, requires `docs/dir_manager/` review before local or remote deployment folder structure changes, and archives old dir manager content to `docs/dir_manager/history_dir_manager/<timestamp>/` before user force-confirmed blocked changes are applied.
 
 ## AGENTS.md Principles
 
@@ -43,7 +43,7 @@ Strong-control generated AGENTS.md should also include a Documentation Governanc
 - Require a verification loop: code or content changes are not complete until the relevant checks run.
 - Prefer automated rule checks when a rule can be verified mechanically.
 - Keep task handoff and lesson capture in the docs governance tree instead of relying on memory.
-- Keep experience lessons in `docs/experience/`; never create a root-level `experience/` folder.
+- Keep experience lessons in 10 numbered `docs/experience/` files; never create a root-level `experience/` folder.
 - New user-developed Skills belong in `skills/<skill-name>/`, and the `SKILL.md` frontmatter name must match that folder.
 - Require selectable interview options and repeated summary confirmation before writing a strong-control profile.
 - Use a strict directory governance gate for folder moves; blocked reviews require explicit user force-confirmation and old dir manager content archival before execution.
@@ -56,5 +56,5 @@ Before claiming a Skill AGENTS.md is strict, verify that:
 - The Skill Design Contract is generated from `.agents/agents-control.json`.
 - The contract contains design patterns, resource boundaries, progressive disclosure, validation gates, validation method, validation granularity, and forward-testing policy.
 - Temporary reference material is distilled into stable guidance and not copied as local paths.
-- Docs governance verification confirms handoff, history, experience, development, install configuration, and git manager files exist.
+- Docs governance verification confirms handoff, history, 10 numbered experience files, development, install configuration, git manager files, and remote deployment directory planning exist.
 - The full validation chain reports no unresolved placeholders or local reference leaks.

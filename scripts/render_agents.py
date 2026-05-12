@@ -267,6 +267,7 @@ def directory_contract(profile: dict | None) -> str:
         f"- Confirmed: {contract.get('confirmed', False)}.",
         f"- Local structure: {contract.get('local', 'not specified')}.",
         f"- Remote structure: {contract.get('remote', 'not specified')}.",
+        "- Remote deployment boundary: do not sync local skill-development content to remote servers; deploy only explicit runtime/deployment artifacts unless the user explicitly overrides.",
         f"- New feature structure: {contract.get('feature_rules', 'not specified')}.",
         "- Do not add new top-level directories or move ownership boundaries without updating this contract.",
         f"- Dir manager gate: review directory create/move/delete/rename plans with `{dir_contract.get('folder', 'docs/dir_manager')}/DIR_MANAGER.md` before changing folder structure.",
@@ -352,18 +353,29 @@ def conversation_completion_contract(profile: dict | None) -> str:
 
 def experience_log_contract(profile: dict | None) -> str:
     folder = "docs/experience"
-    pattern = "YYYY-MM-DD-<topic>.md"
-    sections = ["background", "changes", "verification", "lessons", "reusable_experience", "risks"]
+    pattern = "1-xxxxx.md through 10-xxxxx.md"
+    sections = ["evidence_read", "iterated_lessons", "next_application"]
+    required = ["1-workflow.md", "2-scripts.md", "3-plan.md", "4-design-ui.md"]
+    conversation_limit = 10
+    evolution_every = 10
     if profile:
         contract = profile.get("experience_contract", {})
         folder = contract.get("folder", folder)
         pattern = contract.get("file_pattern", pattern)
         sections = contract.get("required_sections", sections)
+        required = contract.get("required_files", required)
+        conversation_limit = int(contract.get("conversation_context_limit", conversation_limit))
+        evolution_every = int(contract.get("evolution_every_handoffs", evolution_every))
     return "\n".join([
-        f"- Write a lesson file under `{folder}/` after each development conversation.",
-        f"- File name pattern: `{folder}/{pattern}`.",
+        f"- Maintain 10 project-specific numbered experience files under `{folder}/`.",
+        f"- Fixed files: {', '.join(f'`{folder}/{item}`' for item in required)}.",
+        f"- Project-specific files use `{pattern}` with names selected from current repository facts.",
+        "- AI authors experience content; scripts only collect evidence, validate payloads, archive old files, and write accepted AI summaries.",
+        f"- AI must read recent conversation context before experience updates: up to {conversation_limit} latest conversation snapshots.",
+        "- Refresh cadence: every 5 completed handoffs creates an AI update request; apply with `manage_docs.py experience --payload experience-payload.json`.",
+        f"- Evolution cadence: every {evolution_every} completed handoffs writes indexed templates under `assets/templates/evolution/` after quality checks pass.",
         f"- Required sections: {', '.join(sections)}.",
-        "- Capture mistakes, fixes, reusable decisions, verification evidence, and follow-up risks.",
+        "- Archive old current experience files under `docs/experience/history_experience/YYYYMMDD-HHMMSS/` before writing refreshed versions.",
     ])
 
 
@@ -389,15 +401,14 @@ def documentation_governance_contract(profile: dict | None) -> str:
     return "\n".join([
         f"- Docs root: `{contract.get('root', 'docs')}`.",
         f"- Latest handoff: `{handoff.get('current', 'docs/handoff/HANDOFF.md')}` is always the newest task handoff.",
-        f"- Experience folder: `{experience.get('folder', 'docs/experience')}`.",
-        f"- Dir manager: keep strict folder review rules under `{dir_manager.get('folder', 'docs/dir_manager')}/` with current and planned structure JSON files.",
+        f"- Experience folder: `{experience.get('folder', 'docs/experience')}` maintains 10 project-specific numbered experience files: `docs/experience/1-workflow.md`, `docs/experience/2-scripts.md`, `docs/experience/3-plan.md`, `docs/experience/4-design-ui.md`, plus `5-*.md` through `10-*.md`.",
+        f"- Experience cadence: every 5 completed handoffs create an AI update request using up to {experience.get('conversation_context_limit', 10)} recent conversation snapshots; apply only AI-generated payloads and archive previous current files to `{experience.get('history', 'docs/experience/history_experience')}/YYYYMMDD-HHMMSS/`.",
+        f"- Auto evolution: every {experience.get('evolution_every_handoffs', 10)} completed handoffs, distill approved experience into indexed templates under `{experience.get('evolution_templates', 'assets/templates/evolution/{skill-template,engineering-template}/<type>/')}`.",
+        f"- Experience topics: {experience.get('topic_policy', 'Choose files 5-10 from current work content.')}",
+        f"- Dir manager: keep strict local and remote deployment structure review rules under `{dir_manager.get('folder', 'docs/dir_manager')}/`; run `manage_dirs.py review` and keep `history_dir_manager/` archives.",
         "- Directory changes require `python scripts/manage_dirs.py review <project> --input change.json`; blocked reviews require explicit user force-confirmation and risk capture in handoff.",
         f"- Force-confirmed directory overrides must archive old dir manager content to `{dir_manager.get('history', 'docs/dir_manager/history_dir_manager')}/YYYYMMDD-HHMMSS/` before applying the folder change.",
         f"- Handoff history: archive the previous HANDOFF.md to `{handoff.get('history', 'docs/handoff/history_handoff')}` with `{handoff.get('archive_pattern', 'HANDOFF-YYYYMMDD-HHMMSS.md')}` before writing a new one.",
-        "- Handoff sections: original plan and steps, current step, problems, resolved problems, remaining problems, next work, verification evidence.",
-        f"- Experience cadence: summarize lessons every {experience.get('summarize_every_handoffs', 5)} completed handoffs.",
-        f"- Experience history: move old lesson files to `{experience.get('history', 'docs/experience/history_experience')}/YYYYMMDD-HHMMSS/` before writing the new summary.",
-        f"- Experience topics: {experience.get('topic_policy', 'Choose lesson files from the current work content.')}",
         f"- Development records: write `{development.get('file_pattern', 'YYYYMMDD-HHMMSS-<stage>.md')}` under `{development.get('folder', 'docs/development')}` at installable releases or stage completion.",
         f"- Install configuration: document skill installation and {targets_text} adapters under `{install.get('folder', 'docs/install_configuration')}`.",
         f"- Git manager: document branch, master, release, dist, installable version naming, and current version rules under `{git.get('folder', 'docs/git_manager')}`.",
@@ -447,6 +458,7 @@ def template_values(project: Path, profile: dict | None = None) -> dict[str, str
             "Running destructive or expensive commands.",
         ]),
         "NEVER_RULES": bullet_lines([
+            "Sync local skill-development content to remote servers during deployment unless the user explicitly overrides.",
             "Commit secrets, credentials, or sensitive data.",
             "Modify generated/vendor files unless explicitly requested.",
             "Fabricate commands, files, owners, branches, or policies.",
@@ -537,7 +549,7 @@ def render_root(project: Path, template_dir: Path | None = None, profile: dict |
                 "<!-- AGENTS-GENERATED:END commands -->",
             ]),
             compact_section("conversation-completion-contract", "Conversation Completion Contract", values["CONVERSATION_COMPLETION_CONTRACT"], 2),
-            compact_section("documentation-governance-contract", "Documentation Governance Contract", values["DOCUMENTATION_GOVERNANCE_CONTRACT"], 7),
+            compact_section("documentation-governance-contract", "Documentation Governance Contract", values["DOCUMENTATION_GOVERNANCE_CONTRACT"], 9),
             compact_section("directory-coverage", "Directory Coverage", values["DIRECTORY_COVERAGE"], 2),
         ]
         if "Link ADRs or architecture docs here" not in values["KEY_DECISIONS"] or "Add migrations, tech debt" not in values["CODEBASE_STATE"] or "Existing utility" in values["UTILITY_ROWS"]:

@@ -15,8 +15,8 @@ Use external AGENTS.md generator projects as capability references, not as code 
 | GitHub settings | `extract_context.py` collects CODEOWNERS, Copilot instructions, dependency configs, and rulesets |
 | Directory coverage | `extract_context.py` reports major directories that may need scoped AGENTS.md files |
 | Generation | `render_agents.py` renders root/scoped AGENTS.md from templates and extracted facts, then keeps each AGENTS.md within 100 lines |
-| Docs governance | `manage_docs.py` scaffolds `docs/`, rotates handoff files, writes experience summaries, records development stages, verifies governance files, and uses `resume-check` for interrupted session recovery |
-| Directory governance | `manage_dirs.py` scans current structure, records planned structure, reviews directory change requests, blocks unsafe folder changes, archives old dir manager content for user force-confirmed overrides, and writes review records |
+| Docs governance | `manage_docs.py` scaffolds `docs/`, rotates handoff files, writes 10 numbered experience summaries, records development stages, verifies governance files, and uses `resume-check` for interrupted session recovery |
+| Directory governance | `manage_dirs.py` scans current structure, records planned local and remote deployment structure, reviews directory change requests, blocks unsafe folder changes, archives old dir manager content for user force-confirmed overrides, and writes review records |
 | Structure/content validation | `verify_agents.py`, `audit_skill.py`, and `evaluate_skill.py` gate markers, placeholders, paths, commands, skipped directories, and skill structure |
 | Install confirmation | `install_skill.py` asks yes/no install confirmation after release validation and defaults to skip unless Codex or custom target is explicit |
 | Compatibility shims | `create_agent_shims.py` creates CLAUDE.md and GEMINI.md only when requested, preserving non-managed files |
@@ -30,6 +30,6 @@ Use external AGENTS.md generator projects as capability references, not as code 
 - Do not install hooks automatically; detect and document them, then let the user choose setup.
 - Do not install a release package automatically; no answer or no means skip installation.
 - Do not duplicate every agent-specific proprietary rule format; keep AGENTS.md canonical and provide shims only for requested compatibility.
-- Do not overwrite hand-written docs governance records; archive handoff and experience history before writing new current files.
+- Do not overwrite hand-written docs governance records; archive handoff and numbered experience history before writing new current files.
 - Do not apply directory moves directly from the review helper; `manage_dirs.py` only reviews and blocks so agents cannot bypass user intent.
 - If a user force-confirms a blocked directory change, archive old dir manager content to `docs/dir_manager/history_dir_manager/<timestamp>/` before applying the change.

@@ -2,6 +2,16 @@
 
 AGENTS.md is an operational context file for AI coding agents. Human readability is useful, but agent accuracy is the goal.
 
+## Table of Contents
+
+- [Core Principles](#core-principles)
+- [Skill Design Patterns](#skill-design-patterns)
+- [Engineering Rule Essence](#engineering-rule-essence)
+- [Root AGENTS.md Sections](#root-agentsmd-sections)
+- [Scoped AGENTS.md Sections](#scoped-agentsmd-sections)
+- [What Not To Include](#what-not-to-include)
+- [Compatibility](#compatibility)
+
 ## Core Principles
 
 | Principle | Meaning |
@@ -73,7 +83,7 @@ When a book-derived rule set is used, choose exactly one primary rule set. Use `
 | Codebase State | Verified migrations, tech debt, known risks |
 | Terminology | Domain terms agents may misunderstand |
 | Scoped Index | Links to scoped AGENTS.md files |
-| Documentation Governance Contract | Require `docs/handoff/HANDOFF.md`, handoff history rotation, `docs/experience/` summaries every five handoffs, stage records, install configuration, git manager records, `docs/dir_manager/` folder-change review, and `history_dir_manager/` archival before force-confirmed blocked directory changes |
+| Documentation Governance Contract | Require `docs/handoff/HANDOFF.md`, handoff history rotation, 10 numbered `docs/experience/` summaries every five handoffs, stage records, install configuration, git manager records, local and remote deployment `docs/dir_manager/` folder-change review, and `history_dir_manager/` archival before force-confirmed blocked directory changes |
 
 ## Scoped AGENTS.md Sections
 

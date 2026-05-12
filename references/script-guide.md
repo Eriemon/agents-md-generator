@@ -2,6 +2,15 @@
 
 All scripts use Python standard library only.
 
+## Table of Contents
+
+- [Detect](#detect)
+- [Extract](#extract)
+- [Render](#render)
+- [Docs Governance](#docs-governance)
+- [Verify](#verify)
+- [Compatibility](#compatibility)
+
 ## Detect
 
 ```bash
@@ -47,7 +56,7 @@ python scripts/render_agents.py /path/to/project --profile /path/to/project/.age
 python scripts/render_agents.py /path/to/project --template-dir /path/to/templates
 ```
 
-Default mode is dry-run and prints the compressed root draft. `--profile` enables strong-control sections from `.agents/agents-control.json`; without it, output must say strong control is not configured. `--write` writes AGENTS.md files inside the target project, creates the `docs/` governance tree when a profile is present, and preserves hand-written content outside generated sections. Root and scoped AGENTS.md files must stay within 100 lines; if preserved hand-written content breaks that limit, `--write` fails before changing files. It must not create a root-level `experience/`; all experience summaries belong under `docs/experience/`. If docs preflight reports an ambiguous or conflicting existing `docs/` layout, `--write` exits before writing AGENTS.md or docs governance unless `--confirm-docs-layout` records explicit user confirmation. `--template-dir` is mainly for tests or deliberate template overrides; otherwise use bundled templates in `assets/templates/`.
+Default mode is dry-run and prints the compressed root draft. `--profile` enables strong-control sections from `.agents/agents-control.json`; without it, output must say strong control is not configured. `--write` writes AGENTS.md files inside the target project, creates the `docs/` governance tree when a profile is present, and preserves hand-written content outside generated sections. Root and scoped AGENTS.md files must stay within 100 lines; if preserved hand-written content breaks that limit, `--write` fails before changing files. It must not create a root-level `experience/`; all experience summaries belong under `docs/experience/` as 10 numbered files. If docs preflight reports an ambiguous or conflicting existing `docs/` layout, `--write` exits before writing AGENTS.md or docs governance unless `--confirm-docs-layout` records explicit user confirmation. `--template-dir` is mainly for tests or deliberate template overrides; otherwise use bundled templates in `assets/templates/`.
 
 ## Docs Governance
 
@@ -60,6 +69,8 @@ python scripts/manage_docs.py resume-repair /path/to/project --input recovery.js
 python scripts/manage_docs.py handoff /path/to/project --input handoff.json
 python scripts/manage_docs.py experience /path/to/project
 python scripts/manage_docs.py experience /path/to/project --force
+python scripts/manage_docs.py experience /path/to/project --payload experience-payload.json
+python scripts/manage_docs.py evolve /path/to/project --force
 python scripts/manage_docs.py development /path/to/project --stage release --input stage.json
 python scripts/manage_docs.py verify /path/to/project
 python scripts/manage_dirs.py init /path/to/project
@@ -71,17 +82,21 @@ python scripts/manage_dirs.py verify /path/to/project
 
 `preflight` is read-only. It checks whether `docs/` is absent, already has a complete AGENTS.md governance tree, or has an ambiguous/conflicting existing layout. It returns `status`, `docs_exists`, `safe_to_scaffold`, `conflicts`, `requires_user_confirmation`, and `question`. If confirmation is required, ask the user before writing AGENTS.md or scaffolding docs governance.
 
-`scaffold` creates `docs/handoff/`, `docs/handoff/history_handoff/`, `docs/experience/`, `docs/experience/history_experience/`, `docs/development/`, `docs/install_configuration/`, `docs/git_manager/`, and `docs/dir_manager/` including `change_reviews/` and `history_dir_manager/`. It also creates the latest handoff placeholder plus install, git manager, and dir manager baseline files.
+`scaffold` creates `docs/handoff/`, `docs/handoff/history_handoff/`, `docs/experience/`, `docs/experience/history_experience/`, `docs/development/`, `docs/install_configuration/`, `docs/git_manager/`, and `docs/dir_manager/` including `change_reviews/` and `history_dir_manager/`. It also creates the latest handoff placeholder, install and git manager baselines, dir manager baselines, and 10 numbered experience files: fixed `1-workflow.md`, `2-scripts.md`, `3-plan.md`, `4-design-ui.md`, plus project-specific `5-*.md` through `10-*.md`.
 
-`handoff` archives the previous `docs/handoff/HANDOFF.md` to `docs/handoff/history_handoff/HANDOFF-YYYYMMDD-HHMMSS.md`, writes the new latest handoff, increments `.agents/docs-governance-state.json`, and triggers an experience summary every five handoffs. The input JSON can include `original_plan`, `current_step`, `problems`, `resolved`, `remaining`, `next`, and `verification`.
+`handoff` archives the previous `docs/handoff/HANDOFF.md` to `docs/handoff/history_handoff/HANDOFF-YYYYMMDD-HHMMSS.md`, writes the new latest handoff, increments `.agents/docs-governance-state.json`, and creates an AI experience update request every five handoffs. The input JSON can include `original_plan`, `current_step`, `problems`, `resolved`, `remaining`, `next`, `verification`, `conversation_summary`, `conversation_excerpt`, and `conversation_log_path`. Conversation fields are saved under `.agents/conversation-snapshots/` so future experience updates can read the latest 10 conversation materials.
 
 `start-session` writes `.agents/active-session.json` after the current handoff is read and before task execution begins. `resume-check` compares that active session with the current `HANDOFF.md` hash and optional conversation log; an unchanged handoff with an active session is reported as an interrupted session. `resume-repair` writes a recovery handoff and clears the active session before the next request is handled.
 
-`experience` writes `docs/experience/docs-governance-lessons.md` when five new handoffs have accumulated, or immediately with `--force`. Existing lesson files are moved to `docs/experience/history_experience/YYYYMMDD-HHMMSS/` before the new summary is written.
+`experience` without `--payload` does not write lessons. It writes `.agents/experience-update-request.json` when five new handoffs have accumulated, or immediately with `--force`. The request includes project facts, current and historical handoffs, current and historical experience files, target filenames, quality rules, and up to 10 recent conversation snapshots. If no conversation material exists, it sets `conversation_context_missing=true` instead of pretending the context is complete.
+
+`experience --payload experience-payload.json` applies AI-authored lessons. The payload must declare `generated_by=ai` and provide all 10 files. The script validates that content is not a raw HANDOFF.md copy, not placeholder text, and not highly homogeneous across files. Existing current experience files are moved to `docs/experience/history_experience/YYYYMMDD-HHMMSS/` before accepted payload content is written. Files `5-*.md` through `10-*.md` remain selected deterministically from project facts such as testing, validation, release, installation, docs governance, directory governance, and remote deployment.
+
+`evolve` writes automatic evolution templates after accepted experience passes quality checks. Every 10 completed handoffs, payload application triggers the same flow automatically. It reads the current plus latest historical versions of `1-workflow.md`, `2-scripts.md`, `3-plan.md`, and `4-design-ui.md`, then writes indexed templates under `assets/templates/evolution/skill-template/<type>/` and `assets/templates/evolution/engineering-template/<type>/`.
 
 `development` writes a stage record under `docs/development/` for installable releases or stage completion. The input JSON can include `goal`, `completed_scope`, `verification`, `artifacts`, `version`, and `remaining_risks`.
 
-`manage_dirs.py` is the strict folder gate. `init` creates `DIR_MANAGER.md`, `current_structure.json`, `planned_structure.json`, `change_reviews/`, and `history_dir_manager/`. `review` accepts JSON such as `{"changes":[{"action":"create","path":"features"}]}` and returns `approved`, `decision`, `reasons`, `risks`, `user_message`, `force_confirmation_required`, and `force_override_archive_required`. Blocked reviews exit non-zero and must be shown to the user before any force-confirmed folder change. If the user explicitly force-confirms a blocked change, run `archive` before applying it; this preserves the old dir manager content under `docs/dir_manager/history_dir_manager/YYYYMMDD-HHMMSS/`.
+`manage_dirs.py` is the strict local and remote deployment folder gate. `init` creates `DIR_MANAGER.md`, `current_structure.json`, `planned_structure.json`, `change_reviews/`, and `history_dir_manager/`; `planned_structure.json` includes `remote_deployment` with a workspace root, planned remote structure, protected remote paths, and review requirements, or `not configured` when no remote workspace is confirmed. `review` accepts JSON such as `{"changes":[{"action":"create","path":"features"}]}` and returns `approved`, `decision`, `reasons`, `risks`, `user_message`, `force_confirmation_required`, and `force_override_archive_required`. Blocked reviews exit non-zero and must be shown to the user before any force-confirmed folder change. If the user explicitly force-confirms a blocked change, run `archive` before applying it; this preserves the old dir manager content under `docs/dir_manager/history_dir_manager/YYYYMMDD-HHMMSS/`.
 
 ## Verify
 

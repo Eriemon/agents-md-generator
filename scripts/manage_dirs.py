@@ -93,7 +93,7 @@ def dir_manager_doc() -> str:
     return "\n".join([
         "# Directory Manager",
         "",
-        "This file is the strict gate for creating, moving, renaming, or deleting project folders.",
+        "This file is the strict gate for creating, moving, renaming, or deleting local project folders and remote deployment workspace folders.",
         "",
         "## Required Review",
         "- Read this file before changing folder structure.",
@@ -105,6 +105,7 @@ def dir_manager_doc() -> str:
         "## Blocked By Default",
         "- Paths outside the project, absolute paths, parent traversal, wildcards, or shell-unsafe path characters.",
         "- New top-level folders not listed in `planned_structure.json`.",
+        "- Remote deployment folders not listed in `planned_structure.json` remote_deployment planning.",
         "- Moving or deleting `.agents/`, `docs/dir_manager/`, `docs/handoff/`, or `docs/git_manager/`.",
         "- Moving source, tests, docs, dist, scripts, assets, references, or agents folders to unplanned locations.",
         "- Mixing generated output, release packages, or temporary references into source folders.",
@@ -117,6 +118,37 @@ def dir_manager_doc() -> str:
         "- Record confirmation and risk in the next handoff.",
         "",
     ])
+
+
+def control_profile(project: Path) -> dict[str, Any]:
+    data = read_json(project / ".agents" / "agents-control.json")
+    return data if isinstance(data, dict) else {}
+
+
+def remote_structure(project: Path) -> str:
+    profile = control_profile(project)
+    contract = profile.get("directory_contract", {}) if isinstance(profile.get("directory_contract"), dict) else {}
+    raw = str(contract.get("remote", "")).strip()
+    if not raw:
+        return "not configured"
+    if raw.lower() in {"none", "not configured"}:
+        return "not configured"
+    if "no remote workspace is configured" in raw.lower():
+        return "not configured"
+    return raw
+
+
+def remote_deployment_plan(project: Path) -> dict[str, Any]:
+    workspace = remote_structure(project)
+    planned = [] if workspace == "not configured" else [workspace]
+    return {
+        "workspace_root": workspace,
+        "planned_structure": planned,
+        "protected_paths": planned,
+        "review_required_for": ["create", "move", "delete", "rename"],
+        "block_on_failed_review": True,
+        "force_override_requires_user_confirmation": True,
+    }
 
 
 def planned_structure(project: Path) -> dict[str, Any]:
@@ -141,6 +173,7 @@ def planned_structure(project: Path) -> dict[str, Any]:
         "allowed_new_paths": sorted(current_dirs),
         "protected_paths": sorted(GOVERNANCE_PREFIXES),
         "review_required_for": ["create", "move", "delete", "rename"],
+        "remote_deployment": remote_deployment_plan(project),
         "block_on_failed_review": True,
         "force_override_requires_user_confirmation": True,
         "force_override_archive": "docs/dir_manager/history_dir_manager/YYYYMMDD-HHMMSS",
@@ -159,6 +192,12 @@ def init_dir_manager(project: Path) -> dict[str, Any]:
             json.dumps(planned_structure(project), indent=2, sort_keys=True),
             encoding="utf-8",
         )
+    else:
+        planned = load_planned(project)
+        remote_plan = remote_deployment_plan(project)
+        if planned.get("remote_deployment") != remote_plan:
+            planned["remote_deployment"] = remote_plan
+            (project / PLANNED_STRUCTURE).write_text(json.dumps(planned, indent=2, sort_keys=True), encoding="utf-8")
     structure = scan_structure(project)
     (project / CURRENT_STRUCTURE).write_text(json.dumps(structure, indent=2, sort_keys=True), encoding="utf-8")
     verify = verify_dir_manager(project)
@@ -318,6 +357,16 @@ def verify_dir_manager(project: Path) -> dict[str, Any]:
         errors.append(f"{PLANNED_STRUCTURE.as_posix()}: block_on_failed_review must be true")
     if planned and not planned.get("force_override_archive"):
         errors.append(f"{PLANNED_STRUCTURE.as_posix()}: force_override_archive must be configured")
+    remote = planned.get("remote_deployment") if planned else None
+    if planned and not isinstance(remote, dict):
+        errors.append(f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment must be configured")
+    if isinstance(remote, dict):
+        if not remote.get("workspace_root"):
+            errors.append(f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.workspace_root must be configured or `not configured`")
+        if not isinstance(remote.get("planned_structure"), list):
+            errors.append(f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.planned_structure must be a list")
+        if not isinstance(remote.get("review_required_for"), list):
+            errors.append(f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.review_required_for must be a list")
     return {"project": str(project), "checked": checked, "errors": errors}
 
 

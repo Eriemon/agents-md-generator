@@ -44,8 +44,13 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - Missing root `AGENTS.md` triggers an ask-first decision before writing project instructions.
 - Existing `docs/` layouts are preflighted; ambiguous or conflicting layouts require user confirmation before AGENTS.md or docs governance writes.
 - Strong control requires `.agents/agents-control.json` and the docs governance tree; local reference paths may stay in that profile but must not be copied into AGENTS.md.
-- Root-level `experience/` is not allowed; experience lessons and history belong under `docs/experience/`.
-- Directory Contract fixes local structure, remote structure, and future feature-addition structure before implementation.
+- Root-level `experience/` is not allowed; 10 numbered experience files and history belong under `docs/experience/`.
+- Experience files must be AI-authored summaries from evidence, not script-authored templates; every fifth handoff should create `.agents/experience-update-request.json` and require an accepted `experience-payload.json`.
+- AI experience updates must read the latest available conversation snapshots, up to 10 entries, and the request must disclose when conversation context is missing.
+- Experience files must be topic-specific, non-placeholder, not highly homogeneous, and must not copy a full `HANDOFF.md` into every file.
+- Every tenth handoff should evolve accepted experience into indexed templates under `assets/templates/evolution/`.
+- Directory Contract fixes local structure, remote structure, remote deployment workspace planning, and future feature-addition structure before implementation.
+- Remote deployment tasks must not sync local skill-development content to servers unless the user explicitly overrides; deploy only intended runtime or deployment artifacts.
 - Directory changes must pass `docs/dir_manager/DIR_MANAGER.md` review and `python scripts/manage_dirs.py review <project> --input change.json`.
 - Blocked directory reviews require a clear refusal, severe-risk explanation, and explicit user force-confirmation before any folder structure change.
 - Force-confirmed blocked directory changes require `python scripts/manage_dirs.py archive <project> --reason "force-confirmed directory override"` before applying the change, preserving old content under `docs/dir_manager/history_dir_manager/<timestamp>/`.
@@ -60,6 +65,7 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - Root AGENTS.md is thin and points to scoped files when local rules differ.
 - Scoped files do not duplicate root content unless overriding it.
 - README-style narrative, marketing, installation history, and copied docs are omitted.
+- Reference files over 100 lines include a table of contents near the top.
 
 ## Safety Checks
 
@@ -68,7 +74,7 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - Always / Ask First / Never rules are present.
 - Secrets, generated files, dependency changes, migrations, CI changes, destructive git operations, and public API changes have clear rules.
 - Completion claims require verification output.
-- Every completed development conversation writes `docs/handoff/HANDOFF.md`, archives the previous handoff, and refreshes `docs/experience/` lessons every five handoffs.
+- Every completed development conversation writes `docs/handoff/HANDOFF.md`, archives the previous handoff, and refreshes the 10 numbered `docs/experience/` files every five handoffs.
 - New task starts check `.agents/active-session.json` with `manage_docs.py resume-check`; interrupted sessions require `resume-repair` before new work.
 
 ## Update Checks

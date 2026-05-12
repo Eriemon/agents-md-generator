@@ -40,7 +40,7 @@ Create operational context files for AI coding agents. Use facts from the reposi
    - Run `python scripts/render_agents.py <project> --profile <project>/.agents/agents-control.json` first; default is dry-run.
    - Use `--write` only after reviewing the draft and confirming the target path is inside the intended repository.
    - Before `--write` with strong-control docs governance, run `python scripts/manage_docs.py preflight <project>`; if it requires user confirmation, ask before using the existing `docs/` layout.
-   - Strong-control generation creates or requires `.agents/agents-control.json` and the `docs/` governance tree. Experience records must live under `docs/experience/`; do not create a root-level `experience/` folder.
+   - Strong-control generation creates or requires `.agents/agents-control.json` and the `docs/` governance tree. Experience records must live under `docs/experience/` as 10 numbered project-specific files; do not create a root-level `experience/` folder.
    - `render_agents.py --write` writes compressed AGENTS.md and scoped AGENTS.md files, each capped at 100 lines; if preserved hand-written content breaks the limit, ask the user to compress it before writing.
    - After writing AGENTS.md files, run docs scaffolding for handoff, experience, development, install configuration, and git manager records.
    - Templates in `assets/templates/` define the intended root/scoped shape.
@@ -51,10 +51,13 @@ Create operational context files for AI coding agents. Use facts from the reposi
    - At task start, run `python scripts/manage_docs.py start-session <project> --input session.json` after reading `docs/handoff/HANDOFF.md`.
    - Run `python scripts/manage_docs.py scaffold <project>` when docs governance must be prepared without rewriting AGENTS.md.
    - At task completion, run `python scripts/manage_docs.py handoff <project> --input handoff.json`; the current `docs/handoff/HANDOFF.md` is archived before the new latest handoff is written.
-   - Every five handoffs, the script summarizes lessons under `docs/experience/` and archives old lesson files under `docs/experience/history_experience/<timestamp>/`.
+   - Every five handoffs, `manage_docs.py` creates `.agents/experience-update-request.json`; AI must read that request plus up to 10 recent conversation snapshots and write an `experience-payload.json`.
+   - Apply AI-authored experience with `python scripts/manage_docs.py experience <project> --payload experience-payload.json`; scripts validate, archive, and write, but must not fabricate lesson content.
+   - Every ten handoffs, accepted experience evolves indexed templates under assets/templates/evolution skill-template and engineering-template type folders.
    - At installable release or stage completion, run `python scripts/manage_docs.py development <project> --stage <name> --input stage.json`.
    - Keep install setup for Codex, Claude, and OpenClaw under `docs/install_configuration/`; keep branch, release, dist, package naming, and current version rules under `docs/git_manager/`.
-   - Keep folder governance under `docs/dir_manager/`; before creating, moving, deleting, or renaming project folders, run `python scripts/manage_dirs.py review <project> --input change.json`.
+   - Keep local and remote deployment folder governance under `docs/dir_manager/`; before creating, moving, deleting, or renaming governed folders, run `python scripts/manage_dirs.py review <project> --input change.json`.
+   - For remote server deployment tasks, do not sync local skill-development content to servers; deploy only explicit runtime/deployment artifacts unless the user explicitly overrides.
    - If directory review is blocked, refuse default execution, explain the severe risks, and ask for explicit user force-confirmation before changing folder structure.
    - After explicit user force-confirmation and before applying the blocked folder change, run `python scripts/manage_dirs.py archive <project> --reason "force-confirmed directory override"` so old dir manager content is preserved under `docs/dir_manager/history_dir_manager/<timestamp>/`.
 
@@ -70,7 +73,7 @@ Create operational context files for AI coding agents. Use facts from the reposi
 8. **Final Evidence**
    - Report generated files, unresolved warnings, and verification command output.
    - Never label commands verified unless they were actually run.
-   - Ensure each completed development conversation writes `docs/handoff/HANDOFF.md`; every fifth handoff must also refresh `docs/experience/` lessons.
+   - Ensure each completed development conversation writes `docs/handoff/HANDOFF.md`; include conversation summary/excerpt/log references so future AI experience updates can read the latest 10 conversations.
 
 ## Rules
 
@@ -93,5 +96,5 @@ Create operational context files for AI coding agents. Use facts from the reposi
 | `references/evaluation-scenarios.md` | Regression scenarios to forward-test the skill |
 | `assets/templates/root-agents.md` | Root AGENTS.md structure |
 | `assets/templates/scoped-agents.md` | Directory-scoped AGENTS.md structure |
-| `scripts/manage_docs.py` | Docs governance scaffold, handoff rotation, experience summaries, development records, and verification |
-| `scripts/manage_dirs.py` | Strict folder structure scan, planning, review, blocking, and verification |
+| `scripts/manage_docs.py` | Docs governance scaffold, handoff rotation, AI experience requests/payload application, evolution templates, development records, and verification |
+| `scripts/manage_dirs.py` | Strict local and remote folder structure scan, planning, review, blocking, and verification |

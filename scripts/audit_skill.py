@@ -125,6 +125,10 @@ def contains_local_reference(text: str) -> bool:
     return bool(LOCAL_REFERENCE_RE.search(text))
 
 
+def has_toc(lines: list[str]) -> bool:
+    return any("table of contents" in line.lower() or "目录" in line for line in lines[:30])
+
+
 def parse_openai_interface(text: str) -> dict[str, str] | None:
     lines = text.splitlines()
     try:
@@ -225,6 +229,10 @@ def audit(skill_dir: Path) -> dict:
             continue
         if path.suffix in {".md", ".yaml", ".yml", ".py"}:
             text = path.read_text(encoding="utf-8", errors="ignore")
+            if rel_parts and rel_parts[0] == "references" and path.suffix == ".md":
+                lines = text.splitlines()
+                if len(lines) > 100 and not has_toc(lines):
+                    errors.append(f"{rel_path}: reference files over 100 lines need a table of contents")
             if "{{" in text and (rel_path == "SKILL.md" or rel_path.startswith("agents/")):
                 warnings.append(f"{rel_path}: contains template placeholder syntax outside templates")
             if rel_path.startswith("assets/templates/"):
