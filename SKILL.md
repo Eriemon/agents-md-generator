@@ -1,17 +1,20 @@
 ---
 name: agents-md-generator
-description: Use when creating, updating, verifying, or reviewing AGENTS.md files and AI coding-agent rule files; when a project or work folder root lacks AGENTS.md; when the user mentions AGENTS.md, agent rules, scoped AGENTS.md, AI coding context, repository onboarding for agents, stale agent docs, command verification, CLAUDE.md/GEMINI.md compatibility shims, or project instructions for Codex, Claude Code, Gemini CLI, GitHub Copilot, Cursor, and other coding agents.
+description: Use when creating, updating, verifying, or reviewing AGENTS.md files and AI coding-agent rule files; when a project or current work folder root lacks AGENTS.md; when root AGENTS.md version metadata is missing or mismatched; when the user mentions AGENTS.md, 规划, agent rules, scoped AGENTS.md, AI coding context, repository onboarding for agents, stale agent docs, command verification, CLAUDE.md/GEMINI.md compatibility shims, or project instructions for Codex, Claude Code, Gemini CLI, GitHub Copilot, Cursor, and other coding agents.
 ---
 
 # AGENTS.md Generator
 
 Create operational context files for AI coding agents. Use facts from the repository first, ask only for missing human policy, and verify before claiming the draft is ready.
 
+When the user asks to inspect or 规划 the current working folder, first检查当前工作文件夹根 `AGENTS.md` 状态. If the root file is missing, lacks version metadata, or either version field does not match the current installed `agents-md-generator`, this skill must trigger the AGENTS/docs/workspace restructuring flow instead of treating the workspace as normal.
+
 ## Pipeline
 
 1. **Detect**
    - Run `python scripts/inspect_project.py <project>` to gather language, framework, package manager, CI, AI configs, files, and directories.
-   - If `root_agents_md_exists` is false, or the root `AGENTS.md` has no version metadata, or its version does not match the current local installed `agents-md-generator` version, treat the workspace as rebuild-required and trigger AGENTS/docs/workspace restructuring handling immediately.
+   - If `root_agents_md_exists` is false, or the root `AGENTS.md` is missing `agents_version` or `generator_version`, or either version does not match the current local installed `agents-md-generator` version, treat the workspace as trigger-required/rebuild-required and trigger AGENTS/docs/workspace restructuring handling immediately.
+   - When the user says `规划`, do this root-AGENTS check first. `规划` is a trigger entry for inspection and rebuild routing, not a bypass around the AGENTS.md check.
    - Run `python scripts/detect_scopes.py <project>` to find directories that may need scoped AGENTS.md files.
 
 2. **Design Interview**
@@ -55,7 +58,7 @@ Create operational context files for AI coding agents. Use facts from the reposi
    - At task completion, run `python scripts/manage_docs.py handoff <project> --input handoff.json`; the current `docs/handoff/HANDOFF.md` is archived before the new latest handoff is written.
    - Every five handoffs, `manage_docs.py` creates `.agents/experience-update-request.json`; AI must read that request plus up to 10 recent conversation snapshots and write an `experience-payload.json`.
    - Apply AI-authored experience with `python scripts/manage_docs.py experience <project> --payload experience-payload.json`; scripts validate, archive, and write, but must not fabricate lesson content.
-   - Every ten handoffs, accepted experience evolves indexed templates under assets/templates/evolution skill-template and engineering-template type folders.
+   - Every ten handoffs, accepted experience evolves indexed templates under the single matching assets/templates/evolution family: skill projects use `skill-template/<category>/<type>/`, engineering projects use `engineering-template/<category>/<type>/`; do not copy the same experience into both families.
    - At installable release or stage completion, run `python scripts/manage_docs.py development <project> --stage <name> --input stage.json`.
    - Keep install setup for Codex, Claude, and OpenClaw under `docs/install_configuration/`; keep branch, release, dist, package naming, protected branch cleanup, `CHANGELOG.md`, changelog history, and current version rules under `docs/git_manager/`.
    - Rotate commit and release summaries with `python scripts/manage_docs.py git-changelog <project> --input changelog.json`; archive the previous current file under `docs/git_manager/history_git_manager/<timestamp>/CHANGELOG.md` before writing the new one.

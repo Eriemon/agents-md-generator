@@ -1,4 +1,4 @@
 interface:
   display_name: "AGENTS.md Generator"
-  short_description: "Guide agents to draft verified AGENTS.md files"
-  default_prompt: "Use $agents-md-generator to create an AGENTS.md for this repository."
+  short_description: "Inspect current work folder root AGENTS.md state, handle 规划-triggered checks, and draft verified AGENTS.md files"
+  default_prompt: "Use $agents-md-generator to inspect the current work folder root AGENTS.md state first; if it is missing, lacks version metadata, or is version-mismatched, rebuild AGENTS.md/docs/workspace. Treat 规划 as a root AGENTS.md check entry before normal generation."

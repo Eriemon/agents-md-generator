@@ -118,11 +118,11 @@ def project_overview(facts: dict) -> str:
     ]
     if facts.get("root_agents_md_exists"):
         if facts.get("root_agents_md_rebuild_required"):
-            lines.append(f"Root AGENTS.md: present but rebuild required ({', '.join(facts.get('root_agents_md_rebuild_reasons', []))}).")
+            lines.append(f"Root AGENTS.md: present but trigger-required for agents-md-generator regeneration/restructure ({', '.join(facts.get('root_agents_md_trigger_reasons', facts.get('root_agents_md_rebuild_reasons', [])))}).")
         else:
             lines.append("Root AGENTS.md: present and version-aligned with the current local agents-md-generator.")
     else:
-        lines.append("Root AGENTS.md: missing. Must trigger agents-md-generator regeneration and workspace/docs restructure handling before normal work.")
+        lines.append("Root AGENTS.md: missing. Must trigger agents-md-generator root AGENTS/docs/workspace restructure handling before normal work.")
     return "\n".join(lines)
 
 
@@ -366,7 +366,14 @@ def conversation_completion_contract(profile: dict | None) -> str:
 def experience_log_contract(profile: dict | None) -> str:
     folder = "docs/experience"
     pattern = "1-xxxxx.md through 10-xxxxx.md"
-    sections = ["evidence_read", "iterated_lessons", "next_application"]
+    sections = [
+        "evidence_read",
+        "task_context",
+        "how_to_apply",
+        "problems_and_risks",
+        "iterated_lessons",
+        "next_application",
+    ]
     required = ["1-workflow.md", "2-scripts.md", "3-plan.md", "4-design-ui.md"]
     conversation_limit = 10
     evolution_every = 10
@@ -415,7 +422,7 @@ def documentation_governance_contract(profile: dict | None) -> str:
         f"- Latest handoff: `{handoff.get('current', 'docs/handoff/HANDOFF.md')}` is always the newest task handoff.",
         f"- Experience folder: `{experience.get('folder', 'docs/experience')}` maintains 10 project-specific numbered experience files including `docs/experience/1-workflow.md`, `docs/experience/2-scripts.md`, `docs/experience/3-plan.md`, `docs/experience/4-design-ui.md`, plus `5-*.md` through `10-*.md`.",
         f"- Experience cadence: every 5 completed handoffs create an AI update request using up to {experience.get('conversation_context_limit', 10)} recent conversation snapshots; apply only AI-generated payloads and archive previous current files to `{experience.get('history', 'docs/experience/history_experience')}/YYYYMMDD-HHMMSS/`.",
-        f"- Auto evolution: every {experience.get('evolution_every_handoffs', 10)} completed handoffs, distill approved experience into indexed templates under `{experience.get('evolution_templates', 'assets/templates/evolution/{skill-template,engineering-template}/<type>/')}`; topics stay project-specific.",
+        f"- Auto evolution: every {experience.get('evolution_every_handoffs', 10)} completed handoffs, distill approved experience into indexed templates under `{experience.get('evolution_templates', 'assets/templates/evolution/<matching-family>/<category>/<type>/')}`; topics stay project-specific and must not be copied into both template families.",
         f"- Git manager: keep the current change summary in `{git.get('folder', 'docs/git_manager')}/CHANGELOG.md`, archive older entries under `{git.get('folder', 'docs/git_manager')}/history_git_manager/YYYYMMDD-HHMMSS/`, and rotate with `manage_docs.py git-changelog`.",
         f"- Dir manager: keep strict local and remote deployment structure review rules under `{dir_manager.get('folder', 'docs/dir_manager')}/`; run `manage_dirs.py review` and keep `history_dir_manager/` archives.",
         "- Directory changes require `python scripts/manage_dirs.py review <project> --input change.json`; blocked reviews require explicit user force-confirmation and risk capture in handoff.",

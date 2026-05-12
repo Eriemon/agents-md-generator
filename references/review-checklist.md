@@ -41,14 +41,20 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - Skill design interview questions expose selectable options, repeat `review_summary` confirmation after each answer group, and set `alignment_confirmed=true` only after the user confirms the summary.
 - Skill development profiles include detailed development requirements, development purpose, expected result, validation method, and validation granularity before strong control is written.
 - User-developed Skills live under `skills/<skill-name>/SKILL.md`; `SKILL.md` frontmatter `name` exactly matches the folder name and uses lowercase letters, digits, and hyphens.
-- Missing root `AGENTS.md` triggers an ask-first decision before writing project instructions.
+- Missing root `AGENTS.md` is a mandatory trigger for agents-md-generator root AGENTS/docs/workspace restructuring, not a normal warning or optional ask-first decision.
+- Missing `agents_version` or `generator_version`, or either value mismatching the installed `agents-md-generator` version, is also a mandatory trigger for root AGENTS/docs/workspace restructuring.
+- User requests containing `规划` should first run the current-work-folder root `AGENTS.md` check and route into agents-md-generator when the root state is missing or version-abnormal.
 - Existing `docs/` layouts are preflighted; ambiguous or conflicting layouts require user confirmation before AGENTS.md or docs governance writes.
 - Strong control requires `.agents/agents-control.json` and the docs governance tree; local reference paths may stay in that profile but must not be copied into AGENTS.md.
 - Root-level `experience/` is not allowed; 10 numbered experience files and history belong under `docs/experience/`.
 - Experience files must be AI-authored summaries from evidence, not script-authored templates; every fifth handoff should create `.agents/experience-update-request.json` and require an accepted `experience-payload.json`.
 - AI experience updates must read the latest available conversation snapshots, up to 10 entries, and the request must disclose when conversation context is missing.
 - Experience files must be topic-specific, non-placeholder, not highly homogeneous, and must not copy a full `HANDOFF.md` into every file.
-- Every tenth handoff should evolve accepted experience into indexed templates under `assets/templates/evolution/`.
+- Every experience file must contain enough detail for a future maintainer to understand what task was done, how it was done, what failed or was risky, and how to apply the lesson later; require `Evidence Read`, `Task Context`, `How To Apply`, `Problems And Risks`, `Iterated Lessons`, and `Next Application`.
+- Every tenth handoff should evolve accepted experience into indexed templates under `assets/templates/evolution/`, but only from AI-authored `evolution_summary` synthesis.
+- Evolution templates must write to exactly one family that matches the project kind: skill projects use `skill-template/<category>/<type>/`, engineering projects use `engineering-template/<category>/<type>/`.
+- AI-provided `evolution_target` values must have a matching family, safe category/type path segments, and a rationale; inferred categories should use repository facts such as FPGA/Vivado, algorithm/sort, agent-governance, docs-governance, web/frontend, backend/api, data/database, or general.
+- Obsolete evolution outputs listed by a prior `evolution-index.json` must be archived before cleanup; do not silently delete or keep cross-family copied templates.
 - Directory Contract fixes local structure, remote structure, remote deployment workspace planning, and future feature-addition structure before implementation.
 - Remote deployment tasks must not sync local skill-development content to servers unless the user explicitly overrides; deploy only intended runtime or deployment artifacts.
 - Directory changes must pass `docs/dir_manager/DIR_MANAGER.md` review and `python scripts/manage_dirs.py review <project> --input change.json`.

@@ -189,11 +189,20 @@ def verify(project: Path, include_skipped: bool = False) -> dict:
                 metadata = parse_agents_metadata(text)
                 if not metadata.get("agents_version") or not metadata.get("generator_version"):
                     errors.append("AGENTS.md: missing AGENTS metadata version")
-                elif installed_version and metadata.get("agents_version") != installed_version:
-                    errors.append(
-                        f"AGENTS.md: agents version {metadata.get('agents_version')} does not match installed agents-md-generator version {installed_version}"
-                    )
-                elif not installed_version:
+                if not metadata.get("agents_version"):
+                    errors.append("AGENTS.md: missing agents version metadata")
+                if not metadata.get("generator_version"):
+                    errors.append("AGENTS.md: missing generator version metadata")
+                if installed_version:
+                    if metadata.get("agents_version") and metadata.get("agents_version") != installed_version:
+                        errors.append(
+                            f"AGENTS.md: agents version {metadata.get('agents_version')} does not match installed agents-md-generator version {installed_version}"
+                        )
+                    if metadata.get("generator_version") and metadata.get("generator_version") != installed_version:
+                        errors.append(
+                            f"AGENTS.md: generator version {metadata.get('generator_version')} does not match installed agents-md-generator version {installed_version}"
+                        )
+                else:
                     errors.append("AGENTS.md: installed agents-md-generator version is unavailable")
                 if not metadata.get("default_language"):
                     errors.append("AGENTS.md: missing default language metadata")

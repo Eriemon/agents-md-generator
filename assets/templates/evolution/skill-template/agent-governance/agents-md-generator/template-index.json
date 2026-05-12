@@ -1,7 +1,4 @@
 {
-  "cadence_handoffs": 10,
-  "generated_at": "2026-05-12T17:18:00",
-  "handoff_count": 10,
   "schema_version": 1,
   "target": {
     "category_path": [
@@ -69,6 +66,5 @@
       "target_type": "agents-md-generator",
       "topic": "4-design-ui.md"
     }
-  ],
-  "version_window": "current-plus-latest-history"
+  ]
 }

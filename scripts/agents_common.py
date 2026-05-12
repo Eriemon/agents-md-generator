@@ -270,15 +270,23 @@ def inspect_project(root: Path) -> dict[str, Any]:
     agents_metadata = parse_agents_metadata(root_agents_text)
     installed_version = read_installed_skill_version()
     runtime_version = read_skill_version()
-    rebuild_reasons: list[str] = []
+    trigger_reasons: list[str] = []
     if not root_agents_path.is_file():
-        rebuild_reasons.append("missing_root_agents_md")
-    elif not agents_metadata.get("agents_version"):
-        rebuild_reasons.append("missing_agents_version")
-    elif not installed_version:
-        rebuild_reasons.append("installed_skill_version_unavailable")
-    elif agents_metadata.get("agents_version") != installed_version:
-        rebuild_reasons.append("agents_version_mismatch")
+        trigger_reasons.append("missing_root_agents_md")
+    else:
+        agents_version = agents_metadata.get("agents_version", "")
+        generator_version = agents_metadata.get("generator_version", "")
+        if not agents_version:
+            trigger_reasons.append("missing_agents_version")
+        if not generator_version:
+            trigger_reasons.append("missing_generator_version")
+        if not installed_version:
+            trigger_reasons.append("installed_skill_version_unavailable")
+        else:
+            if agents_version and agents_version != installed_version:
+                trigger_reasons.append("agents_version_mismatch")
+            if generator_version and generator_version != installed_version:
+                trigger_reasons.append("generator_version_mismatch")
 
     return {
         "project_root": str(root),
@@ -289,8 +297,10 @@ def inspect_project(root: Path) -> dict[str, Any]:
         "root_agents_md_default_language": agents_metadata.get("default_language", ""),
         "current_skill_version": runtime_version,
         "installed_skill_version": installed_version,
-        "root_agents_md_rebuild_required": bool(rebuild_reasons),
-        "root_agents_md_rebuild_reasons": rebuild_reasons,
+        "root_agents_md_trigger_required": bool(trigger_reasons),
+        "root_agents_md_trigger_reasons": trigger_reasons,
+        "root_agents_md_rebuild_required": bool(trigger_reasons),
+        "root_agents_md_rebuild_reasons": trigger_reasons,
         "primary_language": languages[0] if languages else "unknown",
         "languages": sorted(set(languages)),
         "package_manager": package_manager(root),
