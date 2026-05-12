@@ -20,6 +20,7 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 | Skill design | `references/skill-design-coverage.md` reviewed when the target is Skill development |
 | Freshness | `python scripts/check_freshness.py <project>` reviewed for existing AGENTS.md |
 | Compatibility | `python scripts/create_agent_shims.py <project>` used only when requested |
+| Install confirmation | `python scripts/install_skill.py <skill-dir> --target skip` or explicit install target recorded after release validation |
 | Skill self-audit | `python scripts/audit_skill.py agents-md-generator` has no errors after skill edits |
 | Fact-level validation | `python scripts/evaluate_skill.py agents-md-generator <project>` returns `"ok": true` after skill edits |
 
@@ -36,6 +37,7 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - Book-derived engineering rules use exactly one primary active rule set, mode `mini` or `nano`, explicit scope, and no full material in AGENTS.md.
 - Strong-control AGENTS.md includes Control Profile, Directory Contract, Release Contract, Engineering Rule Contract, Conversation Completion Contract, and Documentation Governance Contract.
 - Strong-control Skill AGENTS.md includes Skill Design Contract with design patterns, resource boundaries, progressive disclosure, validation gates, and forward-testing policy.
+- Every generated root or scoped AGENTS.md is 100 lines or fewer; `verify_agents.py` reports any over-limit file.
 - Skill design interview questions expose selectable options, repeat `review_summary` confirmation after each answer group, and set `alignment_confirmed=true` only after the user confirms the summary.
 - Skill development profiles include detailed development requirements, development purpose, expected result, validation method, and validation granularity before strong control is written.
 - User-developed Skills live under `skills/<skill-name>/SKILL.md`; `SKILL.md` frontmatter `name` exactly matches the folder name and uses lowercase letters, digits, and hyphens.
@@ -48,6 +50,7 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - Blocked directory reviews require a clear refusal, severe-risk explanation, and explicit user force-confirmation before any folder structure change.
 - Force-confirmed blocked directory changes require `python scripts/manage_dirs.py archive <project> --reason "force-confirmed directory override"` before applying the change, preserving old content under `docs/dir_manager/history_dir_manager/<timestamp>/`.
 - Release Contract fixes `dist/<name>-vx.x.x` and matching zip package expectations without remote push.
+- After release packaging and validation, the user is asked yes/no whether to install; no response or no means skip, and custom/Codex installs require an explicit target.
 - Commands are labeled verified only when actually executed.
 - Generated markers are balanced and hand-written content outside markers is preserved.
 - No `{{PLACEHOLDER}}` tokens remain in generated output.
@@ -66,6 +69,7 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - Secrets, generated files, dependency changes, migrations, CI changes, destructive git operations, and public API changes have clear rules.
 - Completion claims require verification output.
 - Every completed development conversation writes `docs/handoff/HANDOFF.md`, archives the previous handoff, and refreshes `docs/experience/` lessons every five handoffs.
+- New task starts check `.agents/active-session.json` with `manage_docs.py resume-check`; interrupted sessions require `resume-repair` before new work.
 
 ## Update Checks
 

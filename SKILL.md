@@ -41,11 +41,14 @@ Create operational context files for AI coding agents. Use facts from the reposi
    - Use `--write` only after reviewing the draft and confirming the target path is inside the intended repository.
    - Before `--write` with strong-control docs governance, run `python scripts/manage_docs.py preflight <project>`; if it requires user confirmation, ask before using the existing `docs/` layout.
    - Strong-control generation creates or requires `.agents/agents-control.json` and the `docs/` governance tree. Experience records must live under `docs/experience/`; do not create a root-level `experience/` folder.
-   - `render_agents.py --write` writes AGENTS.md and scoped AGENTS.md files, then runs docs scaffolding for handoff, experience, development, install configuration, and git manager records.
+   - `render_agents.py --write` writes compressed AGENTS.md and scoped AGENTS.md files, each capped at 100 lines; if preserved hand-written content breaks the limit, ask the user to compress it before writing.
+   - After writing AGENTS.md files, run docs scaffolding for handoff, experience, development, install configuration, and git manager records.
    - Templates in `assets/templates/` define the intended root/scoped shape.
    - Use `--template-dir <dir>` only for controlled tests or intentional template overrides.
 
 6. **Docs Governance**
+   - Before executing a new task after reading a prior handoff, run `python scripts/manage_docs.py resume-check <project>`; if it reports an interrupted active session, run `python scripts/manage_docs.py resume-repair <project> --input recovery.json` before handling the new request.
+   - At task start, run `python scripts/manage_docs.py start-session <project> --input session.json` after reading `docs/handoff/HANDOFF.md`.
    - Run `python scripts/manage_docs.py scaffold <project>` when docs governance must be prepared without rewriting AGENTS.md.
    - At task completion, run `python scripts/manage_docs.py handoff <project> --input handoff.json`; the current `docs/handoff/HANDOFF.md` is archived before the new latest handoff is written.
    - Every five handoffs, the script summarizes lessons under `docs/experience/` and archives old lesson files under `docs/experience/history_experience/<timestamp>/`.
@@ -62,6 +65,7 @@ Create operational context files for AI coding agents. Use facts from the reposi
    - Use `python scripts/evaluate_skill.py <skill-dir> <project>` for the full fact-level validation chain after skill edits.
    - Run `python scripts/check_freshness.py <project>` when updating an existing AGENTS.md.
    - Run `python scripts/create_agent_shims.py <project>` only when the user wants CLAUDE.md/GEMINI.md compatibility.
+   - After release packaging and successful validation, ask the user yes/no whether to install. If yes, use `python scripts/install_skill.py <skill-dir> --target codex --write` or `--target custom --custom-root <dir> --write`; if no or no explicit response, skip installation.
 
 8. **Final Evidence**
    - Report generated files, unresolved warnings, and verification command output.

@@ -47,13 +47,16 @@ python scripts/render_agents.py /path/to/project --profile /path/to/project/.age
 python scripts/render_agents.py /path/to/project --template-dir /path/to/templates
 ```
 
-Default mode is dry-run and prints the root draft. `--profile` enables strong-control sections from `.agents/agents-control.json`; without it, output must say strong control is not configured. `--write` writes AGENTS.md files inside the target project, creates the `docs/` governance tree when a profile is present, and preserves hand-written content outside generated sections. It must not create a root-level `experience/`; all experience summaries belong under `docs/experience/`. If docs preflight reports an ambiguous or conflicting existing `docs/` layout, `--write` exits before writing AGENTS.md or docs governance unless `--confirm-docs-layout` records explicit user confirmation. `--template-dir` is mainly for tests or deliberate template overrides; otherwise use bundled templates in `assets/templates/`.
+Default mode is dry-run and prints the compressed root draft. `--profile` enables strong-control sections from `.agents/agents-control.json`; without it, output must say strong control is not configured. `--write` writes AGENTS.md files inside the target project, creates the `docs/` governance tree when a profile is present, and preserves hand-written content outside generated sections. Root and scoped AGENTS.md files must stay within 100 lines; if preserved hand-written content breaks that limit, `--write` fails before changing files. It must not create a root-level `experience/`; all experience summaries belong under `docs/experience/`. If docs preflight reports an ambiguous or conflicting existing `docs/` layout, `--write` exits before writing AGENTS.md or docs governance unless `--confirm-docs-layout` records explicit user confirmation. `--template-dir` is mainly for tests or deliberate template overrides; otherwise use bundled templates in `assets/templates/`.
 
 ## Docs Governance
 
 ```bash
 python scripts/manage_docs.py preflight /path/to/project
 python scripts/manage_docs.py scaffold /path/to/project
+python scripts/manage_docs.py start-session /path/to/project --input session.json
+python scripts/manage_docs.py resume-check /path/to/project
+python scripts/manage_docs.py resume-repair /path/to/project --input recovery.json
 python scripts/manage_docs.py handoff /path/to/project --input handoff.json
 python scripts/manage_docs.py experience /path/to/project
 python scripts/manage_docs.py experience /path/to/project --force
@@ -72,6 +75,8 @@ python scripts/manage_dirs.py verify /path/to/project
 
 `handoff` archives the previous `docs/handoff/HANDOFF.md` to `docs/handoff/history_handoff/HANDOFF-YYYYMMDD-HHMMSS.md`, writes the new latest handoff, increments `.agents/docs-governance-state.json`, and triggers an experience summary every five handoffs. The input JSON can include `original_plan`, `current_step`, `problems`, `resolved`, `remaining`, `next`, and `verification`.
 
+`start-session` writes `.agents/active-session.json` after the current handoff is read and before task execution begins. `resume-check` compares that active session with the current `HANDOFF.md` hash and optional conversation log; an unchanged handoff with an active session is reported as an interrupted session. `resume-repair` writes a recovery handoff and clears the active session before the next request is handled.
+
 `experience` writes `docs/experience/docs-governance-lessons.md` when five new handoffs have accumulated, or immediately with `--force`. Existing lesson files are moved to `docs/experience/history_experience/YYYYMMDD-HHMMSS/` before the new summary is written.
 
 `development` writes a stage record under `docs/development/` for installable releases or stage completion. The input JSON can include `goal`, `completed_scope`, `verification`, `artifacts`, `version`, and `remaining_risks`.
@@ -86,9 +91,14 @@ python scripts/verify_agents.py /path/to/project --include-skipped
 python scripts/check_freshness.py /path/to/project
 python scripts/audit_skill.py /path/to/agents-md-generator
 python scripts/evaluate_skill.py /path/to/agents-md-generator /path/to/project
+python scripts/install_skill.py /path/to/agents-md-generator --target skip
+python scripts/install_skill.py /path/to/agents-md-generator --target codex --write
+python scripts/install_skill.py /path/to/agents-md-generator --target custom --custom-root /path/to/skills --write
 ```
 
-`verify_agents.py` checks generated markers, unresolved placeholders, path references, core structure, docs governance structure, dir manager files, and config-backed package/Make/composer commands. For strong-control Skill projects, it also requires an exact `## Skill Design Contract` section with design patterns, resource boundaries, progressive disclosure, validation gates, and forward-testing policy. By default it skips development/reference/build trees such as `ref/`, `.git/`, `vendor/`, `dist/`, `build/`, `target/`, and `node_modules/`; use `--include-skipped` only when intentionally auditing those directories. `check_freshness.py` compares Last updated metadata with git history when available. `audit_skill.py` checks this skill's structure, frontmatter, referenced resources, and Python script compilation.
+`verify_agents.py` checks generated markers, unresolved placeholders, path references, core structure, docs governance structure, dir manager files, config-backed package/Make/composer commands, and the 100 line AGENTS.md limit. For strong-control Skill projects, it also requires an exact `## Skill Design Contract` section with design patterns, resource boundaries, progressive disclosure, validation gates, and forward-testing policy. By default it skips development/reference/build trees such as `ref/`, `.git/`, `vendor/`, `dist/`, `build/`, `target/`, and `node_modules/`; use `--include-skipped` only when intentionally auditing those directories. `check_freshness.py` compares Last updated metadata with git history when available. `audit_skill.py` checks this skill's structure, frontmatter, referenced resources, and Python script compilation.
+
+`install_skill.py` is a post-release install confirmation helper. Dry-run mode emits yes/no options and defaults to skip. It installs only with `--write`, supports `codex` and `custom` targets, and refuses to overwrite an existing skill unless `--replace` records explicit user confirmation.
 
 `evaluate_skill.py` runs the fact-level validation chain in one read-only command: unit tests, official skill quick validation, skill audit, AGENTS.md verification, and a render leak check. It emits JSON with each command, exit code, parsed errors, checked files, unresolved template placeholders, and local-reference leaks.
 

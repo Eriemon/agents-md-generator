@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 import sys
 
+sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents_common import SKIP_DIRS, emit_json, resolve_project
 from manage_docs import verify_docs
@@ -13,6 +14,7 @@ from manage_docs import verify_docs
 
 COMMAND_RE = re.compile(r"`([^`\n]+)`")
 PATH_RE = re.compile(r"`([^`\n]+(?:/|\\|\.md|\.json|\.toml|\.yml|\.yaml|\.py|\.ts|\.tsx|\.go|\.php)[^`\n]*)`")
+MAX_AGENTS_LINES = 100
 
 
 def validate_markers(text: str, file: str, errors: list[str]) -> None:
@@ -177,6 +179,9 @@ def verify(project: Path, include_skipped: bool = False) -> dict:
             continue
         checked.append(str(agents.relative_to(project).as_posix()))
         text = agents.read_text(encoding="utf-8", errors="ignore")
+        line_count = len(text.splitlines())
+        if line_count > MAX_AGENTS_LINES:
+            errors.append(f"{checked[-1]}: exceeds 100 line limit ({line_count} lines)")
         validate_markers(text, checked[-1], errors)
         validate_strong_control(text, checked[-1], project, errors)
         if "{{" in text or "}}" in text:

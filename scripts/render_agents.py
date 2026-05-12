@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import sys
 
+sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents_common import detect_scopes, emit_json, extract_commands, extract_context, inspect_project, resolve_project, today
 from manage_docs import preflight_docs, scaffold as scaffold_docs
@@ -13,6 +14,7 @@ from manage_docs import preflight_docs, scaffold as scaffold_docs
 
 GENERATED_START = "<!-- AGENTS-GENERATED:START"
 GENERATED_END = "<!-- AGENTS-GENERATED:END"
+MAX_AGENTS_LINES = 100
 
 
 def command_rows(commands: list[dict[str, str]]) -> str:
@@ -22,6 +24,45 @@ def command_rows(commands: list[dict[str, str]]) -> str:
         f"| {item['task']} | `{item['command']}` | {item.get('time', '~30s')} | {item.get('source', 'unknown')} |"
         for item in commands
     )
+
+
+def limit_lines(text: str, max_lines: int) -> str:
+    lines = [line for line in text.splitlines() if line.strip()]
+    if len(lines) <= max_lines:
+        return "\n".join(lines)
+    kept = lines[: max_lines - 1]
+    kept.append(f"- Trimmed {len(lines) - len(kept)} additional entries; inspect source files for full detail.")
+    return "\n".join(kept)
+
+
+def limit_command_rows(rows: str, max_rows: int = 5) -> str:
+    lines = [line for line in rows.splitlines() if line.strip()]
+    if len(lines) <= max_rows:
+        return "\n".join(lines)
+    return "\n".join(lines[:max_rows] + [f"| More | {len(lines) - max_rows} additional commands omitted | inspect scripts/configs | generated |"])
+
+
+def compact_section(marker: str, heading: str, body: str, max_body_lines: int | None = None) -> str:
+    section_body = limit_lines(body, max_body_lines) if max_body_lines else "\n".join(line for line in body.splitlines() if line.strip())
+    return "\n".join([
+        f"{GENERATED_START} {marker} -->",
+        f"## {heading}",
+        section_body,
+        f"<!-- AGENTS-GENERATED:END {marker} -->",
+    ])
+
+
+def agents_line_count(text: str) -> int:
+    return len(text.splitlines())
+
+
+def line_limit_errors(paths_to_text: list[tuple[str, str]]) -> list[str]:
+    errors: list[str] = []
+    for label, text in paths_to_text:
+        count = agents_line_count(text)
+        if count > MAX_AGENTS_LINES:
+            errors.append(f"{label}: exceeds 100 line limit ({count} lines); compress hand-written content before writing")
+    return errors
 
 
 def file_map(facts: dict) -> str:
@@ -348,18 +389,18 @@ def documentation_governance_contract(profile: dict | None) -> str:
     return "\n".join([
         f"- Docs root: `{contract.get('root', 'docs')}`.",
         f"- Latest handoff: `{handoff.get('current', 'docs/handoff/HANDOFF.md')}` is always the newest task handoff.",
+        f"- Experience folder: `{experience.get('folder', 'docs/experience')}`.",
+        f"- Dir manager: keep strict folder review rules under `{dir_manager.get('folder', 'docs/dir_manager')}/` with current and planned structure JSON files.",
+        "- Directory changes require `python scripts/manage_dirs.py review <project> --input change.json`; blocked reviews require explicit user force-confirmation and risk capture in handoff.",
+        f"- Force-confirmed directory overrides must archive old dir manager content to `{dir_manager.get('history', 'docs/dir_manager/history_dir_manager')}/YYYYMMDD-HHMMSS/` before applying the folder change.",
         f"- Handoff history: archive the previous HANDOFF.md to `{handoff.get('history', 'docs/handoff/history_handoff')}` with `{handoff.get('archive_pattern', 'HANDOFF-YYYYMMDD-HHMMSS.md')}` before writing a new one.",
         "- Handoff sections: original plan and steps, current step, problems, resolved problems, remaining problems, next work, verification evidence.",
-        f"- Experience folder: `{experience.get('folder', 'docs/experience')}`.",
         f"- Experience cadence: summarize lessons every {experience.get('summarize_every_handoffs', 5)} completed handoffs.",
         f"- Experience history: move old lesson files to `{experience.get('history', 'docs/experience/history_experience')}/YYYYMMDD-HHMMSS/` before writing the new summary.",
         f"- Experience topics: {experience.get('topic_policy', 'Choose lesson files from the current work content.')}",
         f"- Development records: write `{development.get('file_pattern', 'YYYYMMDD-HHMMSS-<stage>.md')}` under `{development.get('folder', 'docs/development')}` at installable releases or stage completion.",
         f"- Install configuration: document skill installation and {targets_text} adapters under `{install.get('folder', 'docs/install_configuration')}`.",
         f"- Git manager: document branch, master, release, dist, installable version naming, and current version rules under `{git.get('folder', 'docs/git_manager')}`.",
-        f"- Dir manager: keep strict folder review rules under `{dir_manager.get('folder', 'docs/dir_manager')}/` with current and planned structure JSON files.",
-        "- Directory changes require `python scripts/manage_dirs.py review <project> --input change.json`; blocked reviews require explicit user force-confirmation and risk capture in handoff.",
-        f"- Force-confirmed directory overrides must archive old dir manager content to `{dir_manager.get('history', 'docs/dir_manager/history_dir_manager')}/YYYYMMDD-HHMMSS/` before applying the folder change.",
         "- Use `python scripts/manage_docs.py handoff <project> --input handoff.json` at task completion.",
     ])
 
@@ -419,16 +460,47 @@ def template_values(project: Path, profile: dict | None = None) -> dict[str, str
 def manual_content(existing: str) -> str:
     if not existing.strip():
         return ""
+    generated_boilerplate = {
+        "# AGENTS.md",
+        "**Precedence:** the closest `AGENTS.md` to the files being changed wins. Explicit user prompts override this file.",
+        "### Always Do",
+        "### Ask First",
+        "### Never Do",
+        "Use this order: explicit user prompt, closest AGENTS.md, parent AGENTS.md, general repository docs.",
+    }
+    generated_plain_blocks = {
+        "## Agent Work Loop",
+        "## Boundaries",
+        "## When Instructions Conflict",
+    }
+    generated_prefixes = ("<!-- Last updated:",)
     kept = []
-    skipping = False
+    skipping_marker = False
+    skipping_plain_block = False
     for line in existing.splitlines():
-        if line.startswith(GENERATED_START) or line.startswith("<!-- FOR AI") or line.startswith("<!-- Managed by agent:"):
-            skipping = True
+        stripped = line.strip()
+        if line.startswith(GENERATED_START):
+            skipping_marker = True
+            skipping_plain_block = False
             continue
         if line.startswith(GENERATED_END):
-            skipping = False
+            skipping_marker = False
             continue
-        if not skipping:
+        if skipping_marker:
+            continue
+        if line.startswith("<!-- FOR AI") or line.startswith("<!-- Managed by agent:") or line.startswith(generated_prefixes):
+            continue
+        if stripped == "## Human Notes":
+            skipping_plain_block = False
+            continue
+        if stripped in generated_plain_blocks:
+            skipping_plain_block = True
+            continue
+        if skipping_plain_block and stripped.startswith("## "):
+            skipping_plain_block = False
+        if skipping_plain_block:
+            continue
+        if stripped not in generated_boilerplate:
             kept.append(line)
     text = "\n".join(kept).strip()
     if not text:
@@ -438,6 +510,58 @@ def manual_content(existing: str) -> str:
 
 def render_root(project: Path, template_dir: Path | None = None, profile: dict | None = None) -> str:
     existing = (project / "AGENTS.md").read_text(encoding="utf-8", errors="ignore") if (project / "AGENTS.md").exists() else ""
+    if template_dir is None:
+        values = template_values(project, profile)
+        manual = manual_content(existing).strip()
+        engineering_max = 6 if profile and profile.get("engineering_rule_contract", {}).get("primary") != "none" else 2
+        skill_max = 9 if profile and profile.get("kind") == "skill" else 2
+        context_body = "\n".join([values["KEY_DECISIONS"], values["UTILITY_ROWS"], values["CODEBASE_STATE"]])
+        parts = [
+            "<!-- FOR AI AGENTS - Human readability is a side effect, not a goal -->",
+            "<!-- Managed by agent: keep sections and order; edit content outside AGENTS-GENERATED blocks -->",
+            f"<!-- Last updated: {values['TIMESTAMP']} | Last verified: {values['VERIFIED_TIMESTAMP']} -->",
+            "# AGENTS.md",
+            "**Precedence:** the closest `AGENTS.md` to the files being changed wins. Explicit user prompts override this file.",
+            compact_section("project-overview", "Project Overview", values["PROJECT_OVERVIEW"], 2),
+            compact_section("control-profile", "Control Profile", values["CONTROL_PROFILE"], 7),
+            compact_section("directory-contract", "Directory Contract", values["DIRECTORY_CONTRACT"], 5),
+            compact_section("release-contract", "Release Contract", values["RELEASE_CONTRACT"], 5),
+            compact_section("engineering-rule-contract", "Engineering Rule Contract", values["ENGINEERING_RULE_CONTRACT"], engineering_max),
+            compact_section("skill-design-contract", "Skill Design Contract", values["SKILL_DESIGN_CONTRACT"], skill_max),
+            "\n".join([
+                f"{GENERATED_START} commands -->",
+                f"## Commands ({values['VERIFICATION_STATUS']})",
+                "| Task | Command | ~Time | Source |",
+                "|------|---------|-------|--------|",
+                limit_command_rows(values["COMMAND_ROWS"]),
+                "<!-- AGENTS-GENERATED:END commands -->",
+            ]),
+            compact_section("conversation-completion-contract", "Conversation Completion Contract", values["CONVERSATION_COMPLETION_CONTRACT"], 2),
+            compact_section("documentation-governance-contract", "Documentation Governance Contract", values["DOCUMENTATION_GOVERNANCE_CONTRACT"], 7),
+            compact_section("directory-coverage", "Directory Coverage", values["DIRECTORY_COVERAGE"], 2),
+        ]
+        if "Link ADRs or architecture docs here" not in values["KEY_DECISIONS"] or "Add migrations, tech debt" not in values["CODEBASE_STATE"] or "Existing utility" in values["UTILITY_ROWS"]:
+            parts.append(compact_section("repository-context", "Repository Context", context_body, 10))
+        if "No hook framework detected" not in values["HOOK_POLICY"]:
+            parts.append(compact_section("hook-policy", "Hook Policy", values["HOOK_POLICY"], 3))
+        if "No GitHub settings or rulesets detected" not in values["GITHUB_SETTINGS"]:
+            parts.append(compact_section("github-settings", "GitHub Settings", values["GITHUB_SETTINGS"], 3))
+        parts.extend([
+            "\n".join([
+                "## Boundaries",
+                "### Always Do",
+                limit_lines(values["ALWAYS_RULES"], 2),
+                "### Ask First",
+                limit_lines(values["ASK_FIRST_RULES"], 2),
+                "### Never Do",
+                limit_lines(values["NEVER_RULES"], 2),
+            ]),
+            "## When Instructions Conflict",
+            "Use this order: explicit user prompt, closest AGENTS.md, parent AGENTS.md, general repository docs.",
+        ])
+        if manual:
+            parts.append(manual)
+        return "\n".join(parts).rstrip() + "\n"
     template = load_template(template_dir or default_template_dir(), "root-agents.md")
     rendered = replace_placeholders(template, template_values(project, profile)).rstrip()
     return rendered + manual_content(existing) + "\n"
@@ -490,13 +614,19 @@ def main() -> None:
             })
             raise SystemExit(1)
         scaffold_docs(project)
-    (project / "AGENTS.md").write_text(root_text, encoding="utf-8")
+    pending_writes: list[tuple[Path, str]] = [(project / "AGENTS.md", root_text)]
     for scope in detect_scopes(project)["scopes"]:
         scope_dir = project / scope["path"]
         if scope_dir.exists():
             agents_path = scope_dir / "AGENTS.md"
             if not agents_path.exists():
-                agents_path.write_text(render_scoped(scope, template_dir), encoding="utf-8")
+                pending_writes.append((agents_path, render_scoped(scope, template_dir)))
+    errors = line_limit_errors([(path.relative_to(project).as_posix(), text) for path, text in pending_writes])
+    if errors:
+        emit_json({"errors": errors, "max_lines": MAX_AGENTS_LINES})
+        raise SystemExit(1)
+    for path, text in pending_writes:
+        path.write_text(text, encoding="utf-8")
 
 
 if __name__ == "__main__":

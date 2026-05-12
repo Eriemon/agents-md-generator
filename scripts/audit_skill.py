@@ -31,6 +31,7 @@ REQUIRED_FILES = [
     "scripts/render_agents.py",
     "scripts/manage_docs.py",
     "scripts/manage_dirs.py",
+    "scripts/install_skill.py",
     "scripts/select_engineering_rules.py",
     "scripts/verify_agents.py",
     "scripts/check_freshness.py",

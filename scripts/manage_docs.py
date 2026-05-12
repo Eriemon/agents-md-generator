@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -9,6 +10,7 @@ import shutil
 import sys
 from typing import Any
 
+sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents_common import emit_json, read_json, resolve_project
 from manage_dirs import init_dir_manager, verify_dir_manager
@@ -32,6 +34,7 @@ REQUIRED_DOC_FILES = [
     "docs/git_manager/GIT_MANAGER.md",
 ]
 STATE_PATH = ".agents/docs-governance-state.json"
+ACTIVE_SESSION_PATH = ".agents/active-session.json"
 HANDOFF_SECTIONS = [
     "Original Plan And Steps",
     "Current Step",
@@ -55,6 +58,10 @@ def state_file(project: Path) -> Path:
     return project / STATE_PATH
 
 
+def active_session_file(project: Path) -> Path:
+    return project / ACTIVE_SESSION_PATH
+
+
 def load_state(project: Path) -> dict[str, Any]:
     state = read_json(state_file(project))
     return state if isinstance(state, dict) else {}
@@ -64,6 +71,12 @@ def save_state(project: Path, state: dict[str, Any]) -> None:
     agents_dir = project / ".agents"
     agents_dir.mkdir(exist_ok=True)
     state_file(project).write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def file_hash(path: Path) -> str:
+    if not path.exists() or not path.is_file():
+        return ""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def list_lines(values: Any) -> str:
@@ -324,9 +337,92 @@ def write_handoff(project: Path, input_path: str | None) -> dict[str, Any]:
     target.write_text(handoff_markdown(data, count), encoding="utf-8")
     state["handoff_count"] = count
     save_state(project, state)
+    active = active_session_file(project)
+    if active.exists():
+        active.unlink()
     result = {"project": str(project), "written": str(target), "archived": archived, "handoff_count": count}
     if count % 5 == 0:
         result["experience"] = write_experience(project, force=True)
+    return result
+
+
+def write_active_session(project: Path, input_path: str | None) -> dict[str, Any]:
+    scaffold(project)
+    data = read_input(input_path)
+    handoff = project / "docs" / "handoff" / "HANDOFF.md"
+    active = {
+        "task": data.get("task", "not recorded"),
+        "current_step": data.get("current_step", "not recorded"),
+        "conversation_summary": data.get("conversation_summary", ""),
+        "started_at": datetime.now().isoformat(timespec="seconds"),
+        "handoff_path": "docs/handoff/HANDOFF.md",
+        "handoff_hash": file_hash(handoff),
+        "handoff_mtime": handoff.stat().st_mtime if handoff.exists() else 0,
+    }
+    agents_dir = project / ".agents"
+    agents_dir.mkdir(exist_ok=True)
+    active_session_file(project).write_text(json.dumps(active, indent=2, sort_keys=True), encoding="utf-8")
+    return {"project": str(project), "written": str(active_session_file(project)), "active_session": active}
+
+
+def read_active_session(project: Path) -> dict[str, Any]:
+    active = read_json(active_session_file(project))
+    return active if isinstance(active, dict) else {}
+
+
+def resume_check(project: Path, conversation_log: str | None = None) -> dict[str, Any]:
+    active = read_active_session(project)
+    if not active:
+        return {
+            "project": str(project),
+            "status": "clean",
+            "interrupted": False,
+            "reasons": ["no active session found"],
+        }
+    handoff = project / "docs" / "handoff" / "HANDOFF.md"
+    current_hash = file_hash(handoff)
+    reasons: list[str] = []
+    interrupted = False
+    if current_hash and current_hash == active.get("handoff_hash"):
+        interrupted = True
+        reasons.append("HANDOFF.md has not changed since active session started")
+    elif not current_hash:
+        interrupted = True
+        reasons.append("HANDOFF.md is missing while an active session exists")
+    else:
+        reasons.append("HANDOFF.md changed after active session started")
+
+    if conversation_log:
+        log_path = Path(conversation_log).resolve()
+        if log_path.exists():
+            text = log_path.read_text(encoding="utf-8", errors="ignore").lower()
+            if any(marker in text for marker in ["stop", "stopped", "interrupted", "断网", "强制停止", "中断"]):
+                interrupted = True
+                reasons.append("conversation log contains interruption markers")
+
+    return {
+        "project": str(project),
+        "status": "interrupted" if interrupted else "clean",
+        "interrupted": interrupted,
+        "active_session": active,
+        "current_handoff_hash": current_hash,
+        "reasons": reasons,
+    }
+
+
+def resume_repair(project: Path, input_path: str | None) -> dict[str, Any]:
+    check = resume_check(project)
+    if not check["interrupted"]:
+        return {
+            "project": str(project),
+            "skipped": True,
+            "interrupted": False,
+            "reasons": check["reasons"],
+        }
+    result = write_handoff(project, input_path)
+    result["recovery"] = True
+    result["interrupted"] = True
+    result["resume_check"] = check
     return result
 
 
@@ -450,6 +546,18 @@ def main() -> None:
     handoff_parser.add_argument("project", nargs="?", default=".")
     handoff_parser.add_argument("--input", default=None)
 
+    start_session_parser = subparsers.add_parser("start-session")
+    start_session_parser.add_argument("project", nargs="?", default=".")
+    start_session_parser.add_argument("--input", default=None)
+
+    resume_check_parser = subparsers.add_parser("resume-check")
+    resume_check_parser.add_argument("project", nargs="?", default=".")
+    resume_check_parser.add_argument("--conversation-log", default=None)
+
+    resume_repair_parser = subparsers.add_parser("resume-repair")
+    resume_repair_parser.add_argument("project", nargs="?", default=".")
+    resume_repair_parser.add_argument("--input", default=None)
+
     experience_parser = subparsers.add_parser("experience")
     experience_parser.add_argument("project", nargs="?", default=".")
     experience_parser.add_argument("--force", action="store_true")
@@ -470,6 +578,12 @@ def main() -> None:
         emit_json(preflight_docs(project))
     elif args.command == "handoff":
         emit_json(write_handoff(project, args.input))
+    elif args.command == "start-session":
+        emit_json(write_active_session(project, args.input))
+    elif args.command == "resume-check":
+        emit_json(resume_check(project, args.conversation_log))
+    elif args.command == "resume-repair":
+        emit_json(resume_repair(project, args.input))
     elif args.command == "experience":
         emit_json(write_experience(project, force=args.force))
     elif args.command == "development":
