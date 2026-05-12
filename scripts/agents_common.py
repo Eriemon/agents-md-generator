@@ -26,6 +26,9 @@ SKIP_DIRS = {
     "ref",
 }
 
+AGENTS_METADATA_RE = re.compile(r"<!--\s*AGENTS-METADATA:\s*(.*?)\s*-->", flags=re.IGNORECASE)
+AGENTS_METADATA_PAIR_RE = re.compile(r"([a-zA-Z0-9_]+)\s*=\s*([^;]+)")
+
 
 def resolve_project(raw: str | Path) -> Path:
     project = Path(raw).resolve()
@@ -43,6 +46,50 @@ def read_json(path: Path) -> dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
+
+
+def skill_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def skill_version_file(root: Path | None = None) -> Path:
+    return (root or skill_root()) / "VERSION"
+
+
+def read_skill_version(root: Path | None = None) -> str:
+    path = skill_version_file(root)
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8", errors="ignore").strip()
+
+
+def installed_skill_dir(skill_name: str = "agents-md-generator") -> Path | None:
+    override = os.environ.get("AGENTS_MD_INSTALLED_SKILL_DIR", "").strip()
+    if override:
+        path = Path(override).expanduser().resolve()
+        return path if path.exists() else None
+    codex_home = os.environ.get("CODEX_HOME", "").strip()
+    home_root = Path(codex_home).expanduser().resolve() if codex_home else (Path.home() / ".codex").resolve()
+    path = home_root / "skills" / skill_name
+    return path if path.exists() else None
+
+
+def read_installed_skill_version(skill_name: str = "agents-md-generator") -> str:
+    installed = installed_skill_dir(skill_name)
+    if installed is None:
+        return ""
+    return read_skill_version(installed)
+
+
+def parse_agents_metadata(text: str) -> dict[str, str]:
+    match = AGENTS_METADATA_RE.search(text)
+    if not match:
+        return {}
+    body = match.group(1)
+    data: dict[str, str] = {}
+    for key, value in AGENTS_METADATA_PAIR_RE.findall(body):
+        data[key.strip()] = value.strip()
+    return data
 
 
 def rel(path: Path, root: Path) -> str:
@@ -218,9 +265,32 @@ def inspect_project(root: Path) -> dict[str, Any]:
         ".windsurf",
     ] if (root / name).exists()]
 
+    root_agents_path = root / "AGENTS.md"
+    root_agents_text = root_agents_path.read_text(encoding="utf-8", errors="ignore") if root_agents_path.is_file() else ""
+    agents_metadata = parse_agents_metadata(root_agents_text)
+    installed_version = read_installed_skill_version()
+    runtime_version = read_skill_version()
+    rebuild_reasons: list[str] = []
+    if not root_agents_path.is_file():
+        rebuild_reasons.append("missing_root_agents_md")
+    elif not agents_metadata.get("agents_version"):
+        rebuild_reasons.append("missing_agents_version")
+    elif not installed_version:
+        rebuild_reasons.append("installed_skill_version_unavailable")
+    elif agents_metadata.get("agents_version") != installed_version:
+        rebuild_reasons.append("agents_version_mismatch")
+
     return {
         "project_root": str(root),
-        "root_agents_md_exists": (root / "AGENTS.md").is_file(),
+        "root_agents_md_exists": root_agents_path.is_file(),
+        "root_agents_md_metadata": agents_metadata,
+        "root_agents_md_version": agents_metadata.get("agents_version", ""),
+        "root_agents_md_generator_version": agents_metadata.get("generator_version", ""),
+        "root_agents_md_default_language": agents_metadata.get("default_language", ""),
+        "current_skill_version": runtime_version,
+        "installed_skill_version": installed_version,
+        "root_agents_md_rebuild_required": bool(rebuild_reasons),
+        "root_agents_md_rebuild_reasons": rebuild_reasons,
         "primary_language": languages[0] if languages else "unknown",
         "languages": sorted(set(languages)),
         "package_manager": package_manager(root),

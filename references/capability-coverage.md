@@ -14,7 +14,7 @@ Use external AGENTS.md generator projects as capability references, not as code 
 | Hook detection | `extract_context.py` collects Lefthook, Husky, CaptainHook, pre-commit, and repo hook files |
 | GitHub settings | `extract_context.py` collects CODEOWNERS, Copilot instructions, dependency configs, and rulesets |
 | Directory coverage | `extract_context.py` reports major directories that may need scoped AGENTS.md files |
-| Generation | `render_agents.py` renders root/scoped AGENTS.md from templates and extracted facts, then keeps each AGENTS.md within 100 lines |
+| Generation | `render_agents.py` renders root/scoped AGENTS.md from templates and extracted facts, adds root version/language metadata, and keeps the root `AGENTS.md` within 12KB |
 | Docs governance | `manage_docs.py` scaffolds `docs/`, rotates handoff files, writes 10 numbered experience summaries, records development stages, verifies governance files, and uses `resume-check` for interrupted session recovery |
 | Directory governance | `manage_dirs.py` scans current structure, records planned local and remote deployment structure, reviews directory change requests, blocks unsafe folder changes, archives old dir manager content for user force-confirmed overrides, and writes review records |
 | Structure/content validation | `verify_agents.py`, `audit_skill.py`, and `evaluate_skill.py` gate markers, placeholders, paths, commands, skipped directories, and skill structure |

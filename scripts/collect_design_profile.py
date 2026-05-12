@@ -21,6 +21,13 @@ COMMON_QUESTIONS = [
         "branch": "all",
         "ask": "确认是技能开发还是工程开发？技能开发进入（2），工程开发进入（11）。",
     },
+    {
+        "question_id": "32",
+        "answer_key": "default_conversation_language",
+        "required": True,
+        "branch": "all",
+        "ask": "后续默认对话语言是什么？默认用中文；如需英文或其他语言，必须明确写入控制档案并作为 AGENTS.md 强约束。",
+    },
 ]
 
 SKILL_QUESTIONS = [
@@ -120,6 +127,11 @@ QUESTION_OPTIONS: dict[str, list[dict[str, Any]]] = {
         {"label": "是，理解一致", "value": True, "description": "允许写入强控制档案。", "recommended": True},
         {"label": "否，需要修正", "value": False, "description": "继续补问并重新摘要确认。", "recommended": False},
     ],
+    "default_conversation_language": [
+        {"label": "中文", "value": "中文", "description": "默认后续对话使用中文。", "recommended": True},
+        {"label": "English", "value": "English", "description": "默认后续对话使用英文。", "recommended": False},
+        {"label": "用户自定义", "value": "__user_input__", "description": "由用户输入其他默认语言。", "recommended": False},
+    ],
     "skill_design_patterns": [
         {"label": "五模式组合", "value": ["Tool Wrapper", "Generator", "Reviewer", "Inversion", "Pipeline"], "description": "脚本、模板、审查、反问和流水线都启用。", "recommended": True},
         {"label": "生成器为主", "value": ["Tool Wrapper", "Generator"], "description": "强调稳定输出和可执行脚本。", "recommended": False},
@@ -206,6 +218,8 @@ def missing_answers(answers: dict[str, Any], kind: str) -> list[str]:
     missing: list[str] = []
     for item in questions_for(kind):
         key = item["answer_key"]
+        if key == "default_conversation_language":
+            continue
         if key not in answers or empty(answers[key]):
             missing.append(key)
     if ALIGNMENT_KEY not in answers:
@@ -269,10 +283,23 @@ def skill_layout_contract(project: Path, name: str, answers: dict[str, Any]) -> 
     return {"path": f"skills/{name}", "skill_file": f"skills/{name}/SKILL.md"}, errors
 
 
+def engineering_layout_contract(project: Path, name: str, answers: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    expected = project / "engineering" / name
+    local_structure = str(answers.get("local_directory_structure", "")).strip()
+    if answers.get("has_existing_work") == "yes":
+        if expected.exists():
+            return errors
+        if f"engineering/{name}/" not in local_structure.replace("\\", "/"):
+            errors.append("engineering projects must use engineering/<project-name>/")
+    return errors
+
+
 def review_summary(answers: dict[str, Any] | None, kind: str | None = None) -> dict[str, Any]:
     answers = answers or {}
     keys = [
         "development_type",
+        "default_conversation_language",
         "name",
         "skill_purpose",
         "skill_reason",
@@ -497,10 +524,16 @@ def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any
         layout, layout_errors = skill_layout_contract(project, name, answers)
         if layout_errors:
             return None, layout_errors
+    if kind == "engineering":
+        layout_errors = engineering_layout_contract(project, name, answers)
+        if layout_errors:
+            return None, layout_errors
+    default_language = str(answers.get("default_conversation_language", "中文")).strip() or "中文"
     profile = {
         "schema_version": 1,
         "kind": kind,
         "name": name,
+        "default_conversation_language": default_language,
         "purpose": purpose,
         "reason": reason,
         "alignment_confirmed": bool(answers.get(ALIGNMENT_KEY)),

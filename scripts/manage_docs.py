@@ -13,7 +13,7 @@ from typing import Any
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from agents_common import emit_json, inspect_project, read_json, resolve_project
+from agents_common import emit_json, inspect_project, read_json, read_skill_version, resolve_project
 from manage_dirs import init_dir_manager, verify_dir_manager
 
 
@@ -323,6 +323,7 @@ def git_manager_doc() -> str:
         "- Name installable release folders as `<name>-vx.x.x` and create a matching zip when required.",
         "- Package only after branch cleanup and release records are complete.",
         "- The release commit must include the release artifacts and the current `docs/git_manager/CHANGELOG.md` entry.",
+        "- If the user did not explicitly say whether to install after release, release handling must ask the install question instead of silently stopping.",
         "",
         "## Change Log",
         "- Update `docs/git_manager/CHANGELOG.md` before each commit that changes governed release or git-management behavior.",
@@ -1131,6 +1132,29 @@ def parse_version_tuple(value: str) -> tuple[int, int, int]:
     return tuple(int(part) for part in match.groups())
 
 
+def install_confirmation_options() -> list[dict[str, Any]]:
+    return [
+        {
+            "label": "否，跳过安装",
+            "value": "skip",
+            "description": "默认选项；保留发布产物，但不安装到本地 skills 目录。",
+            "recommended": True,
+        },
+        {
+            "label": "安装到 Codex",
+            "value": "codex",
+            "description": "将发布包安装到当前本地 Codex skills 目录。",
+            "recommended": False,
+        },
+        {
+            "label": "自定义 skills 目录",
+            "value": "custom",
+            "description": "将发布包安装到用户明确提供的自定义 skills 根目录。",
+            "recommended": False,
+        },
+    ]
+
+
 def latest_release_dir(project: Path, skill_name: str) -> Path | None:
     releases = []
     for path in (project / "dist").glob(f"{skill_name}-v*"):
@@ -1149,11 +1173,12 @@ def release_members(root: Path, prefix: Path) -> list[str]:
     return sorted(path.relative_to(prefix).as_posix() for path in root.rglob("*") if path.is_file())
 
 
-def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str) -> dict[str, Any]:
+def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str, install_intent: str) -> dict[str, Any]:
     skill_dir = resolve_project(skill_dir_raw if Path(skill_dir_raw).is_absolute() else project / skill_dir_raw)
     skill_name = skill_dir.name
     expected_release = project / "dist" / f"{skill_name}-{version}"
     expected_zip = project / "dist" / f"{skill_name}-{version}.zip"
+    source_version = read_skill_version(skill_dir)
     git_branch = run_git(project, ["branch", "--show-current"]).stdout.strip()
     branches = sorted(line.strip().lstrip("* ").strip() for line in run_git(project, ["branch", "--list"]).stdout.splitlines() if line.strip())
     status_lines = [line for line in run_git(project, ["status", "--short"]).stdout.splitlines() if line.strip()]
@@ -1162,11 +1187,15 @@ def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str) ->
         "branch": git_branch,
         "local_branches": branches,
         "phase": phase,
+        "install_intent": install_intent,
         "skill_dir": skill_dir.relative_to(project).as_posix() if skill_dir.is_relative_to(project) else str(skill_dir),
+        "source_version": source_version,
         "expected_release_dir": expected_release.relative_to(project).as_posix(),
         "expected_release_zip": expected_zip.relative_to(project).as_posix(),
         "status_lines": status_lines,
     }
+    if source_version and source_version != version:
+        errors.append(f"release gate version {version} does not match skill source version {source_version}")
     if git_branch != "master":
         errors.append("release gate requires current branch master")
     if sorted(branches) != ["master", "release"]:
@@ -1188,7 +1217,14 @@ def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str) ->
         checks["latest_release_dir"] = latest.relative_to(project).as_posix()
         if parse_version_tuple(version) < parse_version_tuple(latest.name.rsplit("-", 1)[-1]):
             errors.append("requested release version is older than the latest dist release")
-    return {"project": str(project), "ok": not errors, "errors": errors, "checks": checks}
+    result = {"project": str(project), "ok": not errors, "errors": errors, "checks": checks}
+    if phase == "post" and install_intent == "unspecified":
+        result["install_confirmation_required"] = True
+        result["confirmation_question"] = "释放安装版本后，用户尚未说明是否需要安装。是否需要安装当前发布包？"
+        result["install_options"] = install_confirmation_options()
+    else:
+        result["install_confirmation_required"] = False
+    return result
 
 
 def verify_docs(project: Path) -> dict[str, Any]:
@@ -1274,6 +1310,7 @@ def main() -> None:
     release_gate_parser.add_argument("--version", required=True)
     release_gate_parser.add_argument("--skill-dir", required=True)
     release_gate_parser.add_argument("--phase", choices=["pre", "post"], default="pre")
+    release_gate_parser.add_argument("--install-intent", choices=["unspecified", "requested", "skipped"], default="unspecified")
 
     verify_parser = subparsers.add_parser("verify")
     verify_parser.add_argument("project", nargs="?", default=".")
@@ -1307,7 +1344,7 @@ def main() -> None:
     elif args.command == "git-changelog":
         emit_json(write_git_changelog(project, args.input))
     elif args.command == "release-gate":
-        result = release_gate(project, args.version, args.skill_dir, args.phase)
+        result = release_gate(project, args.version, args.skill_dir, args.phase, args.install_intent)
         emit_json(result)
         if result["errors"]:
             raise SystemExit(1)

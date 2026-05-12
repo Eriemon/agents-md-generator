@@ -8,13 +8,13 @@ import sys
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from agents_common import SKIP_DIRS, emit_json, resolve_project
+from agents_common import SKIP_DIRS, emit_json, parse_agents_metadata, read_installed_skill_version, resolve_project
 from manage_docs import verify_docs
 
 
 COMMAND_RE = re.compile(r"`([^`\n]+)`")
 PATH_RE = re.compile(r"`([^`\n]+(?:/|\\|\.md|\.json|\.toml|\.yml|\.yaml|\.py|\.ts|\.tsx|\.go|\.php)[^`\n]*)`")
-MAX_AGENTS_LINES = 100
+ROOT_AGENTS_MAX_BYTES = 12 * 1024
 
 
 def validate_markers(text: str, file: str, errors: list[str]) -> None:
@@ -174,14 +174,29 @@ def verify(project: Path, include_skipped: bool = False) -> dict:
     errors: list[str] = []
     warnings: list[str] = []
     checked: list[str] = []
+    installed_version = read_installed_skill_version()
     for agents in sorted(project.rglob("AGENTS.md")):
         if should_skip(agents, project, include_skipped):
             continue
         checked.append(str(agents.relative_to(project).as_posix()))
         text = agents.read_text(encoding="utf-8", errors="ignore")
-        line_count = len(text.splitlines())
-        if line_count > MAX_AGENTS_LINES:
-            errors.append(f"{checked[-1]}: exceeds 100 line limit ({line_count} lines)")
+        if agents == project / "AGENTS.md":
+            size = len(text.encode("utf-8"))
+            if size > ROOT_AGENTS_MAX_BYTES:
+                errors.append(f"{checked[-1]}: exceeds 12KB limit ({size} bytes)")
+            managed_root = "Managed by agent:" in text or (project / ".agents" / "agents-control.json").exists()
+            if managed_root:
+                metadata = parse_agents_metadata(text)
+                if not metadata.get("agents_version") or not metadata.get("generator_version"):
+                    errors.append("AGENTS.md: missing AGENTS metadata version")
+                elif installed_version and metadata.get("agents_version") != installed_version:
+                    errors.append(
+                        f"AGENTS.md: agents version {metadata.get('agents_version')} does not match installed agents-md-generator version {installed_version}"
+                    )
+                elif not installed_version:
+                    errors.append("AGENTS.md: installed agents-md-generator version is unavailable")
+                if not metadata.get("default_language"):
+                    errors.append("AGENTS.md: missing default language metadata")
         validate_markers(text, checked[-1], errors)
         validate_strong_control(text, checked[-1], project, errors)
         if "{{" in text or "}}" in text:

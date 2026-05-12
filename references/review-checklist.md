@@ -37,7 +37,7 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - Book-derived engineering rules use exactly one primary active rule set, mode `mini` or `nano`, explicit scope, and no full material in AGENTS.md.
 - Strong-control AGENTS.md includes Control Profile, Directory Contract, Release Contract, Engineering Rule Contract, Conversation Completion Contract, and Documentation Governance Contract.
 - Strong-control Skill AGENTS.md includes Skill Design Contract with design patterns, resource boundaries, progressive disclosure, validation gates, and forward-testing policy.
-- Every generated root or scoped AGENTS.md is 100 lines or fewer; `verify_agents.py` reports any over-limit file.
+- Root `AGENTS.md` stays within `12KB`; scoped `AGENTS.md` files are not rejected for exceeding the old line-count rule.
 - Skill design interview questions expose selectable options, repeat `review_summary` confirmation after each answer group, and set `alignment_confirmed=true` only after the user confirms the summary.
 - Skill development profiles include detailed development requirements, development purpose, expected result, validation method, and validation granularity before strong control is written.
 - User-developed Skills live under `skills/<skill-name>/SKILL.md`; `SKILL.md` frontmatter `name` exactly matches the folder name and uses lowercase letters, digits, and hyphens.

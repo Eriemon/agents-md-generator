@@ -12,6 +12,7 @@ from agents_common import emit_json, resolve_project
 
 REQUIRED_FILES = [
     "SKILL.md",
+    "VERSION",
     "agents/openai.yaml",
     "references/agents-md-guidance.md",
     "references/book-rules-coverage.md",
@@ -206,6 +207,12 @@ def audit(skill_dir: Path) -> dict:
                 errors.append(f"SKILL.md references missing resource: {rel_path}")
         if contains_local_reference(text):
             errors.append("SKILL.md must not depend on local reference folders")
+
+    version_path = skill_dir / "VERSION"
+    if version_path.exists():
+        version_text = version_path.read_text(encoding="utf-8", errors="ignore").strip()
+        if not re.fullmatch(r"v\d+\.\d+\.\d+", version_text):
+            errors.append("VERSION must use semantic format vX.Y.Z")
 
     validate_openai_yaml(skill_dir / "agents" / "openai.yaml", errors)
 

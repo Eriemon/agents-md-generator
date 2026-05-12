@@ -11,17 +11,19 @@ Create operational context files for AI coding agents. Use facts from the reposi
 
 1. **Detect**
    - Run `python scripts/inspect_project.py <project>` to gather language, framework, package manager, CI, AI configs, files, and directories.
-   - If `root_agents_md_exists` is false, ask the user whether they want AGENTS.md designed for this work folder before writing project instructions.
+   - If `root_agents_md_exists` is false, or the root `AGENTS.md` has no version metadata, or its version does not match the current local installed `agents-md-generator` version, treat the workspace as rebuild-required and trigger AGENTS/docs/workspace restructuring handling immediately.
    - Run `python scripts/detect_scopes.py <project>` to find directories that may need scoped AGENTS.md files.
 
 2. **Design Interview**
    - Run `python scripts/collect_design_profile.py <project>` and ask question 1 first; do not rely on directory inference as the final answer.
+   - Ask the default conversation language question for every project: `中文` by default, `English`, or user-provided custom language.
    - After the user confirms the type, rerun with `--kind skill` or `--kind engineering` to get the mandatory branch questions.
    - Ask every required question in order and present each returned `options` list to the user. Prefer `request_user_input` when available so the user can choose an option or enter a custom answer.
    - Skill development follows questions 2-10, then 22-31, then 20-21; engineering development follows questions 11-19, then 20-21.
    - After each answer group, show the returned `review_summary` and `confirmed_so_far`, then ask the `confirmation_question`. If the user answers no, collect corrections and repeat the summary until the user confirms yes.
    - Save answers to JSON only after the full design is aligned. Set `alignment_confirmed=true` only after user yes/no confirmation succeeds, then run `python scripts/collect_design_profile.py <project> --answers <answers.json> --write` before claiming strong-control AGENTS.md generation.
    - For user-developed Skills, require `skills/<skill-name>/SKILL.md`; the frontmatter `name` must exactly match the folder name and use only lowercase letters, digits, and hyphens. Reject root-level self-hosted skill folders such as `<project>/<skill-name>/SKILL.md`.
+   - For engineering projects, require `engineering/<project-name>/` as the project directory contract; do not accept root-level engineering application folders.
 
 3. **Extract**
    - Run `python scripts/extract_commands.py <project>` to collect command candidates from Makefile, package.json, pyproject.toml, composer.json, go.mod, and visible CI workflow `run:` lines.
@@ -41,7 +43,7 @@ Create operational context files for AI coding agents. Use facts from the reposi
    - Use `--write` only after reviewing the draft and confirming the target path is inside the intended repository.
    - Before `--write` with strong-control docs governance, run `python scripts/manage_docs.py preflight <project>`; if it requires user confirmation, ask before using the existing `docs/` layout.
    - Strong-control generation creates or requires `.agents/agents-control.json` and the `docs/` governance tree. Experience records must live under `docs/experience/` as 10 numbered project-specific files; do not create a root-level `experience/` folder.
-   - `render_agents.py --write` writes compressed AGENTS.md and scoped AGENTS.md files, each capped at 100 lines; if preserved hand-written content breaks the limit, ask the user to compress it before writing.
+   - `render_agents.py --write` writes the root `AGENTS.md` with machine-readable version and default-language metadata. The root file must stay within `12KB`; other `AGENTS.md` files are not subject to this hard size limit.
    - After writing AGENTS.md files, run docs scaffolding for handoff, experience, development, install configuration, and git manager records.
    - Templates in `assets/templates/` define the intended root/scoped shape.
    - Use `--template-dir <dir>` only for controlled tests or intentional template overrides.
@@ -70,7 +72,7 @@ Create operational context files for AI coding agents. Use facts from the reposi
    - Use `python scripts/evaluate_skill.py <skill-dir> <project>` for the full fact-level validation chain after skill edits.
    - Run `python scripts/check_freshness.py <project>` when updating an existing AGENTS.md.
    - Run `python scripts/create_agent_shims.py <project>` only when the user wants CLAUDE.md/GEMINI.md compatibility.
-   - After release packaging and successful validation, ask the user yes/no whether to install. If yes, use `python scripts/install_skill.py <skill-dir> --target codex --write --replace` or `--target custom --custom-root <dir> --write --replace` when replacing an existing skill; the installer must back up the old skill and preserve evolution templates before replacing. If no or no explicit response, skip installation.
+   - After release packaging and successful validation, if the user did not explicitly mention whether to install, you must ask the install question. If yes, use `python scripts/install_skill.py <skill-dir> --target codex --write --replace` or `--target custom --custom-root <dir> --write --replace` when replacing an existing skill; the installer must back up the old skill and preserve evolution templates before replacing. If no or no explicit response, skip installation.
 
 8. **Final Evidence**
    - Report generated files, unresolved warnings, and verification command output.

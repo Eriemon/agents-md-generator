@@ -8,13 +8,13 @@ import sys
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from agents_common import detect_scopes, emit_json, extract_commands, extract_context, inspect_project, resolve_project, today
+from agents_common import detect_scopes, emit_json, extract_commands, extract_context, inspect_project, read_skill_version, resolve_project, today
 from manage_docs import preflight_docs, scaffold as scaffold_docs
 
 
 GENERATED_START = "<!-- AGENTS-GENERATED:START"
 GENERATED_END = "<!-- AGENTS-GENERATED:END"
-MAX_AGENTS_LINES = 100
+ROOT_AGENTS_MAX_BYTES = 12 * 1024
 
 
 def command_rows(commands: list[dict[str, str]]) -> str:
@@ -52,16 +52,14 @@ def compact_section(marker: str, heading: str, body: str, max_body_lines: int | 
     ])
 
 
-def agents_line_count(text: str) -> int:
-    return len(text.splitlines())
-
-
-def line_limit_errors(paths_to_text: list[tuple[str, str]]) -> list[str]:
+def root_size_errors(paths_to_text: list[tuple[str, str]]) -> list[str]:
     errors: list[str] = []
     for label, text in paths_to_text:
-        count = agents_line_count(text)
-        if count > MAX_AGENTS_LINES:
-            errors.append(f"{label}: exceeds 100 line limit ({count} lines); compress hand-written content before writing")
+        if label != "AGENTS.md":
+            continue
+        size = len(text.encode("utf-8"))
+        if size > ROOT_AGENTS_MAX_BYTES:
+            errors.append(f"{label}: exceeds 12KB limit ({size} bytes); compress hand-written content before writing")
     return errors
 
 
@@ -119,9 +117,12 @@ def project_overview(facts: dict) -> str:
         f"Primary language: {facts['primary_language']}. Framework: {facts['framework']}. Project type: {facts['project_type']}.",
     ]
     if facts.get("root_agents_md_exists"):
-        lines.append("Root AGENTS.md: present.")
+        if facts.get("root_agents_md_rebuild_required"):
+            lines.append(f"Root AGENTS.md: present but rebuild required ({', '.join(facts.get('root_agents_md_rebuild_reasons', []))}).")
+        else:
+            lines.append("Root AGENTS.md: present and version-aligned with the current local agents-md-generator.")
     else:
-        lines.append("Root AGENTS.md: missing. Ask the user whether to design AGENTS.md before writing project instructions.")
+        lines.append("Root AGENTS.md: missing. Must trigger agents-md-generator regeneration and workspace/docs restructure handling before normal work.")
     return "\n".join(lines)
 
 
@@ -239,6 +240,8 @@ def control_profile(profile: dict | None) -> str:
         "- Strong control: complete.",
         f"- Development type: {profile.get('kind', 'unknown')}.",
         f"- Name: {profile.get('name', 'unknown')}.",
+        f"- Version: {read_skill_version() or 'unknown'}.",
+        f"- Default conversation language: {profile.get('default_conversation_language', '中文')}.",
         f"- Purpose: {profile.get('purpose', 'unknown')}.",
         f"- Reason: {profile.get('reason', 'unknown')}.",
     ]
@@ -353,6 +356,7 @@ def skill_design_contract(profile: dict | None) -> str:
 def conversation_completion_contract(profile: dict | None) -> str:
     return "\n".join([
         "- Finish all requested development work in the current conversation whenever feasible.",
+        f"- Default conversation language: {profile.get('default_conversation_language', '中文') if profile else '中文'}. Unless the user explicitly switches language, continue in that language.",
         "- If work cannot be completed, report blockers, completed files, unverified assumptions, and exact next steps.",
         "- Run the smallest relevant checks during development and final verification before completion claims.",
         "- Preserve user changes and never rewrite the directory contract silently.",
@@ -429,9 +433,14 @@ def template_values(project: Path, profile: dict | None = None) -> dict[str, str
     scopes = detect_scopes(project)["scopes"]
     context = extract_context(project)
     command_source = ", ".join(sorted({item["source"] for item in commands})) if commands else "none detected"
+    default_language = profile.get("default_conversation_language", "中文") if profile else "中文"
+    current_version = read_skill_version() or "unknown"
     return {
         "TIMESTAMP": today(),
         "VERIFIED_TIMESTAMP": "never",
+        "AGENTS_VERSION": current_version,
+        "GENERATOR_VERSION": current_version,
+        "DEFAULT_LANGUAGE": default_language,
         "PROJECT_OVERVIEW": project_overview(facts),
         "CONTROL_PROFILE": control_profile(profile),
         "DIRECTORY_CONTRACT": directory_contract(profile),
@@ -492,7 +501,7 @@ def manual_content(existing: str) -> str:
         "## Boundaries",
         "## When Instructions Conflict",
     }
-    generated_prefixes = ("<!-- Last updated:",)
+    generated_prefixes = ("<!-- Last updated:", "<!-- AGENTS-METADATA:")
     kept = []
     skipping_marker = False
     skipping_plain_block = False
@@ -539,10 +548,11 @@ def render_root(project: Path, template_dir: Path | None = None, profile: dict |
             "<!-- FOR AI AGENTS - Human readability is a side effect, not a goal -->",
             "<!-- Managed by agent: keep sections and order; edit content outside AGENTS-GENERATED blocks -->",
             f"<!-- Last updated: {values['TIMESTAMP']} | Last verified: {values['VERIFIED_TIMESTAMP']} -->",
+            f"<!-- AGENTS-METADATA: agents_version={values['AGENTS_VERSION']}; generator_version={values['GENERATOR_VERSION']}; default_language={values['DEFAULT_LANGUAGE']} -->",
             "# AGENTS.md",
             "**Precedence:** the closest `AGENTS.md` to the files being changed wins. Explicit user prompts override this file.",
             compact_section("project-overview", "Project Overview", values["PROJECT_OVERVIEW"], 2),
-            compact_section("control-profile", "Control Profile", values["CONTROL_PROFILE"], 6),
+            compact_section("control-profile", "Control Profile", values["CONTROL_PROFILE"], 8),
             compact_section("directory-contract", "Directory Contract", values["DIRECTORY_CONTRACT"], 5),
             compact_section("release-contract", "Release Contract", values["RELEASE_CONTRACT"], 9),
             compact_section("engineering-rule-contract", "Engineering Rule Contract", values["ENGINEERING_RULE_CONTRACT"], engineering_max),
@@ -582,8 +592,10 @@ def render_root(project: Path, template_dir: Path | None = None, profile: dict |
             parts.append(manual)
         return "\n".join(parts).rstrip() + "\n"
     template = load_template(template_dir or default_template_dir(), "root-agents.md")
-    rendered = replace_placeholders(template, template_values(project, profile)).rstrip()
-    return rendered + manual_content(existing) + "\n"
+    values = template_values(project, profile)
+    rendered = replace_placeholders(template, values).rstrip()
+    metadata = f"<!-- AGENTS-METADATA: agents_version={values['AGENTS_VERSION']}; generator_version={values['GENERATOR_VERSION']}; default_language={values['DEFAULT_LANGUAGE']} -->"
+    return metadata + "\n" + rendered + manual_content(existing) + "\n"
 
 
 def render_scoped(scope: dict[str, str], template_dir: Path | None = None) -> str:
@@ -640,9 +652,9 @@ def main() -> None:
             agents_path = scope_dir / "AGENTS.md"
             if not agents_path.exists():
                 pending_writes.append((agents_path, render_scoped(scope, template_dir)))
-    errors = line_limit_errors([(path.relative_to(project).as_posix(), text) for path, text in pending_writes])
+    errors = root_size_errors([(path.relative_to(project).as_posix(), text) for path, text in pending_writes])
     if errors:
-        emit_json({"errors": errors, "max_lines": MAX_AGENTS_LINES})
+        emit_json({"errors": errors, "max_bytes": ROOT_AGENTS_MAX_BYTES})
         raise SystemExit(1)
     for path, text in pending_writes:
         path.write_text(text, encoding="utf-8")

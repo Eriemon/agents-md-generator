@@ -11,7 +11,7 @@ Use these scenarios to forward-test the skill after changes.
 | PHP project | Detects composer scripts and framework hints |
 | Hybrid project | Keeps root thin and avoids mixing frontend/backend commands |
 | Existing AGENTS.md | Preserves hand-written content outside generated markers |
-| AGENTS.md compression | Root and scoped generated AGENTS.md files stay within 100 lines, and over-limit manual content blocks writes |
+| AGENTS.md compression | Root generated `AGENTS.md` stays within 12KB, scoped AGENTS files are not blocked by the old line rule, and over-limit root manual content blocks writes |
 | Outdated AGENTS.md | Reports freshness risk from git history |
 | Scoped directories | Creates scoped files only for distinct local rules |
 | Cross-agent shims | Creates CLAUDE.md/GEMINI.md without overwriting existing non-managed files |
