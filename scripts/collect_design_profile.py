@@ -245,7 +245,6 @@ def skill_layout_contract(project: Path, name: str, answers: dict[str, Any]) -> 
         errors.append("skill name must use lowercase letters, digits, and hyphens only")
 
     expected = project / "skills" / name / "SKILL.md"
-    legacy_self = project / name / "SKILL.md"
     files = discover_skill_files(project)
 
     if expected.exists():
@@ -253,12 +252,6 @@ def skill_layout_contract(project: Path, name: str, answers: dict[str, Any]) -> 
         if skill_name != name:
             errors.append(f"SKILL.md name must match folder name: {name}")
         return {"path": f"skills/{name}", "skill_file": f"skills/{name}/SKILL.md"}, errors
-
-    if name == "agents-md-generator" and legacy_self.exists():
-        skill_name = parse_skill_name(legacy_self)
-        if skill_name != name:
-            errors.append(f"SKILL.md name must match folder name: {name}")
-        return {"path": name, "skill_file": f"{name}/SKILL.md", "legacy_self_hosted": True}, errors
 
     if files and answers.get("has_existing_work") == "yes":
         for skill_file in files:
@@ -425,6 +418,8 @@ def docs_contract(name: str) -> dict[str, Any]:
             "folder": "docs/git_manager",
             "branch_model": "master-and-dist-release",
             "branch_policy": branch_policy,
+            "change_log": "docs/git_manager/CHANGELOG.md",
+            "history": "docs/git_manager/history_git_manager",
             "dist_folder": "dist",
             "release_folder_pattern": f"{name}-vx.x.x",
             "zip_required": True,

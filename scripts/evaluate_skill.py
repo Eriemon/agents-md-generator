@@ -90,8 +90,15 @@ def collect_errors(commands: list[dict[str, Any]]) -> list[str]:
     return errors
 
 
+def repo_root_for(skill_dir: Path) -> Path:
+    for candidate in [skill_dir.parent.parent, skill_dir.parent, skill_dir]:
+        if (candidate / "tests").is_dir():
+            return candidate
+    return skill_dir.parent.parent if skill_dir.parent != skill_dir else skill_dir
+
+
 def evaluate(skill_dir: Path, project: Path) -> dict[str, Any]:
-    repo_root = skill_dir.parent
+    repo_root = repo_root_for(skill_dir)
     quick_validate = quick_validate_path()
     test_env = dict(os.environ, AGENTS_MD_EVALUATE_RUNNING="1")
     commands = [

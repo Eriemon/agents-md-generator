@@ -6,7 +6,7 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 
 | Gate | Required evidence |
 |------|-------------------|
-| Structure | `quick_validate.py agents-md-generator` passes for this skill |
+| Structure | `quick_validate.py skills/agents-md-generator` passes for this skill |
 | Facts | `python scripts/inspect_project.py <project>` output reviewed |
 | Design profile | `python scripts/collect_design_profile.py <project> --answers answers.json --write` completed when strong control is required |
 | Commands | `python scripts/extract_commands.py <project>` output reviewed |
@@ -21,8 +21,8 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 | Freshness | `python scripts/check_freshness.py <project>` reviewed for existing AGENTS.md |
 | Compatibility | `python scripts/create_agent_shims.py <project>` used only when requested |
 | Install confirmation | `python scripts/install_skill.py <skill-dir> --target skip` or explicit install target recorded after release validation; replacement installs must show `backup_path` and no unreviewed template loss |
-| Skill self-audit | `python scripts/audit_skill.py agents-md-generator` has no errors after skill edits |
-| Fact-level validation | `python scripts/evaluate_skill.py agents-md-generator <project>` returns `"ok": true` after skill edits |
+| Skill self-audit | `python scripts/audit_skill.py skills/agents-md-generator` has no errors after skill edits |
+| Fact-level validation | `python scripts/evaluate_skill.py skills/agents-md-generator <project>` returns `"ok": true` after skill edits |
 
 ## Content Checks
 
@@ -58,6 +58,8 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - After release packaging and validation, the user is asked yes/no whether to install; no response or no means skip, and custom/Codex installs require an explicit target.
 - Before installable `dist/` release, local work is committed, development branches are merged into `master`, and local branches other than `master` and `release` are deleted unless the user explicitly changes the branch policy.
 - Replacement installs back up the old skill to `skill_backups/` and preserve installed evolution templates, reporting conflicts instead of silently overwriting them.
+- Commit and release summaries rotate through `docs/git_manager/CHANGELOG.md`; previous current entries are archived under `docs/git_manager/history_git_manager/YYYYMMDD-HHMMSS/`.
+- Release gates run on `master`, with only local `master` and `release` branches present, and post-package validation confirms the release commit includes the dist artifacts and changelog update.
 - Commands are labeled verified only when actually executed.
 - Generated markers are balanced and hand-written content outside markers is preserved.
 - No `{{PLACEHOLDER}}` tokens remain in generated output.

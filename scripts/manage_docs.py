@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import re
 import shutil
+import subprocess
 import sys
 from typing import Any
 
@@ -24,6 +25,7 @@ DOC_DIRS = [
     "docs/development",
     "docs/install_configuration",
     "docs/git_manager",
+    "docs/git_manager/history_git_manager",
     "docs/dir_manager",
     "docs/dir_manager/change_reviews",
     "docs/dir_manager/history_dir_manager",
@@ -32,6 +34,7 @@ REQUIRED_DOC_FILES = [
     "docs/handoff/HANDOFF.md",
     "docs/install_configuration/INSTALL_CONFIGURATION.md",
     "docs/git_manager/GIT_MANAGER.md",
+    "docs/git_manager/CHANGELOG.md",
 ]
 FIXED_EXPERIENCE_TOPICS = [
     ("1-workflow.md", "Workflow", "Workflow lessons for this specific project or skill."),
@@ -76,6 +79,18 @@ def stamp() -> str:
 
 def docs_root(project: Path) -> Path:
     return project / "docs"
+
+
+def git_manager_root(project: Path) -> Path:
+    return docs_root(project) / "git_manager"
+
+
+def git_changelog_file(project: Path) -> Path:
+    return git_manager_root(project) / "CHANGELOG.md"
+
+
+def git_history_root(project: Path) -> Path:
+    return git_manager_root(project) / "history_git_manager"
 
 
 def state_file(project: Path) -> Path:
@@ -270,6 +285,23 @@ def install_configuration_doc() -> str:
     ])
 
 
+def default_git_changelog() -> str:
+    return "\n".join([
+        "# Change Log",
+        "",
+        "- Version: not recorded",
+        "- Generated at: not recorded",
+        "- Summary: not recorded",
+        "",
+        "## Changes",
+        "- Record the staged or committed changes for this release or commit here before the next commit.",
+        "",
+        "## Verification",
+        "- Record the exact validation commands or evidence used for this change set.",
+        "",
+    ])
+
+
 def git_manager_doc() -> str:
     return "\n".join([
         "# Git Manager",
@@ -284,14 +316,21 @@ def git_manager_doc() -> str:
         "- If a branch has unmerged commits, merge it to `master` before cleanup; never discard it silently.",
         "- After release preparation, delete local branches other than `master` and `release`.",
         "- Do not delete remote branches unless the user explicitly requests remote cleanup.",
+        "- Run `python scripts/manage_docs.py release-gate <project> --version vX.Y.Z --skill-dir skills/<skill-name>` before and after packaging to verify branch, worktree, release artifact, and parity gates.",
         "",
         "## Release Configuration",
         "- Place installable releases under `dist/`.",
         "- Name installable release folders as `<name>-vx.x.x` and create a matching zip when required.",
         "- Package only after branch cleanup and release records are complete.",
+        "- The release commit must include the release artifacts and the current `docs/git_manager/CHANGELOG.md` entry.",
+        "",
+        "## Change Log",
+        "- Update `docs/git_manager/CHANGELOG.md` before each commit that changes governed release or git-management behavior.",
+        "- Archive the previous `CHANGELOG.md` to `docs/git_manager/history_git_manager/YYYYMMDD-HHMMSS/CHANGELOG.md` before writing the next current entry.",
+        "- Use `python scripts/manage_docs.py git-changelog <project> --input changelog.json` to rotate and write the current change summary.",
         "",
         "## Current Version",
-        "- Record the active version and release notes here during release preparation.",
+        "- Record the active version here during release preparation and keep detailed changes in `CHANGELOG.md`.",
         "",
     ])
 
@@ -384,6 +423,7 @@ def scaffold(project: Path) -> dict[str, Any]:
         "docs/handoff/HANDOFF.md": default_handoff(),
         "docs/install_configuration/INSTALL_CONFIGURATION.md": install_configuration_doc(),
         "docs/git_manager/GIT_MANAGER.md": git_manager_doc(),
+        "docs/git_manager/CHANGELOG.md": default_git_changelog(),
     }
     for rel_path, content in files.items():
         path = project / rel_path
@@ -830,7 +870,7 @@ def source_versions_for(project: Path, filename: str) -> list[dict[str, str]]:
 def evolution_template_root(project: Path) -> Path:
     profile = control_profile(project)
     layout = profile.get("skill_layout", {}) if isinstance(profile.get("skill_layout"), dict) else {}
-    skill_path = str(layout.get("path") or "agents-md-generator").strip()
+    skill_path = str(layout.get("path") or "skills/agents-md-generator").strip()
     candidate = project / skill_path / "assets" / "templates"
     if candidate.exists() or (project / skill_path).exists():
         return candidate / "evolution"
@@ -1031,6 +1071,126 @@ def write_development(project: Path, stage: str, input_path: str | None) -> dict
     return {"project": str(project), "written": str(target)}
 
 
+def changelog_markdown(data: dict[str, Any]) -> str:
+    return "\n".join([
+        "# Change Log",
+        "",
+        f"- Version: {data.get('version', 'not recorded')}",
+        f"- Generated at: {datetime.now().isoformat(timespec='seconds')}",
+        f"- Summary: {data.get('summary', 'not recorded')}",
+        "",
+        "## Changes",
+        list_lines(data.get("changes")),
+        "",
+        "## Verification",
+        list_lines(data.get("verification")),
+        "",
+    ])
+
+
+def rotate_git_changelog(project: Path) -> str | None:
+    current = git_changelog_file(project)
+    if not current.exists():
+        return None
+    text = current.read_text(encoding="utf-8", errors="ignore")
+    if "- Version: not recorded" in text and "- Summary: not recorded" in text:
+        return None
+    history_dir = git_history_root(project) / stamp()
+    history_dir.mkdir(parents=True, exist_ok=True)
+    target = history_dir / "CHANGELOG.md"
+    shutil.move(str(current), str(target))
+    return target.relative_to(project).as_posix()
+
+
+def write_git_changelog(project: Path, input_path: str | None) -> dict[str, Any]:
+    scaffold(project)
+    data = read_input(input_path)
+    target = git_changelog_file(project)
+    archived = rotate_git_changelog(project)
+    target.write_text(changelog_markdown(data), encoding="utf-8")
+    state = load_state(project)
+    state["last_git_changelog_at"] = datetime.now().isoformat(timespec="seconds")
+    state["last_git_changelog_version"] = str(data.get("version", "")).strip()
+    save_state(project, state)
+    return {
+        "project": str(project),
+        "written": target.relative_to(project).as_posix(),
+        "archived": archived or "",
+        "version": str(data.get("version", "")).strip(),
+    }
+
+
+def run_git(project: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["git", *args], cwd=project, text=True, capture_output=True, check=False)
+
+
+def parse_version_tuple(value: str) -> tuple[int, int, int]:
+    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", value.strip())
+    if not match:
+        raise ValueError(f"invalid version: {value}")
+    return tuple(int(part) for part in match.groups())
+
+
+def latest_release_dir(project: Path, skill_name: str) -> Path | None:
+    releases = []
+    for path in (project / "dist").glob(f"{skill_name}-v*"):
+        if not path.is_dir():
+            continue
+        match = re.search(r"v(\d+)\.(\d+)\.(\d+)", path.name)
+        if match:
+            releases.append((tuple(int(part) for part in match.groups()), path))
+    if not releases:
+        return None
+    releases.sort(key=lambda item: item[0])
+    return releases[-1][1]
+
+
+def release_members(root: Path, prefix: Path) -> list[str]:
+    return sorted(path.relative_to(prefix).as_posix() for path in root.rglob("*") if path.is_file())
+
+
+def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str) -> dict[str, Any]:
+    skill_dir = resolve_project(skill_dir_raw if Path(skill_dir_raw).is_absolute() else project / skill_dir_raw)
+    skill_name = skill_dir.name
+    expected_release = project / "dist" / f"{skill_name}-{version}"
+    expected_zip = project / "dist" / f"{skill_name}-{version}.zip"
+    git_branch = run_git(project, ["branch", "--show-current"]).stdout.strip()
+    branches = sorted(line.strip().lstrip("* ").strip() for line in run_git(project, ["branch", "--list"]).stdout.splitlines() if line.strip())
+    status_lines = [line for line in run_git(project, ["status", "--short"]).stdout.splitlines() if line.strip()]
+    errors: list[str] = []
+    checks = {
+        "branch": git_branch,
+        "local_branches": branches,
+        "phase": phase,
+        "skill_dir": skill_dir.relative_to(project).as_posix() if skill_dir.is_relative_to(project) else str(skill_dir),
+        "expected_release_dir": expected_release.relative_to(project).as_posix(),
+        "expected_release_zip": expected_zip.relative_to(project).as_posix(),
+        "status_lines": status_lines,
+    }
+    if git_branch != "master":
+        errors.append("release gate requires current branch master")
+    if sorted(branches) != ["master", "release"]:
+        errors.append("release gate requires only local branches master and release")
+    if phase == "post":
+        if status_lines:
+            errors.append("post-release gate requires a clean committed worktree")
+        if not expected_release.is_dir():
+            errors.append(f"missing release directory: {expected_release.relative_to(project).as_posix()}")
+        if not expected_zip.is_file():
+            errors.append(f"missing release zip: {expected_zip.relative_to(project).as_posix()}")
+        if expected_release.is_dir():
+            source_files = release_members(skill_dir, skill_dir)
+            release_files = release_members(expected_release, expected_release)
+            if source_files != release_files:
+                errors.append("release parity mismatch between skill source and dist release directory")
+    latest = latest_release_dir(project, skill_name)
+    if latest is not None:
+        checks["latest_release_dir"] = latest.relative_to(project).as_posix()
+        if parse_version_tuple(version) < parse_version_tuple(latest.name.rsplit("-", 1)[-1]):
+            errors.append("requested release version is older than the latest dist release")
+    return {"project": str(project), "ok": not errors, "errors": errors, "checks": checks}
+
+
 def verify_docs(project: Path) -> dict[str, Any]:
     errors: list[str] = []
     checked: list[str] = []
@@ -1105,6 +1265,16 @@ def main() -> None:
     development_parser.add_argument("--stage", required=True)
     development_parser.add_argument("--input", default=None)
 
+    changelog_parser = subparsers.add_parser("git-changelog")
+    changelog_parser.add_argument("project", nargs="?", default=".")
+    changelog_parser.add_argument("--input", default=None)
+
+    release_gate_parser = subparsers.add_parser("release-gate")
+    release_gate_parser.add_argument("project", nargs="?", default=".")
+    release_gate_parser.add_argument("--version", required=True)
+    release_gate_parser.add_argument("--skill-dir", required=True)
+    release_gate_parser.add_argument("--phase", choices=["pre", "post"], default="pre")
+
     verify_parser = subparsers.add_parser("verify")
     verify_parser.add_argument("project", nargs="?", default=".")
 
@@ -1134,6 +1304,13 @@ def main() -> None:
             raise SystemExit(1)
     elif args.command == "development":
         emit_json(write_development(project, args.stage, args.input))
+    elif args.command == "git-changelog":
+        emit_json(write_git_changelog(project, args.input))
+    elif args.command == "release-gate":
+        result = release_gate(project, args.version, args.skill_dir, args.phase)
+        emit_json(result)
+        if result["errors"]:
+            raise SystemExit(1)
     elif args.command == "verify":
         result = verify_docs(project)
         emit_json(result)

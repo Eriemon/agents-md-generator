@@ -293,6 +293,8 @@ def release_contract(profile: dict | None) -> str:
         f"- Dist folder: `{release.get('dist_folder', 'dist')}`.",
         f"- Release folder pattern: `{release.get('release_folder_pattern', '<name>-vx.x.x')}`.",
         f"- Zip required: {release.get('zip_required', True)}.",
+        "- Before and after packaging, run `python scripts/manage_docs.py release-gate <project> --version vX.Y.Z --skill-dir skills/<skill-name> --phase pre|post`.",
+        "- Keep the release commit and the current `docs/git_manager/CHANGELOG.md` entry together.",
         "- Do not push to a remote unless the user explicitly asks.",
     ])
 
@@ -407,17 +409,16 @@ def documentation_governance_contract(profile: dict | None) -> str:
     return "\n".join([
         f"- Docs root: `{contract.get('root', 'docs')}`.",
         f"- Latest handoff: `{handoff.get('current', 'docs/handoff/HANDOFF.md')}` is always the newest task handoff.",
-        f"- Experience folder: `{experience.get('folder', 'docs/experience')}` maintains 10 project-specific numbered experience files: `docs/experience/1-workflow.md`, `docs/experience/2-scripts.md`, `docs/experience/3-plan.md`, `docs/experience/4-design-ui.md`, plus `5-*.md` through `10-*.md`.",
+        f"- Experience folder: `{experience.get('folder', 'docs/experience')}` maintains 10 project-specific numbered experience files including `docs/experience/1-workflow.md`, `docs/experience/2-scripts.md`, `docs/experience/3-plan.md`, `docs/experience/4-design-ui.md`, plus `5-*.md` through `10-*.md`.",
         f"- Experience cadence: every 5 completed handoffs create an AI update request using up to {experience.get('conversation_context_limit', 10)} recent conversation snapshots; apply only AI-generated payloads and archive previous current files to `{experience.get('history', 'docs/experience/history_experience')}/YYYYMMDD-HHMMSS/`.",
-        f"- Auto evolution: every {experience.get('evolution_every_handoffs', 10)} completed handoffs, distill approved experience into indexed templates under `{experience.get('evolution_templates', 'assets/templates/evolution/{skill-template,engineering-template}/<type>/')}`.",
-        f"- Experience topics: {experience.get('topic_policy', 'Choose files 5-10 from current work content.')}",
+        f"- Auto evolution: every {experience.get('evolution_every_handoffs', 10)} completed handoffs, distill approved experience into indexed templates under `{experience.get('evolution_templates', 'assets/templates/evolution/{skill-template,engineering-template}/<type>/')}`; topics stay project-specific.",
+        f"- Git manager: keep the current change summary in `{git.get('folder', 'docs/git_manager')}/CHANGELOG.md`, archive older entries under `{git.get('folder', 'docs/git_manager')}/history_git_manager/YYYYMMDD-HHMMSS/`, and rotate with `manage_docs.py git-changelog`.",
         f"- Dir manager: keep strict local and remote deployment structure review rules under `{dir_manager.get('folder', 'docs/dir_manager')}/`; run `manage_dirs.py review` and keep `history_dir_manager/` archives.",
         "- Directory changes require `python scripts/manage_dirs.py review <project> --input change.json`; blocked reviews require explicit user force-confirmation and risk capture in handoff.",
         f"- Force-confirmed directory overrides must archive old dir manager content to `{dir_manager.get('history', 'docs/dir_manager/history_dir_manager')}/YYYYMMDD-HHMMSS/` before applying the folder change.",
         f"- Handoff history: archive the previous HANDOFF.md to `{handoff.get('history', 'docs/handoff/history_handoff')}` with `{handoff.get('archive_pattern', 'HANDOFF-YYYYMMDD-HHMMSS.md')}` before writing a new one.",
         f"- Development records: write `{development.get('file_pattern', 'YYYYMMDD-HHMMSS-<stage>.md')}` under `{development.get('folder', 'docs/development')}` at installable releases or stage completion.",
         f"- Install configuration: document skill installation and {targets_text} adapters under `{install.get('folder', 'docs/install_configuration')}`.",
-        f"- Git manager: document branch, master, release, dist, installable version naming, local branch cleanup, and current version rules under `{git.get('folder', 'docs/git_manager')}`.",
         "- Use `python scripts/manage_docs.py handoff <project> --input handoff.json` at task completion.",
     ])
 

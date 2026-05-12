@@ -21,7 +21,7 @@ Create operational context files for AI coding agents. Use facts from the reposi
    - Skill development follows questions 2-10, then 22-31, then 20-21; engineering development follows questions 11-19, then 20-21.
    - After each answer group, show the returned `review_summary` and `confirmed_so_far`, then ask the `confirmation_question`. If the user answers no, collect corrections and repeat the summary until the user confirms yes.
    - Save answers to JSON only after the full design is aligned. Set `alignment_confirmed=true` only after user yes/no confirmation succeeds, then run `python scripts/collect_design_profile.py <project> --answers <answers.json> --write` before claiming strong-control AGENTS.md generation.
-   - For user-developed Skills, require `skills/<skill-name>/SKILL.md`; the frontmatter `name` must exactly match the folder name and use only lowercase letters, digits, and hyphens. The generator's own source may remain in `agents-md-generator/`.
+   - For user-developed Skills, require `skills/<skill-name>/SKILL.md`; the frontmatter `name` must exactly match the folder name and use only lowercase letters, digits, and hyphens. Reject root-level self-hosted skill folders such as `<project>/<skill-name>/SKILL.md`.
 
 3. **Extract**
    - Run `python scripts/extract_commands.py <project>` to collect command candidates from Makefile, package.json, pyproject.toml, composer.json, go.mod, and visible CI workflow `run:` lines.
@@ -55,7 +55,9 @@ Create operational context files for AI coding agents. Use facts from the reposi
    - Apply AI-authored experience with `python scripts/manage_docs.py experience <project> --payload experience-payload.json`; scripts validate, archive, and write, but must not fabricate lesson content.
    - Every ten handoffs, accepted experience evolves indexed templates under assets/templates/evolution skill-template and engineering-template type folders.
    - At installable release or stage completion, run `python scripts/manage_docs.py development <project> --stage <name> --input stage.json`.
-   - Keep install setup for Codex, Claude, and OpenClaw under `docs/install_configuration/`; keep branch, release, dist, package naming, protected branch cleanup, and current version rules under `docs/git_manager/`.
+   - Keep install setup for Codex, Claude, and OpenClaw under `docs/install_configuration/`; keep branch, release, dist, package naming, protected branch cleanup, `CHANGELOG.md`, changelog history, and current version rules under `docs/git_manager/`.
+   - Rotate commit and release summaries with `python scripts/manage_docs.py git-changelog <project> --input changelog.json`; archive the previous current file under `docs/git_manager/history_git_manager/<timestamp>/CHANGELOG.md` before writing the new one.
+   - Verify branch, worktree, release artifact, and parity gates with `python scripts/manage_docs.py release-gate <project> --version vX.Y.Z --skill-dir skills/<skill-name> --phase pre|post`.
    - Keep local and remote deployment folder governance under `docs/dir_manager/`; before creating, moving, deleting, or renaming governed folders, run `python scripts/manage_dirs.py review <project> --input change.json`.
    - For remote server deployment tasks, do not sync local skill-development content to servers; deploy only explicit runtime/deployment artifacts unless the user explicitly overrides.
    - If directory review is blocked, refuse default execution, explain the severe risks, and ask for explicit user force-confirmation before changing folder structure.
