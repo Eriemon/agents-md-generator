@@ -267,7 +267,9 @@ def skill_layout_contract(project: Path, name: str, answers: dict[str, Any]) -> 
             errors.append(f"SKILL.md name must match folder name: {name}")
         return {"path": f"skills/{name}", "skill_file": f"skills/{name}/SKILL.md"}, errors
 
-    if files and answers.get("has_existing_work") == "yes":
+    if answers.get("has_existing_work") == "yes":
+        if not files:
+            errors.append("skill projects with existing work must already place the skill under skills/<skill-name>/SKILL.md")
         for skill_file in files:
             relative = skill_file.relative_to(project).as_posix()
             parts = skill_file.relative_to(project).parts
@@ -283,15 +285,28 @@ def skill_layout_contract(project: Path, name: str, answers: dict[str, Any]) -> 
     return {"path": f"skills/{name}", "skill_file": f"skills/{name}/SKILL.md"}, errors
 
 
+def directory_layout_policy(kind: str, name: str) -> dict[str, Any]:
+    primary = f"skills/{name}/" if kind == "skill" else f"engineering/{name}/"
+    return {
+        "primary_project_root": primary,
+        "allowed_new_paths": [
+            primary,
+            "tests/",
+            "dist/",
+            "docs/",
+            ".agents/",
+            "ref/",
+        ],
+        "enforce_primary_project_root": True,
+    }
+
+
 def engineering_layout_contract(project: Path, name: str, answers: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     expected = project / "engineering" / name
-    local_structure = str(answers.get("local_directory_structure", "")).strip()
     if answers.get("has_existing_work") == "yes":
-        if expected.exists():
-            return errors
-        if f"engineering/{name}/" not in local_structure.replace("\\", "/"):
-            errors.append("engineering projects must use engineering/<project-name>/")
+        if not expected.exists():
+            errors.append("engineering projects with existing work must already place the project under engineering/<project-name>/")
     return errors
 
 
@@ -558,6 +573,7 @@ def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any
             "local": answers.get("local_directory_structure", ""),
             "remote": answers.get("remote_directory_structure", ""),
             "feature_rules": answers.get("feature_directory_rules", ""),
+            **directory_layout_policy(kind, name),
         },
         "experience_contract": {
             "folder": "docs/experience",

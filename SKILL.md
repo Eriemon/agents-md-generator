@@ -50,6 +50,8 @@ Create operational context files for AI coding agents. Use facts from the reposi
 5. **Generate**
    - Run `python scripts/render_agents.py <project> --profile <project>/.agents/agents-control.json` first; default is dry-run.
    - Use `--write` only after reviewing the draft and confirming the target path is inside the intended repository.
+   - For strong-control external work folders, branch governance must pass before `--write` continues. Run `python scripts/manage_docs.py branch-gate <project>` first; if it reports branch or worktree violations, stop normal generation and ask whether to enter branch cleanup or release-governance handling.
+   - Only continue after explicit user confirmation by rerunning `render_agents.py --write --confirm-branch-governance`; do not silently bypass a blocked branch gate.
    - Before `--write` with strong-control docs governance, run `python scripts/manage_docs.py preflight <project>`; if it requires user confirmation, ask before using the existing `docs/` layout.
    - Strong-control generation creates or requires `.agents/agents-control.json` and the `docs/` governance tree. Experience records must live under `docs/experience/` as 10 numbered project-specific files; do not create a root-level `experience/` folder.
    - `render_agents.py --write` writes the root `AGENTS.md` with machine-readable version and default-language metadata. The root file must stay within `12KB`; other `AGENTS.md` files are not subject to this hard size limit.
@@ -58,6 +60,7 @@ Create operational context files for AI coding agents. Use facts from the reposi
    - Use `--template-dir <dir>` only for controlled tests or intentional template overrides.
 
 6. **Docs Governance**
+   - If the external work folder already has legacy governance paths such as root `experience/`, root `DEVELOPMENT.md`, root `HANDOFF.md`, or misplaced `docs/HANDOFF.md` / `docs/DEVELOPMENT.md`, automatically migrate them into the governed `docs/` layout before continuing, and preserve history instead of silently overwriting.
    - Before executing a new task after reading a prior handoff, run `python scripts/manage_docs.py resume-check <project>`; if it reports an interrupted active session, run `python scripts/manage_docs.py resume-repair <project> --input recovery.json` before handling the new request.
    - At task start, run `python scripts/manage_docs.py start-session <project> --input session.json` after reading `docs/handoff/HANDOFF.md`.
    - Run `python scripts/manage_docs.py scaffold <project>` when docs governance must be prepared without rewriting AGENTS.md.

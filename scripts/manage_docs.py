@@ -510,6 +510,63 @@ def preflight_docs(project: Path) -> dict[str, Any]:
     }
 
 
+def rotate_current_development_if_needed(project: Path) -> str:
+    target = project / "docs" / "development" / "DEVELOPMENT.md"
+    if not target.exists():
+        return ""
+    text = target.read_text(encoding="utf-8", errors="ignore")
+    if "- Version: not recorded" in text and "- Status: not recorded" in text:
+        return ""
+    history_dir = project / "docs" / "development" / "history_development" / stamp()
+    history_dir.mkdir(parents=True, exist_ok=True)
+    archived_target = history_dir / "DEVELOPMENT.md"
+    shutil.move(str(target), str(archived_target))
+    return archived_target.relative_to(project).as_posix()
+
+
+def migrate_legacy_docs(project: Path) -> list[str]:
+    migrated: list[str] = []
+    docs_root = project / "docs"
+
+    legacy_handoffs = [project / "HANDOFF.md", docs_root / "HANDOFF.md"]
+    handoff_target = project / "docs" / "handoff" / "HANDOFF.md"
+    for legacy in legacy_handoffs:
+        if legacy.exists() and legacy.is_file():
+            if handoff_target.exists():
+                rotate_handoff(project)
+            handoff_target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(legacy), str(handoff_target))
+            migrated.append(handoff_target.relative_to(project).as_posix())
+            break
+
+    legacy_developments = [project / "DEVELOPMENT.md", docs_root / "DEVELOPMENT.md"]
+    development_target = project / "docs" / "development" / "DEVELOPMENT.md"
+    for legacy in legacy_developments:
+        if legacy.exists() and legacy.is_file():
+            if development_target.exists():
+                rotate_current_development_if_needed(project)
+            development_target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(legacy), str(development_target))
+            migrated.append(development_target.relative_to(project).as_posix())
+            break
+
+    legacy_experience = project / "experience"
+    if legacy_experience.exists() and legacy_experience.is_dir():
+        current_experience_root = project / "docs" / "experience"
+        has_current_experience = any(current_experience_root.glob("[0-9]*-*.md"))
+        if has_current_experience:
+            archive_experience_files(project)
+        current_experience_root.mkdir(parents=True, exist_ok=True)
+        for legacy_file in sorted(legacy_experience.rglob("*.md")):
+            target = current_experience_root / legacy_file.name
+            if target.exists():
+                target = current_experience_root / f"legacy-{legacy_file.name}"
+            shutil.move(str(legacy_file), str(target))
+            migrated.append(target.relative_to(project).as_posix())
+        shutil.rmtree(legacy_experience)
+    return migrated
+
+
 def scaffold(project: Path) -> dict[str, Any]:
     created: list[str] = []
     for rel_path in DOC_DIRS:
@@ -517,6 +574,7 @@ def scaffold(project: Path) -> dict[str, Any]:
         if not path.exists():
             path.mkdir(parents=True, exist_ok=True)
             created.append(rel_path)
+    migrated = migrate_legacy_docs(project)
     files = {
         "docs/handoff/HANDOFF.md": default_handoff(),
         "docs/development/DEVELOPMENT.md": default_development_record(),
@@ -537,7 +595,7 @@ def scaffold(project: Path) -> dict[str, Any]:
     dir_result = init_dir_manager(project)
     created.extend(path for path in dir_result.get("written", []) if path not in created)
     created.extend(path for path in ensure_experience_files(project) if path not in created)
-    return {"project": str(project), "created": created, "state": state}
+    return {"project": str(project), "created": created, "migrated": migrated, "state": state}
 
 
 def read_input(path: str | None) -> dict[str, Any]:
@@ -1504,6 +1562,71 @@ def run_git(project: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", *args], cwd=project, text=True, capture_output=True, check=False)
 
 
+def branch_gate(project: Path) -> dict[str, Any]:
+    profile = read_json(project / ".agents" / "agents-control.json")
+    if not isinstance(profile, dict):
+        return {
+            "project": str(project),
+            "approved": True,
+            "decision": "approved",
+            "reasons": [],
+            "checks": {"skipped": "no control profile"},
+            "force_confirmation_required": False,
+            "user_message": "",
+        }
+    if str(profile.get("git_management", "")).strip() == "no-git-management":
+        return {
+            "project": str(project),
+            "approved": True,
+            "decision": "approved",
+            "reasons": [],
+            "checks": {"skipped": "git management disabled"},
+            "force_confirmation_required": False,
+            "user_message": "",
+        }
+
+    policy = profile.get("git_branch_policy", {}) if isinstance(profile.get("git_branch_policy"), dict) else {}
+    protected = policy.get("protected_branches", ["master", "release"])
+    branch_model = str(profile.get("branch_model", "")).strip()
+    git_branch_result = run_git(project, ["branch", "--show-current"])
+    git_list_result = run_git(project, ["branch", "--list"])
+    git_status_result = run_git(project, ["status", "--short"])
+    reasons: list[str] = []
+    checks: dict[str, Any] = {
+        "branch_model": branch_model,
+        "protected_branches": protected,
+        "current_branch": "",
+        "local_branches": [],
+        "status_lines": [],
+    }
+    if any(result.returncode != 0 for result in [git_branch_result, git_list_result, git_status_result]):
+        reasons.append("git branch governance requires a readable local git repository")
+    else:
+        current_branch = git_branch_result.stdout.strip()
+        local_branches = sorted(line.strip().lstrip("* ").strip() for line in git_list_result.stdout.splitlines() if line.strip())
+        status_lines = [line for line in git_status_result.stdout.splitlines() if line.strip()]
+        checks["current_branch"] = current_branch
+        checks["local_branches"] = local_branches
+        checks["status_lines"] = status_lines
+        if branch_model == "master-and-dist-release":
+            if current_branch != "master":
+                reasons.append(f"current branch must be master, found {current_branch or 'unknown'}")
+            if sorted(local_branches) != sorted(protected):
+                reasons.append(f"local branches must match protected branch set {protected}, found {local_branches}")
+        if status_lines:
+            reasons.append("worktree must be clean before continuing under strict branch governance")
+    approved = not reasons
+    return {
+        "project": str(project),
+        "approved": approved,
+        "decision": "approved" if approved else "blocked",
+        "reasons": reasons,
+        "checks": checks,
+        "force_confirmation_required": not approved,
+        "user_message": "" if approved else "分支治理未通过，默认阻止普通生成/整理流程。若用户仍要继续，必须先明确确认是否进入分支整理或发布治理流程。",
+    }
+
+
 def parse_version_tuple(value: str) -> tuple[int, int, int]:
     match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", value.strip())
     if not match:
@@ -1640,6 +1763,12 @@ def verify_docs(project: Path) -> dict[str, Any]:
     dir_result = verify_dir_manager(project)
     checked.extend(dir_result["checked"])
     errors.extend(dir_result["errors"])
+    for legacy in [project / "HANDOFF.md", project / "DEVELOPMENT.md", project / "experience", project / "docs" / "HANDOFF.md", project / "docs" / "DEVELOPMENT.md"]:
+        if legacy.exists():
+            try:
+                errors.append(f"legacy docs path must be migrated into governed docs layout: {legacy.relative_to(project).as_posix()}")
+            except ValueError:
+                errors.append(f"legacy docs path must be migrated into governed docs layout: {legacy}")
     return {"project": str(project), "checked": checked, "errors": errors}
 
 
@@ -1694,6 +1823,9 @@ def main() -> None:
     release_gate_parser.add_argument("--phase", choices=["pre", "post"], default="pre")
     release_gate_parser.add_argument("--install-intent", choices=["unspecified", "requested", "skipped"], default="unspecified")
 
+    branch_gate_parser = subparsers.add_parser("branch-gate")
+    branch_gate_parser.add_argument("project", nargs="?", default=".")
+
     verify_parser = subparsers.add_parser("verify")
     verify_parser.add_argument("project", nargs="?", default=".")
 
@@ -1729,6 +1861,11 @@ def main() -> None:
         result = release_gate(project, args.version, args.skill_dir, args.phase, args.install_intent)
         emit_json(result)
         if result["errors"]:
+            raise SystemExit(1)
+    elif args.command == "branch-gate":
+        result = branch_gate(project)
+        emit_json(result)
+        if not result["approved"]:
             raise SystemExit(1)
     elif args.command == "verify":
         result = verify_docs(project)

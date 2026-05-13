@@ -151,12 +151,39 @@ def remote_deployment_plan(project: Path) -> dict[str, Any]:
     }
 
 
+def profile_layout_policy(project: Path) -> tuple[str, list[str], bool]:
+    profile = control_profile(project)
+    contract = profile.get("directory_contract", {}) if isinstance(profile.get("directory_contract"), dict) else {}
+    primary = normalize_rel(str(contract.get("primary_project_root", "")).strip())
+    if not primary:
+        kind = str(profile.get("kind", "")).strip().lower()
+        name = str(profile.get("name", "")).strip()
+        skill_layout = profile.get("skill_layout", {}) if isinstance(profile.get("skill_layout"), dict) else {}
+        if kind == "skill":
+            primary = normalize_rel(str(skill_layout.get("path", "")).strip()) or (f"skills/{name}" if name else "")
+        elif kind == "engineering" and name:
+            primary = f"engineering/{name}"
+    allowed = [
+        normalize_rel(item)
+        for item in contract.get("allowed_new_paths", [])
+        if str(item).strip()
+    ]
+    if not allowed and primary:
+        allowed = [primary, "tests", "dist", "docs", ".agents", "ref"]
+    enforce = bool(contract.get("enforce_primary_project_root", False) or primary)
+    return primary, allowed, enforce
+
+
 def planned_structure(project: Path) -> dict[str, Any]:
-    current_dirs = {
-        path.name + "/"
-        for path in project.iterdir()
-        if path.is_dir() and path.name not in SKIP_DIRS
-    }
+    primary_root, configured_paths, enforce_primary = profile_layout_policy(project)
+    if configured_paths:
+        current_dirs = set(configured_paths)
+    else:
+        current_dirs = {
+            path.name + "/"
+            for path in project.iterdir()
+            if path.is_dir() and path.name not in SKIP_DIRS
+        }
     current_dirs.update({
         "docs/",
         "docs/dir_manager/",
@@ -167,10 +194,18 @@ def planned_structure(project: Path) -> dict[str, Any]:
         "docs/install_configuration/",
         "docs/git_manager/",
     })
+    current_dirs = {item if item.endswith("/") else item + "/" for item in current_dirs}
     return {
         "schema_version": 1,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "allowed_new_paths": sorted(current_dirs),
+        "primary_project_root": f"{primary_root}/" if primary_root else "",
+        "allowed_top_level_roots": sorted({
+            normalize_rel(item).split("/", 1)[0] + "/"
+            for item in current_dirs
+            if normalize_rel(item)
+        }),
+        "enforce_primary_project_root": enforce_primary,
         "protected_paths": sorted(GOVERNANCE_PREFIXES),
         "review_required_for": ["create", "move", "delete", "rename"],
         "remote_deployment": remote_deployment_plan(project),
@@ -187,17 +222,48 @@ def init_dir_manager(project: Path) -> dict[str, Any]:
     (project / HISTORY_DIR_MANAGER).mkdir(parents=True, exist_ok=True)
     if not (project / DIR_MANAGER_MD).exists():
         (project / DIR_MANAGER_MD).write_text(dir_manager_doc(), encoding="utf-8")
+    desired_planned = planned_structure(project)
     if not (project / PLANNED_STRUCTURE).exists():
         (project / PLANNED_STRUCTURE).write_text(
-            json.dumps(planned_structure(project), indent=2, sort_keys=True),
+            json.dumps(desired_planned, indent=2, sort_keys=True),
             encoding="utf-8",
         )
     else:
         planned = load_planned(project)
-        remote_plan = remote_deployment_plan(project)
-        if planned.get("remote_deployment") != remote_plan:
-            planned["remote_deployment"] = remote_plan
-            (project / PLANNED_STRUCTURE).write_text(json.dumps(planned, indent=2, sort_keys=True), encoding="utf-8")
+        primary_root, configured_paths, enforce_primary = profile_layout_policy(project)
+        rewritten = dict(planned)
+        changed = False
+        remote_plan = desired_planned.get("remote_deployment", {})
+        if rewritten.get("remote_deployment") != remote_plan:
+            rewritten["remote_deployment"] = remote_plan
+            changed = True
+        if configured_paths:
+            current_compare = dict(planned)
+            desired_compare = dict(desired_planned)
+            current_compare.pop("generated_at", None)
+            desired_compare.pop("generated_at", None)
+            if current_compare != desired_compare:
+                rewritten = desired_planned
+                changed = True
+        else:
+            current_allowed = [
+                normalize_rel(item)
+                for item in rewritten.get("allowed_new_paths", [])
+                if str(item).strip()
+            ]
+            derived_top = sorted({item.split("/", 1)[0] + "/" for item in current_allowed if item})
+            if rewritten.get("allowed_top_level_roots") != derived_top:
+                rewritten["allowed_top_level_roots"] = derived_top
+                changed = True
+            if rewritten.get("primary_project_root", "") != primary_root:
+                rewritten["primary_project_root"] = primary_root
+                changed = True
+            if rewritten.get("enforce_primary_project_root", False) != enforce_primary:
+                rewritten["enforce_primary_project_root"] = enforce_primary
+                changed = True
+        if changed:
+            rewritten["generated_at"] = desired_planned["generated_at"]
+            (project / PLANNED_STRUCTURE).write_text(json.dumps(rewritten, indent=2, sort_keys=True), encoding="utf-8")
     structure = scan_structure(project)
     (project / CURRENT_STRUCTURE).write_text(json.dumps(structure, indent=2, sort_keys=True), encoding="utf-8")
     verify = verify_dir_manager(project)
@@ -242,9 +308,24 @@ def load_planned(project: Path) -> dict[str, Any]:
     return planned if isinstance(planned, dict) else {}
 
 
+def allowed_parent_paths(planned: dict[str, Any]) -> set[str]:
+    parents: set[str] = set()
+    for item in planned.get("allowed_new_paths", []):
+        normalized = normalize_rel(item)
+        if not normalized:
+            continue
+        parts = normalized.split("/")
+        for index in range(1, len(parts)):
+            parents.add("/".join(parts[:index]))
+    return parents
+
+
 def allowed_path(path: str, planned: dict[str, Any]) -> bool:
     normalized = normalize_rel(path)
     allowed = [normalize_rel(item) for item in planned.get("allowed_new_paths", []) if str(item).strip()]
+    parents = allowed_parent_paths(planned)
+    if normalized in parents:
+        return True
     return any(normalized == item or normalized.startswith(item.rstrip("/") + "/") for item in allowed)
 
 
@@ -353,6 +434,8 @@ def verify_dir_manager(project: Path) -> dict[str, Any]:
     for key in ["allowed_new_paths", "review_required_for"]:
         if planned and not isinstance(planned.get(key), list):
             errors.append(f"{PLANNED_STRUCTURE.as_posix()}: `{key}` must be a list")
+    if planned and not isinstance(planned.get("allowed_top_level_roots"), list):
+        errors.append(f"{PLANNED_STRUCTURE.as_posix()}: `allowed_top_level_roots` must be a list")
     if planned and not planned.get("block_on_failed_review", False):
         errors.append(f"{PLANNED_STRUCTURE.as_posix()}: block_on_failed_review must be true")
     if planned and not planned.get("force_override_archive"):
@@ -367,6 +450,17 @@ def verify_dir_manager(project: Path) -> dict[str, Any]:
             errors.append(f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.planned_structure must be a list")
         if not isinstance(remote.get("review_required_for"), list):
             errors.append(f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.review_required_for must be a list")
+    if current and planned:
+        primary_root = normalize_rel(str(planned.get("primary_project_root", "")).strip())
+        if planned.get("enforce_primary_project_root") and primary_root:
+            if primary_root not in current.get("directories", []) and not any(path.startswith(primary_root + "/") for path in current.get("directories", [])):
+                errors.append(f"{PLANNED_STRUCTURE.as_posix()}: required primary project root is missing: {primary_root}/")
+        for directory in current.get("directories", []):
+            normalized = normalize_rel(directory)
+            if not normalized:
+                continue
+            if not allowed_path(normalized, planned):
+                errors.append(f"{CURRENT_STRUCTURE.as_posix()}: directory violates planned structure: {normalized}")
     return {"project": str(project), "checked": checked, "errors": errors}
 
 

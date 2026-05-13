@@ -9,7 +9,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents_common import detect_scopes, emit_json, extract_commands, extract_context, inspect_project, read_skill_version, resolve_project, today
-from manage_docs import preflight_docs, scaffold as scaffold_docs
+from manage_docs import branch_gate, preflight_docs, scaffold as scaffold_docs
 
 
 GENERATED_START = "<!-- AGENTS-GENERATED:START"
@@ -266,7 +266,7 @@ def directory_contract(profile: dict | None) -> str:
         return "- Directory contract: not confirmed. Do not freeze structure until the user confirms local, remote, and feature-addition layout."
     contract = profile.get("directory_contract", {})
     dir_contract = profile.get("dir_manager_contract", {})
-    return "\n".join([
+    lines = [
         f"- Confirmed: {contract.get('confirmed', False)}.",
         f"- Local structure: {contract.get('local', 'not specified')}.",
         f"- Remote structure: {contract.get('remote', 'not specified')}.",
@@ -277,7 +277,12 @@ def directory_contract(profile: dict | None) -> str:
         "- Required command before folder changes: `python scripts/manage_dirs.py review <project> --input change.json`.",
         "- If directory review blocks the change, refuse default execution, explain the risk, and ask for explicit user force-confirmation before proceeding.",
         f"- After user force-confirmation and before applying the blocked folder change, archive old dir manager content to `{dir_contract.get('history', 'docs/dir_manager/history_dir_manager')}/YYYYMMDD-HHMMSS/` with `python scripts/manage_dirs.py archive <project> --reason \"force-confirmed directory override\"`.",
-    ])
+    ]
+    primary_root = str(contract.get("primary_project_root", "")).strip()
+    if primary_root:
+        lines.insert(3, f"- Primary project root: `{primary_root}` must be the canonical location for the main skill or project content.")
+        lines.insert(4, "- Existing work must already be placed at that primary root before strict control is confirmed.")
+    return "\n".join(lines)
 
 
 def release_contract(profile: dict | None) -> str:
@@ -642,6 +647,7 @@ def main() -> None:
     parser.add_argument("--template-dir", default=None, help="Directory containing root-agents.md and scoped-agents.md.")
     parser.add_argument("--profile", default=None, help="Path to .agents/agents-control.json for strong-control rendering.")
     parser.add_argument("--confirm-docs-layout", action="store_true", help="User confirmed that docs governance may be added under the existing docs/ layout.")
+    parser.add_argument("--confirm-branch-governance", action="store_true", help="User explicitly confirmed continuing after a blocked branch governance check.")
     args = parser.parse_args()
     project = resolve_project(args.project)
     template_dir = Path(args.template_dir).resolve() if args.template_dir else None
@@ -653,6 +659,14 @@ def main() -> None:
         return
 
     if profile:
+        branch_result = branch_gate(project)
+        if not branch_result.get("approved", True) and not args.confirm_branch_governance:
+            emit_json({
+                "errors": ["branch governance requires user confirmation before writing AGENTS.md or docs governance"],
+                "branch_gate": branch_result,
+                "requires_user_confirmation": True,
+            })
+            raise SystemExit(1)
         docs_preflight = preflight_docs(project)
         if docs_preflight["requires_user_confirmation"] and not args.confirm_docs_layout:
             emit_json({
