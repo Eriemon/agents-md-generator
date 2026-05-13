@@ -43,7 +43,7 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - User-developed Skills live under `skills/<skill-name>/SKILL.md`; `SKILL.md` frontmatter `name` exactly matches the folder name and uses lowercase letters, digits, and hyphens.
 - Missing root `AGENTS.md` is a mandatory trigger for agents-md-generator root AGENTS/docs/workspace restructuring, not a normal warning or optional ask-first decision.
 - Missing `agents_version` or `generator_version`, or either value mismatching the installed `agents-md-generator` version, is also a mandatory trigger for root AGENTS/docs/workspace restructuring.
-- User requests containing `规划` should first run the current-work-folder root `AGENTS.md` check and route into agents-md-generator when the root state is missing or version-abnormal.
+- User requests containing `计划`, `规划`, or `准备` should first run the current-work-folder root `AGENTS.md` check and route into agents-md-generator when the root state is missing or version-abnormal.
 - Existing `docs/` layouts are preflighted; ambiguous or conflicting layouts require user confirmation before AGENTS.md or docs governance writes.
 - Strong control requires `.agents/agents-control.json` and the docs governance tree; local reference paths may stay in that profile but must not be copied into AGENTS.md.
 - Root-level `experience/` is not allowed; 10 numbered experience files and history belong under `docs/experience/`.
@@ -51,6 +51,9 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - AI experience updates must read the latest available conversation snapshots, up to 10 entries, and the request must disclose when conversation context is missing.
 - Experience files must be topic-specific, non-placeholder, not highly homogeneous, and must not copy a full `HANDOFF.md` into every file.
 - Every experience file must contain enough detail for a future maintainer to understand what task was done, how it was done, what failed or was risky, and how to apply the lesson later; require `Evidence Read`, `Task Context`, `How To Apply`, `Problems And Risks`, `Iterated Lessons`, and `Next Application`.
+- `git_management` must be asked as a user-facing enable/disable choice with `是（默认）` / `否` / `其他`, and `否` should persist as the explicit canonical value `no-git-management` rather than silently collapsing to `read-only`.
+- `docs/development/DEVELOPMENT.md` must be the latest iterative development record, and older current records must be archived under `docs/development/history_development/YYYYMMDD-HHMMSS/DEVELOPMENT.md`.
+- DEVELOPMENT records must be detailed enough to explain the complete development plan, current progress, development goal, completed scope, remaining scope, risks, results, verification, and next actions.
 - Every tenth handoff should evolve accepted experience into indexed templates under `assets/templates/evolution/`, but only from AI-authored `evolution_summary` synthesis.
 - Evolution templates must write to exactly one family that matches the project kind: skill projects use `skill-template/<category>/<type>/`, engineering projects use `engineering-template/<category>/<type>/`.
 - AI-provided `evolution_target` values must have a matching family, safe category/type path segments, and a rationale; inferred categories should use repository facts such as FPGA/Vivado, algorithm/sort, agent-governance, docs-governance, web/frontend, backend/api, data/database, or general.

@@ -23,6 +23,7 @@ DOC_DIRS = [
     "docs/experience",
     "docs/experience/history_experience",
     "docs/development",
+    "docs/development/history_development",
     "docs/install_configuration",
     "docs/git_manager",
     "docs/git_manager/history_git_manager",
@@ -32,6 +33,7 @@ DOC_DIRS = [
 ]
 REQUIRED_DOC_FILES = [
     "docs/handoff/HANDOFF.md",
+    "docs/development/DEVELOPMENT.md",
     "docs/install_configuration/INSTALL_CONFIGURATION.md",
     "docs/git_manager/GIT_MANAGER.md",
     "docs/git_manager/CHANGELOG.md",
@@ -93,6 +95,19 @@ REQUIRED_EVOLUTION_SECTIONS = [
 ]
 EVOLUTION_SUMMARY_MIN_LENGTH = 450
 SAFE_TEMPLATE_SEGMENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+REQUIRED_DEVELOPMENT_SECTIONS = [
+    "Development Goal",
+    "Full Development Plan",
+    "Current Progress",
+    "Completed Scope",
+    "Remaining Scope",
+    "Key Problems And Risks",
+    "Resolution Strategy And Next Steps",
+    "Development Result",
+    "Verification",
+    "Artifacts And Impact",
+]
+DEVELOPMENT_MIN_LENGTH = 450
 
 
 def stamp() -> str:
@@ -328,6 +343,62 @@ def default_git_changelog() -> str:
     ])
 
 
+def default_development_record() -> str:
+    return "\n".join([
+        "# Development Stage: not recorded",
+        "",
+        f"- Generated at: {datetime.now().isoformat(timespec='seconds')}",
+        "- Version: not recorded",
+        "- Status: not recorded",
+        "",
+        "## Development Goal",
+        "- Not recorded.",
+        "",
+        "## Full Development Plan",
+        "- Not recorded.",
+        "",
+        "## Current Progress",
+        "- Not recorded.",
+        "",
+        "## Completed Scope",
+        "- Not recorded.",
+        "",
+        "## Remaining Scope",
+        "- Not recorded.",
+        "",
+        "## Key Problems And Risks",
+        "- Not recorded.",
+        "",
+        "## Resolution Strategy And Next Steps",
+        "- Not recorded.",
+        "",
+        "## Development Result",
+        "- Not recorded.",
+        "",
+        "## Verification",
+        "- Not recorded.",
+        "",
+        "## Artifacts And Impact",
+        "- Not recorded.",
+        "",
+    ])
+
+
+def validate_development_record(path: Path) -> list[str]:
+    errors: list[str] = []
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    if "# Development Stage: not recorded" in text and "- Version: not recorded" in text and "- Status: not recorded" in text:
+        return errors
+    for section in REQUIRED_DEVELOPMENT_SECTIONS:
+        if not re.search(rf"^##\s+{re.escape(section)}\s*$", text, flags=re.MULTILINE):
+            errors.append(f"{path.relative_to(path.parents[2]).as_posix()}: missing section ## {section}")
+    if "- Status: not recorded" in text:
+        errors.append(f"{path.relative_to(path.parents[2]).as_posix()}: development status is still placeholder text")
+    if len(text.strip()) < DEVELOPMENT_MIN_LENGTH:
+        errors.append(f"{path.relative_to(path.parents[2]).as_posix()}: development record is too short")
+    return errors
+
+
 def git_manager_doc() -> str:
     return "\n".join([
         "# Git Manager",
@@ -448,6 +519,7 @@ def scaffold(project: Path) -> dict[str, Any]:
             created.append(rel_path)
     files = {
         "docs/handoff/HANDOFF.md": default_handoff(),
+        "docs/development/DEVELOPMENT.md": default_development_record(),
         "docs/install_configuration/INSTALL_CONFIGURATION.md": install_configuration_doc(),
         "docs/git_manager/GIT_MANAGER.md": git_manager_doc(),
         "docs/git_manager/CHANGELOG.md": default_git_changelog(),
@@ -1325,33 +1397,58 @@ def validate_current_experience_quality(project: Path) -> list[str]:
 def write_development(project: Path, stage: str, input_path: str | None) -> dict[str, Any]:
     scaffold(project)
     data = read_input(input_path)
-    target = project / "docs" / "development" / f"{stamp()}-{slug(stage)}.md"
+    target = project / "docs" / "development" / "DEVELOPMENT.md"
+    archived = ""
+    if target.exists():
+        text = target.read_text(encoding="utf-8", errors="ignore")
+        if "- Version: not recorded" not in text or "- Status: not recorded" not in text:
+            history_dir = project / "docs" / "development" / "history_development" / stamp()
+            history_dir.mkdir(parents=True, exist_ok=True)
+            archived_target = history_dir / "DEVELOPMENT.md"
+            shutil.move(str(target), str(archived_target))
+            archived = archived_target.relative_to(project).as_posix()
     target.write_text(
         "\n".join([
             f"# Development Stage: {stage}",
             "",
             f"- Generated at: {datetime.now().isoformat(timespec='seconds')}",
             f"- Version: {data.get('version', 'not recorded')}",
+            f"- Status: {data.get('current_status', 'not recorded')}",
             "",
-            "## Goal",
+            "## Development Goal",
             list_lines(data.get("goal")),
+            "",
+            "## Full Development Plan",
+            list_lines(data.get("full_plan")),
+            "",
+            "## Current Progress",
+            list_lines(data.get("current_status")),
             "",
             "## Completed Scope",
             list_lines(data.get("completed_scope")),
             "",
+            "## Remaining Scope",
+            list_lines(data.get("remaining_scope")),
+            "",
+            "## Key Problems And Risks",
+            list_lines(data.get("remaining_risks") or data.get("problems")),
+            "",
+            "## Resolution Strategy And Next Steps",
+            list_lines(data.get("next_steps") or data.get("next")),
+            "",
+            "## Development Result",
+            list_lines(data.get("results")),
+            "",
             "## Verification",
             list_lines(data.get("verification")),
             "",
-            "## Artifacts",
+            "## Artifacts And Impact",
             list_lines(data.get("artifacts")),
-            "",
-            "## Remaining Risks",
-            list_lines(data.get("remaining_risks")),
             "",
         ]),
         encoding="utf-8",
     )
-    return {"project": str(project), "written": str(target)}
+    return {"project": str(project), "written": str(target), "archived": archived}
 
 
 def changelog_markdown(data: dict[str, Any]) -> str:
@@ -1520,6 +1617,9 @@ def verify_docs(project: Path) -> dict[str, Any]:
         checked.append(rel_path)
         if not (project / rel_path).is_file():
             errors.append(f"missing docs governance file: {rel_path}")
+    development_current = project / "docs" / "development" / "DEVELOPMENT.md"
+    if development_current.exists():
+        errors.extend(validate_development_record(development_current))
     handoff = project / "docs" / "handoff" / "HANDOFF.md"
     if handoff.exists():
         text = handoff.read_text(encoding="utf-8", errors="ignore")

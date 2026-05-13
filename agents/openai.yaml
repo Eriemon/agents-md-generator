@@ -1,4 +1,4 @@
 interface:
   display_name: "AGENTS.md Generator"
-  short_description: "Inspect current work folder root AGENTS.md state, handle 规划-triggered checks, and draft verified AGENTS.md files"
-  default_prompt: "Use $agents-md-generator to inspect the current work folder root AGENTS.md state first; if it is missing, lacks version metadata, or is version-mismatched, rebuild AGENTS.md/docs/workspace. Treat 规划 as a root AGENTS.md check entry before normal generation."
+  short_description: "Inspect current work folder root AGENTS.md state, handle 计划/规划/准备-triggered checks, and draft verified AGENTS.md files"
+  default_prompt: "Use $agents-md-generator to inspect the current work folder root AGENTS.md state first; if it is missing, lacks version metadata, or is version-mismatched, rebuild AGENTS.md/docs/workspace. Treat 计划, 规划, and 准备 as root AGENTS.md check entries before normal generation."

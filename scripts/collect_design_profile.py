@@ -103,9 +103,9 @@ QUESTION_OPTIONS: dict[str, list[dict[str, Any]]] = {
         {"label": "工程开发", "value": "engineering", "description": "为普通工程仓库收集 AGENTS.md 控制档案。", "recommended": False},
     ],
     "git_management": [
-        {"label": "本地 git 管理", "value": "yes-local-only", "description": "允许本地分支和提交，默认不推送远端。", "recommended": True},
-        {"label": "只读不提交", "value": "read-only", "description": "代理只生成计划或文档，不执行提交。", "recommended": False},
-        {"label": "允许远端协作", "value": "remote-allowed", "description": "用户明确要求时可 push 或创建 PR。", "recommended": False},
+        {"label": "启用 git 管理", "value": "yes-local-only", "description": "允许本地分支和提交，默认不推送远端。", "recommended": True},
+        {"label": "不启用 git 管理", "value": "no-git-management", "description": "不把 git 作为当前技能开发流程的一部分。", "recommended": False},
+        {"label": "其他", "value": "__user_input__", "description": "由用户输入自定义 git 管理规则。", "recommended": False},
     ],
     "branch_model": [
         {"label": "master + dist release", "value": "master-and-dist-release", "description": "源码在 master，发布产物在 dist。", "recommended": True},
@@ -434,8 +434,10 @@ def docs_contract(name: str) -> dict[str, Any]:
         },
         "development": {
             "folder": "docs/development",
-            "when": "Write records at installable release time or stage completion.",
-            "file_pattern": "YYYYMMDD-HHMMSS-<stage>.md",
+            "current": "docs/development/DEVELOPMENT.md",
+            "history": "docs/development/history_development",
+            "history_pattern": "YYYYMMDD-HHMMSS/DEVELOPMENT.md",
+            "when": "Write and iteratively refresh the latest DEVELOPMENT.md at installable release time or stage completion.",
         },
         "install_configuration": {
             "folder": "docs/install_configuration",

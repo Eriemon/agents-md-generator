@@ -288,7 +288,7 @@ def release_contract(profile: dict | None) -> str:
     protected = policy.get("protected_branches", ["master", "release"])
     protected_text = ", ".join(f"`{item}`" for item in protected)
     return "\n".join([
-        f"- Git management: {profile.get('git_management', 'not specified')}.",
+        f"- Git management: {git_management_text(profile.get('git_management', 'not specified'))}.",
         f"- Branch model: {profile.get('branch_model', 'not specified')}.",
         f"- Protected branches: {protected_text}.",
         "- Development branches are allowed only as temporary local work branches.",
@@ -300,6 +300,16 @@ def release_contract(profile: dict | None) -> str:
         "- Keep the release commit and the current `docs/git_manager/CHANGELOG.md` entry together.",
         "- Do not push to a remote unless the user explicitly asks.",
     ])
+
+
+def git_management_text(value: str) -> str:
+    mapping = {
+        "yes-local-only": "enabled locally; allow local branches and commits, but do not push remotely by default",
+        "no-git-management": "disabled for this workflow; do not treat git operations as part of the normal execution path",
+        "read-only": "legacy read-only mode; do not execute git writes and limit the workflow to planning/documentation unless the user overrides",
+        "remote-allowed": "enabled with remote collaboration allowed when the user explicitly asks",
+    }
+    return mapping.get(str(value), str(value))
 
 
 def engineering_rule_contract(profile: dict | None) -> str:
@@ -428,7 +438,7 @@ def documentation_governance_contract(profile: dict | None) -> str:
         "- Directory changes require `python scripts/manage_dirs.py review <project> --input change.json`; blocked reviews require explicit user force-confirmation and risk capture in handoff.",
         f"- Force-confirmed directory overrides must archive old dir manager content to `{dir_manager.get('history', 'docs/dir_manager/history_dir_manager')}/YYYYMMDD-HHMMSS/` before applying the folder change.",
         f"- Handoff history: archive the previous HANDOFF.md to `{handoff.get('history', 'docs/handoff/history_handoff')}` with `{handoff.get('archive_pattern', 'HANDOFF-YYYYMMDD-HHMMSS.md')}` before writing a new one.",
-        f"- Development records: write `{development.get('file_pattern', 'YYYYMMDD-HHMMSS-<stage>.md')}` under `{development.get('folder', 'docs/development')}` at installable releases or stage completion.",
+        f"- Development records: keep the latest file at `{development.get('current', 'docs/development/DEVELOPMENT.md')}` and archive older records under `{development.get('history', 'docs/development/history_development')}/YYYYMMDD-HHMMSS/DEVELOPMENT.md`.",
         f"- Install configuration: document skill installation and {targets_text} adapters under `{install.get('folder', 'docs/install_configuration')}`.",
         "- Use `python scripts/manage_docs.py handoff <project> --input handoff.json` at task completion.",
     ])

@@ -16,7 +16,7 @@ keywords:
   - documentation
 repository-code: "https://github.com/Eriemon/agents-md-generator"
 url: "https://github.com/Eriemon/agents-md-generator"
-version: "0.4.4"
+version: "0.4.5"
 date-released: "2026-05-11"
 year: 2026
 license: "Apache-2.0"

@@ -46,7 +46,7 @@ Run `python scripts/collect_design_profile.py <project>` first and ask question 
 |------|-----|
 | Root AGENTS.md missing | This work folder has no root `AGENTS.md`; should I design one for this project? |
 | Root AGENTS.md version abnormal | The current work folder root `AGENTS.md` is missing `agents_version` or `generator_version`, or the version does not match the installed `agents-md-generator`; should I enter the AGENTS/docs/workspace restructuring flow now? |
-| User says 规划 | Before normal planning, should I first inspect the current work folder root `AGENTS.md` and route into AGENTS/docs/workspace restructuring if the root state is missing or version-abnormal? |
+| User says 计划/规划/准备 | Before normal planning, should I first inspect the current work folder root `AGENTS.md` and route into AGENTS/docs/workspace restructuring if the root state is missing or version-abnormal? |
 | Existing docs layout ambiguous | Existing `docs/` content may conflict with AGENTS.md governance. Is it acceptable to add governance subdirectories under the existing `docs/` folder? |
 
 ## Human Policy
@@ -84,6 +84,7 @@ Ask these when the user wants book-derived engineering guidance in generated AGE
 | Commit policy absent | Are agents expected to commit changes, and what format should commits use? |
 | Branch/PR policy absent | Are agents allowed to push branches or open PRs? |
 | Review expectations unknown | What review evidence should agents provide after changes? |
+| Git management preference unknown | Should this skill enable git management? Offer `是（默认）`, `否`, or `其他` and record the exact user intent. |
 
 ## Domain Context
 
