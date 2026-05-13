@@ -41,9 +41,11 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - Skill design interview questions expose selectable options, repeat `review_summary` confirmation after each answer group, and set `alignment_confirmed=true` only after the user confirms the summary.
 - Skill development profiles include detailed development requirements, development purpose, expected result, validation method, and validation granularity before strong control is written.
 - User-developed Skills live under `skills/<skill-name>/SKILL.md`; `SKILL.md` frontmatter `name` exactly matches the folder name and uses lowercase letters, digits, and hyphens.
-- Missing root `AGENTS.md` is a mandatory trigger for agents-md-generator root AGENTS/docs/workspace restructuring, not a normal warning or optional ask-first decision.
-- Missing `agents_version` or `generator_version`, or either value mismatching the installed `agents-md-generator` version, is also a mandatory trigger for root AGENTS/docs/workspace restructuring.
-- User requests containing `计划`, `规划`, or `准备` should first run the current-work-folder root `AGENTS.md` check and route into agents-md-generator when the root state is missing or version-abnormal.
+- Missing root `AGENTS.md` is a mandatory abnormal state for agents-md-generator root AGENTS/docs/workspace handling; the skill must report the problem and ask whether to enter AGENTS design or restructuring.
+- Missing `agents_version` or `generator_version`, or either value mismatching the installed `agents-md-generator` version, is also a mandatory abnormal state for root AGENTS/docs/workspace handling; do not treat it as a normal warning.
+- User requests containing `计划`, `规划`, or `准备` should first run the current-workspace/current-repository/current-work-folder root `AGENTS.md` check.
+- If that root check passes, the trigger path should only report that the check passed and must not silently continue into AGENTS design work.
+- If that root check fails, the trigger path should report the exact abnormal reason and ask whether to enter AGENTS.md design or restructuring.
 - Existing `docs/` layouts are preflighted; ambiguous or conflicting layouts require user confirmation before AGENTS.md or docs governance writes.
 - Strong control requires `.agents/agents-control.json` and the docs governance tree; local reference paths may stay in that profile but must not be copied into AGENTS.md.
 - Root-level `experience/` is not allowed; 10 numbered experience files and history belong under `docs/experience/`.

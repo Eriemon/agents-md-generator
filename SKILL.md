@@ -1,20 +1,26 @@
 ---
 name: agents-md-generator
-description: Use when creating, updating, verifying, or reviewing AGENTS.md files and AI coding-agent rule files; when a project or current work folder root lacks AGENTS.md; when root AGENTS.md version metadata is missing or mismatched; when the user mentions AGENTS.md, 计划, 规划, 准备, agent rules, scoped AGENTS.md, AI coding context, repository onboarding for agents, stale agent docs, command verification, CLAUDE.md/GEMINI.md compatibility shims, or project instructions for Codex, Claude Code, Gemini CLI, GitHub Copilot, Cursor, and other coding agents.
+description: Use when creating, updating, verifying, or reviewing AGENTS.md files and AI coding-agent rule files; when a project or current work folder root lacks AGENTS.md; when root AGENTS.md version metadata is missing or mismatched; when the user explicitly mentions AGENTS.md, agent rules, or scoped AGENTS.md; or when the user is talking about the current workspace/current repository/current work folder and says 计划, 规划, or 准备, which must first trigger a root AGENTS.md check.
 ---
 
 # AGENTS.md Generator
 
 Create operational context files for AI coding agents. Use facts from the repository first, ask only for missing human policy, and verify before claiming the draft is ready.
 
-When the user asks to inspect, 计划, 规划, or 准备 the current working folder, first检查当前工作文件夹根 `AGENTS.md` 状态. If the root file is missing, lacks version metadata, or either version field does not match the current installed `agents-md-generator`, this skill must trigger the AGENTS/docs/workspace restructuring flow instead of treating the workspace as normal.
+当用户明确提到 `AGENTS.md`、`agent rules`、`scoped AGENTS.md` 时，直接进入本技能。
+
+当用户在当前工作区、当前工程、当前仓库、或当前工作文件夹语境里说“计划”、“规划”或“准备”时，也要进入本技能，但第一步不是直接设计，而是先检查当前工作文件夹根 `AGENTS.md` 状态。
+
+根 `AGENTS.md` 正常时，只报告“检查通过”，不要自动继续设计流程。根 `AGENTS.md` 缺失、缺少版本元数据、或版本与当前已安装 `agents-md-generator` 不一致时，先报告异常原因，再询问用户是否进入 `AGENTS.md` 设计/重构流程。
 
 ## Pipeline
 
 1. **Detect**
    - Run `python scripts/inspect_project.py <project>` to gather language, framework, package manager, CI, AI configs, files, and directories.
-   - If `root_agents_md_exists` is false, or the root `AGENTS.md` is missing `agents_version` or `generator_version`, or either version does not match the current local installed `agents-md-generator` version, treat the workspace as trigger-required/rebuild-required and trigger AGENTS/docs/workspace restructuring handling immediately.
-   - When the user says `计划`, `规划`, or `准备`, do this root-AGENTS check first. These are trigger entries for inspection and rebuild routing, not a bypass around the AGENTS.md check.
+   - If `root_agents_md_exists` is false, or the root `AGENTS.md` is missing `agents_version` or `generator_version`, or either version does not match the current local installed `agents-md-generator` version, treat the workspace as trigger-required/rebuild-required.
+   - When the user says `计划`, `规划`, or `准备` in the current workspace/current repository/current work folder context, do this root-AGENTS check first. These are trigger entries for inspection routing, not a bypass around the AGENTS.md check.
+   - If the root check passes, report that the current work folder root `AGENTS.md` check passed and stop unless the user explicitly asks to continue with AGENTS design/update work.
+   - If the root check fails, report the exact missing/mismatched reason and ask whether to enter the AGENTS/docs/workspace design or restructuring flow. Do not silently jump into design work.
    - Run `python scripts/detect_scopes.py <project>` to find directories that may need scoped AGENTS.md files.
 
 2. **Design Interview**

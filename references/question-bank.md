@@ -44,9 +44,9 @@ Run `python scripts/collect_design_profile.py <project>` first and ask question 
 
 | Need | Ask |
 |------|-----|
-| Root AGENTS.md missing | This work folder has no root `AGENTS.md`; should I design one for this project? |
-| Root AGENTS.md version abnormal | The current work folder root `AGENTS.md` is missing `agents_version` or `generator_version`, or the version does not match the installed `agents-md-generator`; should I enter the AGENTS/docs/workspace restructuring flow now? |
-| User says 计划/规划/准备 | Before normal planning, should I first inspect the current work folder root `AGENTS.md` and route into AGENTS/docs/workspace restructuring if the root state is missing or version-abnormal? |
+| Root AGENTS.md missing | This work folder has no root `AGENTS.md`; should I enter AGENTS.md design or restructuring for this project now? |
+| Root AGENTS.md version abnormal | The current work folder root `AGENTS.md` is missing `agents_version` or `generator_version`, or the version does not match the installed `agents-md-generator`; should I enter the AGENTS.md design or restructuring flow now? |
+| User says 计划/规划/准备 | Because this is a current workspace/current repository/current work folder planning request, should I first inspect the root `AGENTS.md`, report pass-only when it is healthy, and ask before entering AGENTS design or restructuring when it is abnormal? |
 | Existing docs layout ambiguous | Existing `docs/` content may conflict with AGENTS.md governance. Is it acceptable to add governance subdirectories under the existing `docs/` folder? |
 
 ## Human Policy
