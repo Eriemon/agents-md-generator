@@ -46,9 +46,11 @@ Run `python scripts/collect_design_profile.py <project>` first and ask question 
 |------|-----|
 | Root AGENTS.md missing | This work folder has no root `AGENTS.md`; should I enter AGENTS.md design or restructuring for this project now? |
 | Root AGENTS.md version abnormal | The current work folder root `AGENTS.md` is missing `agents_version` or `generator_version`, or the version does not match the installed `agents-md-generator`; should I enter the AGENTS.md design or restructuring flow now? |
+| Existing content but no AGENTS | This work folder already has landed content but no root `AGENTS.md`; should I first read the exact-cwd Codex sessions, generate history experience, and then write the latest current experience files before normal AGENTS generation continues? |
 | User says 计划/规划/准备 | Because this is a current workspace/current repository/current work folder planning request, should I first inspect the root `AGENTS.md`, report pass-only when it is healthy, and ask before entering AGENTS design or restructuring when it is abnormal? |
 | Branch governance abnormal | The current work folder branch state does not match the configured branch model; should I enter branch cleanup or release governance before normal generation continues? |
 | Existing docs layout ambiguous | Existing `docs/` content may conflict with AGENTS.md governance. Is it acceptable to add governance subdirectories under the existing `docs/` folder? |
+| Structure governance abnormal | The current work folder structure does not match the governed root or allowed top-level paths. Should I normalize the structure first? Recommend yes by default. |
 
 ## Human Policy
 

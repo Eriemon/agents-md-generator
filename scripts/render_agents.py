@@ -9,7 +9,8 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents_common import detect_scopes, emit_json, extract_commands, extract_context, inspect_project, read_skill_version, resolve_project, today
-from manage_docs import branch_gate, preflight_docs, scaffold as scaffold_docs
+from manage_dirs import apply_structure_fix, structure_gate
+from manage_docs import bootstrap_experience, branch_gate, preflight_docs, scaffold as scaffold_docs
 
 
 GENERATED_START = "<!-- AGENTS-GENERATED:START"
@@ -647,6 +648,7 @@ def main() -> None:
     parser.add_argument("--template-dir", default=None, help="Directory containing root-agents.md and scoped-agents.md.")
     parser.add_argument("--profile", default=None, help="Path to .agents/agents-control.json for strong-control rendering.")
     parser.add_argument("--confirm-docs-layout", action="store_true", help="User confirmed that docs governance may be added under the existing docs/ layout.")
+    parser.add_argument("--confirm-structure-fix", action="store_true", help="User explicitly confirmed applying recommended structure normalization before writing.")
     parser.add_argument("--confirm-branch-governance", action="store_true", help="User explicitly confirmed continuing after a blocked branch governance check.")
     args = parser.parse_args()
     project = resolve_project(args.project)
@@ -659,6 +661,14 @@ def main() -> None:
         return
 
     if profile:
+        structure_result = structure_gate(project)
+        if not structure_result.get("approved", True) and not args.confirm_structure_fix:
+            emit_json({
+                "errors": ["structure governance requires user confirmation before writing AGENTS.md or docs governance"],
+                "structure_gate": structure_result,
+                "requires_user_confirmation": True,
+            })
+            raise SystemExit(1)
         branch_result = branch_gate(project)
         if not branch_result.get("approved", True) and not args.confirm_branch_governance:
             emit_json({
@@ -667,6 +677,14 @@ def main() -> None:
                 "requires_user_confirmation": True,
             })
             raise SystemExit(1)
+        if args.confirm_structure_fix:
+            structure_fix = apply_structure_fix(project)
+            if structure_fix.get("errors"):
+                emit_json({
+                    "errors": ["structure governance fix failed before writing AGENTS.md or docs governance"],
+                    "structure_fix": structure_fix,
+                })
+                raise SystemExit(1)
         docs_preflight = preflight_docs(project)
         if docs_preflight["requires_user_confirmation"] and not args.confirm_docs_layout:
             emit_json({
@@ -676,6 +694,10 @@ def main() -> None:
             })
             raise SystemExit(1)
         scaffold_docs(project)
+        facts = inspect_project(project)
+        if facts.get("session_history_bootstrap_required"):
+            bootstrap_experience(project)
+        root_text = render_root(project, template_dir, profile)
     pending_writes: list[tuple[Path, str]] = [(project / "AGENTS.md", root_text)]
     for scope in detect_scopes(project)["scopes"]:
         scope_dir = project / scope["path"]

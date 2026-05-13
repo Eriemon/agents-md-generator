@@ -13,6 +13,8 @@ Create operational context files for AI coding agents. Use facts from the reposi
 
 根 `AGENTS.md` 正常时，只报告“检查通过”，不要自动继续设计流程。根 `AGENTS.md` 缺失、缺少版本元数据、或版本与当前已安装 `agents-md-generator` 不一致时，先报告异常原因，再询问用户是否进入 `AGENTS.md` 设计/重构流程。
 
+如果是“已有内容但无根 `AGENTS.md`”的工作文件夹，除了结构检查之外，还要读取精确匹配当前工作目录的 Codex sessions：只接受 `.codex/sessions` 中 `session_meta.payload.cwd` 规范化后与当前工作目录完全一致的会话。先用这些会话和现有落地文件补建 `docs/experience/history_experience/` 历史经验，再生成最新的 `docs/experience/*.md`。
+
 ## Pipeline
 
 1. **Detect**
@@ -21,6 +23,7 @@ Create operational context files for AI coding agents. Use facts from the reposi
    - When the user says `计划`, `规划`, or `准备` in the current workspace/current repository/current work folder context, do this root-AGENTS check first. These are trigger entries for inspection routing, not a bypass around the AGENTS.md check.
    - If the root check passes, report that the current work folder root `AGENTS.md` check passed and stop unless the user explicitly asks to continue with AGENTS design/update work.
    - If the root check fails, report the exact missing/mismatched reason and ask whether to enter the AGENTS/docs/workspace design or restructuring flow. Do not silently jump into design work.
+   - If the workspace already has landed content but no root `AGENTS.md`, mark session bootstrap as required and inspect exact-cwd Codex session history before normal AGENTS generation continues.
    - Run `python scripts/detect_scopes.py <project>` to find directories that may need scoped AGENTS.md files.
 
 2. **Design Interview**
@@ -50,6 +53,8 @@ Create operational context files for AI coding agents. Use facts from the reposi
 5. **Generate**
    - Run `python scripts/render_agents.py <project> --profile <project>/.agents/agents-control.json` first; default is dry-run.
    - Use `--write` only after reviewing the draft and confirming the target path is inside the intended repository.
+   - For strong-control external work folders, structure governance must pass before `--write` continues. Run `python scripts/manage_dirs.py structure-gate <project>` first; if it reports a primary root, top-level folder, or related structure violation, stop normal generation and ask whether to normalize the structure. 默认推荐“是”。
+   - Only continue after explicit user confirmation by rerunning `render_agents.py --write --confirm-structure-fix`; do not silently bypass a blocked structure gate.
    - For strong-control external work folders, branch governance must pass before `--write` continues. Run `python scripts/manage_docs.py branch-gate <project>` first; if it reports branch or worktree violations, stop normal generation and ask whether to enter branch cleanup or release-governance handling.
    - Only continue after explicit user confirmation by rerunning `render_agents.py --write --confirm-branch-governance`; do not silently bypass a blocked branch gate.
    - Before `--write` with strong-control docs governance, run `python scripts/manage_docs.py preflight <project>`; if it requires user confirmation, ask before using the existing `docs/` layout.
@@ -61,6 +66,7 @@ Create operational context files for AI coding agents. Use facts from the reposi
 
 6. **Docs Governance**
    - If the external work folder already has legacy governance paths such as root `experience/`, root `DEVELOPMENT.md`, root `HANDOFF.md`, or misplaced `docs/HANDOFF.md` / `docs/DEVELOPMENT.md`, automatically migrate them into the governed `docs/` layout before continuing, and preserve history instead of silently overwriting.
+   - When the external work folder already has landed content but no root `AGENTS.md`, run `python scripts/manage_docs.py bootstrap-experience <project>` after confirmation so the latest `docs/experience/*.md` and per-session `history_experience` snapshots are generated from exact-cwd Codex sessions plus current file evidence.
    - Before executing a new task after reading a prior handoff, run `python scripts/manage_docs.py resume-check <project>`; if it reports an interrupted active session, run `python scripts/manage_docs.py resume-repair <project> --input recovery.json` before handling the new request.
    - At task start, run `python scripts/manage_docs.py start-session <project> --input session.json` after reading `docs/handoff/HANDOFF.md`.
    - Run `python scripts/manage_docs.py scaffold <project>` when docs governance must be prepared without rewriting AGENTS.md.

@@ -21,8 +21,10 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 | Scopes | `python scripts/detect_scopes.py <project>` output reviewed |
 | Content | `python scripts/verify_agents.py <project>` has no errors and does not scan skipped development/reference trees by default |
 | Docs preflight | `python scripts/manage_docs.py preflight <project>` is safe, or user confirmation is recorded for an ambiguous/conflicting existing `docs/` layout |
+| Session bootstrap | When the workspace already has landed content but no root `AGENTS.md`, `python scripts/manage_docs.py bootstrap-experience <project>` has been reviewed and exact-cwd session matching is correct |
 | Docs governance | `python scripts/manage_docs.py verify <project>` has no errors for strong-control projects |
 | Branch governance | `python scripts/manage_docs.py branch-gate <project>` passes before strong-control generation on external work folders |
+| Structure governance | `python scripts/manage_dirs.py structure-gate <project>` passes or explicit confirmation for normalization is recorded before strong-control generation continues |
 | Directory governance | `python scripts/manage_dirs.py verify <project>` passes, and folder changes have a passing `manage_dirs.py review` result |
 | Book rules | `python scripts/select_engineering_rules.py --list` or `--task <type>` used when a book-derived engineering rule set is selected |
 | Skill design | `references/skill-design-coverage.md` reviewed when the target is Skill development |
@@ -51,7 +53,10 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - User-developed Skills live under `skills/<skill-name>/SKILL.md`; `SKILL.md` frontmatter `name` exactly matches the folder name and uses lowercase letters, digits, and hyphens.
 - If `has_existing_work=yes` for a Skill project, the expected `skills/<skill-name>/SKILL.md` must already exist on disk; answer text alone is not enough.
 - If `has_existing_work=yes` for an engineering project, the expected `engineering/<project-name>/` root must already exist on disk.
+- When a workspace already has landed content but no root `AGENTS.md`, bootstrap history must read only exact-cwd Codex sessions from `.codex/sessions`; do not mix in neighboring or similarly named repositories.
+- Session bootstrap should write one `history_experience` snapshot per matched session and one latest current `docs/experience/*.md` set for the current workspace.
 - External work folders with enabled git management must pass branch governance before strong-control generation: current branch, local branch set, and worktree state must match the configured branch model or be explicitly escalated.
+- If the current file structure violates the governed primary root or allowed top-level roots, the workflow must ask whether to normalize it before modifying files, and the recommended default should be yes.
 - Missing root `AGENTS.md` is a mandatory abnormal state for agents-md-generator root AGENTS/docs/workspace handling; the skill must report the problem and ask whether to enter AGENTS design or restructuring.
 - Missing `agents_version` or `generator_version`, or either value mismatching the installed `agents-md-generator` version, is also a mandatory abnormal state for root AGENTS/docs/workspace handling; do not treat it as a normal warning.
 - User requests containing `计划`, `规划`, or `准备` should first run the current-workspace/current-repository/current-work-folder root `AGENTS.md` check.
@@ -61,6 +66,7 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - Strong control requires `.agents/agents-control.json` and the docs governance tree; local reference paths may stay in that profile but must not be copied into AGENTS.md.
 - Root-level `experience/` is not allowed; 10 numbered experience files and history belong under `docs/experience/`.
 - Legacy root or misplaced governance files such as `experience/`, `HANDOFF.md`, `DEVELOPMENT.md`, `docs/HANDOFF.md`, or `docs/DEVELOPMENT.md` must be migrated into the governed `docs/` layout instead of being left in place.
+- User-visible path strings must keep real separators and be rendered in a readable normalized form; avoid collapsed Windows path text such as `F:WorkSpace...`.
 - Experience files must be AI-authored summaries from evidence, not script-authored templates; every fifth handoff should create `.agents/experience-update-request.json` and require an accepted `experience-payload.json`.
 - AI experience updates must read the latest available conversation snapshots, up to 10 entries, and the request must disclose when conversation context is missing.
 - Experience files must be topic-specific, non-placeholder, not highly homogeneous, and must not copy a full `HANDOFF.md` into every file.

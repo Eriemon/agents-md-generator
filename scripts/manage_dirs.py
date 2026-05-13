@@ -125,6 +125,13 @@ def control_profile(project: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def display_rel(path: Path, project: Path) -> str:
+    try:
+        return path.relative_to(project).as_posix()
+    except Exception:
+        return path.resolve().as_posix()
+
+
 def remote_structure(project: Path) -> str:
     profile = control_profile(project)
     contract = profile.get("directory_contract", {}) if isinstance(profile.get("directory_contract"), dict) else {}
@@ -464,6 +471,105 @@ def verify_dir_manager(project: Path) -> dict[str, Any]:
     return {"project": str(project), "checked": checked, "errors": errors}
 
 
+def obvious_structure_fix_candidate(project: Path, profile: dict, planned: dict) -> dict[str, str]:
+    contract = profile.get("directory_contract", {}) if isinstance(profile.get("directory_contract"), dict) else {}
+    primary_root = normalize_rel(str(contract.get("primary_project_root", "")).strip())
+    if not primary_root:
+        return {}
+    target = project / primary_root
+    if target.exists():
+        return {}
+    allowed_roots = {
+        normalize_rel(item).split("/", 1)[0]
+        for item in planned.get("allowed_top_level_roots", [])
+        if normalize_rel(item)
+    }
+    candidates = []
+    for child in sorted(project.iterdir()):
+        if child.name in SKIP_DIRS or child.name in {".agents", "docs", "dist", "tests", "ref"}:
+            continue
+        if child.name in allowed_roots:
+            continue
+        candidates.append(child)
+    if len(candidates) != 1 or not candidates[0].is_dir():
+        return {}
+    candidate = candidates[0]
+    kind = str(profile.get("kind", "")).strip().lower()
+    if kind == "skill" and not (candidate / "SKILL.md").is_file():
+        return {}
+    return {
+        "source": display_rel(candidate, project),
+        "target": primary_root,
+    }
+
+
+def structure_gate(project: Path) -> dict[str, Any]:
+    profile = control_profile(project)
+    if not profile:
+        return {
+            "project": str(project),
+            "approved": True,
+            "decision": "approved",
+            "reasons": [],
+            "default_confirmation": "yes",
+            "recommended_option": "yes",
+            "auto_fix_plan": [],
+            "requires_user_confirmation": False,
+            "user_message": "",
+        }
+    planned = load_planned(project) or planned_structure(project)
+    current = scan_structure(project)
+    reasons: list[str] = []
+    primary_root = normalize_rel(str(planned.get("primary_project_root", "")).strip())
+    if planned.get("enforce_primary_project_root") and primary_root:
+        if primary_root not in current.get("directories", []) and not any(path.startswith(primary_root + "/") for path in current.get("directories", [])):
+            reasons.append(f"required primary project root is missing: {primary_root}/")
+    for directory in current.get("directories", []):
+        normalized = normalize_rel(directory)
+        if not normalized:
+            continue
+        if not allowed_path(normalized, planned):
+            reasons.append(f"directory violates planned structure: {normalized}")
+    auto_fix_plan: list[dict[str, str]] = []
+    candidate = obvious_structure_fix_candidate(project, profile, planned)
+    if candidate:
+        auto_fix_plan.append({"action": "move", **candidate})
+    approved = not reasons
+    return {
+        "project": str(project),
+        "approved": approved,
+        "decision": "approved" if approved else "blocked",
+        "reasons": reasons,
+        "default_confirmation": "yes",
+        "recommended_option": "yes",
+        "auto_fix_plan": auto_fix_plan,
+        "requires_user_confirmation": not approved,
+        "user_message": "" if approved else "目录结构不符合治理契约，默认应先按规范整理/迁移。若继续，请明确确认是否执行结构修复，默认推荐“是”。",
+    }
+
+
+def apply_structure_fix(project: Path) -> dict[str, Any]:
+    profile = control_profile(project)
+    planned = load_planned(project)
+    candidate = obvious_structure_fix_candidate(project, profile, planned)
+    moved: list[dict[str, str]] = []
+    errors: list[str] = []
+    if candidate:
+        source = project / candidate["source"]
+        target = project / candidate["target"]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            errors.append(f"structure fix target already exists: {display_rel(target, project)}")
+        else:
+            source.rename(target)
+            moved.append(candidate)
+    return {
+        "project": str(project),
+        "moved": moved,
+        "errors": errors,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Review and verify strict project directory management gates.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -478,6 +584,12 @@ def main() -> None:
     review_parser = subparsers.add_parser("review")
     review_parser.add_argument("project", nargs="?", default=".")
     review_parser.add_argument("--input", required=True)
+
+    structure_parser = subparsers.add_parser("structure-gate")
+    structure_parser.add_argument("project", nargs="?", default=".")
+
+    apply_fix_parser = subparsers.add_parser("apply-structure-fix")
+    apply_fix_parser.add_argument("project", nargs="?", default=".")
 
     archive_parser = subparsers.add_parser("archive")
     archive_parser.add_argument("project", nargs="?", default=".")
@@ -501,6 +613,16 @@ def main() -> None:
         result = review_change(project, args.input)
         emit_json(result)
         if not result["approved"]:
+            raise SystemExit(1)
+    elif args.command == "structure-gate":
+        result = structure_gate(project)
+        emit_json(result)
+        if not result["approved"]:
+            raise SystemExit(1)
+    elif args.command == "apply-structure-fix":
+        result = apply_structure_fix(project)
+        emit_json(result)
+        if result["errors"]:
             raise SystemExit(1)
     elif args.command == "archive":
         emit_json(archive_dir_manager(project, reason=args.reason, review_file=args.review_file))

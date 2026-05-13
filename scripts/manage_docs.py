@@ -13,7 +13,7 @@ from typing import Any
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from agents_common import emit_json, inspect_project, read_json, read_skill_version, resolve_project
+from agents_common import codex_sessions_root, display_path, emit_json, inspect_project, matched_codex_sessions, read_json, read_skill_version, resolve_project, session_message_rows
 from manage_dirs import init_dir_manager, verify_dir_manager
 
 
@@ -833,6 +833,217 @@ def current_experience_files(project: Path) -> dict[str, str]:
         path.name: path.read_text(encoding="utf-8", errors="ignore")
         for path in sorted(root.glob("[0-9]*-*.md"))
         if path.is_file()
+    }
+
+
+def project_content_evidence(project: Path, limit: int = 14) -> list[str]:
+    facts = inspect_project(project)
+    evidence = list(facts.get("files", []))
+    if len(evidence) < limit:
+        evidence.extend(path for path in facts.get("directories", []) if path not in evidence)
+    return evidence[:limit]
+
+
+def session_bundle(project: Path) -> list[dict[str, Any]]:
+    bundles: list[dict[str, Any]] = []
+    for session in matched_codex_sessions(project):
+        path = Path(session["path"])
+        bundles.append(
+            {
+                **session,
+                "messages": session_message_rows(path),
+            }
+        )
+    return bundles
+
+
+def format_message_excerpt(messages: list[dict[str, str]], limit: int = 6) -> str:
+    if not messages:
+        return "- No extracted user or assistant message content was available from the matched session transcript."
+    lines = []
+    for row in messages[:limit]:
+        prefix = "User" if row.get("role") == "user" else "Assistant"
+        text = " ".join(str(row.get("message", "")).split())
+        lines.append(f"- {prefix}: {text[:220]}")
+    return "\n".join(lines)
+
+
+def bootstrap_topic_content(
+    project: Path,
+    spec: dict[str, str],
+    *,
+    scope_label: str,
+    sessions: list[dict[str, Any]],
+    current_files: list[str],
+) -> str:
+    session_ids = ", ".join(item["id"] for item in sessions if item.get("id")) or "none"
+    session_paths = [display_path(Path(item["path"])) for item in sessions[:4] if item.get("path")]
+    current_file_lines = "\n".join(f"- `{path}`" for path in current_files[:10]) or "- No current file evidence was detected."
+    session_path_lines = "\n".join(f"- `{path}`" for path in session_paths) or "- No matching Codex session transcript file was available."
+    excerpts = "\n\n".join(
+        [
+            f"### Session `{item.get('id', 'unknown')}`\n{format_message_excerpt(item.get('messages', []))}"
+            for item in sessions[:4]
+        ]
+    ) or "### Session Evidence\n- No matching Codex session transcripts were found for this exact working directory."
+    common_context = [
+        f"# {spec['title']} Experience",
+        "",
+        "## Evidence Read",
+        f"- Scope: {scope_label}.",
+        f"- Matched Codex sessions (exact cwd only): {session_ids}.",
+        "- Current repository facts discovered from the working directory.",
+        "- Existing repository files and directories that were already present before AGENTS governance scaffolding.",
+        "",
+        "### Matched Session Files",
+        session_path_lines,
+        "",
+        "### Current Workspace Evidence",
+        current_file_lines,
+        "",
+        "### Session Excerpts",
+        excerpts,
+        "",
+        "## Task Context",
+        f"- The current working directory already contained project content but did not yet contain a root `AGENTS.md`. This bootstrap experience records how the existing code and the exact-cwd Codex session history should be read together before the workspace is normalized.",
+        f"- This `{spec['title']}` record is generated from session evidence plus landed repository content so future agents can understand what work was underway, what files mattered, and what governance repairs were required.",
+        "",
+        "## How To Apply",
+        "- First inspect whether the root `AGENTS.md` is missing and whether the workspace already contains meaningful files or directories.",
+        "- Then read only the Codex sessions whose `session_meta.payload.cwd` exactly matches the current working directory; do not mix in adjacent or similarly named workspaces.",
+        "- Use the matched sessions to reconstruct the recent user intent, combine that with the current file tree, and only then create the governed docs layout, latest experience files, and any required structure migration plan.",
+        "- If directory structure is not compliant, ask whether to normalize it before changing files. The recommended default is yes, but the confirmation must still be explicit.",
+        "",
+        "## Problems And Risks",
+        "- If session matching is too broad, another repository's history can contaminate the current experience files and make the generated AGENTS guidance unsafe.",
+        "- If the workspace layout is normalized without asking first, the agent can silently move the wrong files or create governance output in the wrong place.",
+        "- If only the current file tree is used and the Codex session history is ignored, the resulting experience files can miss the real reason the repository is in its current partial state.",
+    ]
+    if spec["filename"] == "1-workflow.md":
+        common_context.extend(
+            [
+                "",
+                "## Iterated Lessons",
+                "- 完整流程链: detect missing root AGENTS.md -> confirm the workspace already has landed content -> read exact-cwd Codex sessions -> extract user and assistant intent from those sessions -> inspect the current file tree -> ask whether to normalize structure when the layout violates the contract -> migrate legacy docs paths -> generate history experience snapshots per matched session -> synthesize the latest current experience set -> continue with AGENTS generation and verification.",
+                "- 完整逻辑链: the working directory is the identity boundary; the exact cwd selects the session transcripts; the transcripts explain why current files exist; the current files confirm what was actually landed; the structure gate decides whether reorganization must be confirmed; the docs bootstrap turns those inputs into governed memory under `docs/experience/` and `docs/experience/history_experience/`.",
+                "- 闭环: if exact-cwd sessions are found, archive them as historical experience first; if no exact-cwd sessions are found, mark the conversation context as missing and generate the latest experience from landed files only; if structure is invalid, stop and ask before reorganizing; after normalization, regenerate current experience so the governed state reflects the repaired repository.",
+                "- For path handling, always render workspace evidence as normalized repository-relative paths such as `src/main.py` or absolute filesystem paths with real separators. Never collapse them into unreadable joined strings.",
+                "",
+                "```mermaid",
+                "flowchart TD",
+                "    A[Missing root AGENTS.md detected] --> B[Check whether workspace already has landed content]",
+                "    B --> C[Match exact-cwd Codex sessions]",
+                "    C --> D[Inspect current files and directories]",
+                "    D --> E[Ask whether to normalize structure when contract violations exist]",
+                "    E --> F[Migrate legacy docs paths into governed docs layout]",
+                "    F --> G[Write per-session history_experience snapshots]",
+                "    G --> H[Write latest current docs/experience files]",
+                "    H --> I[Continue AGENTS generation and verification]",
+                "```",
+                "",
+                "## Next Application",
+                "- Reuse this bootstrap only for workspaces that already contain real content but still lack a root `AGENTS.md`.",
+                "- Keep the exact-cwd rule strict so that neighboring repositories never leak into the current experience set.",
+                "- After the initial bootstrap, switch back to the normal handoff and experience cadence instead of regenerating history on every run.",
+            ]
+        )
+    else:
+        common_context.extend(
+            [
+                "",
+                "## Iterated Lessons",
+                f"- `{spec['title']}` bootstrap records should capture both the current repository evidence and the matching Codex session excerpts so later agents can understand not only what files exist, but why they exist and what restructuring or governance work was already being discussed.",
+                "- The bootstrap process should remain conservative: exact-cwd matching only, no silent directory normalization, and no fabricated narrative beyond what the file tree and the matched session excerpts support.",
+                "- User-visible paths should stay normalized and readable. Repository-relative evidence such as `src/main.py`, `docs/experience/1-workflow.md`, or `engineering/demo-app/` is easier to audit than collapsed raw path strings.",
+                "",
+                "## Next Application",
+                f"- Use this `{spec['title']}` template when the next missing-AGENTS bootstrap needs to recover context from local Codex sessions and landed files before ordinary docs governance begins.",
+                "- If exact-cwd session evidence is missing, say that clearly and lean harder on file evidence instead of pretending the missing conversation details are known.",
+            ]
+        )
+    return "\n".join(common_context).strip() + "\n"
+
+
+def write_bootstrap_experience_set(
+    project: Path,
+    root: Path,
+    *,
+    scope_label: str,
+    sessions: list[dict[str, Any]],
+    current_files: list[str],
+) -> list[str]:
+    written: list[str] = []
+    root.mkdir(parents=True, exist_ok=True)
+    for spec in experience_file_specs(project):
+        target = root / spec["filename"]
+        target.write_text(
+            bootstrap_topic_content(
+                project,
+                spec,
+                scope_label=scope_label,
+                sessions=sessions,
+                current_files=current_files,
+            ),
+            encoding="utf-8",
+        )
+        written.append(target.relative_to(project).as_posix())
+    return written
+
+
+def bootstrap_experience(project: Path, force: bool = False) -> dict[str, Any]:
+    pre_scaffold_files = project_content_evidence(project)
+    sessions = session_bundle(project)
+    scaffold(project)
+    facts = inspect_project(project)
+    if not facts.get("session_history_bootstrap_required") and not force:
+        return {
+            "project": str(project),
+            "skipped": True,
+            "reason": "workspace does not require initial session bootstrap",
+            "matched_session_count": facts.get("matched_session_count", 0),
+            "matched_session_ids": facts.get("matched_session_ids", []),
+        }
+    current_files = pre_scaffold_files
+    experience_root = project / "docs" / "experience"
+    current_existing = list(experience_root.glob("[0-9]*-*.md"))
+    if current_existing:
+        archive_experience_files(project)
+    history_written: list[str] = []
+    for session in sessions:
+        session_dir = experience_root / "history_experience" / f"{stamp()}-{slug(session.get('id', 'session'))}"
+        history_written.extend(
+            write_bootstrap_experience_set(
+                project,
+                session_dir,
+                scope_label=f"matched session {session.get('id', 'unknown')}",
+                sessions=[session],
+                current_files=current_files,
+            )
+        )
+    current_written = write_bootstrap_experience_set(
+        project,
+        experience_root,
+        scope_label="latest current bootstrap",
+        sessions=sessions,
+        current_files=current_files,
+    )
+    state = load_state(project)
+    state["experience_bootstrapped_from_sessions"] = True
+    state["last_session_bootstrap_at"] = datetime.now().isoformat(timespec="seconds")
+    state["matched_session_count"] = len(sessions)
+    state["matched_session_ids"] = [item.get("id", "") for item in sessions if item.get("id")]
+    save_state(project, state)
+    return {
+        "project": str(project),
+        "skipped": False,
+        "requires_user_confirmation": False,
+        "matched_session_count": len(sessions),
+        "matched_session_ids": [item.get("id", "") for item in sessions if item.get("id")],
+        "history_written": history_written,
+        "current_experience_written": current_written,
+        "conversation_context_missing": len(sessions) == 0,
+        "session_history_match_scope": "exact-cwd",
+        "sessions_root": display_path(codex_sessions_root()),
     }
 
 
@@ -1778,6 +1989,7 @@ def main() -> None:
 
     scaffold_parser = subparsers.add_parser("scaffold")
     scaffold_parser.add_argument("project", nargs="?", default=".")
+    scaffold_parser.add_argument("--bootstrap-sessions", action="store_true")
 
     preflight_parser = subparsers.add_parser("preflight")
     preflight_parser.add_argument("project", nargs="?", default=".")
@@ -1816,6 +2028,10 @@ def main() -> None:
     changelog_parser.add_argument("project", nargs="?", default=".")
     changelog_parser.add_argument("--input", default=None)
 
+    bootstrap_parser = subparsers.add_parser("bootstrap-experience")
+    bootstrap_parser.add_argument("project", nargs="?", default=".")
+    bootstrap_parser.add_argument("--force", action="store_true")
+
     release_gate_parser = subparsers.add_parser("release-gate")
     release_gate_parser.add_argument("project", nargs="?", default=".")
     release_gate_parser.add_argument("--version", required=True)
@@ -1832,7 +2048,10 @@ def main() -> None:
     args = parser.parse_args()
     project = resolve_project(args.project)
     if args.command == "scaffold":
-        emit_json(scaffold(project))
+        result = scaffold(project)
+        if getattr(args, "bootstrap_sessions", False):
+            result["bootstrap_experience"] = bootstrap_experience(project)
+        emit_json(result)
     elif args.command == "preflight":
         emit_json(preflight_docs(project))
     elif args.command == "handoff":
@@ -1857,6 +2076,11 @@ def main() -> None:
         emit_json(write_development(project, args.stage, args.input))
     elif args.command == "git-changelog":
         emit_json(write_git_changelog(project, args.input))
+    elif args.command == "bootstrap-experience":
+        result = bootstrap_experience(project, force=args.force)
+        emit_json(result)
+        if result.get("errors"):
+            raise SystemExit(1)
     elif args.command == "release-gate":
         result = release_gate(project, args.version, args.skill_dir, args.phase, args.install_intent)
         emit_json(result)

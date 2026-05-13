@@ -29,7 +29,6 @@ SKIP_DIRS = {
 AGENTS_METADATA_RE = re.compile(r"<!--\s*AGENTS-METADATA:\s*(.*?)\s*-->", flags=re.IGNORECASE)
 AGENTS_METADATA_PAIR_RE = re.compile(r"([a-zA-Z0-9_]+)\s*=\s*([^;]+)")
 
-
 def resolve_project(raw: str | Path) -> Path:
     project = Path(raw).resolve()
     if not project.exists() or not project.is_dir():
@@ -46,6 +45,17 @@ def read_json(path: Path) -> dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
+
+
+def codex_home_root() -> Path:
+    env_home = os.environ.get("CODEX_HOME", "").strip()
+    if env_home:
+        return Path(env_home).expanduser().resolve()
+    return (Path.home() / ".codex").resolve()
+
+
+def codex_sessions_root() -> Path:
+    return codex_home_root() / "sessions"
 
 
 def skill_root() -> Path:
@@ -94,6 +104,103 @@ def parse_agents_metadata(text: str) -> dict[str, str]:
 
 def rel(path: Path, root: Path) -> str:
     return path.resolve().relative_to(root.resolve()).as_posix()
+
+
+def display_path(path: Path, root: Path | None = None) -> str:
+    if root is not None:
+        try:
+            return path.resolve().relative_to(root.resolve()).as_posix()
+        except Exception:
+            pass
+    return path.resolve().as_posix()
+
+
+def normalize_path_key(raw: str | Path) -> str:
+    value = str(raw).strip()
+    if not value:
+        return ""
+    try:
+        resolved = Path(value).expanduser().resolve()
+    except Exception:
+        resolved = Path(value).expanduser()
+    return os.path.normcase(str(resolved))
+
+
+def workspace_has_existing_content(root: Path) -> bool:
+    ignored = set(SKIP_DIRS) | {".agents"}
+    for path in root.iterdir():
+        if path.name in ignored:
+            continue
+        if path.name == "AGENTS.md":
+            continue
+        return True
+    return False
+
+
+def parse_session_meta(path: Path) -> dict[str, Any]:
+    try:
+        with path.open("r", encoding="utf-8", errors="ignore") as handle:
+            for raw in handle:
+                data = json.loads(raw)
+                if data.get("type") != "session_meta":
+                    continue
+                payload = data.get("payload", {})
+                if isinstance(payload, dict):
+                    return payload
+    except Exception:
+        return {}
+    return {}
+
+
+def matched_codex_sessions(root: Path) -> list[dict[str, str]]:
+    sessions_root = codex_sessions_root()
+    if not sessions_root.is_dir():
+        return []
+    key = normalize_path_key(root)
+    matches: list[dict[str, str]] = []
+    for path in sorted(sessions_root.rglob("*.jsonl")):
+        payload = parse_session_meta(path)
+        if not payload:
+            continue
+        cwd_key = normalize_path_key(payload.get("cwd", ""))
+        if not cwd_key or cwd_key != key:
+            continue
+        matches.append(
+            {
+                "id": str(payload.get("id", "")).strip(),
+                "cwd": str(payload.get("cwd", "")).strip(),
+                "timestamp": str(payload.get("timestamp", "")).strip(),
+                "path": path.resolve().as_posix(),
+            }
+        )
+    return matches
+
+
+def session_message_rows(path: Path, limit: int = 48) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    try:
+        with path.open("r", encoding="utf-8", errors="ignore") as handle:
+            for raw in handle:
+                try:
+                    data = json.loads(raw)
+                except Exception:
+                    continue
+                if data.get("type") != "event_msg":
+                    continue
+                payload = data.get("payload", {})
+                if not isinstance(payload, dict):
+                    continue
+                message_type = str(payload.get("type", "")).strip()
+                role = "user" if message_type == "user_message" else "assistant" if message_type == "agent_message" else ""
+                message = str(payload.get("message", "")).strip()
+                if not role or not message:
+                    continue
+                rows.append({"role": role, "message": message})
+                if len(rows) >= limit:
+                    break
+    except Exception:
+        return []
+    return rows
 
 
 def list_files(root: Path, max_depth: int = 3) -> list[str]:
@@ -288,6 +395,35 @@ def inspect_project(root: Path) -> dict[str, Any]:
             if generator_version and generator_version != installed_version:
                 trigger_reasons.append("generator_version_mismatch")
 
+    matched_sessions = matched_codex_sessions(root)
+    session_bootstrap_required = (not root_agents_path.is_file()) and workspace_has_existing_content(root)
+
+    structure_fix_confirmation_required = False
+    structure_fix_reasons: list[str] = []
+    profile = read_json(root / ".agents" / "agents-control.json")
+    if isinstance(profile, dict):
+        contract = profile.get("directory_contract", {}) if isinstance(profile.get("directory_contract"), dict) else {}
+        primary_root = str(contract.get("primary_project_root", "")).strip().strip("/")
+        if primary_root and not (root / primary_root).exists():
+            structure_fix_confirmation_required = True
+            structure_fix_reasons.append(f"missing primary project root `{primary_root}/`")
+        allowed_roots = {
+            str(item).strip().strip("/").split("/", 1)[0]
+            for item in contract.get("allowed_new_paths", [])
+            if str(item).strip()
+        }
+        if allowed_roots:
+            for child in root.iterdir():
+                if child.name in SKIP_DIRS or child.name in {".agents", "AGENTS.md"}:
+                    continue
+                if child.name not in allowed_roots:
+                    structure_fix_confirmation_required = True
+                    structure_fix_reasons.append(f"top-level path requires review: `{child.name}`")
+        for legacy in [root / "HANDOFF.md", root / "DEVELOPMENT.md", root / "experience", root / "docs" / "HANDOFF.md", root / "docs" / "DEVELOPMENT.md"]:
+            if legacy.exists():
+                structure_fix_confirmation_required = True
+                structure_fix_reasons.append(f"legacy docs path requires migration: `{display_path(legacy, root)}`")
+
     return {
         "project_root": str(root),
         "root_agents_md_exists": root_agents_path.is_file(),
@@ -301,6 +437,14 @@ def inspect_project(root: Path) -> dict[str, Any]:
         "root_agents_md_trigger_reasons": trigger_reasons,
         "root_agents_md_rebuild_required": bool(trigger_reasons),
         "root_agents_md_rebuild_reasons": trigger_reasons,
+        "session_history_bootstrap_required": session_bootstrap_required,
+        "session_history_match_scope": "exact-cwd",
+        "matched_session_count": len(matched_sessions),
+        "matched_session_ids": [item["id"] for item in matched_sessions if item["id"]],
+        "matched_session_paths": [item["path"] for item in matched_sessions],
+        "structure_fix_confirmation_required": structure_fix_confirmation_required,
+        "structure_fix_default": "yes",
+        "structure_fix_reasons": structure_fix_reasons,
         "primary_language": languages[0] if languages else "unknown",
         "languages": sorted(set(languages)),
         "package_manager": package_manager(root),
