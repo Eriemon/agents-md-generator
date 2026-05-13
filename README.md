@@ -100,17 +100,24 @@ AGENTS.md Generator is intentionally narrow:
 - It does not fabricate repository policies, owners, CI behavior, branch names, or security rules.
 - Local secrets, private infrastructure, generated caches, and machine-specific paths should stay out of generated guidance.
 
+## Affiliation
+
+Jiyuan Liu and He Li are with the School of Electronic Science and Engineering, Southeast University.
+They are affiliated with the Heterogeneous Intelligence and Quantum Computing Laboratory (HIQC), which works on heterogeneous intelligence, quantum computing, and related computing systems research.
+
 ## Contact
 
 For questions, collaboration, or academic use, contact: [erie@seu.edu.cn](mailto:erie@seu.edu.cn).
 
 ## Citation
 
+This skill is maintained by authors from the Heterogeneous Intelligence and Quantum Computing Laboratory(HIQC), School of Electronic Science and Engineering, Southeast University.
+
 If this skill helps your research, teaching, or engineering workflow, please cite it. The canonical citation metadata is maintained in [CITATION.cff](CITATION.cff).
 
 ```bibtex
 @software{liu_2026_agents_md_generator,
-  author       = {Jiyuan Liu},
+  author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
   version      = {0.4.6},

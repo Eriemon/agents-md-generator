@@ -6,6 +6,10 @@ authors:
   - family-names: "Liu"
     given-names: "Jiyuan"
     email: "erie@seu.edu.cn"
+    affiliation: "Southeast University"
+  - family-names: "Li"
+    given-names: "He"
+    affiliation: "Southeast University"
 abstract: "AGENTS.md Generator is a Codex-ready agent skill package for generating and verifying AGENTS.md files from repository facts, design profiles, templates, and validation evidence."
 keywords:
   - agent skill
