@@ -10,7 +10,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents_common import detect_scopes, emit_json, extract_commands, extract_context, inspect_project, read_skill_version, resolve_project, today
 from manage_dirs import apply_structure_fix, structure_gate
-from manage_docs import bootstrap_experience, branch_gate, preflight_docs, scaffold as scaffold_docs
+from manage_docs import bootstrap_experience, branch_gate, infer_evolution_target, preflight_docs, scaffold as scaffold_docs
 
 
 GENERATED_START = "<!-- AGENTS-GENERATED:START"
@@ -179,6 +179,56 @@ def codebase_state(context: dict) -> str:
     return "\n".join(lines)
 
 
+def evolution_templates_root(template_dir: Path | None) -> Path:
+    return (template_dir or default_template_dir()) / "evolution"
+
+
+def extract_markdown_section(text: str, heading: str) -> list[str]:
+    pattern = rf"^##\s+{re.escape(heading)}\s*$"
+    lines = text.splitlines()
+    capture = False
+    collected: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if re.match(pattern, stripped):
+            capture = True
+            continue
+        if capture and stripped.startswith("## "):
+            break
+        if capture and stripped:
+            collected.append(stripped)
+    return collected
+
+
+def evolution_template_guidance(project: Path, template_dir: Path | None = None) -> str:
+    root = evolution_templates_root(template_dir)
+    if not root.exists():
+        return ""
+    target = infer_evolution_target(project)
+    target_dir = root / target["family"]
+    for segment in target["category_path"]:
+        target_dir = target_dir / segment
+    target_dir = target_dir / target["type_slug"]
+    if not target_dir.exists() or not target_dir.is_dir():
+        return ""
+    lines = [
+        f"- Matching evolution template target: family `{target['family']}`, category `{'/'.join(target['category_path'])}`, type `{target['type_slug']}`.",
+    ]
+    for filename in ["1-workflow.md", "2-scripts.md", "3-plan.md", "4-design-ui.md"]:
+        path = target_dir / filename
+        if not path.exists() or not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        for heading in ("Applicable Scenario", "Key Decisions", "Application Checklist"):
+            section_lines = extract_markdown_section(text, heading)
+            if section_lines:
+                lines.extend(f"- {line.lstrip('- ').strip()}" for line in section_lines[:2])
+                break
+    if len(lines) == 1:
+        return ""
+    return "\n".join(lines)
+
+
 def hook_policy(context: dict) -> str:
     hooks = context.get("hook_configs", [])
     if not hooks:
@@ -257,6 +307,10 @@ def control_profile(profile: dict | None) -> str:
         lines.append(f"- Validation method: {profile['validation_method']}.")
     if profile.get("validation_granularity"):
         lines.append(f"- Validation granularity: {profile['validation_granularity']}.")
+    if profile.get("resource_plan"):
+        lines.append(f"- Resource boundaries: {profile['resource_plan']}.")
+    if profile.get("forward_testing_policy"):
+        lines.append(f"- Forward testing: {profile['forward_testing_policy']}.")
     if profile.get("reference_materials_temporary"):
         lines.append("- Temporary reference materials were used; remove them manually after development and do not copy local reference paths into AGENTS.md.")
     return "\n".join(lines)
@@ -295,14 +349,17 @@ def release_contract(profile: dict | None) -> str:
     protected_text = ", ".join(f"`{item}`" for item in protected)
     return "\n".join([
         f"- Git management: {git_management_text(profile.get('git_management', 'not specified'))}.",
-        f"- Branch model: {profile.get('branch_model', 'not specified')}.",
-        f"- Protected branches: {protected_text}.",
+        f"- Branch model: {profile.get('branch_model', 'not specified')}; protected branches: {protected_text}.",
         "- Development branches are allowed only as temporary local work branches.",
+        "- Do not repoint repositories with `git config core.worktree`; use normal checkout/merge or explicit `git worktree` commands instead.",
         "- Before releasing an installable `dist/` package: commit all work, merge into `master`, record the release, then delete local branches other than `master` and `release`.",
-        f"- Dist folder: `{release.get('dist_folder', 'dist')}`.",
-        f"- Release folder pattern: `{release.get('release_folder_pattern', '<name>-vx.x.x')}`.",
-        f"- Zip required: {release.get('zip_required', True)}.",
+        "- Use `python scripts/manage_docs.py release-prepare <project> --version vX.Y.Z --skill-dir skills/<skill-name>` to auto-commit governed paths, merge the active temporary branch into `master`, and delete that local branch.",
+        "- Build release artifacts with `python scripts/manage_docs.py package-release <project> --version vX.Y.Z --skill-dir skills/<skill-name>`.",
+        f"- Release receipt file: `{release.get('receipt_file', 'RELEASE_RECEIPT.json')}` must exist inside each installable release directory.",
+        f"- Dist folder: `{release.get('dist_folder', 'dist')}`; release folder pattern: `{release.get('release_folder_pattern', '<name>-vx.x.x')}`; zip required: {release.get('zip_required', True)}.",
         "- Before and after packaging, run `python scripts/manage_docs.py release-gate <project> --version vX.Y.Z --skill-dir skills/<skill-name> --phase pre|post`.",
+        "- Install only from a versioned `dist/<name>-vX.Y.Z/` release directory that contains a validated `RELEASE_RECEIPT.json`; source directory installs are forbidden.",
+        f"- Repo-local installs use validation level `{release.get('repo_install_validation_level', 'strong')}`; standalone copied release folders use `{release.get('external_install_validation_level', 'reduced_assurance')}`.",
         "- Keep the release commit and the current `docs/git_manager/CHANGELOG.md` entry together.",
         "- Do not push to a remote unless the user explicitly asks.",
     ])
@@ -407,8 +464,9 @@ def experience_log_contract(profile: dict | None) -> str:
         f"- Project-specific files use `{pattern}` with names selected from current repository facts.",
         "- AI authors experience content; scripts only collect evidence, validate payloads, archive old files, and write accepted AI summaries.",
         f"- AI must read recent conversation context before experience updates: up to {conversation_limit} latest conversation snapshots.",
-        "- Refresh cadence: every 5 completed handoffs creates an AI update request; apply with `manage_docs.py experience --payload experience-payload.json`.",
-        f"- Evolution cadence: every {evolution_every} completed handoffs writes indexed templates under `assets/templates/evolution/` after quality checks pass.",
+        "- Refresh cadence: every 5 completed handoffs creates an AI update request plus the current handoff/conversation window; the active agent should generate and apply the payload in the same conversation with `manage_docs.py experience --payload experience-payload.json`.",
+        f"- Evolution cadence: every {evolution_every} completed handoffs requires valid `evolution_summary` content in the same payload so evolution completes atomically before the checkpoint is considered current.",
+        "- Evolution summaries must satisfy both path-level family matching and content-level type isolation; skill templates must reject engineering workflow chains, and engineering templates must reject skill-governance workflow chains.",
         f"- Required sections: {', '.join(sections)}.",
         "- Archive old current experience files under `docs/experience/history_experience/YYYYMMDD-HHMMSS/` before writing refreshed versions.",
     ])
@@ -437,8 +495,10 @@ def documentation_governance_contract(profile: dict | None) -> str:
         f"- Docs root: `{contract.get('root', 'docs')}`.",
         f"- Latest handoff: `{handoff.get('current', 'docs/handoff/HANDOFF.md')}` is always the newest task handoff.",
         f"- Experience folder: `{experience.get('folder', 'docs/experience')}` maintains 10 project-specific numbered experience files including `docs/experience/1-workflow.md`, `docs/experience/2-scripts.md`, `docs/experience/3-plan.md`, `docs/experience/4-design-ui.md`, plus `5-*.md` through `10-*.md`.",
-        f"- Experience cadence: every 5 completed handoffs create an AI update request using up to {experience.get('conversation_context_limit', 10)} recent conversation snapshots; apply only AI-generated payloads and archive previous current files to `{experience.get('history', 'docs/experience/history_experience')}/YYYYMMDD-HHMMSS/`.",
-        f"- Auto evolution: every {experience.get('evolution_every_handoffs', 10)} completed handoffs, distill approved experience into indexed templates under `{experience.get('evolution_templates', 'assets/templates/evolution/<matching-family>/<category>/<type>/')}`; topics stay project-specific and must not be copied into both template families.",
+        f"- Experience cadence: every 5 completed handoffs create an AI update request plus the current evidence window using up to {experience.get('conversation_context_limit', 10)} recent conversation snapshots; the active agent should immediately apply an AI-authored payload in the same conversation, and previous current files are archived to `{experience.get('history', 'docs/experience/history_experience')}/YYYYMMDD-HHMMSS/` before refreshed files are written with cadence metadata.",
+        f"- Auto evolution: every {experience.get('evolution_every_handoffs', 10)} completed handoffs requires valid `evolution_summary` content in the same payload so experience refresh and evolution finish atomically; approved experience is distilled into indexed templates under `{experience.get('evolution_templates', 'assets/templates/evolution/')}` using the exact matching family, category, and type target, and topics stay project-specific without being copied into both template families.",
+        "- Evolution template writing is isolated by both family and content schema: the exact family, category, and type must match the project kind, and the workflow text must not carry the opposite kind's execution chain.",
+        "- AGENTS rendering must not scan the whole `assets/templates/` tree. Only the exact matching evolution target may be read as supplemental guidance, and unmatched sibling templates are ignored.",
         f"- Git manager: keep the current change summary in `{git.get('folder', 'docs/git_manager')}/CHANGELOG.md`, archive older entries under `{git.get('folder', 'docs/git_manager')}/history_git_manager/YYYYMMDD-HHMMSS/`, and rotate with `manage_docs.py git-changelog`.",
         f"- Dir manager: keep strict local and remote deployment structure review rules under `{dir_manager.get('folder', 'docs/dir_manager')}/`; run `manage_dirs.py review` and keep `history_dir_manager/` archives.",
         "- Directory changes require `python scripts/manage_dirs.py review <project> --input change.json`; blocked reviews require explicit user force-confirmation and risk capture in handoff.",
@@ -450,7 +510,7 @@ def documentation_governance_contract(profile: dict | None) -> str:
     ])
 
 
-def template_values(project: Path, profile: dict | None = None) -> dict[str, str]:
+def template_values(project: Path, profile: dict | None = None, template_dir: Path | None = None) -> dict[str, str]:
     facts = inspect_project(project)
     commands = extract_commands(project)["commands"]
     scopes = detect_scopes(project)["scopes"]
@@ -486,6 +546,7 @@ def template_values(project: Path, profile: dict | None = None) -> dict[str, str
         "GITHUB_SETTINGS": github_settings(context),
         "DIRECTORY_COVERAGE": directory_coverage(context),
         "KEY_DECISIONS": key_decisions(context),
+        "EVOLUTION_TEMPLATE_GUIDANCE": evolution_template_guidance(project, template_dir),
         "ALWAYS_RULES": bullet_lines([
             "Preserve user changes and hand-written guidance.",
             "Add tests or verification for changed behavior.",
@@ -562,7 +623,7 @@ def manual_content(existing: str) -> str:
 def render_root(project: Path, template_dir: Path | None = None, profile: dict | None = None) -> str:
     existing = (project / "AGENTS.md").read_text(encoding="utf-8", errors="ignore") if (project / "AGENTS.md").exists() else ""
     if template_dir is None:
-        values = template_values(project, profile)
+        values = template_values(project, profile, template_dir)
         manual = manual_content(existing).strip()
         engineering_max = 6 if profile and profile.get("engineering_rule_contract", {}).get("primary") != "none" else 2
         skill_max = 9 if profile and profile.get("kind") == "skill" else 2
@@ -575,7 +636,7 @@ def render_root(project: Path, template_dir: Path | None = None, profile: dict |
             "# AGENTS.md",
             "**Precedence:** the closest `AGENTS.md` to the files being changed wins. Explicit user prompts override this file.",
             compact_section("project-overview", "Project Overview", values["PROJECT_OVERVIEW"], 2),
-            compact_section("control-profile", "Control Profile", values["CONTROL_PROFILE"], 8),
+            compact_section("control-profile", "Control Profile", values["CONTROL_PROFILE"], 16),
             compact_section("directory-contract", "Directory Contract", values["DIRECTORY_CONTRACT"], 5),
             compact_section("release-contract", "Release Contract", values["RELEASE_CONTRACT"], 9),
             compact_section("engineering-rule-contract", "Engineering Rule Contract", values["ENGINEERING_RULE_CONTRACT"], engineering_max),
@@ -589,7 +650,7 @@ def render_root(project: Path, template_dir: Path | None = None, profile: dict |
                 "<!-- AGENTS-GENERATED:END commands -->",
             ]),
             compact_section("conversation-completion-contract", "Conversation Completion Contract", values["CONVERSATION_COMPLETION_CONTRACT"], 2),
-            compact_section("documentation-governance-contract", "Documentation Governance Contract", values["DOCUMENTATION_GOVERNANCE_CONTRACT"], 8),
+            compact_section("documentation-governance-contract", "Documentation Governance Contract", values["DOCUMENTATION_GOVERNANCE_CONTRACT"], 12),
             compact_section("directory-coverage", "Directory Coverage", values["DIRECTORY_COVERAGE"], 2),
         ]
         if "Link ADRs or architecture docs here" not in values["KEY_DECISIONS"] or "Add migrations, tech debt" not in values["CODEBASE_STATE"] or "Existing utility" in values["UTILITY_ROWS"]:
@@ -598,6 +659,8 @@ def render_root(project: Path, template_dir: Path | None = None, profile: dict |
             parts.append(compact_section("hook-policy", "Hook Policy", values["HOOK_POLICY"], 3))
         if "No GitHub settings or rulesets detected" not in values["GITHUB_SETTINGS"]:
             parts.append(compact_section("github-settings", "GitHub Settings", values["GITHUB_SETTINGS"], 3))
+        if values["EVOLUTION_TEMPLATE_GUIDANCE"]:
+            parts.append(compact_section("evolution-template-guidance", "Evolution Template Guidance", values["EVOLUTION_TEMPLATE_GUIDANCE"], 6))
         parts.extend([
             "\n".join([
                 "## Boundaries",
@@ -615,7 +678,7 @@ def render_root(project: Path, template_dir: Path | None = None, profile: dict |
             parts.append(manual)
         return "\n".join(parts).rstrip() + "\n"
     template = load_template(template_dir or default_template_dir(), "root-agents.md")
-    values = template_values(project, profile)
+    values = template_values(project, profile, template_dir)
     rendered = replace_placeholders(template, values).rstrip()
     metadata = f"<!-- AGENTS-METADATA: agents_version={values['AGENTS_VERSION']}; generator_version={values['GENERATOR_VERSION']}; default_language={values['DEFAULT_LANGUAGE']} -->"
     return metadata + "\n" + rendered + manual_content(existing) + "\n"

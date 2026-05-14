@@ -6,35 +6,33 @@
 - Source file: 4-design-ui.md
 - Version window: current-plus-latest-history
 - Target source: inferred
-- Rationale: Inferred from non-visual AGENTS.md generator work with markdown-facing user experience.
+- Rationale: Inferred from project control profile, repository facts, and topic keywords.
 
 ## Source Versions
 - `docs/experience/4-design-ui.md`
-- `docs/experience/history_experience/20260512-165633/4-design-ui.md`
+- `docs/experience/history_experience/20260514-134203/4-design-ui.md`
+
+# Design UI Evolution Template
 
 ## Evidence Sources
-- Current design-ui experience and latest historical design-ui experience, both recording that the work was non-visual.
+- Current and latest historical experience versions for this topic.
 
 ## Applicable Scenario
-- Use when the task changes textual governance artifacts but does not touch a visual UI, frontend, screenshots, browser behavior, generated images, or layout.
+- Use when a future design ui task matches the same repository governance constraints and needs reusable guidance rather than a copied experience note.
 
 ## Distilled Workflow
-- State clearly when there is no UI evidence.
-- Treat markdown section structure as an information-design decision for future maintainers and agents.
-- Keep non-visual records focused on readability, language, and scan structure rather than inventing visual design lessons.
+- Inspect evidence, identify the concrete design ui failure, write a regression check, implement narrowly, verify targeted behavior, and update governance evidence only after the check passes.
 
 ## Key Decisions
-- `暂无 UI 经验` is valid when no UI work occurred, but the file still needs task context, application guidance, and risks.
-- Repeated headings across experience files improve resumption quality because future agents can scan for evidence, context, method, problems, lessons, and next application.
+- Keep deterministic scripts responsible for validation and file movement; keep AI-authored payloads responsible for synthesis and judgment.
 
 ## Common Problems
-- Filling UI files with unrelated script or release lessons creates false evidence.
-- Omitting context because there was no UI work makes the file too thin to validate.
+- Do not paste raw handoff content, do not duplicate the same text across template families, and do not mix skill-specific guidance into engineering templates.
 
 ## Non-Reusable Content
-- Do not carry over claims about colors, layouts, interactions, or screenshots unless the source task actually reviewed them.
+- Omit release timestamps, temporary file paths, and conversation-only details that do not change future implementation choices.
 
 ## Application Checklist
-- Confirm whether visible UI changed.
-- If not, record the absence of UI evidence and preserve markdown readability lessons only.
-- If yes, replace this negative template with evidence-backed UI verification.
+- Confirm the template family and category match the target repository.
+- Confirm the experience source passed quality validation.
+- Confirm the resulting guidance is a synthesis, not a copy.

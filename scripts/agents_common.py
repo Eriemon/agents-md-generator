@@ -414,6 +414,8 @@ def inspect_project(root: Path) -> dict[str, Any]:
         }
         if allowed_roots:
             for child in root.iterdir():
+                if child.is_file():
+                    continue
                 if child.name in SKIP_DIRS or child.name in {".agents", "AGENTS.md"}:
                     continue
                 if child.name not in allowed_roots:

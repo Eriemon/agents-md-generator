@@ -6,38 +6,33 @@
 - Source file: 3-plan.md
 - Version window: current-plus-latest-history
 - Target source: inferred
-- Rationale: Inferred from AGENTS.md generator planning and governance contracts.
+- Rationale: Inferred from project control profile, repository facts, and topic keywords.
 
 ## Source Versions
 - `docs/experience/3-plan.md`
-- `docs/experience/history_experience/20260512-165633/3-plan.md`
+- `docs/experience/history_experience/20260514-134203/3-plan.md`
+
+# Plan Evolution Template
 
 ## Evidence Sources
-- Current plan experience, latest historical plan experience, user-approved implementation plan, and tests that encode user examples.
+- Current and latest historical experience versions for this topic.
 
 ## Applicable Scenario
-- Use when planning changes to agent-rule generation, docs governance, experience capture, template evolution, install preservation, or release gates.
+- Use when a future plan task matches the same repository governance constraints and needs reusable guidance rather than a copied experience note.
 
 ## Distilled Workflow
-- Translate user language into observable acceptance criteria.
-- Name source artifacts, target artifacts, forbidden artifacts, and repair behavior.
-- Keep examples concrete enough for tests while designing generic helpers that can handle future categories.
-- Record no-release or no-install assumptions separately from implementation completion.
+- Inspect evidence, identify the concrete plan failure, write a regression check, implement narrowly, verify targeted behavior, and update governance evidence only after the check passes.
 
 ## Key Decisions
-- A plan for governance automation must cover current state, history state, pending request state, and verification state.
-- Classification examples such as FPGA/Vivado and algorithm/sort are acceptance fixtures, not a closed taxonomy.
-- Archive-before-cleanup belongs in the plan whenever generated paths move.
+- Keep deterministic scripts responsible for validation and file movement; keep AI-authored payloads responsible for synthesis and judgment.
 
 ## Common Problems
-- Planning only the happy path lets stale outputs survive in active directories.
-- Saying "make summaries better" without section and length rules leaves implementation subjective.
-- Mixing release packaging into a source-only task creates avoidable version drift.
+- Do not paste raw handoff content, do not duplicate the same text across template families, and do not mix skill-specific guidance into engineering templates.
 
 ## Non-Reusable Content
-- Do not reuse local handoff counts, timestamped history folder names, or branch-specific steps unless the future task has the same release context.
+- Omit release timestamps, temporary file paths, and conversation-only details that do not change future implementation choices.
 
 ## Application Checklist
-- Include one skill fixture and one engineering fixture when taxonomy behavior changes.
-- Include at least one malformed payload case.
-- Confirm docs and tests describe the same public interface.
+- Confirm the template family and category match the target repository.
+- Confirm the experience source passed quality validation.
+- Confirm the resulting guidance is a synthesis, not a copy.

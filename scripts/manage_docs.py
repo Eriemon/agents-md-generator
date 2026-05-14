@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 from typing import Any
+import zipfile
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -94,6 +95,8 @@ REQUIRED_EVOLUTION_SECTIONS = [
     "Application Checklist",
 ]
 EVOLUTION_SUMMARY_MIN_LENGTH = 450
+EXPERIENCE_CADENCE_HANDOFFS = 5
+EVOLUTION_CADENCE_HANDOFFS = 10
 SAFE_TEMPLATE_SEGMENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 REQUIRED_DEVELOPMENT_SECTIONS = [
     "Development Goal",
@@ -108,6 +111,257 @@ REQUIRED_DEVELOPMENT_SECTIONS = [
     "Artifacts And Impact",
 ]
 DEVELOPMENT_MIN_LENGTH = 450
+TOPIC_DETAIL_RULES: dict[str, dict[str, Any]] = {
+    "2-scripts.md": {
+        "guidance": [
+            "Name the exact script, CLI command, function, JSON contract, or code path that changed.",
+            "Explain the state transition or validation boundary the script owns, and include the verification command that proved the change.",
+        ],
+        "required_term_groups": [
+            ("script", "scripts", "cli", "python", "manage_docs.py", "render_agents.py", "audit_skill.py", "json"),
+            ("command", "function", "state transition", "state transitions", "validation", "validation boundary", "code path", "file path"),
+        ],
+        "error": "content must include script-specific implementation evidence",
+    },
+    "3-plan.md": {
+        "guidance": [
+            "Describe the concrete plan, sequencing, handoff boundary, or acceptance criteria that shaped the work.",
+            "Record which failure mode or requirement forced the plan to change before implementation or release.",
+        ],
+        "required_terms": ("plan", "planning", "task", "sequence", "handoff", "acceptance", "scope", "steps"),
+        "minimum_matches": 2,
+        "error": "content must include planning-specific evidence",
+    },
+    "5-testing.md": {
+        "guidance": [
+            "Record the focused tests, regression checks, or fixtures that proved the old behavior failed and the new behavior passed.",
+            "Call out the verification command, expected failure, or assertion surface that protects this topic.",
+        ],
+        "required_terms": ("test", "tests", "testing", "pytest", "unittest", "regression", "assert", "verification", "fixture"),
+        "minimum_matches": 2,
+        "error": "content must include testing-specific verification evidence",
+    },
+    "6-validation.md": {
+        "guidance": [
+            "Name the validation gate, verify command, or quality check that determines whether the repository is healthy.",
+            "Explain why this validation matters and which failure it prevents from leaking downstream.",
+        ],
+        "required_terms": ("validate", "validation", "verify", "gate", "quality", "errors", "warnings"),
+        "minimum_matches": 2,
+        "error": "content must include validation-specific gate evidence",
+    },
+    "7-release.md": {
+        "guidance": [
+            "Mention the release artifact, dist package, versioned output, or parity check that mattered for this task.",
+            "Include the release-specific failure mode, rebuild requirement, or packaging verification step.",
+        ],
+        "required_terms": ("release", "dist", "package", "zip", "version", "artifact", "parity"),
+        "minimum_matches": 2,
+        "error": "content must include release-specific artifact evidence",
+    },
+    "8-installation.md": {
+        "guidance": [
+            "Explain the installation target, replacement behavior, backup path, or conflict-preservation rule involved in the task.",
+            "Document the install-specific guardrails so future replacement work does not overwrite durable user state.",
+        ],
+        "required_terms": ("install", "installation", "replace", "backup", "conflict", "codex", "target"),
+        "minimum_matches": 2,
+        "error": "content must include installation-specific evidence",
+    },
+    "9-docs-governance.md": {
+        "guidance": [
+            "Name the docs governance workflow, such as handoff rotation, experience cadence, request/payload flow, or governance state repair.",
+            "Record the relevant docs path or governance state transition that future maintainers must preserve.",
+        ],
+        "required_term_groups": [
+            ("docs/experience", "docs/handoff", "handoff", "experience update", "governance state"),
+            ("governance", "cadence", "request", "payload", "rotation", "archive"),
+        ],
+        "error": "content must include docs-governance-specific evidence",
+    },
+    "10-directory-governance.md": {
+        "guidance": [
+            "Call out the directory structure, folder review, path movement, or archive behavior that constrained the task.",
+            "Explain the directory-specific risk so future structure changes can be reviewed before mutation.",
+        ],
+        "required_terms": ("directory", "directories", "folder", "folders", "path", "paths", "structure", "review"),
+        "minimum_matches": 2,
+        "error": "content must include directory-governance-specific evidence",
+    },
+}
+EVOLUTION_CATEGORY_SCHEMAS: dict[tuple[str, tuple[str, ...]], dict[str, Any]] = {
+    ("skill-template", ("agent-governance",)): {
+        "flow_requirements": [
+            "Workflow must show repository fact inspection or control-profile inspection before synthesis.",
+            "Workflow must cover rule/design alignment for AGENTS or agent-governance behavior.",
+            "Workflow must cover script/test/verify style execution before final docs governance output.",
+            "Workflow must mention release or install decision handling when summarizing reusable skill-governance flow.",
+        ],
+        "mixed_content_risks": [
+            "Do not copy FPGA/Vivado/HLS/XDC/bitstream engineering flows into an agent-governance skill template.",
+            "Do not turn the template into a hardware execution checklist when the target is a skill-governance workflow.",
+        ],
+        "workflow_required_groups": [
+            ("repository facts", "fact inspection", "control profile", "inspect facts"),
+            ("agents.md", "agent rule", "rule alignment", "design alignment", "docs governance"),
+            ("script", "scripts", "test", "verify", "validation"),
+            ("release", "install", "installation"),
+        ],
+        "workflow_forbidden_terms": (
+            "engineering tcl",
+            "hls",
+            "verilog",
+            "xdc",
+            "bitstream",
+            "timing closure",
+            "download validation",
+            "vivado",
+        ),
+    },
+    ("skill-template", ("docs-governance",)): {
+        "flow_requirements": [
+            "Workflow must cover handoff rotation, experience cadence, request/payload flow, and verification.",
+            "Workflow must keep current docs, history docs, and reusable outputs distinct.",
+        ],
+        "mixed_content_risks": [
+            "Do not replace docs-governance flow with product-engineering execution stages.",
+        ],
+        "workflow_required_groups": [
+            ("handoff", "docs governance", "experience cadence", "request", "payload"),
+            ("verify", "validation", "archive", "history"),
+        ],
+        "workflow_forbidden_terms": ("bitstream", "xdc", "hls", "vivado"),
+    },
+    ("engineering-template", ("docs-governance",)): {
+        "flow_requirements": [
+            "Workflow must cover handoff rotation, experience cadence, request/payload flow, and repository verification for an engineering workspace.",
+            "Workflow must keep current docs, history docs, and reusable outputs distinct while still treating the repository as an engineering project.",
+        ],
+        "mixed_content_risks": [
+            "Do not replace engineering docs-governance flow with FPGA/algorithm execution chains.",
+        ],
+        "workflow_required_groups": [
+            ("handoff", "docs governance", "experience cadence", "request", "payload"),
+            ("verify", "validation", "archive", "history"),
+        ],
+        "workflow_forbidden_terms": ("bitstream", "xdc", "hls", "vivado"),
+    },
+    ("engineering-template", ("FPGA",)): {
+        "flow_requirements": [
+            "Workflow must cover design/develop/simulate/synthesize/implement/validate FPGA stages.",
+            "Workflow must mention hardware-specific artifacts or closure steps such as XDC, bitstream, timing, or download validation.",
+        ],
+        "mixed_content_risks": [
+            "Do not replace engineering execution with AGENTS/control-profile/docs-governance skill steps.",
+        ],
+        "workflow_required_groups": [
+            ("design", "规划", "architecture"),
+            ("develop", "implementation", "开发", "hls", "verilog"),
+            ("simulation", "simulate", "仿真", "test"),
+            ("synthesis", "implement", "implementation", "综合"),
+            ("bitstream", "timing", "xdc", "download validation", "验证"),
+        ],
+        "workflow_forbidden_terms": (
+            "agents.md",
+            "control profile",
+            "docs governance",
+            "handoff cadence",
+            "install confirmation",
+        ),
+    },
+    ("engineering-template", ("algorithm",)): {
+        "flow_requirements": [
+            "Workflow must cover requirement/design/implementation/test or correctness validation.",
+            "Workflow must mention algorithm-oriented validation such as correctness, benchmark, performance, or complexity.",
+        ],
+        "mixed_content_risks": [
+            "Do not replace algorithm engineering flow with AGENTS/docs-governance skill operations.",
+        ],
+        "workflow_required_groups": [
+            ("requirement", "requirements", "需求"),
+            ("design", "设计", "plan"),
+            ("implement", "implementation", "develop", "开发"),
+            ("test", "testing", "验证", "correctness"),
+            ("performance", "benchmark", "complexity", "sort", "sorting", "性能"),
+        ],
+        "workflow_forbidden_terms": (
+            "agents.md",
+            "control profile",
+            "docs governance",
+            "handoff cadence",
+            "install confirmation",
+            "skill install",
+        ),
+    },
+    ("engineering-template", ("web", "frontend")): {
+        "flow_requirements": [
+            "Workflow must cover UI/frontend design, implementation, testing, and responsive or accessibility validation.",
+        ],
+        "mixed_content_risks": [
+            "Do not replace frontend flow with AGENTS/docs-governance maintenance steps.",
+        ],
+        "workflow_required_groups": [
+            ("design", "layout", "ui", "frontend"),
+            ("implement", "development", "develop", "开发"),
+            ("test", "validation", "responsive", "accessibility"),
+        ],
+        "workflow_forbidden_terms": ("agents.md", "control profile", "docs governance", "handoff cadence"),
+    },
+    ("engineering-template", ("backend", "api")): {
+        "flow_requirements": [
+            "Workflow must cover API/backend design, implementation, test, and runtime or integration validation.",
+        ],
+        "mixed_content_risks": [
+            "Do not replace backend execution flow with skill-governance maintenance steps.",
+        ],
+        "workflow_required_groups": [
+            ("api", "backend", "service", "interface"),
+            ("implement", "development", "develop", "开发"),
+            ("test", "validation", "integration", "runtime"),
+        ],
+        "workflow_forbidden_terms": ("agents.md", "control profile", "docs governance", "handoff cadence"),
+    },
+    ("engineering-template", ("data", "database")): {
+        "flow_requirements": [
+            "Workflow must cover schema/query/data implementation plus validation or migration/runtime checks.",
+        ],
+        "mixed_content_risks": [
+            "Do not replace data/database flow with skill-governance maintenance steps.",
+        ],
+        "workflow_required_groups": [
+            ("data", "database", "sql", "schema"),
+            ("implement", "development", "develop", "query"),
+            ("test", "validation", "migration", "runtime"),
+        ],
+        "workflow_forbidden_terms": ("agents.md", "control profile", "docs governance", "handoff cadence"),
+    },
+    ("skill-template", ("general",)): {
+        "flow_requirements": [
+            "Workflow must still reflect a skill/repository-governance style process rather than a product-engineering execution chain.",
+        ],
+        "mixed_content_risks": [
+            "Do not copy specialized engineering execution chains into a general skill template.",
+        ],
+        "workflow_required_groups": [
+            ("repository facts", "control profile", "facts", "inspect"),
+            ("script", "test", "verify", "docs"),
+        ],
+        "workflow_forbidden_terms": ("hls", "verilog", "xdc", "bitstream", "timing closure"),
+    },
+    ("engineering-template", ("general",)): {
+        "flow_requirements": [
+            "Workflow must reflect engineering execution stages rather than AGENTS/docs-governance repository maintenance.",
+        ],
+        "mixed_content_risks": [
+            "Do not copy AGENTS/control-profile/docs-governance flow into a general engineering template.",
+        ],
+        "workflow_required_groups": [
+            ("design", "implement", "develop", "test"),
+            ("validate", "verification", "runtime", "release"),
+        ],
+        "workflow_forbidden_terms": ("agents.md", "control profile", "docs governance", "handoff cadence"),
+    },
+}
 
 
 def stamp() -> str:
@@ -233,6 +487,144 @@ def project_specific_experience_topics(project: Path) -> list[tuple[str, str]]:
     remote = remote_structure_from_profile(project)
     topics = REMOTE_OPTIONAL_EXPERIENCE_TOPICS if remote else DEFAULT_OPTIONAL_EXPERIENCE_TOPICS
     return [(f"{index}-{slug_name}.md", title) for index, (slug_name, title) in enumerate(topics, start=5)]
+
+
+def cadence_checkpoint(count: int, interval: int) -> int:
+    if count <= 0 or interval <= 0:
+        return 0
+    return (count // interval) * interval
+
+
+def latest_experience_due(count: int) -> int:
+    return cadence_checkpoint(count, EXPERIENCE_CADENCE_HANDOFFS)
+
+
+def latest_evolution_due(count: int) -> int:
+    return cadence_checkpoint(count, EVOLUTION_CADENCE_HANDOFFS)
+
+
+def cadence_window_bounds(checkpoint: int, interval: int) -> tuple[int, int]:
+    if checkpoint <= 0:
+        return 0, 0
+    return max(1, checkpoint - interval + 1), checkpoint
+
+
+def handoff_count_from_markdown(text: str) -> int:
+    match = re.search(r"^- Handoff count:\s*(\d+)\s*$", text, flags=re.MULTILINE)
+    return int(match.group(1)) if match else 0
+
+
+def current_handoff_entry(project: Path) -> dict[str, Any] | None:
+    path = project / "docs" / "handoff" / "HANDOFF.md"
+    if not path.exists() or not path.is_file():
+        return None
+    content = path.read_text(encoding="utf-8", errors="ignore")
+    return {
+        "path": path.relative_to(project).as_posix(),
+        "content": content,
+        "handoff_count": handoff_count_from_markdown(content),
+    }
+
+
+def handoff_window(project: Path, checkpoint: int, limit: int = EXPERIENCE_CADENCE_HANDOFFS) -> dict[str, Any]:
+    start, end = cadence_window_bounds(checkpoint, limit)
+    if end == 0:
+        return {"start_handoff_count": 0, "end_handoff_count": 0, "entries": []}
+    entries: list[dict[str, Any]] = []
+    current = current_handoff_entry(project)
+    if current:
+        entries.append(current)
+    entries.extend(recent_handoff_history(project, limit=max(limit * 3, 10)))
+    deduped: dict[int, dict[str, Any]] = {}
+    for row in entries:
+        handoff_count = int(row.get("handoff_count", 0))
+        if start <= handoff_count <= end and handoff_count not in deduped:
+            deduped[handoff_count] = row
+    return {
+        "start_handoff_count": start,
+        "end_handoff_count": end,
+        "entries": [deduped[key] for key in sorted(deduped)],
+    }
+
+
+def recent_conversation_window(project: Path, limit: int = EXPERIENCE_CADENCE_HANDOFFS) -> dict[str, Any]:
+    entries = recent_conversation_context(project, limit=limit)
+    return {
+        "count": len(entries),
+        "limit": limit,
+        "entries": entries,
+    }
+
+
+def detail_requirements_for(filename: str) -> list[str]:
+    rule = TOPIC_DETAIL_RULES.get(filename, {})
+    guidance = rule.get("guidance")
+    if isinstance(guidance, list) and guidance:
+        return [str(item) for item in guidance]
+    return [
+        "Name the exact files, implementation surface, and task-specific boundary that changed.",
+        "Explain the main risk or failure mode, then record the verification evidence and future reuse condition.",
+    ]
+
+
+def contains_term(text: str, term: str) -> bool:
+    lowered = text.lower()
+    needle = term.lower().strip()
+    if not needle:
+        return False
+    if re.fullmatch(r"[A-Za-z0-9_-]+(?: [A-Za-z0-9_-]+)*", needle):
+        return re.search(rf"\b{re.escape(needle)}\b", lowered) is not None
+    return needle in lowered
+
+
+def count_term_matches(text: str, terms: tuple[str, ...]) -> int:
+    return sum(1 for term in terms if contains_term(text, term))
+
+
+def validate_topic_specificity(filename: str, content: str) -> list[str]:
+    rule = TOPIC_DETAIL_RULES.get(filename)
+    if not rule:
+        return []
+    errors: list[str] = []
+    lowered = content.lower()
+    required_groups = rule.get("required_term_groups")
+    if isinstance(required_groups, list) and required_groups:
+        for group in required_groups:
+            if isinstance(group, tuple) and not any(contains_term(content, term) for term in group):
+                errors.append(f"{filename}: {rule['error']}")
+                return errors
+        return errors
+    required_terms = rule.get("required_terms")
+    minimum_matches = int(rule.get("minimum_matches", 1))
+    if isinstance(required_terms, tuple) and count_term_matches(content, required_terms) < minimum_matches:
+        errors.append(f"{filename}: {rule['error']}")
+    return errors
+
+
+def experience_metadata_block(project: Path, checkpoint: int) -> list[str]:
+    start, end = cadence_window_bounds(checkpoint, EXPERIENCE_CADENCE_HANDOFFS)
+    conversation = recent_conversation_window(project)
+    handoffs = handoff_window(project, checkpoint)
+    return [
+        f"- Experience cadence: {checkpoint}",
+        f"- Covered handoff window: {start}-{end}",
+        f"- Source handoff count: {len(handoffs['entries'])}",
+        f"- Source conversation count: {conversation['count']}",
+        f"- Applied at: {datetime.now().isoformat(timespec='seconds')}",
+    ]
+
+
+def with_experience_metadata(project: Path, content: str, checkpoint: int) -> str:
+    lines = content.rstrip().splitlines()
+    title = lines[0] if lines and lines[0].startswith("# ") else "# Experience"
+    body = lines[1:] if lines and lines[0].startswith("# ") else lines
+    while body and not body[0].strip():
+        body = body[1:]
+    result = [title, ""]
+    result.extend(experience_metadata_block(project, checkpoint))
+    result.append("")
+    result.extend(body)
+    return "\n".join(result).rstrip() + "\n"
 
 
 def experience_file_specs(project: Path) -> list[dict[str, str]]:
@@ -405,22 +797,26 @@ def git_manager_doc() -> str:
         "",
         "## Workspace Management",
         "- Keep current development work in the working folder unless the user requests a separate worktree.",
+        "- Do not repoint repositories with `git config core.worktree`; prefer normal branch checkout/merge or explicit `git worktree` commands when separate work folders are required.",
         "",
         "## Branch Configuration",
         "- Protected branches: `master`, `release`.",
         "- Development branches are allowed as temporary local work branches.",
         "- Before releasing an installable `dist/` package, commit all work and merge development branches into `master`.",
+        "- Use `python scripts/manage_docs.py release-prepare <project> --version vX.Y.Z --skill-dir skills/<skill-name>` to auto-commit governed paths from the active temporary branch, merge it into `master`, and delete the local branch before packaging.",
         "- If a branch has unmerged commits, merge it to `master` before cleanup; never discard it silently.",
         "- After release preparation, delete local branches other than `master` and `release`.",
         "- Do not delete remote branches unless the user explicitly requests remote cleanup.",
-        "- Run `python scripts/manage_docs.py release-gate <project> --version vX.Y.Z --skill-dir skills/<skill-name>` before and after packaging to verify branch, worktree, release artifact, and parity gates.",
+        "- Run `python scripts/manage_docs.py release-gate <project> --version vX.Y.Z --skill-dir skills/<skill-name> --phase pre|post` before and after packaging to verify branch, worktree, release artifact, release receipt, and parity gates.",
         "",
         "## Release Configuration",
         "- Place installable releases under `dist/`.",
         "- Name installable release folders as `<name>-vx.x.x` and create a matching zip when required.",
+        "- Build installable releases with `python scripts/manage_docs.py package-release <project> --version vX.Y.Z --skill-dir skills/<skill-name>` so the versioned release directory, matching zip, and `RELEASE_RECEIPT.json` provenance stay aligned.",
+        "- Install only from the versioned release directory after receipt validation; never install directly from the source skill folder.",
         "- Package only after branch cleanup and release records are complete.",
         "- The release commit must include the release artifacts and the current `docs/git_manager/CHANGELOG.md` entry.",
-        "- If the user did not explicitly say whether to install after release, release handling must ask the install question instead of silently stopping.",
+        "- If the release is for a skill project and the user did not explicitly say whether to install after release, release handling must ask the install question instead of silently stopping. Engineering projects must not ask to install a skill.",
         "",
         "## Change Log",
         "- Update `docs/git_manager/CHANGELOG.md` before each commit that changes governed release or git-management behavior.",
@@ -817,13 +1213,18 @@ def recent_conversation_context(project: Path, limit: int = 10) -> list[dict[str
     return items
 
 
-def recent_handoff_history(project: Path, limit: int = 10) -> list[dict[str, str]]:
+def recent_handoff_history(project: Path, limit: int = 10) -> list[dict[str, Any]]:
     history = project / "docs" / "handoff" / "history_handoff"
     if not history.is_dir():
         return []
-    rows: list[dict[str, str]] = []
+    rows: list[dict[str, Any]] = []
     for path in sorted(history.glob("HANDOFF-*.md"), reverse=True)[:limit]:
-        rows.append({"path": path.relative_to(project).as_posix(), "content": path.read_text(encoding="utf-8", errors="ignore")})
+        content = path.read_text(encoding="utf-8", errors="ignore")
+        rows.append({
+            "path": path.relative_to(project).as_posix(),
+            "content": content,
+            "handoff_count": handoff_count_from_markdown(content),
+        })
     return rows
 
 
@@ -1069,12 +1470,16 @@ def build_experience_request(project: Path, count: int) -> dict[str, Any]:
     specs = experience_file_specs(project)
     filenames = [spec["filename"] for spec in specs]
     latest_handoff = project / "docs" / "handoff" / "HANDOFF.md"
+    checkpoint = latest_experience_due(count) or count
     conversations = recent_conversation_context(project, limit=10)
+    handoff_window_payload = handoff_window(project, checkpoint)
+    conversation_window_payload = recent_conversation_window(project)
     return {
         "schema_version": 1,
         "project": str(project),
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "handoff_count": count,
+        "cadence_checkpoint": checkpoint,
         "requires_ai_generation": True,
         "ai_must_read_recent_conversations": True,
         "conversation_context_limit": 10,
@@ -1084,14 +1489,22 @@ def build_experience_request(project: Path, count: int) -> dict[str, Any]:
         "control_profile": control_profile(project),
         "current_handoff": latest_handoff.read_text(encoding="utf-8", errors="ignore") if latest_handoff.exists() else "",
         "recent_handoff_history": recent_handoff_history(project, limit=10),
+        "handoff_window": handoff_window_payload,
+        "recent_conversation_window": conversation_window_payload,
         "current_experience": current_experience_files(project),
         "historical_experience": latest_historical_experience(project, filenames),
         "target_files": specs,
+        "detail_requirements": {
+            spec["filename"]: detail_requirements_for(spec["filename"])
+            for spec in specs
+        },
         "quality_rules": [
             "AI must generate topic-specific lessons; scripts only collect evidence and apply validated payloads.",
             "Experience files must be detailed and project-specific; concise placeholders are not acceptable.",
+            f"Summaries must cover the current cadence window {handoff_window_payload['start_handoff_count']}-{handoff_window_payload['end_handoff_count']} rather than the entire repository history.",
             "Every experience file must include sections: Evidence Read, Task Context, How To Apply, Problems And Risks, Iterated Lessons, and Next Application.",
             "Each non-workflow experience file must be detailed enough for a future maintainer to understand the task, implementation path, problems, and reuse conditions.",
+            "Each topic must name concrete changed artifacts, failed risks, verification evidence, and future reuse conditions rather than broad process advice.",
             "1-workflow.md must describe a complete skill or engineering development workflow, including the full process chain, logic chain, feedback/closure loops, and a Mermaid flowchart.",
             "Do not copy a full HANDOFF.md into experience files.",
             "Do not write highly similar content across the 10 experience files.",
@@ -1114,6 +1527,7 @@ def write_experience_request(project: Path, count: int) -> dict[str, Any]:
     target.write_text(json.dumps(request, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     state = load_state(project)
     state["experience_update_required"] = True
+    state["experience_request_due_at"] = int(request.get("cadence_checkpoint", count))
     state["experience_request"] = target.relative_to(project).as_posix()
     save_state(project, state)
     return {
@@ -1225,6 +1639,8 @@ def validate_experience_content(filename: str, content: str) -> list[str]:
         errors.append("4-design-ui.md: must either record 暂无 UI 经验 or contain UI/design-specific lessons")
     if filename == "1-workflow.md":
         errors.extend(workflow_experience_errors(content))
+    else:
+        errors.extend(validate_topic_specificity(filename, content))
     return errors
 
 
@@ -1312,9 +1728,9 @@ def inferred_evolution_category(project: Path) -> list[str]:
         return ["FPGA"]
     if "sort" in text or "sorting" in text or "排序" in text:
         return ["algorithm"]
-    if "agents-md" in text or "agents.md" in text or "agent rule" in text or "coding-agent" in text:
+    if "agents-md" in text or "agents.md" in text or "agent rule" in text or "coding-agent" in text or "agent governance" in text:
         return ["agent-governance"]
-    if "docs governance" in text or "handoff" in text or "experience" in text:
+    if "docs governance" in text or "docs-governance" in text or "handoff" in text or "experience" in text:
         return ["docs-governance"]
     if any(term in text for term in ("react", "next.js", "vue", "frontend", "ui", "gui")):
         return ["web", "frontend"]
@@ -1403,7 +1819,63 @@ def normalize_evolution_target(project: Path, raw: Any | None) -> tuple[dict[str
     return target, errors
 
 
-def validate_evolution_summaries(project: Path, summaries: dict[str, str]) -> list[str]:
+def target_schema_label(target: dict[str, Any]) -> str:
+    category_path = target.get("category_path", [])
+    if not isinstance(category_path, list):
+        category_path = []
+    return f"{target.get('family', 'unknown')}/{'/'.join(str(item) for item in category_path) or 'general'}"
+
+
+def evolution_schema_for(target: dict[str, Any]) -> dict[str, Any]:
+    family = str(target.get("family", "")).strip()
+    raw_path = target.get("category_path", [])
+    category_path = tuple(str(item).strip() for item in raw_path) if isinstance(raw_path, list) else tuple()
+    candidates = [
+        (family, category_path),
+        (family, category_path[:1]) if category_path else (family, tuple()),
+        (family, ("general",)),
+    ]
+    for key in candidates:
+        schema = EVOLUTION_CATEGORY_SCHEMAS.get(key)
+        if schema:
+            return schema
+    return {}
+
+
+def target_evidence_summary(project: Path, target: dict[str, Any]) -> list[str]:
+    profile = control_profile(project)
+    facts = inspect_project(project)
+    summary = [
+        f"Profile kind: {profile.get('kind', facts.get('project_type', 'unknown'))}",
+        f"Profile name: {profile.get('name', facts.get('project_name', project.name))}",
+        f"Framework/project type: {facts.get('framework', 'none')} / {facts.get('project_type', 'unknown')}",
+        f"Inference rationale: {target.get('rationale', 'not recorded')}",
+    ]
+    keyword_excerpt = [line for line in project_keyword_text(project).splitlines() if line.strip()][:4]
+    if keyword_excerpt:
+        summary.extend(f"Keyword evidence: {line[:160]}" for line in keyword_excerpt)
+    return summary
+
+
+def validate_workflow_schema_for_target(content: str, target: dict[str, Any]) -> list[str]:
+    schema = evolution_schema_for(target)
+    if not schema:
+        return []
+    label = target_schema_label(target)
+    groups = schema.get("workflow_required_groups", [])
+    if isinstance(groups, list):
+        for group in groups:
+            if isinstance(group, tuple) and not any(contains_term(content, term) for term in group):
+                return [f"1-workflow.md: evolution summary does not match workflow schema for {label}"]
+    forbidden = schema.get("workflow_forbidden_terms", ())
+    if isinstance(forbidden, tuple):
+        for term in forbidden:
+            if contains_term(content, str(term)):
+                return [f"1-workflow.md: evolution summary does not match workflow schema for {label}"]
+    return []
+
+
+def validate_evolution_summaries(project: Path, summaries: dict[str, str], target: dict[str, Any] | None = None) -> list[str]:
     errors: list[str] = []
     expected = [spec["filename"] for spec in experience_file_specs(project)[:4]]
     missing = [filename for filename in expected if filename not in summaries]
@@ -1417,10 +1889,15 @@ def validate_evolution_summaries(project: Path, summaries: dict[str, str]) -> li
             errors.append(f"{filename}: evolution summary missing required section ## {section}")
         if "## Reusable Lessons" in content:
             errors.append(f"{filename}: evolution summary must be a synthesis, not the old reusable-lessons copy format")
+    target_info = target or infer_evolution_target(project)
+    workflow = summaries.get("1-workflow.md", "")
+    if workflow:
+        errors.extend(validate_workflow_schema_for_target(workflow, target_info))
     return errors
 
 
 def write_evolution_request(project: Path, count: int, target: dict[str, Any], reason: str) -> dict[str, Any]:
+    schema = evolution_schema_for(target)
     request = {
         "schema_version": 1,
         "project": str(project),
@@ -1429,6 +1906,10 @@ def write_evolution_request(project: Path, count: int, target: dict[str, Any], r
         "requires_ai_generation": True,
         "reason": reason,
         "target": target,
+        "target_schema_label": target_schema_label(target),
+        "target_evidence": target_evidence_summary(project, target),
+        "flow_requirements": schema.get("flow_requirements", []),
+        "mixed_content_risks": schema.get("mixed_content_risks", []),
         "source_versions": {
             spec["filename"]: source_versions_for(project, spec["filename"])
             for spec in experience_file_specs(project)[:4]
@@ -1517,10 +1998,13 @@ def archive_obsolete_evolution_outputs(project: Path, root: Path, target_dir: Pa
 def run_evolution(project: Path, force: bool = False) -> dict[str, Any]:
     state = load_state(project)
     count = int(state.get("handoff_count", 0))
+    checkpoint = latest_evolution_due(count)
     last = int(state.get("last_evolution_at", 0))
-    if not force and (count < 10 or count % 10 != 0 or last == count):
+    if not force and (checkpoint == 0 or last >= checkpoint):
         return {"project": str(project), "skipped": True, "handoff_count": count, "last_evolution_at": last}
-    quality_errors = validate_current_experience_quality(project)
+    if checkpoint == 0:
+        checkpoint = count
+    quality_errors = validate_current_experience_quality(project, include_evolution_cadence=False)
     if quality_errors:
         return {"project": str(project), "skipped": True, "errors": quality_errors, "reason": "experience quality gate failed"}
     target_raw = state.get("last_evolution_target")
@@ -1529,7 +2013,7 @@ def run_evolution(project: Path, force: bool = False) -> dict[str, Any]:
         return {"project": str(project), "skipped": True, "errors": target_errors, "reason": "evolution target validation failed"}
     summaries = state.get("last_evolution_summary")
     if not isinstance(summaries, dict):
-        request = write_evolution_request(project, count, target, "AI-authored evolution_summary is required before writing reusable templates")
+        request = write_evolution_request(project, checkpoint, target, "AI-authored evolution_summary is required before writing reusable templates")
         return {
             "project": str(project),
             "skipped": True,
@@ -1537,9 +2021,9 @@ def run_evolution(project: Path, force: bool = False) -> dict[str, Any]:
             **request,
         }
     summary_map = {str(key): str(value) for key, value in summaries.items()}
-    summary_errors = validate_evolution_summaries(project, summary_map)
+    summary_errors = validate_evolution_summaries(project, summary_map, target)
     if summary_errors:
-        request = write_evolution_request(project, count, target, "evolution_summary failed quality validation")
+        request = write_evolution_request(project, checkpoint, target, "evolution_summary failed quality validation")
         return {"project": str(project), "skipped": True, "errors": summary_errors, **request}
 
     root = evolution_template_root(project)
@@ -1578,8 +2062,8 @@ def run_evolution(project: Path, force: bool = False) -> dict[str, Any]:
     index = {
         "schema_version": 1,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "handoff_count": count,
-        "cadence_handoffs": 10,
+        "handoff_count": checkpoint,
+        "cadence_handoffs": EVOLUTION_CADENCE_HANDOFFS,
         "version_window": "current-plus-latest-history",
         "target": target,
         "templates": index_entries,
@@ -1587,32 +2071,37 @@ def run_evolution(project: Path, force: bool = False) -> dict[str, Any]:
     index_path = root / "evolution-index.json"
     index_path.write_text(json.dumps(index, indent=2, sort_keys=True), encoding="utf-8")
     written.append(index_path.relative_to(project).as_posix())
-    state["last_evolution_at"] = count
+    state["last_evolution_at"] = checkpoint
     save_state(project, state)
-    return {"project": str(project), "written": written, "archived": archived, "handoff_count": count, "index": str(index_path), "target": target}
+    return {"project": str(project), "written": written, "archived": archived, "handoff_count": checkpoint, "index": str(index_path), "target": target}
 
 
 def apply_experience_payload(project: Path, payload_path: str) -> dict[str, Any]:
     scaffold(project)
+    state = load_state(project)
+    count = int(state.get("handoff_count", 0))
+    checkpoint = latest_experience_due(count) or count
+    requires_atomic_evolution = checkpoint >= EVOLUTION_CADENCE_HANDOFFS and checkpoint % EVOLUTION_CADENCE_HANDOFFS == 0
     payload = read_input(payload_path)
     entries, errors = validate_experience_payload(project, payload)
     target, target_errors = normalize_evolution_target(project, payload.get("evolution_target") if "evolution_target" in payload else None)
     errors.extend(target_errors)
     summaries = payload_evolution_summary(payload)
+    if requires_atomic_evolution and not summaries:
+        errors.append("evolution_summary is required before writing reusable templates")
     if summaries:
-        errors.extend(validate_evolution_summaries(project, summaries))
+        errors.extend(validate_evolution_summaries(project, summaries, target))
     if errors:
         return {"project": str(project), "errors": errors}
     archived = archive_experience_files(project)
     written: list[str] = []
     for spec in experience_file_specs(project):
         target = project / "docs" / "experience" / spec["filename"]
-        target.write_text(entries[spec["filename"]].rstrip() + "\n", encoding="utf-8")
+        target.write_text(with_experience_metadata(project, entries[spec["filename"]], checkpoint), encoding="utf-8")
         written.append(str(target))
-    state = load_state(project)
-    count = int(state.get("handoff_count", 0))
-    state["last_experience_at"] = count
+    state["last_experience_at"] = checkpoint
     state["experience_update_required"] = False
+    state.pop("experience_request_due_at", None)
     payload_resolved = Path(payload_path).resolve()
     try:
         state["last_experience_payload"] = payload_resolved.relative_to(project).as_posix()
@@ -1624,9 +2113,11 @@ def apply_experience_payload(project: Path, payload_path: str) -> dict[str, Any]
     else:
         state.pop("last_evolution_summary", None)
     save_state(project, state)
-    result: dict[str, Any] = {"project": str(project), "written": written, "archived": archived, "handoff_count": count}
-    if count >= 10 and count % 10 == 0:
+    result: dict[str, Any] = {"project": str(project), "written": written, "archived": archived, "handoff_count": checkpoint}
+    if requires_atomic_evolution:
         result["evolution"] = run_evolution(project)
+        if result["evolution"].get("errors"):
+            result["errors"] = list(result["evolution"]["errors"])
     return result
 
 
@@ -1636,17 +2127,26 @@ def write_experience(project: Path, force: bool = False, payload_path: str | Non
     scaffold(project)
     state = load_state(project)
     count = int(state.get("handoff_count", 0))
+    checkpoint = latest_experience_due(count)
     last = int(state.get("last_experience_at", 0))
-    if not force and count - last < 5:
+    if not force and (checkpoint == 0 or last >= checkpoint):
         return {"project": str(project), "skipped": True, "handoff_count": count, "last_experience_at": last}
-    return write_experience_request(project, count)
+    return write_experience_request(project, checkpoint or count)
 
 
-def validate_current_experience_quality(project: Path) -> list[str]:
+def validate_current_experience_quality(project: Path, *, include_evolution_cadence: bool = True) -> list[str]:
     state = load_state(project)
     errors: list[str] = []
-    if state.get("experience_update_required"):
+    count = int(state.get("handoff_count", 0))
+    experience_due = latest_experience_due(count)
+    last_experience = int(state.get("last_experience_at", 0))
+    if experience_due and last_experience < experience_due:
+        errors.append(f"cadence requires an applied AI experience update at handoff {experience_due}")
+    if state.get("experience_update_required") and experience_due:
         errors.append("experience update requires AI-generated payload before it can be considered current")
+    evolution_due = latest_evolution_due(count)
+    if include_evolution_cadence and evolution_due and int(state.get("last_evolution_at", 0)) < evolution_due:
+        errors.append(f"cadence requires completed evolution at handoff {evolution_due}")
     entries = current_experience_files(project)
     expected = [spec["filename"] for spec in experience_file_specs(project)]
     for filename in expected:
@@ -1773,6 +2273,270 @@ def run_git(project: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", *args], cwd=project, text=True, capture_output=True, check=False)
 
 
+def git_ok(project: Path, args: list[str]) -> tuple[bool, str]:
+    result = run_git(project, args)
+    return result.returncode == 0, (result.stdout or result.stderr).strip()
+
+
+def governed_allowed_paths(profile: dict[str, Any], skill_dir: Path, project: Path) -> list[str]:
+    policy = profile.get("git_branch_policy", {}) if isinstance(profile.get("git_branch_policy"), dict) else {}
+    configured = policy.get("release_prepare_allowed_paths")
+    if isinstance(configured, list) and configured:
+        return [str(item).replace("\\", "/").strip().strip("/") for item in configured if str(item).strip()]
+    rel_skill = skill_dir.relative_to(project).as_posix() if skill_dir.is_relative_to(project) else skill_dir.name
+    return [rel_skill, "tests", "docs", ".agents", "AGENTS.md", "dist"]
+
+
+def receipt_filename(profile: dict[str, Any]) -> str:
+    release = profile.get("release_contract", {}) if isinstance(profile.get("release_contract"), dict) else {}
+    value = str(release.get("receipt_file", "RELEASE_RECEIPT.json")).strip()
+    return value or "RELEASE_RECEIPT.json"
+
+
+def matches_governed_path(path: str, allowed: list[str]) -> bool:
+    normalized = path.replace("\\", "/").strip().lstrip("./")
+    for prefix in allowed:
+        if normalized == prefix or normalized.startswith(prefix + "/"):
+            return True
+    return False
+
+
+def parse_status_paths(line: str) -> list[str]:
+    body = line[3:].strip() if len(line) >= 4 else line.strip()
+    if " -> " in body:
+        old_path, new_path = body.split(" -> ", 1)
+        return [old_path.strip().replace("\\", "/"), new_path.strip().replace("\\", "/")]
+    return [body.replace("\\", "/")]
+
+
+def changed_paths(project: Path) -> tuple[list[str], list[str]]:
+    status = run_git(project, ["status", "--short"])
+    if status.returncode != 0:
+        return [], ["git status --short failed"]
+    paths: list[str] = []
+    for line in status.stdout.splitlines():
+        if not line.strip():
+            continue
+        paths.extend(parse_status_paths(line))
+    return sorted(set(path for path in paths if path)), []
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def build_release_file_manifest(root: Path, *, exclude: set[str] | None = None) -> list[dict[str, str]]:
+    excluded = exclude or set()
+    manifest: list[dict[str, str]] = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(root).as_posix()
+        if relative in excluded:
+            continue
+        manifest.append({"path": relative, "sha256": sha256_file(path)})
+    return manifest
+
+
+def write_release_zip(release_dir: Path, zip_path: Path) -> None:
+    zip_path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(release_dir.rglob("*")):
+            if path.is_file():
+                archive.write(path, path.relative_to(release_dir.parent).as_posix())
+
+
+def read_release_receipt(path: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def verify_release_receipt(project: Path, receipt_path: Path, release_dir: Path, skill_name: str, version: str, source_rel: str, *, require_repo_dist: bool) -> list[str]:
+    receipt = read_release_receipt(receipt_path)
+    errors: list[str] = []
+    if not receipt:
+        return [f"invalid release receipt: {display_path(receipt_path, project)}"]
+    if str(receipt.get("skill_name", "")).strip() != skill_name:
+        errors.append("release receipt skill_name does not match release directory")
+    if str(receipt.get("version", "")).strip() != version:
+        errors.append("release receipt version does not match requested release version")
+    if str(receipt.get("source_path", "")).strip().replace("\\", "/") != source_rel:
+        errors.append("release receipt source_path does not match skill source path")
+    expected_validation = "strong" if require_repo_dist else "reduced_assurance"
+    if str(receipt.get("validation_level", "")).strip() != expected_validation:
+        errors.append("release receipt validation_level is inconsistent with the release source")
+    expected_files = build_release_file_manifest(release_dir, exclude={receipt_path.name})
+    actual_files = receipt.get("files")
+    if not isinstance(actual_files, list):
+        errors.append("release receipt files list is missing")
+    else:
+        filtered = []
+        for item in actual_files:
+            if not isinstance(item, dict):
+                errors.append("release receipt files list contains invalid entries")
+                continue
+            filtered.append({"path": str(item.get("path", "")).strip(), "sha256": str(item.get("sha256", "")).strip()})
+        if filtered != expected_files:
+            errors.append("release receipt file manifest does not match packaged release contents")
+    return errors
+
+
+def current_branch_and_locals(project: Path) -> tuple[str, list[str], list[str]]:
+    git_branch_result = run_git(project, ["branch", "--show-current"])
+    git_list_result = run_git(project, ["branch", "--list"])
+    git_status_result = run_git(project, ["status", "--short"])
+    if any(result.returncode != 0 for result in [git_branch_result, git_list_result, git_status_result]):
+        return "", [], []
+    current_branch = git_branch_result.stdout.strip()
+    local_branches = sorted(line.strip().lstrip("* ").strip() for line in git_list_result.stdout.splitlines() if line.strip())
+    status_lines = [line for line in git_status_result.stdout.splitlines() if line.strip()]
+    return current_branch, local_branches, status_lines
+
+
+def release_prepare(project: Path, version: str, skill_dir_raw: str) -> dict[str, Any]:
+    profile = read_json(project / ".agents" / "agents-control.json")
+    skill_dir = resolve_project(skill_dir_raw if Path(skill_dir_raw).is_absolute() else project / skill_dir_raw)
+    current_branch, local_branches, status_lines = current_branch_and_locals(project)
+    protected = sorted((profile.get("git_branch_policy", {}) or {}).get("protected_branches", ["master", "release"]))
+    extras = sorted(branch for branch in local_branches if branch not in protected)
+    errors: list[str] = []
+    checks: dict[str, Any] = {
+        "current_branch": current_branch,
+        "local_branches": local_branches,
+        "protected_branches": protected,
+        "prepared_branch": "",
+    }
+    if not current_branch and not local_branches:
+        errors.append("release prepare requires a readable local git repository")
+        return {"ok": False, "errors": errors, "checks": checks}
+    if current_branch == "master":
+        if len(extras) > 1:
+            errors.append(f"multiple extra local branches require manual resolution before release prepare: {extras}")
+        elif len(extras) == 1:
+            errors.append(f"master cannot guess which extra local branch to prepare automatically: {extras[0]}")
+        else:
+            return {"ok": True, "errors": [], "checks": checks}
+        return {"ok": False, "errors": errors, "checks": checks}
+    if current_branch in protected:
+        errors.append(f"release prepare only handles temporary development branches, found protected branch {current_branch}")
+        return {"ok": False, "errors": errors, "checks": checks}
+    if extras != [current_branch]:
+        errors.append(f"release prepare requires exactly one temporary development branch, found {extras}")
+        return {"ok": False, "errors": errors, "checks": checks}
+    allowed = governed_allowed_paths(profile, skill_dir, project)
+    changed, changed_errors = changed_paths(project)
+    errors.extend(changed_errors)
+    outside = [path for path in changed if not matches_governed_path(path, allowed)]
+    if outside:
+        errors.append(f"release prepare found changes outside governed release paths: {outside}")
+        return {"ok": False, "errors": errors, "checks": checks}
+    stage_targets = sorted(set(path for path in changed if matches_governed_path(path, allowed)))
+    if stage_targets and run_git(project, ["add", "--all", "--", *stage_targets]).returncode != 0:
+        errors.append("release prepare failed to stage governed release paths")
+        return {"ok": False, "errors": errors, "checks": checks}
+    diff_cached = run_git(project, ["diff", "--cached", "--quiet"])
+    if diff_cached.returncode == 1:
+        commit_message = f"release-prepare: stage {current_branch} for {version}"
+        commit_result = run_git(project, ["commit", "-m", commit_message])
+        if commit_result.returncode != 0:
+            errors.append(f"release prepare failed to commit staged changes: {(commit_result.stderr or commit_result.stdout).strip()}")
+            return {"ok": False, "errors": errors, "checks": checks}
+    elif diff_cached.returncode not in {0, 1}:
+        errors.append("release prepare could not inspect staged changes")
+        return {"ok": False, "errors": errors, "checks": checks}
+    checkout_master = run_git(project, ["checkout", "master"])
+    if checkout_master.returncode != 0:
+        errors.append(f"release prepare failed to checkout master: {(checkout_master.stderr or checkout_master.stdout).strip()}")
+        return {"ok": False, "errors": errors, "checks": checks}
+    merge_message = f"release-prepare: merge {current_branch} into master for {version}"
+    merge = run_git(project, ["merge", "--no-ff", current_branch, "-m", merge_message])
+    if merge.returncode != 0:
+        errors.append(f"release prepare failed to merge {current_branch} into master: {(merge.stderr or merge.stdout).strip()}")
+        return {"ok": False, "errors": errors, "checks": checks}
+    delete_branch = run_git(project, ["branch", "-d", current_branch])
+    if delete_branch.returncode != 0:
+        errors.append(f"release prepare failed to delete branch {current_branch}: {(delete_branch.stderr or delete_branch.stdout).strip()}")
+        return {"ok": False, "errors": errors, "checks": checks}
+    final_branch, final_locals, final_status = current_branch_and_locals(project)
+    checks.update({
+        "prepared_branch": current_branch,
+        "current_branch": final_branch,
+        "local_branches": final_locals,
+        "status_lines": final_status,
+    })
+    if final_branch != "master":
+        errors.append("release prepare did not end on master")
+    if sorted(final_locals) != protected:
+        errors.append(f"release prepare did not end with only protected branches {protected}")
+    if final_status:
+        errors.append("release prepare requires a clean worktree after merge and branch cleanup")
+    return {"ok": not errors, "errors": errors, "checks": checks}
+
+
+def copy_release_tree(skill_dir: Path, release_dir: Path) -> None:
+    if release_dir.exists():
+        shutil.rmtree(release_dir)
+    ignore = shutil.ignore_patterns(".git", "__pycache__", "*.pyc", "AGENTS.md")
+    shutil.copytree(skill_dir, release_dir, ignore=ignore)
+
+
+def package_release(project: Path, version: str, skill_dir_raw: str) -> dict[str, Any]:
+    profile = read_json(project / ".agents" / "agents-control.json")
+    skill_dir = resolve_project(skill_dir_raw if Path(skill_dir_raw).is_absolute() else project / skill_dir_raw)
+    skill_name = skill_dir.name
+    source_rel = skill_dir.relative_to(project).as_posix() if skill_dir.is_relative_to(project) else skill_dir.name
+    pre = release_gate(project, version, skill_dir_raw, "pre", "unspecified")
+    if pre["errors"]:
+        return {"ok": False, "errors": pre["errors"], "pre_gate": pre}
+    release_dir = project / "dist" / f"{skill_name}-{version}"
+    zip_path = project / "dist" / f"{skill_name}-{version}.zip"
+    copy_release_tree(skill_dir, release_dir)
+    receipt_path = release_dir / receipt_filename(profile)
+    receipt = {
+        "skill_name": skill_name,
+        "version": version,
+        "source_path": source_rel,
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "current_branch": "master",
+        "local_branches": ["master", "release"],
+        "worktree_clean": True,
+        "phase_results": {"pre": True, "post": True},
+        "packaging_mode": "repository-dist",
+        "validation_level": "strong",
+        "provenance_mode": "repository-dist",
+        "files": build_release_file_manifest(release_dir),
+    }
+    receipt_path.write_text(json.dumps(receipt, indent=2), encoding="utf-8")
+    write_release_zip(release_dir, zip_path)
+    add_result = run_git(project, ["add", "--all", "--", "dist"])
+    if add_result.returncode != 0:
+        return {"ok": False, "errors": ["package release failed to stage dist artifacts"], "pre_gate": pre}
+    diff_cached = run_git(project, ["diff", "--cached", "--quiet"])
+    if diff_cached.returncode == 1:
+        commit_result = run_git(project, ["commit", "-m", f"package-release: {skill_name} {version}"])
+        if commit_result.returncode != 0:
+            return {"ok": False, "errors": [f"package release failed to commit dist artifacts: {(commit_result.stderr or commit_result.stdout).strip()}"], "pre_gate": pre}
+    elif diff_cached.returncode not in {0, 1}:
+        return {"ok": False, "errors": ["package release could not inspect staged release artifacts"], "pre_gate": pre}
+    post = release_gate(project, version, skill_dir_raw, "post", "unspecified")
+    return {
+        "ok": not post["errors"],
+        "errors": post["errors"],
+        "release_dir": display_path(release_dir, project),
+        "release_zip": display_path(zip_path, project),
+        "receipt_path": display_path(receipt_path, project),
+        "pre_gate": pre,
+        "post_gate": post,
+    }
+
+
 def branch_gate(project: Path) -> dict[str, Any]:
     profile = read_json(project / ".agents" / "agents-control.json")
     if not isinstance(profile, dict):
@@ -1886,11 +2650,26 @@ def release_members(root: Path, prefix: Path) -> list[str]:
     return sorted(path.relative_to(prefix).as_posix() for path in root.rglob("*") if path.is_file())
 
 
+def release_project_kind(project: Path, skill_dir: Path) -> str:
+    profile = read_json(project / ".agents" / "agents-control.json")
+    if isinstance(profile, dict):
+        kind = str(profile.get("kind", "")).strip().lower()
+        if kind in {"skill", "engineering"}:
+            return kind
+    if (skill_dir / "SKILL.md").is_file():
+        return "skill"
+    return "engineering"
+
+
 def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str, install_intent: str) -> dict[str, Any]:
+    profile = read_json(project / ".agents" / "agents-control.json")
     skill_dir = resolve_project(skill_dir_raw if Path(skill_dir_raw).is_absolute() else project / skill_dir_raw)
     skill_name = skill_dir.name
+    project_kind = release_project_kind(project, skill_dir)
     expected_release = project / "dist" / f"{skill_name}-{version}"
     expected_zip = project / "dist" / f"{skill_name}-{version}.zip"
+    source_rel = skill_dir.relative_to(project).as_posix() if skill_dir.is_relative_to(project) else skill_dir.name
+    receipt_path = expected_release / receipt_filename(profile)
     source_version = read_skill_version(skill_dir)
     git_branch = run_git(project, ["branch", "--show-current"]).stdout.strip()
     branches = sorted(line.strip().lstrip("* ").strip() for line in run_git(project, ["branch", "--list"]).stdout.splitlines() if line.strip())
@@ -1901,10 +2680,12 @@ def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str, in
         "local_branches": branches,
         "phase": phase,
         "install_intent": install_intent,
+        "project_kind": project_kind,
         "skill_dir": skill_dir.relative_to(project).as_posix() if skill_dir.is_relative_to(project) else str(skill_dir),
         "source_version": source_version,
         "expected_release_dir": expected_release.relative_to(project).as_posix(),
         "expected_release_zip": expected_zip.relative_to(project).as_posix(),
+        "receipt_path": expected_release.joinpath(receipt_filename(profile)).relative_to(project).as_posix(),
         "status_lines": status_lines,
     }
     if source_version and source_version != version:
@@ -1913,6 +2694,8 @@ def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str, in
         errors.append("release gate requires current branch master")
     if sorted(branches) != ["master", "release"]:
         errors.append("release gate requires only local branches master and release")
+    if phase == "pre" and status_lines:
+        errors.append("pre-release gate requires a clean committed worktree")
     if phase == "post":
         if status_lines:
             errors.append("post-release gate requires a clean committed worktree")
@@ -1922,16 +2705,39 @@ def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str, in
             errors.append(f"missing release zip: {expected_zip.relative_to(project).as_posix()}")
         if expected_release.is_dir():
             source_files = release_members(skill_dir, skill_dir)
-            release_files = release_members(expected_release, expected_release)
+            release_files = sorted(item["path"] for item in build_release_file_manifest(expected_release, exclude={receipt_path.name}))
             if source_files != release_files:
                 errors.append("release parity mismatch between skill source and dist release directory")
+            if not receipt_path.is_file():
+                errors.append(f"missing release receipt: {receipt_path.relative_to(project).as_posix()}")
+            else:
+                errors.extend(
+                    verify_release_receipt(
+                        project,
+                        receipt_path,
+                        expected_release,
+                        skill_name,
+                        version,
+                        source_rel,
+                        require_repo_dist=True,
+                    )
+                )
     latest = latest_release_dir(project, skill_name)
     if latest is not None:
         checks["latest_release_dir"] = latest.relative_to(project).as_posix()
         if parse_version_tuple(version) < parse_version_tuple(latest.name.rsplit("-", 1)[-1]):
             errors.append("requested release version is older than the latest dist release")
-    result = {"project": str(project), "ok": not errors, "errors": errors, "checks": checks}
-    if phase == "post" and install_intent == "unspecified":
+    result = {
+        "project": str(project),
+        "ok": not errors,
+        "errors": errors,
+        "checks": checks,
+        "installable": not errors and phase == "post",
+        "receipt_path": checks["receipt_path"],
+        "provenance_mode": "repository-dist",
+        "validation_level": "strong",
+    }
+    if phase == "post" and install_intent == "unspecified" and project_kind == "skill":
         result["install_confirmation_required"] = True
         result["confirmation_question"] = "释放安装版本后，用户尚未说明是否需要安装。是否需要安装当前发布包？"
         result["install_options"] = install_confirmation_options()
@@ -2039,6 +2845,16 @@ def main() -> None:
     release_gate_parser.add_argument("--phase", choices=["pre", "post"], default="pre")
     release_gate_parser.add_argument("--install-intent", choices=["unspecified", "requested", "skipped"], default="unspecified")
 
+    release_prepare_parser = subparsers.add_parser("release-prepare")
+    release_prepare_parser.add_argument("project", nargs="?", default=".")
+    release_prepare_parser.add_argument("--version", required=True)
+    release_prepare_parser.add_argument("--skill-dir", required=True)
+
+    package_release_parser = subparsers.add_parser("package-release")
+    package_release_parser.add_argument("project", nargs="?", default=".")
+    package_release_parser.add_argument("--version", required=True)
+    package_release_parser.add_argument("--skill-dir", required=True)
+
     branch_gate_parser = subparsers.add_parser("branch-gate")
     branch_gate_parser.add_argument("project", nargs="?", default=".")
 
@@ -2083,6 +2899,16 @@ def main() -> None:
             raise SystemExit(1)
     elif args.command == "release-gate":
         result = release_gate(project, args.version, args.skill_dir, args.phase, args.install_intent)
+        emit_json(result)
+        if result["errors"]:
+            raise SystemExit(1)
+    elif args.command == "release-prepare":
+        result = release_prepare(project, args.version, args.skill_dir)
+        emit_json(result)
+        if result["errors"]:
+            raise SystemExit(1)
+    elif args.command == "package-release":
+        result = package_release(project, args.version, args.skill_dir)
         emit_json(result)
         if result["errors"]:
             raise SystemExit(1)

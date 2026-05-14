@@ -65,6 +65,11 @@
 {{DOCUMENTATION_GOVERNANCE_CONTRACT}}
 <!-- AGENTS-GENERATED:END documentation-governance-contract -->
 
+<!-- AGENTS-GENERATED:START evolution-template-guidance -->
+## Evolution Template Guidance
+{{EVOLUTION_TEMPLATE_GUIDANCE}}
+<!-- AGENTS-GENERATED:END evolution-template-guidance -->
+
 <!-- AGENTS-GENERATED:START file-map -->
 ## File Map
 {{FILE_MAP}}

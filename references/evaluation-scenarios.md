@@ -20,6 +20,7 @@ Use these scenarios to forward-test the skill after changes.
 | Auto evolution | Every tenth completed handoff distills accepted core experience files into indexed guidance under exactly one matching family, either `assets/templates/evolution/skill-template/<category>/<type>/` for skills or `assets/templates/evolution/engineering-template/<category>/<type>/` for engineering projects |
 | interrupted session | `start-session` creates an active session, `resume-check` detects an unchanged HANDOFF.md after interruption, and `resume-repair` writes a recovery handoff |
 | Directory governance | Strong-control generation creates `docs/dir_manager/`; planned local and remote deployment directory changes are governed, unsafe top-level, governance, or project-outside path changes are blocked, remote deployments do not sync local skill-development content by default, and force-confirmed blocked changes archive old dir manager content under `history_dir_manager/<timestamp>/` |
-| Release install confirmation | After validation, `install_skill.py` defaults to skip and installs only when Codex or custom target plus `--write` are explicit |
+| Release install confirmation | After validation, only skill-development release flows ask about `install_skill.py`; engineering releases do not prompt for skill installation |
+| Old workspace takeover | A landed workspace with missing or stale root `AGENTS.md` enters takeover mode, asks only for minimal identity fields, generates a strong-control profile, and then uses forced local directory takeover instead of a full design interview |
 | Bad paths | Verification reports missing or suspicious path references |
 | Placeholder leak | Verification reports unresolved `{{PLACEHOLDER}}` tokens |

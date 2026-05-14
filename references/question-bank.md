@@ -2,9 +2,19 @@
 
 Ask only when repository inspection cannot answer the question.
 
+## Table of Contents
+
+- [Mandatory Design Interview](#mandatory-design-interview)
+- [Trigger And Docs Layout Questions](#trigger-and-docs-layout-questions)
+- [Human Policy](#human-policy)
+- [Engineering Rule Policy](#engineering-rule-policy)
+- [Verification Policy](#verification-policy)
+- [Workflow Policy](#workflow-policy)
+- [Domain Context](#domain-context)
+
 ## Mandatory Design Interview
 
-Run `python scripts/collect_design_profile.py <project>` first and ask question 1. After the user confirms the branch, rerun with `--kind skill` or `--kind engineering`, ask every returned question in order using the returned selectable `options`, then show `review_summary` and ask the yes/no `confirmation_question`. If the user says no, collect corrections and repeat the summary. Validate answers with `collect_design_profile.py --answers <answers.json>` first; use `--write` only after setting `alignment_confirmed=true`.
+Start grouped interviews with `python scripts/collect_design_profile.py <project> --start`. Resume unfinished chains with `--resume`, answer only the current group with `--answer-file partial.json`, and never silently skip an unfinished `.agents/design-interview-state.json` chain. After each group, show `review_summary` and ask the yes/no `confirmation_question`. If the user says no, keep the interview on that same group until it is re-confirmed. Save the final aligned answers to JSON only after the last `alignment_confirmed=true`, then use `collect_design_profile.py --answers <answers.json> --write`.
 
 | ID | Branch | Ask |
 |----|--------|-----|
@@ -28,6 +38,9 @@ Run `python scripts/collect_design_profile.py <project>` first and ask question 
 | 29 | skill | What is the expected result after development is complete? |
 | 30 | skill | How should the completed skill be validated? |
 | 31 | skill | What validation granularity is required before final acceptance? |
+| 42 | all | What is the governed local directory structure for source, tests, dist, docs, and supporting files? |
+| 43 | all | What is the governed remote directory structure or the explicit statement that no remote structure is configured? |
+| 44 | all | What are the fixed rules for where new features, scripts, docs, tests, and release artifacts must go? |
 | 11 | engineering | What does this project do? |
 | 12 | engineering | Why build this project? |
 | 13 | engineering | What are the expected outcome and goals? |
@@ -37,20 +50,29 @@ Run `python scripts/collect_design_profile.py <project>` first and ask question 
 | 17 | engineering | Should this project use local git management without remote submission? |
 | 18 | engineering | Is the project folder the `master` branch and `dist/` the release branch area? |
 | 19 | engineering | Should release folders be named `<project-name>-vx.x.x` under `dist/` and zipped? |
+| 33 | engineering | What are the detailed engineering development requirements? |
+| 34 | engineering | What are the engineering resource boundaries for source, scripts, tests, docs, deployment, and release artifacts? |
+| 35 | engineering | How should the completed engineering project be validated? |
+| 36 | engineering | What validation granularity is required before final acceptance? |
+| 37 | engineering | When is forward-testing required, and how should it be performed? |
+| 38 | engineering | Which one primary engineering rule set should shape this project, or should no book-derived rule set be active? |
+| 39 | engineering | Should the engineering rule set use `none`, `mini`, or `nano` mode? |
+| 40 | engineering | Should the engineering rule set be `project-baseline`, `scoped`, or `on-demand`? |
+| 41 | engineering | What local engineering-rule notes or tradeoffs should be preserved? |
 | 20 | all | Does the current working folder already contain a project or skill? |
-| 21 | all | If yes, confirm the AGENTS.md is generated from current content and the local, remote, and feature-addition directory structures are fixed. |
+| 21 | all | Confirm that the local, remote, and feature-addition directory rules are fixed strongly enough to become the directory contract. |
 
 ## Trigger And Docs Layout Questions
 
 | Need | Ask |
 |------|-----|
-| Root AGENTS.md missing | This work folder has no root `AGENTS.md`; should I enter AGENTS.md design or restructuring for this project now? |
-| Root AGENTS.md version abnormal | The current work folder root `AGENTS.md` is missing `agents_version` or `generator_version`, or the version does not match the installed `agents-md-generator`; should I enter the AGENTS.md design or restructuring flow now? |
+| Root AGENTS.md missing | If this work folder already has landed content, do not launch the full design interview. Enter takeover mode, confirm only the project type, name, default language, and remote structure when needed, then force local directory takeover and governance scaffolding. |
+| Root AGENTS.md version abnormal | If the current work folder root `AGENTS.md` is version-abnormal and the folder already has landed content, do not enter the full design interview. Enter takeover mode and continue with forced governance takeover after minimal confirmation. |
 | Existing content but no AGENTS | This work folder already has landed content but no root `AGENTS.md`; should I first read the exact-cwd Codex sessions, generate history experience, and then write the latest current experience files before normal AGENTS generation continues? |
 | User says 计划/规划/准备 | Because this is a current workspace/current repository/current work folder planning request, should I first inspect the root `AGENTS.md`, report pass-only when it is healthy, and ask before entering AGENTS design or restructuring when it is abnormal? |
 | Branch governance abnormal | The current work folder branch state does not match the configured branch model; should I enter branch cleanup or release governance before normal generation continues? |
 | Existing docs layout ambiguous | Existing `docs/` content may conflict with AGENTS.md governance. Is it acceptable to add governance subdirectories under the existing `docs/` folder? |
-| Structure governance abnormal | The current work folder structure does not match the governed root or allowed top-level paths. Should I normalize the structure first? Recommend yes by default. |
+| Structure governance abnormal | Normal design flow asks whether to normalize the structure first. Takeover mode does not ask again; it should proceed with forced local takeover using `manage_dirs.py takeover-fix`. |
 
 ## Human Policy
 

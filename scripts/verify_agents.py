@@ -53,6 +53,13 @@ def validate_strong_control(text: str, file: str, project: Path, errors: list[st
     docs_result = verify_docs(project)
     errors.extend(f"{file}: {item}" for item in docs_result["errors"])
     profile = read_json(project / ".agents" / "agents-control.json")
+    git_management = str(profile.get("git_management", "")).strip()
+    if git_management in {"yes-local-only", "remote-allowed"}:
+        release_body = section_body(text, "## Release Contract")
+        if release_body is None:
+            errors.append(f"{file}: git-managed strong-control project requires ## Release Contract")
+        elif "core.worktree" not in release_body or "Do not repoint repositories" not in release_body:
+            errors.append(f"{file}: Release Contract must explicitly forbid `git config core.worktree` for git-managed workflows")
     if profile.get("kind") == "skill":
         contract_body = section_body(text, "## Skill Design Contract")
         if contract_body is None:

@@ -1,14 +1,14 @@
 {
   "cadence_handoffs": 10,
-  "generated_at": "2026-05-12T17:18:00",
-  "handoff_count": 10,
+  "generated_at": "2026-05-14T13:42:18",
+  "handoff_count": 20,
   "schema_version": 1,
   "target": {
     "category_path": [
       "agent-governance"
     ],
     "family": "skill-template",
-    "rationale": "Inferred from AGENTS.md generator skill facts and governance-specific repository content.",
+    "rationale": "Inferred from project control profile, repository facts, and topic keywords.",
     "source": "inferred",
     "type_slug": "agents-md-generator"
   },
@@ -19,10 +19,10 @@
       ],
       "family": "skill-template",
       "output": "skills/agents-md-generator/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/1-workflow.md",
-      "sha256": "c433d84866865a55eea6cc549f5d72fab728c5de2e72684286d1e6f7d8d6ae88",
+      "sha256": "8b7c2b9d0ee26c84b89330877abebbf227faf33975acce2a859bc7f63b30ff09",
       "source_versions": [
         "docs/experience/1-workflow.md",
-        "docs/experience/history_experience/20260512-165633/1-workflow.md"
+        "docs/experience/history_experience/20260514-134203/1-workflow.md"
       ],
       "target_type": "agents-md-generator",
       "topic": "1-workflow.md"
@@ -33,10 +33,10 @@
       ],
       "family": "skill-template",
       "output": "skills/agents-md-generator/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/2-scripts.md",
-      "sha256": "89fc3d50995e6a79240b44ffa77b6038099d845d089bf0874fb6fbccdf755009",
+      "sha256": "916baedb4eeeda06de75820ab67576ef2413d7ed4788b981d9d66272eefc4e7a",
       "source_versions": [
         "docs/experience/2-scripts.md",
-        "docs/experience/history_experience/20260512-165633/2-scripts.md"
+        "docs/experience/history_experience/20260514-134203/2-scripts.md"
       ],
       "target_type": "agents-md-generator",
       "topic": "2-scripts.md"
@@ -47,10 +47,10 @@
       ],
       "family": "skill-template",
       "output": "skills/agents-md-generator/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/3-plan.md",
-      "sha256": "3ab6f9a8f002cb4516bbd60d06aa71e50ff0d089c156ef726d7d6814fb6f5c2a",
+      "sha256": "70418b961b77530ff5e3f4fbdb8d689cf0dbfba092d4235c6a5cc679c38a0a1a",
       "source_versions": [
         "docs/experience/3-plan.md",
-        "docs/experience/history_experience/20260512-165633/3-plan.md"
+        "docs/experience/history_experience/20260514-134203/3-plan.md"
       ],
       "target_type": "agents-md-generator",
       "topic": "3-plan.md"
@@ -61,10 +61,10 @@
       ],
       "family": "skill-template",
       "output": "skills/agents-md-generator/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/4-design-ui.md",
-      "sha256": "4357f8a6f21e20210eaa8c44c8ee49f2c89849900a59a8cf0091deeadf2c0809",
+      "sha256": "c1d27b3363fedf6f4c0a315cba977c92017b863b355d3a2d3c69b679f2ccef34",
       "source_versions": [
         "docs/experience/4-design-ui.md",
-        "docs/experience/history_experience/20260512-165633/4-design-ui.md"
+        "docs/experience/history_experience/20260514-134203/4-design-ui.md"
       ],
       "target_type": "agents-md-generator",
       "topic": "4-design-ui.md"

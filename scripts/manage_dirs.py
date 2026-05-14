@@ -39,6 +39,14 @@ GOVERNANCE_PREFIXES = {
     "docs/handoff",
     "docs/git_manager",
 }
+TAKEOVER_PRESERVE_ROOT_FILES = {
+    "AGENTS.md",
+    "CLAUDE.md",
+    "GEMINI.md",
+    ".gitignore",
+    ".gitattributes",
+    ".editorconfig",
+}
 
 
 def stamp() -> str:
@@ -503,6 +511,88 @@ def obvious_structure_fix_candidate(project: Path, profile: dict, planned: dict)
     }
 
 
+def takeover_candidates(project: Path, planned: dict) -> list[Path]:
+    primary_root = normalize_rel(str(planned.get("primary_project_root", "")).strip())
+    if not primary_root:
+        return []
+    top_primary = primary_root.split("/", 1)[0]
+    preserve_roots = {".agents", "docs", "dist", "tests", "ref", top_primary}
+    candidates: list[Path] = []
+    for child in sorted(project.iterdir()):
+        if child.name in SKIP_DIRS:
+            continue
+        if child.name in preserve_roots:
+            continue
+        if child.is_file() and child.name in TAKEOVER_PRESERVE_ROOT_FILES:
+            continue
+        candidates.append(child)
+    return candidates
+
+
+def takeover_fix(project: Path) -> dict[str, Any]:
+    profile = control_profile(project)
+    planned = load_planned(project) or planned_structure(project)
+    primary_root = normalize_rel(str(planned.get("primary_project_root", "")).strip())
+    if not primary_root:
+        return {
+            "project": str(project),
+            "moved": [],
+            "errors": ["takeover fix requires a configured primary_project_root"],
+            "archive_dir": "",
+        }
+
+    archive_dir = ""
+    if any((project / rel).exists() for rel in [DIR_MANAGER_MD, CURRENT_STRUCTURE, PLANNED_STRUCTURE]):
+        archive = archive_dir_manager(project, reason="takeover directory restructuring")
+        archive_dir = str(archive.get("archive_dir", ""))
+
+    target_root = project / primary_root
+    target_root.mkdir(parents=True, exist_ok=True)
+    moved: list[dict[str, str]] = []
+    errors: list[str] = []
+    project_name = str(profile.get("name", "")).strip()
+    for source in takeover_candidates(project, planned):
+        if source.is_dir() and project_name and source.name == project_name:
+            for child in sorted(source.iterdir()):
+                target = target_root / child.name
+                if target.exists():
+                    errors.append(f"takeover target already exists: {display_rel(target, project)}")
+                    continue
+                child.rename(target)
+                moved.append(
+                    {
+                        "action": "move",
+                        "source": display_rel(child, project),
+                        "target": display_rel(target, project),
+                    }
+                )
+            if not any(source.iterdir()):
+                source.rmdir()
+            continue
+        target = target_root / source.name
+        if target.exists():
+            errors.append(f"takeover target already exists: {display_rel(target, project)}")
+            continue
+        source.rename(target)
+        moved.append(
+            {
+                "action": "move",
+                "source": display_rel(source, project),
+                "target": display_rel(target, project),
+            }
+        )
+
+    init_result = init_dir_manager(project)
+    errors.extend(str(item) for item in init_result.get("errors", []))
+    return {
+        "project": str(project),
+        "primary_project_root": primary_root,
+        "archive_dir": archive_dir,
+        "moved": moved,
+        "errors": errors,
+    }
+
+
 def structure_gate(project: Path) -> dict[str, Any]:
     profile = control_profile(project)
     if not profile:
@@ -591,6 +681,9 @@ def main() -> None:
     apply_fix_parser = subparsers.add_parser("apply-structure-fix")
     apply_fix_parser.add_argument("project", nargs="?", default=".")
 
+    takeover_fix_parser = subparsers.add_parser("takeover-fix")
+    takeover_fix_parser.add_argument("project", nargs="?", default=".")
+
     archive_parser = subparsers.add_parser("archive")
     archive_parser.add_argument("project", nargs="?", default=".")
     archive_parser.add_argument("--reason", default="force-confirmed directory override")
@@ -621,6 +714,11 @@ def main() -> None:
             raise SystemExit(1)
     elif args.command == "apply-structure-fix":
         result = apply_structure_fix(project)
+        emit_json(result)
+        if result["errors"]:
+            raise SystemExit(1)
+    elif args.command == "takeover-fix":
+        result = takeover_fix(project)
         emit_json(result)
         if result["errors"]:
             raise SystemExit(1)

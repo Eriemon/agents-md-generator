@@ -18,7 +18,7 @@ Use external AGENTS.md generator projects as capability references, not as code 
 | Docs governance | `manage_docs.py` scaffolds `docs/`, rotates handoff files, writes 10 numbered experience summaries, records development stages, verifies governance files, and uses `resume-check` for interrupted session recovery |
 | Directory governance | `manage_dirs.py` scans current structure, records planned local and remote deployment structure, reviews directory change requests, blocks unsafe folder changes, archives old dir manager content for user force-confirmed overrides, and writes review records |
 | Structure/content validation | `verify_agents.py`, `audit_skill.py`, and `evaluate_skill.py` gate markers, placeholders, paths, commands, skipped directories, and skill structure |
-| Install confirmation | `install_skill.py` asks yes/no install confirmation after release validation and defaults to skip unless Codex or custom target is explicit; replacement installs back up the old skill and preserve evolution templates |
+| Install confirmation | `install_skill.py` is used only for skill-development release flows, asks yes/no install confirmation after release validation, defaults to skip unless Codex or custom target is explicit, rejects source directories, requires `RELEASE_RECEIPT.json`, and preserves backup/template state on replacement |
 | Compatibility shims | `create_agent_shims.py` creates CLAUDE.md and GEMINI.md only when requested, preserving non-managed files |
 | Hooks guidance | Rendered AGENTS.md includes hook policy and forbids bypassing hooks |
 
@@ -28,8 +28,9 @@ Use external AGENTS.md generator projects as capability references, not as code 
 - Do not include large example projects in the skill package.
 - Do not hard-code local reference paths in skill files or generated AGENTS.md.
 - Do not install hooks automatically; detect and document them, then let the user choose setup.
-- Do not install a release package automatically; no answer or no means skip installation.
+- Do not install a release package automatically; no answer or no means skip installation, and engineering projects must not be routed into skill-install prompts.
 - Do not release an installable `dist/` package from unmerged temporary branches; commit, merge into `master`, and clean local branches except `master` and `release`.
+- Do not treat copied standalone release folders as equivalent to repository-local `dist/` installs; they may install only with explicit reduced-assurance labeling after receipt validation.
 - Do not overwrite user-accumulated evolution templates during skill installation; preserve both versions and report conflicts.
 - Do not duplicate every agent-specific proprietary rule format; keep AGENTS.md canonical and provide shims only for requested compatibility.
 - Do not overwrite hand-written docs governance records; archive handoff and numbered experience history before writing new current files.

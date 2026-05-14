@@ -6,41 +6,33 @@
 - Source file: 1-workflow.md
 - Version window: current-plus-latest-history
 - Target source: inferred
-- Rationale: Inferred from AGENTS.md generator skill facts and governance-specific repository content.
+- Rationale: Inferred from project control profile, repository facts, and topic keywords.
 
 ## Source Versions
 - `docs/experience/1-workflow.md`
-- `docs/experience/history_experience/20260512-165633/1-workflow.md`
+- `docs/experience/history_experience/20260514-134203/1-workflow.md`
+
+# Workflow Evolution Template
 
 ## Evidence Sources
-- Current workflow experience, latest historical workflow experience, current control profile, and regression tests for evolution classification.
+- Current and latest historical experience versions for this topic.
 
 ## Applicable Scenario
-- Use this template when maintaining an agent-governance skill that generates, verifies, or evolves AI coding-agent instruction files and docs governance records.
+- Use when a future governance workflow task matches the same repository governance constraints and needs reusable guidance rather than a copied experience note.
 
 ## Distilled Workflow
-- Inspect repository facts and the control profile before deciding whether guidance applies.
-- Convert user feedback into failing regression tests that assert both the desired output and the forbidden stale output.
-- Apply detailed AI-authored experience first, then evolve only from AI-authored synthesis.
-- Archive obsolete indexed templates before writing newly classified templates.
-- Run focused tests, docs governance verification, skill audit, and full evaluation before claiming completion.
+- Inspect repository facts and the control profile, align AGENTS rules and docs governance behavior, update scripts, run focused tests, verify the repository, and make the release/install decision only after validation passes.
 
 ## Key Decisions
-- Skill projects write only to `skill-template/<category>/<type>/`; they never write sibling engineering templates for the same experience source.
-- Experience files preserve what happened in the project; evolution templates preserve reusable guidance distilled from that evidence.
-- Missing synthesis is a request state, not permission to copy source lessons.
+- Keep deterministic scripts responsible for validation and file movement; keep AI-authored payloads responsible for synthesis and judgment.
+- Use release and installation decisions as the final governance checkpoint instead of treating them as unrelated afterthoughts.
 
 ## Common Problems
-- Copying `## Iterated Lessons` into templates makes unrelated future projects inherit local assumptions.
-- Treating `project_type=skill-repo` as an engineering category pollutes `engineering-template/skill-repo/`.
-- Short experience files pass structural checks but fail as operational memory.
+- Raw handoff copies, duplicated template-family text, and stale docs governance state can make a skill workflow look complete when it is not.
 
 ## Non-Reusable Content
-- Do not carry over release timestamps, temporary handoff counts, local branch names, or one-off conversation wording.
-- Do not include Vivado, sorting, frontend, or backend assumptions unless the target category actually contains those facts.
+- Omit release timestamps, temporary file paths, and conversation-only details that do not change future implementation choices.
 
 ## Application Checklist
-- Confirm the project kind is `skill`.
-- Confirm the target path is under `skill-template/agent-governance/<skill-name>/` or a more precise AI-approved skill category.
-- Confirm current experience passed required-section and length validation.
-- Confirm the template body is synthesized and does not use the old `Reusable Lessons` copy format.
+- Confirm repository facts and control profile were inspected.
+- Confirm scripts, tests, verify, docs governance, release, and install decisions all align with the target repository.
