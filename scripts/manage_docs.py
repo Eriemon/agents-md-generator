@@ -14,7 +14,22 @@ import zipfile
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from agents_common import codex_sessions_root, display_path, emit_json, inspect_project, matched_codex_sessions, read_json, read_skill_version, resolve_project, session_message_rows
+from agents_common import (
+    RELEASE_CORE_WORKTREE_RULE,
+    ROOT_AGENTS_SYNC_COMMAND,
+    codex_sessions_root,
+    current_timestamp,
+    display_path,
+    emit_json,
+    inspect_project,
+    matched_codex_sessions,
+    parse_agents_metadata,
+    preferred_skill_version,
+    read_json,
+    read_skill_version,
+    resolve_project,
+    session_message_rows,
+)
 from manage_dirs import init_dir_manager, verify_dir_manager
 
 
@@ -39,6 +54,7 @@ REQUIRED_DOC_FILES = [
     "docs/git_manager/GIT_MANAGER.md",
     "docs/git_manager/CHANGELOG.md",
 ]
+LAST_UPDATED_HEADER_RE = re.compile(r"^<!--\s*Last updated:\s*(.*?)\s*\|\s*Last verified:\s*(.*?)\s*-->$", flags=re.MULTILINE)
 FIXED_EXPERIENCE_TOPICS = [
     ("1-workflow.md", "Workflow", "Workflow lessons for this specific project or skill."),
     ("2-scripts.md", "Scripts", "Code writing, script development, and automation lessons."),
@@ -797,7 +813,7 @@ def git_manager_doc() -> str:
         "",
         "## Workspace Management",
         "- Keep current development work in the working folder unless the user requests a separate worktree.",
-        "- Do not repoint repositories with `git config core.worktree`; prefer normal branch checkout/merge or explicit `git worktree` commands when separate work folders are required.",
+        f"- {RELEASE_CORE_WORKTREE_RULE}",
         "",
         "## Branch Configuration",
         "- Protected branches: `master`, `release`.",
@@ -827,6 +843,119 @@ def git_manager_doc() -> str:
         "- Record the active version here during release preparation and keep detailed changes in `CHANGELOG.md`.",
         "",
     ])
+
+
+def sync_root_agents(project: Path, write: bool = False) -> dict[str, Any]:
+    agents_path = project / "AGENTS.md"
+    if not agents_path.exists():
+        return {
+            "project": str(project),
+            "agents_path": str(agents_path),
+            "expected_version": "",
+            "version_source": "unavailable",
+            "sync_required": False,
+            "updated": False,
+            "reasons": [],
+            "errors": ["root AGENTS.md does not exist; render or write AGENTS.md before syncing metadata"],
+            "repair_command": ROOT_AGENTS_SYNC_COMMAND,
+        }
+
+    expected_version, version_source = preferred_skill_version()
+    if not expected_version:
+        return {
+            "project": str(project),
+            "agents_path": str(agents_path),
+            "expected_version": "",
+            "version_source": version_source,
+            "sync_required": False,
+            "updated": False,
+            "reasons": [],
+            "errors": ["agents-md-generator version is unavailable; cannot sync root AGENTS metadata"],
+            "repair_command": ROOT_AGENTS_SYNC_COMMAND,
+        }
+
+    text = agents_path.read_text(encoding="utf-8", errors="ignore")
+    metadata = parse_agents_metadata(text)
+    last_updated_match = LAST_UPDATED_HEADER_RE.search(text)
+    last_updated_raw = last_updated_match.group(1).strip() if last_updated_match else ""
+    last_verified = last_updated_match.group(2).strip() if last_updated_match else "never"
+    default_language = metadata.get("default_language", "中文").strip() or "中文"
+
+    reasons: list[str] = []
+    if not last_updated_match:
+        reasons.append("missing_last_updated_header")
+    elif "T" not in last_updated_raw:
+        reasons.append("legacy_last_updated_format")
+    if not metadata.get("agents_version"):
+        reasons.append("missing_agents_version")
+    elif metadata.get("agents_version") != expected_version:
+        reasons.append("agents_version_mismatch")
+    if not metadata.get("generator_version"):
+        reasons.append("missing_generator_version")
+    elif metadata.get("generator_version") != expected_version:
+        reasons.append("generator_version_mismatch")
+    if not metadata.get("default_language"):
+        reasons.append("missing_default_language")
+
+    sync_required = bool(reasons)
+    updated = False
+    synced_text = text
+
+    if write and sync_required:
+        new_last_updated = current_timestamp()
+        new_last_line = f"<!-- Last updated: {new_last_updated} | Last verified: {last_verified} -->"
+        new_metadata_line = (
+            f"<!-- AGENTS-METADATA: agents_version={expected_version}; "
+            f"generator_version={expected_version}; default_language={default_language} -->"
+        )
+        lines = text.splitlines()
+        rewritten: list[str] = []
+        last_inserted = False
+        metadata_inserted = False
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("<!-- Last updated:"):
+                if not last_inserted:
+                    rewritten.append(new_last_line)
+                    last_inserted = True
+                continue
+            if stripped.startswith("<!-- AGENTS-METADATA:"):
+                if not metadata_inserted:
+                    rewritten.append(new_metadata_line)
+                    metadata_inserted = True
+                continue
+            rewritten.append(line)
+        if not last_inserted or not metadata_inserted:
+            insert_at = 0
+            while insert_at < len(rewritten) and rewritten[insert_at].startswith("<!--"):
+                insert_at += 1
+            missing_lines: list[str] = []
+            if not last_inserted:
+                missing_lines.append(new_last_line)
+            if not metadata_inserted:
+                missing_lines.append(new_metadata_line)
+            rewritten[insert_at:insert_at] = missing_lines
+        synced_text = "\n".join(rewritten).rstrip() + "\n"
+        if synced_text != text:
+            agents_path.write_text(synced_text, encoding="utf-8")
+            updated = True
+
+    refreshed_match = LAST_UPDATED_HEADER_RE.search(synced_text)
+    refreshed_raw = refreshed_match.group(1).strip() if refreshed_match else last_updated_raw
+
+    return {
+        "project": str(project),
+        "agents_path": str(agents_path),
+        "expected_version": expected_version,
+        "version_source": version_source,
+        "default_language": default_language,
+        "last_updated_raw": refreshed_raw,
+        "sync_required": sync_required,
+        "updated": updated,
+        "reasons": reasons,
+        "errors": [],
+        "repair_command": ROOT_AGENTS_SYNC_COMMAND,
+    }
 
 
 def preflight_docs(project: Path) -> dict[str, Any]:
@@ -2430,6 +2559,21 @@ def release_prepare(project: Path, version: str, skill_dir_raw: str) -> dict[str
     if extras != [current_branch]:
         errors.append(f"release prepare requires exactly one temporary development branch, found {extras}")
         return {"ok": False, "errors": errors, "checks": checks}
+    if (project / "AGENTS.md").exists():
+        sync_result = sync_root_agents(project, write=True)
+        checks["root_agents_sync"] = {
+            "updated": sync_result.get("updated", False),
+            "reasons": sync_result.get("reasons", []),
+        }
+        if sync_result.get("errors"):
+            errors.extend(sync_result["errors"])
+            return {"ok": False, "errors": errors, "checks": checks}
+    else:
+        checks["root_agents_sync"] = {
+            "updated": False,
+            "reasons": ["missing_root_agents_md"],
+            "skipped": True,
+        }
     allowed = governed_allowed_paths(profile, skill_dir, project)
     changed, changed_errors = changed_paths(project)
     errors.extend(changed_errors)
@@ -2838,6 +2982,10 @@ def main() -> None:
     bootstrap_parser.add_argument("project", nargs="?", default=".")
     bootstrap_parser.add_argument("--force", action="store_true")
 
+    sync_root_parser = subparsers.add_parser("sync-root-agents")
+    sync_root_parser.add_argument("project", nargs="?", default=".")
+    sync_root_parser.add_argument("--write", action="store_true")
+
     release_gate_parser = subparsers.add_parser("release-gate")
     release_gate_parser.add_argument("project", nargs="?", default=".")
     release_gate_parser.add_argument("--version", required=True)
@@ -2894,6 +3042,11 @@ def main() -> None:
         emit_json(write_git_changelog(project, args.input))
     elif args.command == "bootstrap-experience":
         result = bootstrap_experience(project, force=args.force)
+        emit_json(result)
+        if result.get("errors"):
+            raise SystemExit(1)
+    elif args.command == "sync-root-agents":
+        result = sync_root_agents(project, write=args.write)
         emit_json(result)
         if result.get("errors"):
             raise SystemExit(1)

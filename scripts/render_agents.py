@@ -8,7 +8,18 @@ import sys
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from agents_common import detect_scopes, emit_json, extract_commands, extract_context, inspect_project, read_skill_version, resolve_project, today
+from agents_common import (
+    RELEASE_CORE_WORKTREE_RULE,
+    current_timestamp,
+    detect_scopes,
+    emit_json,
+    extract_commands,
+    extract_context,
+    inspect_project,
+    preferred_skill_version,
+    read_skill_version,
+    resolve_project,
+)
 from manage_dirs import apply_structure_fix, structure_gate
 from manage_docs import bootstrap_experience, branch_gate, infer_evolution_target, preflight_docs, scaffold as scaffold_docs
 
@@ -293,22 +304,21 @@ def control_profile(profile: dict | None) -> str:
         f"- Name: {profile.get('name', 'unknown')}.",
         f"- Version: {read_skill_version() or 'unknown'}.",
         f"- Default conversation language: {profile.get('default_conversation_language', '中文')}.",
-        f"- Purpose: {profile.get('purpose', 'unknown')}.",
-        f"- Reason: {profile.get('reason', 'unknown')}.",
+        f"- Purpose/reason: {profile.get('purpose', 'unknown')} / {profile.get('reason', 'unknown')}.",
     ]
+    if profile.get("development_requirements"):
+        lines.append(f"- Development requirements: {profile['development_requirements']}.")
+    if profile.get("validation_method"):
+        lines.append(f"- Validation method: {profile['validation_method']}.")
+    if profile.get("resource_plan"):
+        lines.append(f"- Resource boundaries: {profile['resource_plan']}.")
+    if profile.get("expected_outcome"):
+        lines.append(f"- Expected outcome: {profile['expected_outcome']}.")
     audience = profile.get("audience_or_environment")
     if audience:
         lines.append(f"- Audience/environment: {audience}.")
-    if profile.get("development_requirements"):
-        lines.append(f"- Development requirements: {profile['development_requirements']}.")
-    if profile.get("expected_outcome"):
-        lines.append(f"- Expected outcome: {profile['expected_outcome']}.")
-    if profile.get("validation_method"):
-        lines.append(f"- Validation method: {profile['validation_method']}.")
     if profile.get("validation_granularity"):
         lines.append(f"- Validation granularity: {profile['validation_granularity']}.")
-    if profile.get("resource_plan"):
-        lines.append(f"- Resource boundaries: {profile['resource_plan']}.")
     if profile.get("forward_testing_policy"):
         lines.append(f"- Forward testing: {profile['forward_testing_policy']}.")
     if profile.get("reference_materials_temporary"):
@@ -351,11 +361,11 @@ def release_contract(profile: dict | None) -> str:
         f"- Git management: {git_management_text(profile.get('git_management', 'not specified'))}.",
         f"- Branch model: {profile.get('branch_model', 'not specified')}; protected branches: {protected_text}.",
         "- Development branches are allowed only as temporary local work branches.",
-        "- Do not repoint repositories with `git config core.worktree`; use normal checkout/merge or explicit `git worktree` commands instead.",
+        f"- {RELEASE_CORE_WORKTREE_RULE}",
         "- Before releasing an installable `dist/` package: commit all work, merge into `master`, record the release, then delete local branches other than `master` and `release`.",
         "- Use `python scripts/manage_docs.py release-prepare <project> --version vX.Y.Z --skill-dir skills/<skill-name>` to auto-commit governed paths, merge the active temporary branch into `master`, and delete that local branch.",
         "- Build release artifacts with `python scripts/manage_docs.py package-release <project> --version vX.Y.Z --skill-dir skills/<skill-name>`.",
-        f"- Release receipt file: `{release.get('receipt_file', 'RELEASE_RECEIPT.json')}` must exist inside each installable release directory.",
+        f"- Release receipt file named {release.get('receipt_file', 'RELEASE_RECEIPT.json')} must exist inside each installable release directory.",
         f"- Dist folder: `{release.get('dist_folder', 'dist')}`; release folder pattern: `{release.get('release_folder_pattern', '<name>-vx.x.x')}`; zip required: {release.get('zip_required', True)}.",
         "- Before and after packaging, run `python scripts/manage_docs.py release-gate <project> --version vX.Y.Z --skill-dir skills/<skill-name> --phase pre|post`.",
         "- Install only from a versioned `dist/<name>-vX.Y.Z/` release directory that contains a validated `RELEASE_RECEIPT.json`; source directory installs are forbidden.",
@@ -413,13 +423,14 @@ def skill_design_contract(profile: dict | None) -> str:
         patterns_text = patterns
     else:
         patterns_text = ", ".join(str(item) for item in patterns if str(item).strip())
+    validation_method = contract.get('validation_method', profile.get('validation_method', 'not specified'))
+    validation_granularity = contract.get('validation_granularity', profile.get('validation_granularity', 'not specified'))
     return "\n".join([
         f"- Trigger scenarios: {contract.get('trigger_scenarios', 'not specified')}.",
         f"- Design patterns: {patterns_text or 'not specified'}.",
         f"- Resource boundaries: {contract.get('resource_plan', 'not specified')}.",
         f"- Progressive disclosure: {contract.get('progressive_disclosure_policy', 'not specified')}.",
-        f"- Validation method: {contract.get('validation_method', profile.get('validation_method', 'not specified'))}.",
-        f"- Validation granularity: {contract.get('validation_granularity', profile.get('validation_granularity', 'not specified'))}.",
+        f"- Validation method: {validation_method}; granularity: {validation_granularity}.",
         f"- Validation gates: {contract.get('validation_gates', 'not specified')}.",
         f"- Forward testing: {contract.get('forward_testing_policy', 'not specified')}.",
         f"- Reference material policy: {contract.get('reference_material_policy', 'temporary inputs only')}.",
@@ -517,9 +528,10 @@ def template_values(project: Path, profile: dict | None = None, template_dir: Pa
     context = extract_context(project)
     command_source = ", ".join(sorted({item["source"] for item in commands})) if commands else "none detected"
     default_language = profile.get("default_conversation_language", "中文") if profile else "中文"
-    current_version = read_skill_version() or "unknown"
+    current_version, _ = preferred_skill_version()
+    current_version = current_version or "unknown"
     return {
-        "TIMESTAMP": today(),
+        "TIMESTAMP": current_timestamp(),
         "VERIFIED_TIMESTAMP": "never",
         "AGENTS_VERSION": current_version,
         "GENERATOR_VERSION": current_version,
@@ -626,57 +638,67 @@ def render_root(project: Path, template_dir: Path | None = None, profile: dict |
         values = template_values(project, profile, template_dir)
         manual = manual_content(existing).strip()
         engineering_max = 6 if profile and profile.get("engineering_rule_contract", {}).get("primary") != "none" else 2
-        skill_max = 9 if profile and profile.get("kind") == "skill" else 2
         context_body = "\n".join([values["KEY_DECISIONS"], values["UTILITY_ROWS"], values["CODEBASE_STATE"]])
-        parts = [
-            "<!-- FOR AI AGENTS - Human readability is a side effect, not a goal -->",
-            "<!-- Managed by agent: keep sections and order; edit content outside AGENTS-GENERATED blocks -->",
-            f"<!-- Last updated: {values['TIMESTAMP']} | Last verified: {values['VERIFIED_TIMESTAMP']} -->",
-            f"<!-- AGENTS-METADATA: agents_version={values['AGENTS_VERSION']}; generator_version={values['GENERATOR_VERSION']}; default_language={values['DEFAULT_LANGUAGE']} -->",
-            "# AGENTS.md",
-            "**Precedence:** the closest `AGENTS.md` to the files being changed wins. Explicit user prompts override this file.",
-            compact_section("project-overview", "Project Overview", values["PROJECT_OVERVIEW"], 2),
-            compact_section("control-profile", "Control Profile", values["CONTROL_PROFILE"], 16),
-            compact_section("directory-contract", "Directory Contract", values["DIRECTORY_CONTRACT"], 5),
-            compact_section("release-contract", "Release Contract", values["RELEASE_CONTRACT"], 9),
-            compact_section("engineering-rule-contract", "Engineering Rule Contract", values["ENGINEERING_RULE_CONTRACT"], engineering_max),
-            compact_section("skill-design-contract", "Skill Design Contract", values["SKILL_DESIGN_CONTRACT"], skill_max),
-            "\n".join([
-                f"{GENERATED_START} commands -->",
-                f"## Commands ({values['VERIFICATION_STATUS']})",
-                "| Task | Command | ~Time | Source |",
-                "|------|---------|-------|--------|",
-                limit_command_rows(values["COMMAND_ROWS"]),
-                "<!-- AGENTS-GENERATED:END commands -->",
-            ]),
-            compact_section("conversation-completion-contract", "Conversation Completion Contract", values["CONVERSATION_COMPLETION_CONTRACT"], 2),
-            compact_section("documentation-governance-contract", "Documentation Governance Contract", values["DOCUMENTATION_GOVERNANCE_CONTRACT"], 12),
-            compact_section("directory-coverage", "Directory Coverage", values["DIRECTORY_COVERAGE"], 2),
-        ]
-        if "Link ADRs or architecture docs here" not in values["KEY_DECISIONS"] or "Add migrations, tech debt" not in values["CODEBASE_STATE"] or "Existing utility" in values["UTILITY_ROWS"]:
-            parts.append(compact_section("repository-context", "Repository Context", context_body, 10))
-        if "No hook framework detected" not in values["HOOK_POLICY"]:
-            parts.append(compact_section("hook-policy", "Hook Policy", values["HOOK_POLICY"], 3))
-        if "No GitHub settings or rulesets detected" not in values["GITHUB_SETTINGS"]:
-            parts.append(compact_section("github-settings", "GitHub Settings", values["GITHUB_SETTINGS"], 3))
-        if values["EVOLUTION_TEMPLATE_GUIDANCE"]:
-            parts.append(compact_section("evolution-template-guidance", "Evolution Template Guidance", values["EVOLUTION_TEMPLATE_GUIDANCE"], 6))
-        parts.extend([
-            "\n".join([
-                "## Boundaries",
-                "### Always Do",
-                limit_lines(values["ALWAYS_RULES"], 2),
-                "### Ask First",
-                limit_lines(values["ASK_FIRST_RULES"], 2),
-                "### Never Do",
-                limit_lines(values["NEVER_RULES"], 2),
-            ]),
-            "## When Instructions Conflict",
-            "Use this order: explicit user prompt, closest AGENTS.md, parent AGENTS.md, general repository docs.",
-        ])
-        if manual:
-            parts.append(manual)
-        return "\n".join(parts).rstrip() + "\n"
+
+        def compose(control_max: int, skill_max: int) -> str:
+            parts = [
+                "<!-- FOR AI AGENTS - Human readability is a side effect, not a goal -->",
+                "<!-- Managed by agent: keep sections and order; edit content outside AGENTS-GENERATED blocks -->",
+                f"<!-- Last updated: {values['TIMESTAMP']} | Last verified: {values['VERIFIED_TIMESTAMP']} -->",
+                f"<!-- AGENTS-METADATA: agents_version={values['AGENTS_VERSION']}; generator_version={values['GENERATOR_VERSION']}; default_language={values['DEFAULT_LANGUAGE']} -->",
+                "# AGENTS.md",
+                "**Precedence:** the closest `AGENTS.md` to the files being changed wins. Explicit user prompts override this file.",
+                compact_section("project-overview", "Project Overview", values["PROJECT_OVERVIEW"], 2),
+                compact_section("control-profile", "Control Profile", values["CONTROL_PROFILE"], control_max),
+                compact_section("directory-contract", "Directory Contract", values["DIRECTORY_CONTRACT"], 5),
+                compact_section("release-contract", "Release Contract", values["RELEASE_CONTRACT"], 9),
+                compact_section("engineering-rule-contract", "Engineering Rule Contract", values["ENGINEERING_RULE_CONTRACT"], engineering_max),
+                compact_section("skill-design-contract", "Skill Design Contract", values["SKILL_DESIGN_CONTRACT"], skill_max),
+                "\n".join([
+                    f"{GENERATED_START} commands -->",
+                    f"## Commands ({values['VERIFICATION_STATUS']})",
+                    "| Task | Command | ~Time | Source |",
+                    "|------|---------|-------|--------|",
+                    limit_command_rows(values["COMMAND_ROWS"]),
+                    "<!-- AGENTS-GENERATED:END commands -->",
+                ]),
+                compact_section("conversation-completion-contract", "Conversation Completion Contract", values["CONVERSATION_COMPLETION_CONTRACT"], 2),
+                compact_section("documentation-governance-contract", "Documentation Governance Contract", values["DOCUMENTATION_GOVERNANCE_CONTRACT"], 12),
+                compact_section("directory-coverage", "Directory Coverage", values["DIRECTORY_COVERAGE"], 2),
+            ]
+            if "Link ADRs or architecture docs here" not in values["KEY_DECISIONS"] or "Add migrations, tech debt" not in values["CODEBASE_STATE"] or "Existing utility" in values["UTILITY_ROWS"]:
+                parts.append(compact_section("repository-context", "Repository Context", context_body, 10))
+            if "No hook framework detected" not in values["HOOK_POLICY"]:
+                parts.append(compact_section("hook-policy", "Hook Policy", values["HOOK_POLICY"], 3))
+            if "No GitHub settings or rulesets detected" not in values["GITHUB_SETTINGS"]:
+                parts.append(compact_section("github-settings", "GitHub Settings", values["GITHUB_SETTINGS"], 3))
+            if values["EVOLUTION_TEMPLATE_GUIDANCE"]:
+                parts.append(compact_section("evolution-template-guidance", "Evolution Template Guidance", values["EVOLUTION_TEMPLATE_GUIDANCE"], 6))
+            parts.extend([
+                "\n".join([
+                    "## Boundaries",
+                    "### Always Do",
+                    limit_lines(values["ALWAYS_RULES"], 2),
+                    "### Ask First",
+                    limit_lines(values["ASK_FIRST_RULES"], 2),
+                    "### Never Do",
+                    limit_lines(values["NEVER_RULES"], 2),
+                ]),
+                "## When Instructions Conflict",
+                "Use this order: explicit user prompt, closest AGENTS.md, parent AGENTS.md, general repository docs.",
+            ])
+            if manual:
+                parts.append(manual)
+            return "\n".join(parts).rstrip() + "\n"
+
+        rendered = compose(control_max=10, skill_max=8)
+        if len(rendered.encode("utf-8")) > ROOT_AGENTS_MAX_BYTES:
+            rendered = compose(control_max=9, skill_max=8)
+        if len(rendered.encode("utf-8")) > ROOT_AGENTS_MAX_BYTES:
+            rendered = compose(control_max=8, skill_max=8)
+        if len(rendered.encode("utf-8")) > ROOT_AGENTS_MAX_BYTES:
+            rendered = compose(control_max=7, skill_max=8)
+        return rendered
     template = load_template(template_dir or default_template_dir(), "root-agents.md")
     values = template_values(project, profile, template_dir)
     rendered = replace_placeholders(template, values).rstrip()
@@ -688,7 +710,7 @@ def render_scoped(scope: dict[str, str], template_dir: Path | None = None) -> st
     path = scope["path"]
     template = load_template(template_dir or default_template_dir(), "scoped-agents.md")
     values = {
-        "TIMESTAMP": today(),
+        "TIMESTAMP": current_timestamp(),
         "VERIFIED_TIMESTAMP": "never",
         "SCOPE_NAME": path,
         "SCOPE_PATH": path,

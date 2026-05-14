@@ -28,6 +28,8 @@ SKIP_DIRS = {
 
 AGENTS_METADATA_RE = re.compile(r"<!--\s*AGENTS-METADATA:\s*(.*?)\s*-->", flags=re.IGNORECASE)
 AGENTS_METADATA_PAIR_RE = re.compile(r"([a-zA-Z0-9_]+)\s*=\s*([^;]+)")
+RELEASE_CORE_WORKTREE_RULE = "Do not repoint repositories with `git config core.worktree`; use normal checkout/merge or explicit `git worktree` commands instead."
+ROOT_AGENTS_SYNC_COMMAND = "python scripts/manage_docs.py sync-root-agents . --write"
 
 def resolve_project(raw: str | Path) -> Path:
     project = Path(raw).resolve()
@@ -89,6 +91,16 @@ def read_installed_skill_version(skill_name: str = "agents-md-generator") -> str
     if installed is None:
         return ""
     return read_skill_version(installed)
+
+
+def preferred_skill_version(skill_name: str = "agents-md-generator") -> tuple[str, str]:
+    installed = read_installed_skill_version(skill_name)
+    if installed:
+        return installed, "installed"
+    runtime = read_skill_version()
+    if runtime:
+        return runtime, "runtime"
+    return "", "unavailable"
 
 
 def parse_agents_metadata(text: str) -> dict[str, str]:
@@ -395,6 +407,14 @@ def inspect_project(root: Path) -> dict[str, Any]:
             if generator_version and generator_version != installed_version:
                 trigger_reasons.append("generator_version_mismatch")
 
+    repair_reasons = {
+        "missing_agents_version",
+        "missing_generator_version",
+        "agents_version_mismatch",
+        "generator_version_mismatch",
+    }
+    repair_command = ROOT_AGENTS_SYNC_COMMAND if any(reason in repair_reasons for reason in trigger_reasons) else ""
+
     matched_sessions = matched_codex_sessions(root)
     session_bootstrap_required = (not root_agents_path.is_file()) and workspace_has_existing_content(root)
 
@@ -439,6 +459,7 @@ def inspect_project(root: Path) -> dict[str, Any]:
         "root_agents_md_trigger_reasons": trigger_reasons,
         "root_agents_md_rebuild_required": bool(trigger_reasons),
         "root_agents_md_rebuild_reasons": trigger_reasons,
+        "root_agents_md_repair_command": repair_command,
         "session_history_bootstrap_required": session_bootstrap_required,
         "session_history_match_scope": "exact-cwd",
         "matched_session_count": len(matched_sessions),
@@ -829,6 +850,10 @@ def run_git(root: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
 
 def today() -> str:
     return date.today().isoformat()
+
+
+def current_timestamp() -> str:
+    return datetime.now().isoformat(timespec="seconds")
 
 
 def parse_args(description: str) -> argparse.ArgumentParser:

@@ -8,7 +8,7 @@ import sys
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from agents_common import SKIP_DIRS, emit_json, parse_agents_metadata, read_installed_skill_version, resolve_project
+from agents_common import ROOT_AGENTS_SYNC_COMMAND, SKIP_DIRS, emit_json, parse_agents_metadata, read_installed_skill_version, resolve_project
 from manage_docs import verify_docs
 
 
@@ -188,6 +188,7 @@ def verify(project: Path, include_skipped: bool = False) -> dict:
         checked.append(str(agents.relative_to(project).as_posix()))
         text = agents.read_text(encoding="utf-8", errors="ignore")
         if agents == project / "AGENTS.md":
+            root_metadata_repair_required = False
             size = len(text.encode("utf-8"))
             if size > ROOT_AGENTS_MAX_BYTES:
                 errors.append(f"{checked[-1]}: exceeds 12KB limit ({size} bytes)")
@@ -196,23 +197,31 @@ def verify(project: Path, include_skipped: bool = False) -> dict:
                 metadata = parse_agents_metadata(text)
                 if not metadata.get("agents_version") or not metadata.get("generator_version"):
                     errors.append("AGENTS.md: missing AGENTS metadata version")
+                    root_metadata_repair_required = True
                 if not metadata.get("agents_version"):
                     errors.append("AGENTS.md: missing agents version metadata")
+                    root_metadata_repair_required = True
                 if not metadata.get("generator_version"):
                     errors.append("AGENTS.md: missing generator version metadata")
+                    root_metadata_repair_required = True
                 if installed_version:
                     if metadata.get("agents_version") and metadata.get("agents_version") != installed_version:
                         errors.append(
                             f"AGENTS.md: agents version {metadata.get('agents_version')} does not match installed agents-md-generator version {installed_version}"
                         )
+                        root_metadata_repair_required = True
                     if metadata.get("generator_version") and metadata.get("generator_version") != installed_version:
                         errors.append(
                             f"AGENTS.md: generator version {metadata.get('generator_version')} does not match installed agents-md-generator version {installed_version}"
                         )
+                        root_metadata_repair_required = True
                 else:
                     errors.append("AGENTS.md: installed agents-md-generator version is unavailable")
                 if not metadata.get("default_language"):
                     errors.append("AGENTS.md: missing default language metadata")
+                    root_metadata_repair_required = True
+                if root_metadata_repair_required:
+                    errors.append(f"AGENTS.md: run `{ROOT_AGENTS_SYNC_COMMAND}` to refresh root metadata before continuing")
         validate_markers(text, checked[-1], errors)
         validate_strong_control(text, checked[-1], project, errors)
         if "{{" in text or "}}" in text:

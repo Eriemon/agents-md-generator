@@ -1,19 +1,19 @@
 {
   "skill_name": "agents-md-generator",
-  "version": "v0.5.0",
+  "version": "v0.5.1",
   "source_path": "skills/agents-md-generator",
-  "generated_at": "2026-05-14T17:56:58",
+  "generated_at": "2026-05-14T21:06:20",
   "current_branch": "master",
   "local_branches": [
     "master",
     "release"
   ],
-  "worktree_clean": false,
+  "worktree_clean": true,
   "phase_results": {
-    "pre": false,
-    "post": false
+    "pre": true,
+    "post": true
   },
-  "packaging_mode": "manual-rebuild",
+  "packaging_mode": "repository-dist",
   "validation_level": "strong",
   "provenance_mode": "repository-dist",
   "files": [
@@ -127,15 +127,15 @@
     },
     {
       "path": "scripts/agents_common.py",
-      "sha256": "cf654ee8ddd4b8457ce5c70fca407beedf67c843b56028d9007c5b4c229a1e3a"
+      "sha256": "a007708ebd2853b54bd300c20f6ac0503c5321c82cbf8e0ee390b0e339b4e4ea"
     },
     {
       "path": "scripts/audit_skill.py",
-      "sha256": "00ede4b24dbaf2b60627a10b863af8fa9162687b03972ac4fa71d43f6d3c7ac0"
+      "sha256": "e48256d58b6288ef5b38c869ae33a5e2b2b93932c811e819328c72ac664efc52"
     },
     {
       "path": "scripts/check_freshness.py",
-      "sha256": "3fa5e5ccd6c1d3f2d00932fc7e8864fe11d5d826d8f281f70783f3907d155620"
+      "sha256": "1f937f0419c2e18a3baf0cb87fe5fae2e604791c7958ee68f2f3cb4ee9697ead"
     },
     {
       "path": "scripts/collect_design_profile.py",
@@ -175,11 +175,11 @@
     },
     {
       "path": "scripts/manage_docs.py",
-      "sha256": "886d43b053934e84ae6a95e63aa70963ccecbe86a810d8b32c081e0a2c6b3834"
+      "sha256": "27638c573f1f7a23d6fcc53c2cf5dd4e154e13bd423d5f488cc736e93a8633a6"
     },
     {
       "path": "scripts/render_agents.py",
-      "sha256": "da3de20ac21c0076fd0b23bebb22ea6f2beb4d68ce494110de15547316f4fad6"
+      "sha256": "332d48a39c1201bdc06edba381a0a18d1db4c37d4223014ff463949282b29e12"
     },
     {
       "path": "scripts/select_engineering_rules.py",
@@ -187,7 +187,7 @@
     },
     {
       "path": "scripts/verify_agents.py",
-      "sha256": "8067fa3162b8b6df624be495f9a0dbec2bf4a64729b7d65607d1ad3919075080"
+      "sha256": "00028f1599bb0133071f4afa3f1614f0b44d176f7cfcdf519dd51540ddd9820e"
     },
     {
       "path": "SKILL.md",
@@ -195,7 +195,7 @@
     },
     {
       "path": "VERSION",
-      "sha256": "b7812c3f6328bec50f93801cbeac975516b549a4aee01e6930050dbf509dd6a5"
+      "sha256": "eb8d59c0680eb3f8813d4c7254f5cd6dbb0160cb24efa20e92bdda11d548c2e8"
     }
   ]
 }
