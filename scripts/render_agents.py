@@ -128,6 +128,13 @@ def project_overview(facts: dict) -> str:
     lines = [
         f"Primary language: {facts['primary_language']}. Framework: {facts['framework']}. Project type: {facts['project_type']}.",
     ]
+    if facts.get("global_codex_agents_baseline_ok"):
+        lines.append("Global .codex/AGENTS.md: present with a managed baseline that requires reading the current work folder root `AGENTS.md` first.")
+    elif facts.get("global_codex_agents_repair_required"):
+        reasons = ", ".join(facts.get("global_codex_agents_repair_reasons", []))
+        lines.append(
+            f"Global .codex/AGENTS.md: trigger-required for entry-point baseline repair ({reasons}); sync it before treating user-level AGENTS governance as complete."
+        )
     if facts.get("root_agents_md_exists"):
         if facts.get("root_agents_md_rebuild_required"):
             lines.append(f"Root AGENTS.md: present but trigger-required for agents-md-generator regeneration/restructure ({', '.join(facts.get('root_agents_md_trigger_reasons', facts.get('root_agents_md_rebuild_reasons', [])))}).")
@@ -650,7 +657,7 @@ def render_root(project: Path, template_dir: Path | None = None, profile: dict |
                 f"<!-- AGENTS-METADATA: agents_version={values['AGENTS_VERSION']}; generator_version={values['GENERATOR_VERSION']}; default_language={values['DEFAULT_LANGUAGE']} -->",
                 "# AGENTS.md",
                 "**Precedence:** the closest `AGENTS.md` to the files being changed wins. Explicit user prompts override this file.",
-                compact_section("project-overview", "Project Overview", values["PROJECT_OVERVIEW"], 2),
+                compact_section("project-overview", "Project Overview", values["PROJECT_OVERVIEW"], 3),
                 compact_section("control-profile", "Control Profile", values["CONTROL_PROFILE"], control_max),
                 compact_section("directory-contract", "Directory Contract", values["DIRECTORY_CONTRACT"], 5),
                 compact_section("release-contract", "Release Contract", values["RELEASE_CONTRACT"], 9),

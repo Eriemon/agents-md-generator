@@ -11,7 +11,11 @@ Create operational context files for AI coding agents. Use facts from the reposi
 
 当用户在当前工作区、当前工程、当前仓库、或当前工作文件夹语境里说“计划”、“规划”或“准备”时，也要进入本技能，但第一步不是直接设计，而是先检查当前工作文件夹根 `AGENTS.md` 状态。
 
+当前工作区类请求除了检查当前工作文件夹根 `AGENTS.md`，还要检查全局 `~/.codex/AGENTS.md` 或 `$CODEX_HOME/AGENTS.md` 是否存在且包含受管的全局基线区块。这个全局文件只负责入口规则：要求代理先读取当前工作文件夹根 `AGENTS.md`，而不是替代仓库根文件中的本地约束。
+
 根 `AGENTS.md` 正常时，只报告“检查通过”，不要自动继续设计流程。根 `AGENTS.md` 缺失、缺少版本元数据、或版本与当前已安装 `agents-md-generator` 不一致时，先报告异常原因；如果当前工作文件夹已经有落地内容，则进入最小 takeover 流程而不是完整设计访谈。
+
+如果全局 `.codex/AGENTS.md` 缺失、为空、或缺少受管基线区块，不要静默忽略；要明确报告“全局入口规则未落盘”，并给出 `python scripts/manage_docs.py sync-global-codex-agents . --write` 作为修复命令。
 
 如果是“已有内容但无根 `AGENTS.md`”的工作文件夹，除了结构检查之外，还要读取精确匹配当前工作目录的 Codex sessions：只接受 `.codex/sessions` 中 `session_meta.payload.cwd` 规范化后与当前工作目录完全一致的会话。先用这些会话和现有落地文件补建 `docs/experience/history_experience/` 历史经验，再生成最新的 `docs/experience/*.md`。
 
@@ -20,6 +24,7 @@ Create operational context files for AI coding agents. Use facts from the reposi
 1. **Detect**
    - Run `python scripts/inspect_project.py <project>` to gather language, framework, package manager, CI, AI configs, files, and directories.
    - If `root_agents_md_exists` is false, or the root `AGENTS.md` is missing `agents_version` or `generator_version`, or either version does not match the current local installed `agents-md-generator` version, treat the workspace as trigger-required/rebuild-required.
+   - Inspect the global `.codex/AGENTS.md` baseline status too. If it is missing, empty, unmanaged, or outdated, report the exact reason and recommend `python scripts/manage_docs.py sync-global-codex-agents . --write`.
    - When the user says `计划`, `规划`, or `准备` in the current workspace/current repository/current work folder context, do this root-AGENTS check first. These are trigger entries for inspection routing, not a bypass around the AGENTS.md check.
    - If the root check passes, report that the current work folder root `AGENTS.md` check passed and stop unless the user explicitly asks to continue with AGENTS design/update work.
    - If the root check fails for an old workspace with landed content, switch to takeover handling instead of the full design interview: only confirm the project type, project/skill name, default conversation language, and remote structure when the facts cannot prove it is `not configured`.

@@ -24,6 +24,7 @@ REQUIRED_FILES = [
     "references/evaluation-scenarios.md",
     "assets/templates/root-agents.md",
     "assets/templates/scoped-agents.md",
+    "assets/templates/global-codex-agents.md",
     "scripts/inspect_project.py",
     "scripts/collect_design_profile.py",
     "scripts/extract_commands.py",

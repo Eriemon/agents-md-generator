@@ -15,17 +15,24 @@ import zipfile
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents_common import (
+    GLOBAL_CODEX_AGENTS_PREAMBLE,
+    GLOBAL_CODEX_AGENTS_BLOCK_END,
+    GLOBAL_CODEX_AGENTS_BLOCK_START,
+    GLOBAL_CODEX_AGENTS_SYNC_COMMAND,
     RELEASE_CORE_WORKTREE_RULE,
     ROOT_AGENTS_SYNC_COMMAND,
     codex_sessions_root,
     current_timestamp,
     display_path,
     emit_json,
+    global_codex_agents_path,
+    global_codex_agents_status,
     inspect_project,
     matched_codex_sessions,
     parse_agents_metadata,
     preferred_skill_version,
     read_json,
+    render_global_codex_agents_template,
     read_skill_version,
     resolve_project,
     session_message_rows,
@@ -984,6 +991,61 @@ def sync_root_agents(project: Path, write: bool = False) -> dict[str, Any]:
         "errors": [],
         "repair_command": ROOT_AGENTS_SYNC_COMMAND,
     }
+
+
+def replace_global_codex_block(text: str, rendered: str) -> str:
+    current = text
+    start = current.find(GLOBAL_CODEX_AGENTS_BLOCK_START)
+    end = current.find(GLOBAL_CODEX_AGENTS_BLOCK_END)
+    if start == -1 or end == -1 or end < start:
+        return current
+    search_end = start
+    while True:
+        preamble_start = current.rfind(GLOBAL_CODEX_AGENTS_PREAMBLE, 0, search_end)
+        if preamble_start == -1:
+            break
+        between = current[preamble_start + len(GLOBAL_CODEX_AGENTS_PREAMBLE) : start]
+        if between.strip():
+            break
+        start = preamble_start
+        search_end = preamble_start
+    end += len(GLOBAL_CODEX_AGENTS_BLOCK_END)
+    return (current[:start] + rendered + current[end:]).rstrip() + "\n"
+
+
+def sync_global_codex_agents(project: Path, write: bool = False, codex_home: str | None = None) -> dict[str, Any]:
+    target = global_codex_agents_path(codex_home)
+    status = global_codex_agents_status(codex_home)
+    result = {
+        "project": str(project),
+        "target_path": str(target),
+        "updated": False,
+        "write_requested": write,
+        "requires_user_confirmation": status["requires_user_confirmation"],
+        "user_message": status["user_message"],
+        "repair_command": GLOBAL_CODEX_AGENTS_SYNC_COMMAND,
+        **status,
+    }
+    if not write:
+        return result
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists() and not target.is_file():
+        return {**result, "errors": [f"global Codex AGENTS target is not a file: {target}"]}
+    rendered = render_global_codex_agents_template()
+    current = target.read_text(encoding="utf-8", errors="ignore") if target.is_file() else ""
+    if not target.exists() or status["empty"]:
+        new_text = rendered
+    elif status["managed"]:
+        new_text = replace_global_codex_block(current, rendered)
+    else:
+        return result
+    if new_text != current:
+        target.write_text(new_text, encoding="utf-8")
+        result["updated"] = True
+    refreshed = global_codex_agents_status(codex_home)
+    result.update(refreshed)
+    result["repair_command"] = GLOBAL_CODEX_AGENTS_SYNC_COMMAND
+    return result
 
 
 def preflight_docs(project: Path) -> dict[str, Any]:
@@ -3236,6 +3298,11 @@ def main() -> None:
     sync_root_parser.add_argument("project", nargs="?", default=".")
     sync_root_parser.add_argument("--write", action="store_true")
 
+    sync_global_parser = subparsers.add_parser("sync-global-codex-agents")
+    sync_global_parser.add_argument("project", nargs="?", default=".")
+    sync_global_parser.add_argument("--write", action="store_true")
+    sync_global_parser.add_argument("--codex-home", default=None)
+
     release_gate_parser = subparsers.add_parser("release-gate")
     release_gate_parser.add_argument("project", nargs="?", default=".")
     release_gate_parser.add_argument("--version", required=True)
@@ -3297,6 +3364,11 @@ def main() -> None:
             raise SystemExit(1)
     elif args.command == "sync-root-agents":
         result = sync_root_agents(project, write=args.write)
+        emit_json(result)
+        if result.get("errors"):
+            raise SystemExit(1)
+    elif args.command == "sync-global-codex-agents":
+        result = sync_global_codex_agents(project, write=args.write, codex_home=args.codex_home)
         emit_json(result)
         if result.get("errors"):
             raise SystemExit(1)

@@ -30,6 +30,10 @@ AGENTS_METADATA_RE = re.compile(r"<!--\s*AGENTS-METADATA:\s*(.*?)\s*-->", flags=
 AGENTS_METADATA_PAIR_RE = re.compile(r"([a-zA-Z0-9_]+)\s*=\s*([^;]+)")
 RELEASE_CORE_WORKTREE_RULE = "Do not repoint repositories with `git config core.worktree`; use normal checkout/merge or explicit `git worktree` commands instead."
 ROOT_AGENTS_SYNC_COMMAND = "python scripts/manage_docs.py sync-root-agents . --write"
+GLOBAL_CODEX_AGENTS_SYNC_COMMAND = "python scripts/manage_docs.py sync-global-codex-agents . --write"
+GLOBAL_CODEX_AGENTS_PREAMBLE = "<!-- Managed by agents-md-generator: keep manual notes outside the managed global baseline block. -->"
+GLOBAL_CODEX_AGENTS_BLOCK_START = "<!-- AGENTS-GENERATED:START global-codex-baseline -->"
+GLOBAL_CODEX_AGENTS_BLOCK_END = "<!-- AGENTS-GENERATED:END global-codex-baseline -->"
 
 def resolve_project(raw: str | Path) -> Path:
     project = Path(raw).resolve()
@@ -49,8 +53,8 @@ def read_json(path: Path) -> dict[str, Any]:
         return {}
 
 
-def codex_home_root() -> Path:
-    env_home = os.environ.get("CODEX_HOME", "").strip()
+def codex_home_root(raw: str | None = None) -> Path:
+    env_home = raw.strip() if raw else os.environ.get("CODEX_HOME", "").strip()
     if env_home:
         return Path(env_home).expanduser().resolve()
     return (Path.home() / ".codex").resolve()
@@ -101,6 +105,71 @@ def preferred_skill_version(skill_name: str = "agents-md-generator") -> tuple[st
     if runtime:
         return runtime, "runtime"
     return "", "unavailable"
+
+
+def global_codex_agents_path(codex_home: str | None = None) -> Path:
+    return codex_home_root(codex_home) / "AGENTS.md"
+
+
+def global_codex_agents_template_path(root: Path | None = None) -> Path:
+    return (root or skill_root()) / "assets" / "templates" / "global-codex-agents.md"
+
+
+def render_global_codex_agents_template(root: Path | None = None) -> str:
+    path = global_codex_agents_template_path(root)
+    if not path.is_file():
+        raise SystemExit(f"Missing global Codex AGENTS template: {path}")
+    return path.read_text(encoding="utf-8", errors="ignore").rstrip() + "\n"
+
+
+def extract_global_codex_managed_block(text: str) -> str:
+    start = text.find(GLOBAL_CODEX_AGENTS_BLOCK_START)
+    end = text.find(GLOBAL_CODEX_AGENTS_BLOCK_END)
+    if start == -1 or end == -1 or end < start:
+        return ""
+    end += len(GLOBAL_CODEX_AGENTS_BLOCK_END)
+    return text[start:end]
+
+
+def global_codex_agents_status(codex_home: str | None = None) -> dict[str, Any]:
+    path = global_codex_agents_path(codex_home)
+    text = path.read_text(encoding="utf-8", errors="ignore") if path.is_file() else ""
+    exists = path.is_file()
+    empty = exists and not text.strip()
+    managed = GLOBAL_CODEX_AGENTS_BLOCK_START in text and GLOBAL_CODEX_AGENTS_BLOCK_END in text
+    expected_block = extract_global_codex_managed_block(render_global_codex_agents_template())
+    actual_block = extract_global_codex_managed_block(text) if managed else ""
+    baseline_ok = managed and actual_block == expected_block
+    repair_reasons: list[str] = []
+    requires_user_confirmation = False
+    user_message = ""
+    if not exists:
+        repair_reasons.append("missing_global_codex_agents_md")
+    elif empty:
+        repair_reasons.append("empty_global_codex_agents_md")
+    elif not managed:
+        repair_reasons.append("missing_global_codex_agents_managed_block")
+        requires_user_confirmation = True
+        user_message = (
+            "Global .codex/AGENTS.md has manual content but no managed baseline block; "
+            "insert the generated baseline block near the top of the file after any opening comments."
+        )
+    elif not baseline_ok:
+        repair_reasons.append("outdated_global_codex_agents_baseline")
+    repair_required = bool(repair_reasons)
+    return {
+        "path": str(path),
+        "exists": exists,
+        "empty": empty,
+        "managed": managed,
+        "baseline_ok": baseline_ok,
+        "repair_required": repair_required,
+        "repair_reasons": repair_reasons,
+        "repair_command": GLOBAL_CODEX_AGENTS_SYNC_COMMAND,
+        "recommended_action": GLOBAL_CODEX_AGENTS_SYNC_COMMAND,
+        "requires_user_confirmation": requires_user_confirmation,
+        "user_message": user_message,
+    }
 
 
 def parse_agents_metadata(text: str) -> dict[str, str]:
@@ -417,6 +486,7 @@ def inspect_project(root: Path) -> dict[str, Any]:
 
     matched_sessions = matched_codex_sessions(root)
     session_bootstrap_required = (not root_agents_path.is_file()) and workspace_has_existing_content(root)
+    global_codex = global_codex_agents_status()
 
     structure_fix_confirmation_required = False
     structure_fix_reasons: list[str] = []
@@ -460,6 +530,14 @@ def inspect_project(root: Path) -> dict[str, Any]:
         "root_agents_md_rebuild_required": bool(trigger_reasons),
         "root_agents_md_rebuild_reasons": trigger_reasons,
         "root_agents_md_repair_command": repair_command,
+        "global_codex_agents_exists": global_codex["exists"],
+        "global_codex_agents_empty": global_codex["empty"],
+        "global_codex_agents_managed": global_codex["managed"],
+        "global_codex_agents_baseline_ok": global_codex["baseline_ok"],
+        "global_codex_agents_repair_required": global_codex["repair_required"],
+        "global_codex_agents_repair_reasons": global_codex["repair_reasons"],
+        "global_codex_agents_repair_command": global_codex["repair_command"],
+        "global_codex_agents_requires_user_confirmation": global_codex["requires_user_confirmation"],
         "session_history_bootstrap_required": session_bootstrap_required,
         "session_history_match_scope": "exact-cwd",
         "matched_session_count": len(matched_sessions),

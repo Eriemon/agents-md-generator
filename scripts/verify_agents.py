@@ -8,7 +8,16 @@ import sys
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from agents_common import ROOT_AGENTS_SYNC_COMMAND, SKIP_DIRS, emit_json, parse_agents_metadata, read_installed_skill_version, resolve_project
+from agents_common import (
+    GLOBAL_CODEX_AGENTS_SYNC_COMMAND,
+    ROOT_AGENTS_SYNC_COMMAND,
+    SKIP_DIRS,
+    emit_json,
+    global_codex_agents_status,
+    parse_agents_metadata,
+    read_installed_skill_version,
+    resolve_project,
+)
 from manage_docs import verify_docs
 
 
@@ -247,7 +256,13 @@ def verify(project: Path, include_skipped: bool = False) -> dict:
                 errors.append(f"{checked[-1]}: {config_error}")
             if command.startswith(("make ", "npm ", "pnpm ", "yarn ", "bun ", "python ", "pytest", "go ", "composer ", "ruff ", "mypy ", "npx ")):
                 continue
-    return {"checked_files": checked, "errors": errors, "warnings": warnings}
+    global_status = global_codex_agents_status()
+    if (project / "skills" / "agents-md-generator" / "SKILL.md").is_file() and not global_status["baseline_ok"]:
+        reason_text = ", ".join(global_status["repair_reasons"]) or "unknown global Codex AGENTS baseline issue"
+        errors.append(
+            f"global .codex/AGENTS.md is not healthy for agents-md-generator development ({reason_text}); run `{GLOBAL_CODEX_AGENTS_SYNC_COMMAND}`"
+        )
+    return {"checked_files": checked, "errors": errors, "warnings": warnings, "global_codex_agents_status": global_status}
 
 
 def main() -> None:

@@ -93,6 +93,8 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - Blocked directory reviews require a clear refusal, severe-risk explanation, and explicit user force-confirmation before any folder structure change.
 - Force-confirmed blocked directory changes require `python scripts/manage_dirs.py archive <project> --reason "force-confirmed directory override"` before applying the change, preserving old content under `docs/dir_manager/history_dir_manager/<timestamp>/`.
 - Release Contract fixes `dist/<name>-vx.x.x` and matching zip package expectations without remote push.
+- User-level `.codex/AGENTS.md` is treated as an entry-point baseline, not a repository rule dump: it must tell agents to read the current work folder root `AGENTS.md` first and must not carry repository-specific branch, release, or layout policy.
+- For this skill repository, an empty or missing global `.codex/AGENTS.md` is a real governance failure, not a cosmetic warning.
 - Skill-development installable releases sanitize the `dist/` copy before packaging; source files stay unchanged and sensitive values are removed or replaced with typed placeholders.
 - After release packaging and validation, only skill-development flows ask yes/no whether to install; engineering projects must not prompt for skill installation.
 - Before installable `dist/` release, local work is committed, development branches are merged into `master`, and local branches other than `master` and `release` are deleted unless the user explicitly changes the branch policy.
@@ -106,6 +108,7 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - No `{{PLACEHOLDER}}` tokens remain in generated output.
 - Verification skips `ref/`, `.git/`, `vendor/`, build outputs, caches, and dependency folders unless `--include-skipped` is intentionally used.
 - Compatibility shim creation uses the same skip boundary and never creates CLAUDE.md/GEMINI.md inside read-only reference trees by default.
+- If a global `.codex/AGENTS.md` already has user-written content but no managed baseline block, sync must refuse silent overwrite and must return an explicit confirmation requirement instead.
 - Fact-level validation has no errors or warnings, no `ref/**` checked files, no local development-reference leaks, and no unresolved render placeholders.
 - Root AGENTS.md is thin and points to scoped files when local rules differ.
 - Scoped files do not duplicate root content unless overriding it.

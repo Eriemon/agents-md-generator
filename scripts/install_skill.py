@@ -14,7 +14,7 @@ from datetime import datetime
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from agents_common import emit_json, resolve_project
+from agents_common import emit_json, global_codex_agents_status, resolve_project
 
 
 def fail_json(message: str) -> None:
@@ -446,6 +446,7 @@ def main() -> None:
         "receipt_path": validation["receipt_path"],
         "provenance_mode": validation["provenance_mode"],
         "validation_level": validation["validation_level"],
+        "global_codex_agents_status": global_codex_agents_status(args.codex_home),
         "confirmation_question": "发布包验证完成。是否安装这个技能？请选择是或否；默认是否，跳过安装。",
         "options": install_options(),
     }
