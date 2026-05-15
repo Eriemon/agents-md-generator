@@ -93,6 +93,81 @@ def read_receipt(release_dir: Path) -> tuple[Path, dict[str, Any]]:
     return receipt_path, data
 
 
+def is_probably_text_bytes(data: bytes) -> bool:
+    if b"\x00" in data:
+        return False
+    try:
+        data.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return True
+
+
+def normalize_line_endings(text: str) -> str:
+    return text.replace("\r\n", "\n")
+
+
+SANITIZED_PLACEHOLDERS = {
+    "api_key": "<REDACTED_API_KEY>",
+    "password": "<REDACTED_PASSWORD>",
+    "email": "<REDACTED_EMAIL>",
+    "local_path": "<REDACTED_LOCAL_PATH>",
+}
+SANITIZED_ASSIGNMENT_RULES = [
+    (
+        "api_key",
+        re.compile(r"(?im)^(\s*[A-Z0-9_]*(?:API[_-]?KEY|ACCESS_TOKEN|AUTH_TOKEN|SECRET|TOKEN)[A-Z0-9_]*\s*[:=]\s*)(.+?)\s*$"),
+    ),
+    (
+        "password",
+        re.compile(r"(?im)^(\s*[A-Z0-9_]*PASSWORD[A-Z0-9_]*\s*[:=]\s*)(.+?)\s*$"),
+    ),
+]
+SANITIZED_INLINE_RULES = [
+    ("email", re.compile(r"(?<!\\)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", flags=re.IGNORECASE)),
+    ("local_path", re.compile(r"[A-Za-z]:\\Users\\[^\r\n]+")),
+    ("local_path", re.compile(r"/(?:Users|home)/[^\s]+")),
+]
+SANITIZED_BINARY_PATTERNS = [
+    ("api_key", re.compile(br"sk-(?:live|proj|test)-[A-Za-z0-9_-]+")),
+    ("password", re.compile(br"password", flags=re.IGNORECASE)),
+    ("email", re.compile(br"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")),
+]
+
+
+def sanitize_release_text(text: str) -> tuple[str, list[dict[str, str]]]:
+    redacted = text
+    matches: list[dict[str, str]] = []
+    for rule_name, pattern in SANITIZED_ASSIGNMENT_RULES:
+        placeholder = SANITIZED_PLACEHOLDERS[rule_name]
+        hit = False
+
+        def replace_assignment(match: re.Match[str]) -> str:
+            nonlocal hit
+            hit = True
+            return f"{match.group(1)}{placeholder}"
+
+        updated = pattern.sub(replace_assignment, redacted)
+        if hit:
+            matches.append({"rule": rule_name, "placeholder": placeholder})
+            redacted = updated
+    for rule_name, pattern in SANITIZED_INLINE_RULES:
+        placeholder = SANITIZED_PLACEHOLDERS[rule_name]
+        updated, count = pattern.subn(placeholder, redacted)
+        if count:
+            matches.append({"rule": rule_name, "placeholder": placeholder})
+            redacted = updated
+    return redacted, matches
+
+
+def detect_binary_sensitive_matches(data: bytes) -> list[str]:
+    hits: list[str] = []
+    for rule_name, pattern in SANITIZED_BINARY_PATTERNS:
+        if pattern.search(data):
+            hits.append(rule_name)
+    return sorted(set(hits))
+
+
 def file_manifest(release_dir: Path, *, exclude: set[str] | None = None) -> list[dict[str, str]]:
     excluded = exclude or set()
     manifest: list[dict[str, str]] = []
@@ -104,6 +179,10 @@ def file_manifest(release_dir: Path, *, exclude: set[str] | None = None) -> list
             continue
         manifest.append({"path": relative, "sha256": sha256_file(path)})
     return manifest
+
+
+def normalize_branch_list_line(line: str) -> str:
+    return line.strip().lstrip("*+ ").strip()
 
 
 def infer_repo_root(release_dir: Path) -> Path | None:
@@ -130,7 +209,7 @@ def verify_repo_release_state(repo_root: Path) -> list[str]:
     if any(item.returncode != 0 for item in [branch, branches, status]):
         return ["unable to inspect repository git state for strong release install validation"]
     current_branch = branch.stdout.strip()
-    local_branches = sorted(line.strip().lstrip("* ").strip() for line in branches.stdout.splitlines() if line.strip())
+    local_branches = sorted(normalize_branch_list_line(line) for line in branches.stdout.splitlines() if line.strip())
     status_lines = [line for line in status.stdout.splitlines() if line.strip()]
     if current_branch != "master":
         errors.append("strong install validation requires current branch master")
@@ -168,6 +247,63 @@ def validate_release_dir(release_dir: Path) -> dict[str, Any]:
     expected_validation = "strong" if repo_root is not None else "reduced_assurance"
     if str(receipt.get("validation_level", "")).strip() != expected_validation:
         errors.append("release receipt validation_level does not match the installation source")
+    sanitization = receipt.get("sanitization")
+    if not isinstance(sanitization, dict):
+        errors.append("release receipt sanitization block is missing")
+    else:
+        if bool(sanitization.get("enabled")) is not True:
+            errors.append("release receipt sanitization enabled flag is missing or false")
+        if str(sanitization.get("scope", "")).strip() != "broad":
+            errors.append("release receipt sanitization scope is missing or invalid")
+        if str(sanitization.get("mode", "")).strip() != "auto-redact-dist-copy":
+            errors.append("release receipt sanitization mode is missing or invalid")
+        if bool(sanitization.get("receipt_required")) is not True:
+            errors.append("release receipt sanitization receipt_required flag is missing or false")
+        files = sanitization.get("files")
+        if not isinstance(files, list):
+            errors.append("release receipt sanitization files list is missing")
+        else:
+            declared: dict[str, dict[str, Any]] = {}
+            for item in files:
+                if not isinstance(item, dict):
+                    errors.append("release receipt sanitization files list contains invalid entries")
+                    continue
+                rel_path = str(item.get("path", "")).strip()
+                if not rel_path:
+                    errors.append("release receipt sanitization file entry is missing path")
+                    continue
+                rules = item.get("rules")
+                if not isinstance(rules, list) or not all(str(value).strip() for value in rules):
+                    errors.append(f"release receipt sanitization rules are missing for {rel_path}")
+                placeholders = item.get("placeholders")
+                if not isinstance(placeholders, list) or not all(str(value).strip() for value in placeholders):
+                    errors.append(f"release receipt sanitization placeholders are missing for {rel_path}")
+                declared[rel_path] = item
+            expected_declared: set[str] = set()
+            for path in sorted(release_dir.rglob("*")):
+                if not path.is_file() or path.name == receipt_path.name:
+                    continue
+                relative = path.relative_to(release_dir).as_posix()
+                data = path.read_bytes()
+                if is_probably_text_bytes(data):
+                    text = data.decode("utf-8")
+                    sanitized_text, matches = sanitize_release_text(text)
+                    if matches:
+                        expected_declared.add(relative)
+                        row = declared.get(relative)
+                        if row is None:
+                            errors.append(f"release receipt is missing sanitization record for {relative}")
+                        elif str(row.get("sha256", "")).strip() != sha256_file(path):
+                            errors.append(f"release receipt sanitization hash mismatch for {relative}")
+                        if normalize_line_endings(text) != normalize_line_endings(sanitized_text):
+                            errors.append(f"release directory still contains unsanitized sensitive content: {relative}")
+                else:
+                    hits = detect_binary_sensitive_matches(data)
+                    if hits:
+                        errors.append(f"release directory contains sensitive binary content: {relative}")
+            unexpected = sorted(set(declared) - expected_declared)
+            for relative in unexpected:
+                errors.append(f"release receipt declares unexpected sanitized file: {relative}")
     if repo_root is not None:
         errors.extend(verify_repo_release_state(repo_root))
     if not (release_dir / "SKILL.md").is_file():

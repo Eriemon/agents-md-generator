@@ -55,6 +55,32 @@ REQUIRED_DOC_FILES = [
     "docs/git_manager/CHANGELOG.md",
 ]
 LAST_UPDATED_HEADER_RE = re.compile(r"^<!--\s*Last updated:\s*(.*?)\s*\|\s*Last verified:\s*(.*?)\s*-->$", flags=re.MULTILINE)
+SANITIZED_PLACEHOLDERS = {
+    "api_key": "<REDACTED_API_KEY>",
+    "password": "<REDACTED_PASSWORD>",
+    "email": "<REDACTED_EMAIL>",
+    "local_path": "<REDACTED_LOCAL_PATH>",
+}
+SANITIZED_ASSIGNMENT_RULES = [
+    (
+        "api_key",
+        re.compile(r"(?im)^(\s*[A-Z0-9_]*(?:API[_-]?KEY|ACCESS_TOKEN|AUTH_TOKEN|SECRET|TOKEN)[A-Z0-9_]*\s*[:=]\s*)(.+?)\s*$"),
+    ),
+    (
+        "password",
+        re.compile(r"(?im)^(\s*[A-Z0-9_]*PASSWORD[A-Z0-9_]*\s*[:=]\s*)(.+?)\s*$"),
+    ),
+]
+SANITIZED_INLINE_RULES = [
+    ("email", re.compile(r"(?<!\\)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", flags=re.IGNORECASE)),
+    ("local_path", re.compile(r"[A-Za-z]:\\Users\\[^\r\n]+")),
+    ("local_path", re.compile(r"/(?:Users|home)/[^\s]+")),
+]
+SANITIZED_BINARY_PATTERNS = [
+    ("api_key", re.compile(br"sk-(?:live|proj|test)-[A-Za-z0-9_-]+")),
+    ("password", re.compile(br"password", flags=re.IGNORECASE)),
+    ("email", re.compile(br"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")),
+]
 FIXED_EXPERIENCE_TOPICS = [
     ("1-workflow.md", "Workflow", "Workflow lessons for this specific project or skill."),
     ("2-scripts.md", "Scripts", "Code writing, script development, and automation lessons."),
@@ -829,6 +855,8 @@ def git_manager_doc() -> str:
         "- Place installable releases under `dist/`.",
         "- Name installable release folders as `<name>-vx.x.x` and create a matching zip when required.",
         "- Build installable releases with `python scripts/manage_docs.py package-release <project> --version vX.Y.Z --skill-dir skills/<skill-name>` so the versioned release directory, matching zip, and `RELEASE_RECEIPT.json` provenance stay aligned.",
+        "- Installable `dist/` release copies for skill development must be sanitized before packaging; replace sensitive values in the dist copy only and use typed placeholders such as `<REDACTED_API_KEY>`, `<REDACTED_PASSWORD>`, `<REDACTED_EMAIL>`, and `<REDACTED_LOCAL_PATH>`.",
+        "- The release receipt must record sanitized files, placeholder types, and post-sanitization hashes; undeclared or unfinished sanitization blocks installation.",
         "- Install only from the versioned release directory after receipt validation; never install directly from the source skill folder.",
         "- Package only after branch cleanup and release records are complete.",
         "- The release commit must include the release artifacts and the current `docs/git_manager/CHANGELOG.md` entry.",
@@ -2422,12 +2450,29 @@ def receipt_filename(profile: dict[str, Any]) -> str:
     return value or "RELEASE_RECEIPT.json"
 
 
+def release_sanitization_settings(profile: dict[str, Any], project_kind: str) -> dict[str, Any]:
+    release = profile.get("release_contract", {}) if isinstance(profile.get("release_contract"), dict) else {}
+    required = bool(release.get("sanitization_required", False)) and project_kind == "skill"
+    return {
+        "required": required,
+        "scope": str(release.get("sanitization_scope", "not-configured")).strip() or "not-configured",
+        "mode": str(release.get("sanitization_mode", "not-configured")).strip() or "not-configured",
+        "receipt_required": bool(release.get("sanitization_receipt_required", False)) and project_kind == "skill",
+    }
+
+
 def matches_governed_path(path: str, allowed: list[str]) -> bool:
-    normalized = path.replace("\\", "/").strip().lstrip("./")
+    normalized = path.replace("\\", "/").strip()
+    if normalized.startswith("./"):
+        normalized = normalized[2:]
     for prefix in allowed:
         if normalized == prefix or normalized.startswith(prefix + "/"):
             return True
     return False
+
+
+def normalize_branch_list_line(line: str) -> str:
+    return line.strip().lstrip("*+ ").strip()
 
 
 def parse_status_paths(line: str) -> list[str]:
@@ -2487,6 +2532,182 @@ def read_release_receipt(path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def is_probably_text_bytes(data: bytes) -> bool:
+    if b"\x00" in data:
+        return False
+    try:
+        data.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return True
+
+
+def normalize_line_endings(text: str) -> str:
+    return text.replace("\r\n", "\n")
+
+
+def sanitize_release_text(text: str) -> tuple[str, list[dict[str, str]]]:
+    redacted = text
+    matches: list[dict[str, str]] = []
+    for rule_name, pattern in SANITIZED_ASSIGNMENT_RULES:
+        placeholder = SANITIZED_PLACEHOLDERS[rule_name]
+        hit = False
+
+        def replace_assignment(match: re.Match[str]) -> str:
+            nonlocal hit
+            hit = True
+            return f"{match.group(1)}{placeholder}"
+
+        updated = pattern.sub(replace_assignment, redacted)
+        if hit:
+            matches.append({"rule": rule_name, "placeholder": placeholder})
+            redacted = updated
+    for rule_name, pattern in SANITIZED_INLINE_RULES:
+        placeholder = SANITIZED_PLACEHOLDERS[rule_name]
+        updated, count = pattern.subn(placeholder, redacted)
+        if count:
+            matches.append({"rule": rule_name, "placeholder": placeholder})
+            redacted = updated
+    return redacted, matches
+
+
+def detect_binary_sensitive_matches(data: bytes) -> list[str]:
+    hits: list[str] = []
+    for rule_name, pattern in SANITIZED_BINARY_PATTERNS:
+        if pattern.search(data):
+            hits.append(rule_name)
+    return sorted(set(hits))
+
+
+def sanitize_release_tree(profile: dict[str, Any], project_kind: str, skill_dir: Path, release_dir: Path) -> tuple[dict[str, Any], list[str]]:
+    settings = release_sanitization_settings(profile, project_kind)
+    result: dict[str, Any] = {
+        "enabled": settings["required"],
+        "scope": settings["scope"],
+        "mode": settings["mode"],
+        "files": [],
+    }
+    if settings["receipt_required"]:
+        result["receipt_required"] = True
+    if not settings["required"]:
+        return result, []
+    errors: list[str] = []
+    files: list[dict[str, Any]] = []
+    for source_path in sorted(skill_dir.rglob("*")):
+        if not source_path.is_file():
+            continue
+        rel_path = source_path.relative_to(skill_dir).as_posix()
+        if rel_path == "AGENTS.md":
+            continue
+        release_path = release_dir / rel_path
+        if not release_path.is_file():
+            continue
+        data = release_path.read_bytes()
+        if is_probably_text_bytes(data):
+            text = data.decode("utf-8")
+            sanitized_text, matches = sanitize_release_text(text)
+            if matches:
+                release_path.write_text(normalize_line_endings(sanitized_text), encoding="utf-8")
+                files.append(
+                    {
+                        "path": rel_path,
+                        "rules": sorted({item["rule"] for item in matches}),
+                        "placeholders": sorted({item["placeholder"] for item in matches}),
+                        "sha256": sha256_file(release_path),
+                    }
+                )
+        else:
+            hits = detect_binary_sensitive_matches(data)
+            if hits:
+                errors.append(f"binary file contains sensitive content and cannot be sanitized safely: {rel_path}")
+    result["files"] = files
+    return result, errors
+
+
+def verify_release_sanitization(
+    profile: dict[str, Any],
+    project_kind: str,
+    skill_dir: Path,
+    release_dir: Path,
+    receipt: dict[str, Any],
+) -> list[str]:
+    settings = release_sanitization_settings(profile, project_kind)
+    if not settings["required"]:
+        return []
+    sanitization = receipt.get("sanitization")
+    errors: list[str] = []
+    if not isinstance(sanitization, dict):
+        return ["release receipt sanitization block is missing"]
+    if bool(sanitization.get("enabled")) is not True:
+        errors.append("release receipt sanitization enabled flag is missing or false")
+    if str(sanitization.get("scope", "")).strip() != settings["scope"]:
+        errors.append("release receipt sanitization scope does not match the release policy")
+    if str(sanitization.get("mode", "")).strip() != settings["mode"]:
+        errors.append("release receipt sanitization mode does not match the release policy")
+    if settings["receipt_required"] and bool(sanitization.get("receipt_required")) is not True:
+        errors.append("release receipt sanitization receipt_required flag is missing or false")
+    files = sanitization.get("files")
+    if not isinstance(files, list):
+        return ["release receipt sanitization files list is missing"]
+    declared: dict[str, dict[str, Any]] = {}
+    for row in files:
+        if not isinstance(row, dict):
+            errors.append("release receipt sanitization files list contains invalid entries")
+            continue
+        rel_path = str(row.get("path", "")).strip()
+        if not rel_path:
+            errors.append("release receipt sanitization file entry is missing path")
+            continue
+        rules = row.get("rules")
+        if not isinstance(rules, list) or not all(str(item).strip() for item in rules):
+            errors.append(f"release receipt sanitization rules are missing for {rel_path}")
+        placeholders = row.get("placeholders")
+        if not isinstance(placeholders, list) or not all(str(item).strip() for item in placeholders):
+            errors.append(f"release receipt sanitization placeholders are missing for {rel_path}")
+        declared[rel_path] = row
+    expected_declared: set[str] = set()
+    for source_path in sorted(skill_dir.rglob("*")):
+        if not source_path.is_file():
+            continue
+        rel_path = source_path.relative_to(skill_dir).as_posix()
+        if rel_path == "AGENTS.md":
+            continue
+        release_path = release_dir / rel_path
+        if not release_path.is_file():
+            continue
+        source_bytes = source_path.read_bytes()
+        release_bytes = release_path.read_bytes()
+        if is_probably_text_bytes(source_bytes):
+            source_text = source_bytes.decode("utf-8")
+            expected_text, matches = sanitize_release_text(source_text)
+            if matches:
+                expected_declared.add(rel_path)
+                if rel_path not in declared:
+                    errors.append(f"release receipt is missing sanitization record for {rel_path}")
+                if not is_probably_text_bytes(release_bytes):
+                    errors.append(f"sanitized release file is not valid UTF-8 text: {rel_path}")
+                    continue
+                actual_text = release_bytes.decode("utf-8")
+                if normalize_line_endings(actual_text) != normalize_line_endings(expected_text):
+                    errors.append(f"sanitized release content mismatch for {rel_path}")
+                row = declared.get(rel_path)
+                if isinstance(row, dict):
+                    if str(row.get("sha256", "")).strip() != sha256_file(release_path):
+                        errors.append(f"release receipt sanitization hash mismatch for {rel_path}")
+            elif release_bytes != source_bytes:
+                errors.append(f"undeclared release diff outside sanitization receipt: {rel_path}")
+        else:
+            hits = detect_binary_sensitive_matches(source_bytes)
+            if hits:
+                errors.append(f"binary file contains sensitive content and cannot be sanitized safely: {rel_path}")
+            elif release_bytes != source_bytes:
+                errors.append(f"undeclared binary release diff outside sanitization receipt: {rel_path}")
+    unexpected = sorted(set(declared) - expected_declared)
+    for rel_path in unexpected:
+        errors.append(f"release receipt declares unexpected sanitized file: {rel_path}")
+    return errors
+
+
 def verify_release_receipt(project: Path, receipt_path: Path, release_dir: Path, skill_name: str, version: str, source_rel: str, *, require_repo_dist: bool) -> list[str]:
     receipt = read_release_receipt(receipt_path)
     errors: list[str] = []
@@ -2524,7 +2745,7 @@ def current_branch_and_locals(project: Path) -> tuple[str, list[str], list[str]]
     if any(result.returncode != 0 for result in [git_branch_result, git_list_result, git_status_result]):
         return "", [], []
     current_branch = git_branch_result.stdout.strip()
-    local_branches = sorted(line.strip().lstrip("* ").strip() for line in git_list_result.stdout.splitlines() if line.strip())
+    local_branches = sorted(normalize_branch_list_line(line) for line in git_list_result.stdout.splitlines() if line.strip())
     status_lines = [line for line in git_status_result.stdout.splitlines() if line.strip()]
     return current_branch, local_branches, status_lines
 
@@ -2636,6 +2857,7 @@ def package_release(project: Path, version: str, skill_dir_raw: str) -> dict[str
     skill_dir = resolve_project(skill_dir_raw if Path(skill_dir_raw).is_absolute() else project / skill_dir_raw)
     skill_name = skill_dir.name
     source_rel = skill_dir.relative_to(project).as_posix() if skill_dir.is_relative_to(project) else skill_dir.name
+    project_kind = release_project_kind(project, skill_dir)
     pre = release_gate(project, version, skill_dir_raw, "pre", "unspecified")
     if pre["errors"]:
         return {"ok": False, "errors": pre["errors"], "pre_gate": pre}
@@ -2643,6 +2865,14 @@ def package_release(project: Path, version: str, skill_dir_raw: str) -> dict[str
     zip_path = project / "dist" / f"{skill_name}-{version}.zip"
     copy_release_tree(skill_dir, release_dir)
     receipt_path = release_dir / receipt_filename(profile)
+    sanitization, sanitization_errors = sanitize_release_tree(profile, project_kind, skill_dir, release_dir)
+    if sanitization_errors:
+        return {
+            "ok": False,
+            "errors": sanitization_errors,
+            "pre_gate": pre,
+            "release_dir": display_path(release_dir, project),
+        }
     receipt = {
         "skill_name": skill_name,
         "version": version,
@@ -2655,6 +2885,7 @@ def package_release(project: Path, version: str, skill_dir_raw: str) -> dict[str
         "packaging_mode": "repository-dist",
         "validation_level": "strong",
         "provenance_mode": "repository-dist",
+        "sanitization": sanitization,
         "files": build_release_file_manifest(release_dir),
     }
     receipt_path.write_text(json.dumps(receipt, indent=2), encoding="utf-8")
@@ -2722,7 +2953,7 @@ def branch_gate(project: Path) -> dict[str, Any]:
         reasons.append("git branch governance requires a readable local git repository")
     else:
         current_branch = git_branch_result.stdout.strip()
-        local_branches = sorted(line.strip().lstrip("* ").strip() for line in git_list_result.stdout.splitlines() if line.strip())
+        local_branches = sorted(normalize_branch_list_line(line) for line in git_list_result.stdout.splitlines() if line.strip())
         status_lines = [line for line in git_status_result.stdout.splitlines() if line.strip()]
         checks["current_branch"] = current_branch
         checks["local_branches"] = local_branches
@@ -2791,7 +3022,16 @@ def latest_release_dir(project: Path, skill_name: str) -> Path | None:
 
 
 def release_members(root: Path, prefix: Path) -> list[str]:
-    return sorted(path.relative_to(prefix).as_posix() for path in root.rglob("*") if path.is_file())
+    members: list[str] = []
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(prefix).as_posix()
+        parts = relative.split("/")
+        if relative == "AGENTS.md" or ".git" in parts or "__pycache__" in parts or relative.endswith(".pyc"):
+            continue
+        members.append(relative)
+    return sorted(members)
 
 
 def release_project_kind(project: Path, skill_dir: Path) -> str:
@@ -2816,7 +3056,7 @@ def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str, in
     receipt_path = expected_release / receipt_filename(profile)
     source_version = read_skill_version(skill_dir)
     git_branch = run_git(project, ["branch", "--show-current"]).stdout.strip()
-    branches = sorted(line.strip().lstrip("* ").strip() for line in run_git(project, ["branch", "--list"]).stdout.splitlines() if line.strip())
+    branches = sorted(normalize_branch_list_line(line) for line in run_git(project, ["branch", "--list"]).stdout.splitlines() if line.strip())
     status_lines = [line for line in run_git(project, ["status", "--short"]).stdout.splitlines() if line.strip()]
     errors: list[str] = []
     checks = {
@@ -2855,6 +3095,7 @@ def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str, in
             if not receipt_path.is_file():
                 errors.append(f"missing release receipt: {receipt_path.relative_to(project).as_posix()}")
             else:
+                receipt = read_release_receipt(receipt_path)
                 errors.extend(
                     verify_release_receipt(
                         project,
@@ -2864,6 +3105,15 @@ def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str, in
                         version,
                         source_rel,
                         require_repo_dist=True,
+                    )
+                )
+                errors.extend(
+                    verify_release_sanitization(
+                        profile,
+                        project_kind,
+                        skill_dir,
+                        expected_release,
+                        receipt,
                     )
                 )
     latest = latest_release_dir(project, skill_name)

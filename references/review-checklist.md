@@ -93,9 +93,11 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - Blocked directory reviews require a clear refusal, severe-risk explanation, and explicit user force-confirmation before any folder structure change.
 - Force-confirmed blocked directory changes require `python scripts/manage_dirs.py archive <project> --reason "force-confirmed directory override"` before applying the change, preserving old content under `docs/dir_manager/history_dir_manager/<timestamp>/`.
 - Release Contract fixes `dist/<name>-vx.x.x` and matching zip package expectations without remote push.
+- Skill-development installable releases sanitize the `dist/` copy before packaging; source files stay unchanged and sensitive values are removed or replaced with typed placeholders.
 - After release packaging and validation, only skill-development flows ask yes/no whether to install; engineering projects must not prompt for skill installation.
 - Before installable `dist/` release, local work is committed, development branches are merged into `master`, and local branches other than `master` and `release` are deleted unless the user explicitly changes the branch policy.
-- Installable release directories must contain `RELEASE_RECEIPT.json`, repository-local installs must preserve strong branch/worktree validation, and copied standalone release folders must be labeled as reduced assurance instead of silently treated as equivalent.
+- Installable release directories must contain `RELEASE_RECEIPT.json`, repository-local installs must preserve strong branch/worktree validation, copied standalone release folders must be labeled as reduced assurance instead of silently treated as equivalent, and receipt-declared sanitization must explain every allowed content difference from the source skill.
+- Binary files with sensitive content are a hard failure unless the workflow gains an explicit safe sanitizer for that file type; do not silently ship them.
 - Replacement installs back up the old skill to `skill_backups/` and preserve installed evolution templates, reporting conflicts instead of silently overwriting them.
 - Commit and release summaries rotate through `docs/git_manager/CHANGELOG.md`; previous current entries are archived under `docs/git_manager/history_git_manager/YYYYMMDD-HHMMSS/`.
 - Release gates run on `master`, with only local `master` and `release` branches present, and post-package validation confirms the release commit includes the dist artifacts and changelog update.

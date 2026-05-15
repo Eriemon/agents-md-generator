@@ -704,6 +704,10 @@ def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any
             "repo_install_validation_level": "strong",
             "external_install_validation_level": "reduced_assurance",
             "remote_push_allowed": False,
+            "sanitization_required": kind == "skill",
+            "sanitization_scope": "broad" if kind == "skill" else "not-applicable",
+            "sanitization_mode": "auto-redact-dist-copy" if kind == "skill" else "disabled",
+            "sanitization_receipt_required": kind == "skill",
         },
         "existing_work": answers["has_existing_work"],
         "directory_contract": {
