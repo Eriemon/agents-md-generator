@@ -112,6 +112,7 @@ REMOTE_OPTIONAL_EXPERIENCE_TOPICS = [
 ]
 STATE_PATH = ".agents/docs-governance-state.json"
 ACTIVE_SESSION_PATH = ".agents/active-session.json"
+IGNORED_RUNTIME_GIT_PATHS = {ACTIVE_SESSION_PATH.replace("\\", "/")}
 EXPERIENCE_REQUEST_PATH = ".agents/experience-update-request.json"
 EVOLUTION_REQUEST_PATH = ".agents/evolution-update-request.json"
 CONVERSATION_SNAPSHOT_DIR = ".agents/conversation-snapshots"
@@ -2545,6 +2546,21 @@ def parse_status_paths(line: str) -> list[str]:
     return [body.replace("\\", "/")]
 
 
+def filter_runtime_paths(paths: list[str]) -> list[str]:
+    return [path for path in paths if path and path not in IGNORED_RUNTIME_GIT_PATHS]
+
+
+def filter_runtime_status_lines(lines: list[str]) -> list[str]:
+    filtered: list[str] = []
+    for line in lines:
+        if not line.strip():
+            continue
+        paths = filter_runtime_paths(parse_status_paths(line))
+        if paths:
+            filtered.append(line)
+    return filtered
+
+
 def changed_paths(project: Path) -> tuple[list[str], list[str]]:
     status = run_git(project, ["status", "--short"])
     if status.returncode != 0:
@@ -2554,7 +2570,7 @@ def changed_paths(project: Path) -> tuple[list[str], list[str]]:
         if not line.strip():
             continue
         paths.extend(parse_status_paths(line))
-    return sorted(set(path for path in paths if path)), []
+    return sorted(set(filter_runtime_paths(paths))), []
 
 
 def sha256_file(path: Path) -> str:
@@ -2808,7 +2824,7 @@ def current_branch_and_locals(project: Path) -> tuple[str, list[str], list[str]]
         return "", [], []
     current_branch = git_branch_result.stdout.strip()
     local_branches = sorted(normalize_branch_list_line(line) for line in git_list_result.stdout.splitlines() if line.strip())
-    status_lines = [line for line in git_status_result.stdout.splitlines() if line.strip()]
+    status_lines = filter_runtime_status_lines(git_status_result.stdout.splitlines())
     return current_branch, local_branches, status_lines
 
 
@@ -3016,7 +3032,7 @@ def branch_gate(project: Path) -> dict[str, Any]:
     else:
         current_branch = git_branch_result.stdout.strip()
         local_branches = sorted(normalize_branch_list_line(line) for line in git_list_result.stdout.splitlines() if line.strip())
-        status_lines = [line for line in git_status_result.stdout.splitlines() if line.strip()]
+        status_lines = filter_runtime_status_lines(git_status_result.stdout.splitlines())
         checks["current_branch"] = current_branch
         checks["local_branches"] = local_branches
         checks["status_lines"] = status_lines
@@ -3119,7 +3135,7 @@ def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str, in
     source_version = read_skill_version(skill_dir)
     git_branch = run_git(project, ["branch", "--show-current"]).stdout.strip()
     branches = sorted(normalize_branch_list_line(line) for line in run_git(project, ["branch", "--list"]).stdout.splitlines() if line.strip())
-    status_lines = [line for line in run_git(project, ["status", "--short"]).stdout.splitlines() if line.strip()]
+    status_lines = filter_runtime_status_lines(run_git(project, ["status", "--short"]).stdout.splitlines())
     errors: list[str] = []
     checks = {
         "branch": git_branch,

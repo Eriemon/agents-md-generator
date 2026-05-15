@@ -1,8 +1,8 @@
 {
   "skill_name": "agents-md-generator",
-  "version": "v0.5.4",
+  "version": "v0.5.5",
   "source_path": "skills/agents-md-generator",
-  "generated_at": "2026-05-15T16:49:45",
+  "generated_at": "2026-05-15T22:42:15",
   "current_branch": "master",
   "local_branches": [
     "master",
@@ -114,11 +114,11 @@
     },
     {
       "path": "references/capability-coverage.md",
-      "sha256": "774fc0ed187602a18c818c7f588c04dd669f07276f6a8be466a4931e4168c605"
+      "sha256": "3543e94d0328e7a8241a6516aa211163c5a81dc6ebf1508a65f95b5cca25cab3"
     },
     {
       "path": "references/evaluation-scenarios.md",
-      "sha256": "4fb7f105882faa4b5c3cec63d410d043af16c2cb128666cfd36df317eb3f3824"
+      "sha256": "0191607faea8639125e986dfbf7170bb0e8b8d6fd2471056bcdcc6766ef55c91"
     },
     {
       "path": "references/question-bank.md",
@@ -126,11 +126,11 @@
     },
     {
       "path": "references/review-checklist.md",
-      "sha256": "1f42f45a5c160979866847a6d7c58de89083855c3d3d4372f02bcd48f9a8a2b1"
+      "sha256": "b4bccbc7594c168f6a4f58079875f08b9c737165a7b6b74cb37abdcbc48c157c"
     },
     {
       "path": "references/script-guide.md",
-      "sha256": "87faa7a2cc03f6959fac420e076c4d9946e4cf3d82a8e58f09d123eab28687fb"
+      "sha256": "60a76cfd5bf976d16401033f0bf220eec03205fbd1f5107e6d59ffc8103621ce"
     },
     {
       "path": "references/skill-design-coverage.md",
@@ -162,7 +162,7 @@
     },
     {
       "path": "scripts/evaluate_skill.py",
-      "sha256": "8f7c541b5ef5c3d22fc91f765ea3d2e6f050b8c1d3a4ae278977f23bfe355b06"
+      "sha256": "6a56362aaea0c15f6a55447852240771ccb40a3549b82e9fd477f19db13aacdb"
     },
     {
       "path": "scripts/extract_commands.py",
@@ -178,7 +178,7 @@
     },
     {
       "path": "scripts/install_skill.py",
-      "sha256": "588bd5a8070c16c6c15b233303983d5c955969ff084c54e7690f56ad61e6d7cb"
+      "sha256": "7d9f60a05d9cac2ee3667b3a7a33e6766192793593fde657ae826994b1e38a46"
     },
     {
       "path": "scripts/manage_dirs.py",
@@ -186,11 +186,11 @@
     },
     {
       "path": "scripts/manage_docs.py",
-      "sha256": "fa490caac9d21636c5e3aeb6971ad301c8aec85e5cf6a566a0dbeb28ba21fa8b"
+      "sha256": "f5b44ed2ecfd87e5e5f6ea7530fc3f8c56fbd021621b4b7e91a5396a4ffd1ee0"
     },
     {
       "path": "scripts/render_agents.py",
-      "sha256": "074760d8836ba45a5da2f23313758f0c6fdb2c5f7c56c635d5bb3d6b51ac4139"
+      "sha256": "9359105477a84027ae5e138b3676e361efd73171442d310bb0df3ecda49cb0da"
     },
     {
       "path": "scripts/select_engineering_rules.py",
@@ -198,15 +198,15 @@
     },
     {
       "path": "scripts/verify_agents.py",
-      "sha256": "d1c3b9cecbbea3bd5857675d6c42f138ae5a93e183113d210d17c99f1b5e9351"
+      "sha256": "de5f148da5230863724b28d7c05f2a2c58b52761da1add230f7be8021e04e5e2"
     },
     {
       "path": "SKILL.md",
-      "sha256": "afe131279278095e7dd58a02106fea5c9c6d2dbc068d7ba9c0147060b01f1e82"
+      "sha256": "50634ec5eb78d20934821ccb950cfef6792a34cea62b315d09e36ea6adc44081"
     },
     {
       "path": "VERSION",
-      "sha256": "15048083805c4cf4e6f27e56adfff0d57225c6611d83bdba5a61ff63459dc803"
+      "sha256": "91602fb47656cdb5021d23c217822edf018a9f7d0afaf0f7175c8740c4e37fcb"
     }
   ]
 }

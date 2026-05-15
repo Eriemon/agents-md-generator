@@ -16,6 +16,8 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents_common import emit_json, global_codex_agents_status, resolve_project
 
+ACTIVE_SESSION_PATH = ".agents/active-session.json"
+
 
 def fail_json(message: str) -> None:
     emit_json({"errors": [message]})
@@ -185,6 +187,26 @@ def normalize_branch_list_line(line: str) -> str:
     return line.strip().lstrip("*+ ").strip()
 
 
+def parse_status_paths(line: str) -> list[str]:
+    body = line[3:].strip() if len(line) >= 4 else line.strip()
+    if " -> " in body:
+        old_path, new_path = body.split(" -> ", 1)
+        return [old_path.strip().replace("\\", "/"), new_path.strip().replace("\\", "/")]
+    return [body.replace("\\", "/")]
+
+
+def filter_runtime_status_lines(lines: list[str]) -> list[str]:
+    ignored = {ACTIVE_SESSION_PATH.replace("\\", "/")}
+    filtered: list[str] = []
+    for line in lines:
+        if not line.strip():
+            continue
+        paths = [path for path in parse_status_paths(line) if path and path not in ignored]
+        if paths:
+            filtered.append(line)
+    return filtered
+
+
 def infer_repo_root(release_dir: Path) -> Path | None:
     if release_dir.parent.name != "dist":
         return None
@@ -210,7 +232,7 @@ def verify_repo_release_state(repo_root: Path) -> list[str]:
         return ["unable to inspect repository git state for strong release install validation"]
     current_branch = branch.stdout.strip()
     local_branches = sorted(normalize_branch_list_line(line) for line in branches.stdout.splitlines() if line.strip())
-    status_lines = [line for line in status.stdout.splitlines() if line.strip()]
+    status_lines = filter_runtime_status_lines(status.stdout.splitlines())
     if current_branch != "master":
         errors.append("strong install validation requires current branch master")
     if local_branches != ["master", "release"]:

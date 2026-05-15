@@ -48,13 +48,18 @@ def run_command(name: str, argv: list[str], cwd: Path, env: dict[str, str] | Non
 
 def render_entry(skill_dir: Path, project: Path) -> dict[str, Any]:
     argv = [sys.executable, str(skill_dir / "scripts" / "render_agents.py"), str(project)]
+    command_env = dict(
+        os.environ,
+        PYTHONDONTWRITEBYTECODE="1",
+        AGENTS_MD_INSTALLED_SKILL_DIR=str(skill_dir),
+    )
     result = subprocess.run(
         argv,
         cwd=project,
         text=True,
         capture_output=True,
         check=False,
-        env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"),
+        env=command_env,
     )
     entry = command_entry("render_agents", argv, project, result)
     output = result.stdout
@@ -100,12 +105,16 @@ def repo_root_for(skill_dir: Path) -> Path:
 def evaluate(skill_dir: Path, project: Path) -> dict[str, Any]:
     repo_root = repo_root_for(skill_dir)
     quick_validate = quick_validate_path()
-    test_env = dict(os.environ, AGENTS_MD_EVALUATE_RUNNING="1")
+    self_eval_env = dict(
+        os.environ,
+        AGENTS_MD_EVALUATE_RUNNING="1",
+        AGENTS_MD_INSTALLED_SKILL_DIR=str(skill_dir),
+    )
     commands = [
-        run_command("unit_tests", [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"], repo_root, test_env),
-        run_command("quick_validate", [sys.executable, str(quick_validate), str(skill_dir)], repo_root),
-        run_command("audit_skill", [sys.executable, str(skill_dir / "scripts" / "audit_skill.py"), str(skill_dir)], repo_root),
-        run_command("verify_agents", [sys.executable, str(skill_dir / "scripts" / "verify_agents.py"), str(project)], repo_root),
+        run_command("unit_tests", [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"], repo_root, self_eval_env),
+        run_command("quick_validate", [sys.executable, str(quick_validate), str(skill_dir)], repo_root, self_eval_env),
+        run_command("audit_skill", [sys.executable, str(skill_dir / "scripts" / "audit_skill.py"), str(skill_dir)], repo_root, self_eval_env),
+        run_command("verify_agents", [sys.executable, str(skill_dir / "scripts" / "verify_agents.py"), str(project)], repo_root, self_eval_env),
         render_entry(skill_dir, project),
     ]
     errors = collect_errors(commands)

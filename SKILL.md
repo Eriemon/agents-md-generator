@@ -71,7 +71,7 @@ Create operational context files for AI coding agents. Use facts from the reposi
    - When git management is enabled, generated release guidance must explicitly forbid repointing a repository with `git config core.worktree`; prefer normal checkout/merge or explicit `git worktree` commands instead.
    - Before `--write` with strong-control docs governance, run `python scripts/manage_docs.py preflight <project>`; if it requires user confirmation, ask before using the existing `docs/` layout.
    - Strong-control generation creates or requires `.agents/agents-control.json` and the `docs/` governance tree. Experience records must live under `docs/experience/` as 10 numbered project-specific files; do not create a root-level `experience/` folder.
-   - `render_agents.py --write` writes the root `AGENTS.md` with machine-readable version and default-language metadata. The root file must stay within `12KB`; other `AGENTS.md` files are not subject to this hard size limit.
+   - `render_agents.py --write` writes the root `AGENTS.md` with machine-readable version and default-language metadata. The root file must stay within `15KB`; other `AGENTS.md` files are not subject to this hard size limit.
    - After writing AGENTS.md files, run docs scaffolding for handoff, experience, development, install configuration, and git manager records.
    - Templates in `assets/templates/` define the intended root/scoped shape. AGENTS rendering must not scan the whole templates tree; it should use the root/scoped templates plus only the exact matching evolution target when supplemental guidance exists.
    - Use `--template-dir <dir>` only for controlled tests or intentional template overrides.

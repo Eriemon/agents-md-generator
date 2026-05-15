@@ -26,7 +26,7 @@ from manage_docs import bootstrap_experience, branch_gate, infer_evolution_targe
 
 GENERATED_START = "<!-- AGENTS-GENERATED:START"
 GENERATED_END = "<!-- AGENTS-GENERATED:END"
-ROOT_AGENTS_MAX_BYTES = 12 * 1024
+ROOT_AGENTS_MAX_BYTES = 15 * 1024
 
 
 def command_rows(commands: list[dict[str, str]]) -> str:
@@ -71,7 +71,7 @@ def root_size_errors(paths_to_text: list[tuple[str, str]]) -> list[str]:
             continue
         size = len(text.encode("utf-8"))
         if size > ROOT_AGENTS_MAX_BYTES:
-            errors.append(f"{label}: exceeds 12KB limit ({size} bytes); compress hand-written content before writing")
+            errors.append(f"{label}: exceeds 15KB limit ({size} bytes); compress hand-written content before writing")
     return errors
 
 
@@ -434,14 +434,17 @@ def skill_design_contract(profile: dict | None) -> str:
         patterns_text = ", ".join(str(item) for item in patterns if str(item).strip())
     validation_method = contract.get('validation_method', profile.get('validation_method', 'not specified'))
     validation_granularity = contract.get('validation_granularity', profile.get('validation_granularity', 'not specified'))
+    forward_policy = str(contract.get('forward_testing_policy', 'not specified')).strip() or 'not specified'
+    if forward_policy != "not specified":
+        forward_policy = "use fresh fixtures or real targets for risky generation, docs governance, install, directory, release, compatibility, or verification changes"
     return "\n".join([
         f"- Trigger scenarios: {contract.get('trigger_scenarios', 'not specified')}.",
         f"- Design patterns: {patterns_text or 'not specified'}.",
         f"- Resource boundaries: {contract.get('resource_plan', 'not specified')}.",
         f"- Progressive disclosure: {contract.get('progressive_disclosure_policy', 'not specified')}.",
-        f"- Validation method: {validation_method}; granularity: {validation_granularity}.",
         f"- Validation gates: {contract.get('validation_gates', 'not specified')}.",
-        f"- Forward testing: {contract.get('forward_testing_policy', 'not specified')}.",
+        f"- Forward testing: {forward_policy}.",
+        f"- Validation method: {validation_method}; granularity: {validation_granularity}.",
         f"- Reference material policy: {contract.get('reference_material_policy', 'temporary inputs only')}.",
     ])
 
@@ -512,21 +515,20 @@ def documentation_governance_contract(profile: dict | None) -> str:
     else:
         targets_text = str(targets)
     return "\n".join([
-        f"- Docs root: `{contract.get('root', 'docs')}`.",
-        f"- Latest handoff: `{handoff.get('current', 'docs/handoff/HANDOFF.md')}` is always the newest task handoff.",
+        f"- Docs root: `{contract.get('root', 'docs')}`; latest handoff: `{handoff.get('current', 'docs/handoff/HANDOFF.md')}` is always the newest task handoff.",
+        f"- Before a new task, read `{handoff.get('current', 'docs/handoff/HANDOFF.md')}`, run `python scripts/manage_docs.py resume-check <project>`, and repair interrupted sessions with `python scripts/manage_docs.py resume-repair <project> --input recovery.json` before new work continues.",
+        "- After reading the prior handoff and before implementation, run `python scripts/manage_docs.py start-session <project> --input session.json` to record the active session.",
+        f"- Every completed development conversation must write `{handoff.get('current', 'docs/handoff/HANDOFF.md')}`; use `python scripts/manage_docs.py handoff <project> --input handoff.json` at task completion.",
         f"- Experience folder: `{experience.get('folder', 'docs/experience')}` maintains 10 project-specific numbered experience files including `docs/experience/1-workflow.md`, `docs/experience/2-scripts.md`, `docs/experience/3-plan.md`, `docs/experience/4-design-ui.md`, plus `5-*.md` through `10-*.md`.",
         f"- Experience cadence: every 5 completed handoffs create an AI update request plus the current evidence window using up to {experience.get('conversation_context_limit', 10)} recent conversation snapshots; the active agent should immediately apply an AI-authored payload in the same conversation, and previous current files are archived to `{experience.get('history', 'docs/experience/history_experience')}/YYYYMMDD-HHMMSS/` before refreshed files are written with cadence metadata.",
         f"- Auto evolution: every {experience.get('evolution_every_handoffs', 10)} completed handoffs requires valid `evolution_summary` content in the same payload so experience refresh and evolution finish atomically; approved experience is distilled into indexed templates under `{experience.get('evolution_templates', 'assets/templates/evolution/')}` using the exact matching family, category, and type target, and topics stay project-specific without being copied into both template families.",
         "- Evolution template writing is isolated by both family and content schema: the exact family, category, and type must match the project kind, and the workflow text must not carry the opposite kind's execution chain.",
         "- AGENTS rendering must not scan the whole `assets/templates/` tree. Only the exact matching evolution target may be read as supplemental guidance, and unmatched sibling templates are ignored.",
         f"- Git manager: keep the current change summary in `{git.get('folder', 'docs/git_manager')}/CHANGELOG.md`, archive older entries under `{git.get('folder', 'docs/git_manager')}/history_git_manager/YYYYMMDD-HHMMSS/`, and rotate with `manage_docs.py git-changelog`.",
-        f"- Dir manager: keep strict local and remote deployment structure review rules under `{dir_manager.get('folder', 'docs/dir_manager')}/`; run `manage_dirs.py review` and keep `history_dir_manager/` archives.",
+        f"- Dir manager: keep strict local and remote deployment structure review rules under `{dir_manager.get('folder', 'docs/dir_manager')}/`; run `manage_dirs.py review`, preserve `history_dir_manager/` archives, and keep remote deployment structure governance in the same contract.",
         "- Directory changes require `python scripts/manage_dirs.py review <project> --input change.json`; blocked reviews require explicit user force-confirmation and risk capture in handoff.",
         f"- Force-confirmed directory overrides must archive old dir manager content to `{dir_manager.get('history', 'docs/dir_manager/history_dir_manager')}/YYYYMMDD-HHMMSS/` before applying the folder change.",
-        f"- Handoff history: archive the previous HANDOFF.md to `{handoff.get('history', 'docs/handoff/history_handoff')}` with `{handoff.get('archive_pattern', 'HANDOFF-YYYYMMDD-HHMMSS.md')}` before writing a new one.",
-        f"- Development records: keep the latest file at `{development.get('current', 'docs/development/DEVELOPMENT.md')}` and archive older records under `{development.get('history', 'docs/development/history_development')}/YYYYMMDD-HHMMSS/DEVELOPMENT.md`.",
-        f"- Install configuration: document skill installation and {targets_text} adapters under `{install.get('folder', 'docs/install_configuration')}`.",
-        "- Use `python scripts/manage_docs.py handoff <project> --input handoff.json` at task completion.",
+        f"- Handoff history: archive the previous HANDOFF.md to `{handoff.get('history', 'docs/handoff/history_handoff')}` with `{handoff.get('archive_pattern', 'HANDOFF-YYYYMMDD-HHMMSS.md')}` before writing a new one; keep development records at `{development.get('current', 'docs/development/DEVELOPMENT.md')}` and install configuration for {targets_text} under `{install.get('folder', 'docs/install_configuration')}`.",
     ])
 
 
@@ -707,6 +709,8 @@ def render_root(project: Path, template_dir: Path | None = None, profile: dict |
             rendered = compose(control_max=8, skill_max=8)
         if len(rendered.encode("utf-8")) > ROOT_AGENTS_MAX_BYTES:
             rendered = compose(control_max=7, skill_max=8)
+        if len(rendered.encode("utf-8")) > ROOT_AGENTS_MAX_BYTES:
+            rendered = compose(control_max=7, skill_max=7)
         return rendered
     template = load_template(template_dir or default_template_dir(), "root-agents.md")
     values = template_values(project, profile, template_dir)

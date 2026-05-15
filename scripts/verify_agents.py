@@ -23,7 +23,7 @@ from manage_docs import verify_docs
 
 COMMAND_RE = re.compile(r"`([^`\n]+)`")
 PATH_RE = re.compile(r"`([^`\n]+(?:/|\\|\.md|\.json|\.toml|\.yml|\.yaml|\.py|\.ts|\.tsx|\.go|\.php)[^`\n]*)`")
-ROOT_AGENTS_MAX_BYTES = 12 * 1024
+ROOT_AGENTS_MAX_BYTES = 15 * 1024
 
 
 def validate_markers(text: str, file: str, errors: list[str]) -> None:
@@ -200,7 +200,7 @@ def verify(project: Path, include_skipped: bool = False) -> dict:
             root_metadata_repair_required = False
             size = len(text.encode("utf-8"))
             if size > ROOT_AGENTS_MAX_BYTES:
-                errors.append(f"{checked[-1]}: exceeds 12KB limit ({size} bytes)")
+                errors.append(f"{checked[-1]}: exceeds 15KB limit ({size} bytes)")
             managed_root = "Managed by agent:" in text or (project / ".agents" / "agents-control.json").exists()
             if managed_root:
                 metadata = parse_agents_metadata(text)
