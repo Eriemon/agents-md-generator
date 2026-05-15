@@ -1,8 +1,8 @@
 {
   "skill_name": "agents-md-generator",
-  "version": "v0.5.3",
+  "version": "v0.5.4",
   "source_path": "skills/agents-md-generator",
-  "generated_at": "2026-05-15T15:45:25",
+  "generated_at": "2026-05-15T16:49:45",
   "current_branch": "master",
   "local_branches": [
     "master",
@@ -178,7 +178,7 @@
     },
     {
       "path": "scripts/install_skill.py",
-      "sha256": "e9a241cc2a0a5a298b1480f04ffba0dad924d1e2d2fd77751e15f0849c7f6824"
+      "sha256": "588bd5a8070c16c6c15b233303983d5c955969ff084c54e7690f56ad61e6d7cb"
     },
     {
       "path": "scripts/manage_dirs.py",
@@ -186,7 +186,7 @@
     },
     {
       "path": "scripts/manage_docs.py",
-      "sha256": "0ca16b8b86acd436971068cb02238a9cd50a1e6e696cf2ed1207da5d0c1610af"
+      "sha256": "fa490caac9d21636c5e3aeb6971ad301c8aec85e5cf6a566a0dbeb28ba21fa8b"
     },
     {
       "path": "scripts/render_agents.py",
@@ -206,7 +206,7 @@
     },
     {
       "path": "VERSION",
-      "sha256": "70c8308e781f6c292956d4787414eaa462e297647fb10c3ba543e119fe620ad9"
+      "sha256": "15048083805c4cf4e6f27e56adfff0d57225c6611d83bdba5a61ff63459dc803"
     }
   ]
 }
