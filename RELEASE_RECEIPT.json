@@ -1,8 +1,8 @@
 {
   "skill_name": "agents-md-generator",
-  "version": "v0.5.7",
+  "version": "v0.5.8",
   "source_path": "skills/agents-md-generator",
-  "generated_at": "2026-05-16T15:39:24",
+  "generated_at": "2026-05-16T18:37:04",
   "current_branch": "master",
   "local_branches": [
     "master",
@@ -30,67 +30,27 @@
     },
     {
       "path": "assets/templates/evolution/evolution-index.json",
-      "sha256": "22339c4f9f096125c38d72982365eb02083a8a002496040438f4977e192181bc"
-    },
-    {
-      "path": "assets/templates/evolution/history_evolution/20260512-171800/engineering-template/skill-repo/1-workflow.md",
-      "sha256": "f6f37cd0200f9b74b74b8670562103e2f77756e1da50ee28799def281b8eb9aa"
-    },
-    {
-      "path": "assets/templates/evolution/history_evolution/20260512-171800/engineering-template/skill-repo/2-scripts.md",
-      "sha256": "9f4e84396852aa0b2107276015e5ad9d5d3d02fc26aa39e5199e28fff0fda43e"
-    },
-    {
-      "path": "assets/templates/evolution/history_evolution/20260512-171800/engineering-template/skill-repo/3-plan.md",
-      "sha256": "fe22cd8ae788df3c71b0db2480debc2d91ebb5fe8eddc43f24a1c92051d6008a"
-    },
-    {
-      "path": "assets/templates/evolution/history_evolution/20260512-171800/engineering-template/skill-repo/4-design-ui.md",
-      "sha256": "6494a0ba61f243e422c269004147641243368f996dbb74da04681fd2d6133d2b"
-    },
-    {
-      "path": "assets/templates/evolution/history_evolution/20260512-171800/engineering-template/skill-repo/template-index.json",
-      "sha256": "1f2ec2a4b1a3fd28ab71dba7bbcc14df5f9347ae7fd8dc009f4bd21e9d4d2aa1"
-    },
-    {
-      "path": "assets/templates/evolution/history_evolution/20260512-171800/skill-template/agents-md-generator/1-workflow.md",
-      "sha256": "c4d2ceed31b212d68b57139914f85d70c60231280416dd58b34b6d203ae5086b"
-    },
-    {
-      "path": "assets/templates/evolution/history_evolution/20260512-171800/skill-template/agents-md-generator/2-scripts.md",
-      "sha256": "80c81b7f980c85f391aa86df5bd397a217649e00193b70f296961fd5f9b0c340"
-    },
-    {
-      "path": "assets/templates/evolution/history_evolution/20260512-171800/skill-template/agents-md-generator/3-plan.md",
-      "sha256": "5c43dfbae704f49dc100b4b51a40fa97653645fc3ba7ad51487026b180baf62b"
-    },
-    {
-      "path": "assets/templates/evolution/history_evolution/20260512-171800/skill-template/agents-md-generator/4-design-ui.md",
-      "sha256": "c73679b886a4f1ee3643859d7b0e8b4b77b218a0c5edffbe2eafa47d1215e9f9"
-    },
-    {
-      "path": "assets/templates/evolution/history_evolution/20260512-171800/skill-template/agents-md-generator/template-index.json",
-      "sha256": "f9361879afd989bc5301dcd87b7ec7822cbd1277fc73efc54afad0e54a73b0e4"
+      "sha256": "1c7770d0e0aea9be7ad586fb3d4b61ab24610012366ef923948dce329b39fe7c"
     },
     {
       "path": "assets/templates/evolution/skill-template/agent-governance/agents-md-generator/1-workflow.md",
-      "sha256": "a4543d33e25aa3ebcdc1e7cf96cbd3e11cc636958bad8ad7de39d5fcf43fafb4"
+      "sha256": "4ad6d7ada1e800ce92340811375ed47d59f0ee541e5dff8a826ee28138941a28"
     },
     {
       "path": "assets/templates/evolution/skill-template/agent-governance/agents-md-generator/2-scripts.md",
-      "sha256": "a2cc7dbe54c907bb0fb9bf804eee87e725fb83e01b5091000cf771eaeac73c07"
+      "sha256": "aaa77f07ed76baccabfb85a9ca73b3db4181410f53a8c4146e8956acacde885e"
     },
     {
       "path": "assets/templates/evolution/skill-template/agent-governance/agents-md-generator/3-plan.md",
-      "sha256": "f463fad545386da32c99bea04443db9cda67fce5ae776d5bde9ed5f0c8c1fee9"
+      "sha256": "ffec28987271714fa484f375d5d733e8eb7a3b49fb2e4f3d1141470df87e913a"
     },
     {
       "path": "assets/templates/evolution/skill-template/agent-governance/agents-md-generator/4-design-ui.md",
-      "sha256": "207486ab7aab9b60d7bca17c259a4177de43382400031eb4230e461cf1c72cf4"
+      "sha256": "dff282fda562017a069eaf48fd8413b7c9de66cba20028c33415b20b1b1e35d6"
     },
     {
       "path": "assets/templates/evolution/skill-template/agent-governance/agents-md-generator/template-index.json",
-      "sha256": "247e37d991b77534555db5258c1b6e1fb0e9a4f4932bc03d2565c43777203495"
+      "sha256": "71400b19e4997ec9ddad40d43946c6730c09c73131601344a605afabeb41207d"
     },
     {
       "path": "assets/templates/global-codex-agents.md",
@@ -130,7 +90,7 @@
     },
     {
       "path": "references/script-guide.md",
-      "sha256": "fe8d7fd5f228c7f8176ecce903f4b7b1d87186db391e0d4b7ef6f0e88b4929d7"
+      "sha256": "15e830ada44ffde511a26ddf5c1947e3806d428d537d5f2c16bdc3f682852d6f"
     },
     {
       "path": "references/skill-design-coverage.md",
@@ -210,11 +170,11 @@
     },
     {
       "path": "scripts/manage_docs_evolution.py",
-      "sha256": "c1a81d31e7a6f6dc0f200ea4a89a9654bb4a9ab5f62deaf2991373699d0cba37"
+      "sha256": "6261a58d4113e53afa42bdba6be0de3bf0b24dc523dfa1815cc381fa811d51f3"
     },
     {
       "path": "scripts/manage_docs_experience.py",
-      "sha256": "251ff73a0b4273c67e72fa938a1aed31613450a9c14ae095848d80014191e812"
+      "sha256": "3abed1f7257684d9be141662371b6ee5664eead6bd0ee105af50a07902a41b53"
     },
     {
       "path": "scripts/manage_docs_release.py",
@@ -234,7 +194,7 @@
     },
     {
       "path": "scripts/render_agents.py",
-      "sha256": "6352a6c85246cc17ff9b776bf4096b7b53b42333c8e3a5e8fca478d8c432a2bd"
+      "sha256": "de9269f250c53fcc2d680259df940c45adb35a87eb27f6b0472b5515ad9ca79a"
     },
     {
       "path": "scripts/select_engineering_rules.py",
@@ -246,11 +206,11 @@
     },
     {
       "path": "SKILL.md",
-      "sha256": "5bc2847df13d6b4c8cfad4d2f58de96c893fbc03a5bf800315e940c91270f614"
+      "sha256": "6c499071bfa8731bb34ff13f5f46ce2728c6e1acc9745b27ecac2f6a312815d2"
     },
     {
       "path": "VERSION",
-      "sha256": "804764353829da1e01e07eee47a895b39ef86e370a6a2cead4db2b4ac278702b"
+      "sha256": "a1b673b99e58bf43ed12acef82a7d38e4761a9d7be814be99ac0f96d3e9d5932"
     }
   ],
   "other_version_artifacts": [
@@ -4333,6 +4293,242 @@
     {
       "path": "dist/agents-md-generator-v0.5.6.zip",
       "sha256": "7cbdbc9515c656e683082a71be0d0dc20e15265046aeb3ccc1dc65b45b8be1ed"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/agents/openai.yaml",
+      "sha256": "bdb0b768918afe373828cc7310a5a04f3f4b2d1f2d692411e8926d3832f76495"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/assets/templates/evolution/evolution-index.json",
+      "sha256": "22339c4f9f096125c38d72982365eb02083a8a002496040438f4977e192181bc"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/assets/templates/evolution/history_evolution/20260512-171800/engineering-template/skill-repo/1-workflow.md",
+      "sha256": "f6f37cd0200f9b74b74b8670562103e2f77756e1da50ee28799def281b8eb9aa"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/assets/templates/evolution/history_evolution/20260512-171800/engineering-template/skill-repo/2-scripts.md",
+      "sha256": "9f4e84396852aa0b2107276015e5ad9d5d3d02fc26aa39e5199e28fff0fda43e"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/assets/templates/evolution/history_evolution/20260512-171800/engineering-template/skill-repo/3-plan.md",
+      "sha256": "fe22cd8ae788df3c71b0db2480debc2d91ebb5fe8eddc43f24a1c92051d6008a"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/assets/templates/evolution/history_evolution/20260512-171800/engineering-template/skill-repo/4-design-ui.md",
+      "sha256": "6494a0ba61f243e422c269004147641243368f996dbb74da04681fd2d6133d2b"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/assets/templates/evolution/history_evolution/20260512-171800/engineering-template/skill-repo/template-index.json",
+      "sha256": "1f2ec2a4b1a3fd28ab71dba7bbcc14df5f9347ae7fd8dc009f4bd21e9d4d2aa1"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/assets/templates/evolution/history_evolution/20260512-171800/skill-template/agents-md-generator/1-workflow.md",
+      "sha256": "c4d2ceed31b212d68b57139914f85d70c60231280416dd58b34b6d203ae5086b"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/assets/templates/evolution/history_evolution/20260512-171800/skill-template/agents-md-generator/2-scripts.md",
+      "sha256": "80c81b7f980c85f391aa86df5bd397a217649e00193b70f296961fd5f9b0c340"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/assets/templates/evolution/history_evolution/20260512-171800/skill-template/agents-md-generator/3-plan.md",
+      "sha256": "5c43dfbae704f49dc100b4b51a40fa97653645fc3ba7ad51487026b180baf62b"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/assets/templates/evolution/history_evolution/20260512-171800/skill-template/agents-md-generator/4-design-ui.md",
+      "sha256": "c73679b886a4f1ee3643859d7b0e8b4b77b218a0c5edffbe2eafa47d1215e9f9"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/assets/templates/evolution/history_evolution/20260512-171800/skill-template/agents-md-generator/template-index.json",
+      "sha256": "f9361879afd989bc5301dcd87b7ec7822cbd1277fc73efc54afad0e54a73b0e4"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/1-workflow.md",
+      "sha256": "a4543d33e25aa3ebcdc1e7cf96cbd3e11cc636958bad8ad7de39d5fcf43fafb4"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/2-scripts.md",
+      "sha256": "a2cc7dbe54c907bb0fb9bf804eee87e725fb83e01b5091000cf771eaeac73c07"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/3-plan.md",
+      "sha256": "f463fad545386da32c99bea04443db9cda67fce5ae776d5bde9ed5f0c8c1fee9"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/4-design-ui.md",
+      "sha256": "207486ab7aab9b60d7bca17c259a4177de43382400031eb4230e461cf1c72cf4"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/template-index.json",
+      "sha256": "247e37d991b77534555db5258c1b6e1fb0e9a4f4932bc03d2565c43777203495"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/assets/templates/global-codex-agents.md",
+      "sha256": "092d18547342f9918186e9fe3ccf3edfe9f003d03d7a1bac7d169712c04562eb"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/assets/templates/root-agents.md",
+      "sha256": "fb332912a2c0e07c0b42a83862fd13b72b26fe8ee7041c98467ad53817d804c3"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/assets/templates/scoped-agents.md",
+      "sha256": "0c22cf8c23607fa129d996c8367cd8de0b4ed26f2e7e914ae371e0d13d865705"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/references/agents-md-guidance.md",
+      "sha256": "d289909138a9af87c9fa08400d1c8a003b35d591abce81fe9a8c286d8d384846"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/references/book-rules-coverage.md",
+      "sha256": "ad395f31ef56306e4798a582ea9fa7251ddb1730cfd576911930f30d2d49a180"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/references/capability-coverage.md",
+      "sha256": "1e249df62b4bcbb253d1890fd34ccb66c5ad90a906095c9ac6bc3cdf77a46202"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/references/evaluation-scenarios.md",
+      "sha256": "f0f6dc71cfd78ce09671c95537aa9410af16128c0f435a6c799e5f3320bf1006"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/references/question-bank.md",
+      "sha256": "9c322761712f880ea6d59c71bacdb26c72ae039795cc543a030233b9de5c4036"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/references/review-checklist.md",
+      "sha256": "a731304b0ea4a4e3c1fbeb4884684f0032bc72e640db8975ee22491e4fd54a4f"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/references/script-guide.md",
+      "sha256": "fe8d7fd5f228c7f8176ecce903f4b7b1d87186db391e0d4b7ef6f0e88b4929d7"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/references/skill-design-coverage.md",
+      "sha256": "72c58a7f46c6a5cf146bc01cae06b0016c797937df2991a5c1044681521679ad"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/RELEASE_RECEIPT.json",
+      "sha256": "c7018e2b2de012fc616a2353f4351a17a325c5c95ff47318581d4fda7719c631"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/agents_common.py",
+      "sha256": "1cc035f948a7e9c5e9128df70c4ff018a327e3f2a271450db80a45ac5308e507"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/agents_project_facts.py",
+      "sha256": "7f5b28c10fa6f168fe663c9fcfc7a72070b4a6a5dead758f674c1c979bc4df98"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/audit_skill.py",
+      "sha256": "3ee7317c80080dc7e4d508423bc0cd69fa1923ec9b999a0059c257b05af2c553"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/check_freshness.py",
+      "sha256": "1f937f0419c2e18a3baf0cb87fe5fae2e604791c7958ee68f2f3cb4ee9697ead"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/collect_design_profile.py",
+      "sha256": "37924ad84fcc7688e74a625a95148d3468b141a21651973475048ee7fa0e1bd3"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/create_agent_shims.py",
+      "sha256": "aab7ac75247c035a6528e85da2d2d0127d4b41204dcdd42180f1fa207d8b5df5"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/design_interview_state.py",
+      "sha256": "6d1b162a5c79f707ab2f7895139828c98d8da1ca7a435c83c6eabb09a13ebefd"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/design_profile_builder.py",
+      "sha256": "3431409ecb0b7087a3feec57230f0025da0403e300601c48de161e9bdb2bb2d6"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/design_questions.py",
+      "sha256": "d2e9ee0e3f712956363afeac71cbbef930554132ece4b8cae4d0f1313a36a23d"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/design_remote_gate.py",
+      "sha256": "e4a318a1dfacc071f2f650ebc8b6520dba1c1711688c1b8ff82104ea030d7fcb"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/detect_scopes.py",
+      "sha256": "8c262dd5fdc7255d1ec524ba5bec44ee813b1746318ee2446ada119180e21adb"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/evaluate_skill.py",
+      "sha256": "6a56362aaea0c15f6a55447852240771ccb40a3549b82e9fd477f19db13aacdb"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/extract_commands.py",
+      "sha256": "e08346e12a14eeb14666a684044626200a85df1980457687cf58cb007eb8fbec"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/extract_context.py",
+      "sha256": "2964e5fc94b8ea45620b11894f185bcb553f98d426ace0d5874abff0e0f2b192"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/inspect_project.py",
+      "sha256": "df356458f92bfdbe197f282610aac7be1f654e266ae21c05cd9a61ebff4ca156"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/install_skill.py",
+      "sha256": "7d9f60a05d9cac2ee3667b3a7a33e6766192793593fde657ae826994b1e38a46"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/manage_dirs.py",
+      "sha256": "7f1c7962a185e6fa6e6a6c7f809643cf455d4f519953f1129c473bc4dd2f0c56"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/manage_docs.py",
+      "sha256": "2aa51812b67df2d2f39de68b6410e5c143dbdbf9653857625e3c1ed1408e5c5a"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/manage_docs_evolution.py",
+      "sha256": "c1a81d31e7a6f6dc0f200ea4a89a9654bb4a9ab5f62deaf2991373699d0cba37"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/manage_docs_experience.py",
+      "sha256": "251ff73a0b4273c67e72fa938a1aed31613450a9c14ae095848d80014191e812"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/manage_docs_release.py",
+      "sha256": "648444552136a9ff3fd59af937726666bb6c95ddb37ea0540e2c377800d13b13"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/manage_docs_scaffold_session.py",
+      "sha256": "b024efee62923c33ae8f9c3766ebf1c83d712c7737c6058eb99921981129dbeb"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/manage_docs_shared.py",
+      "sha256": "36235c63b94ed8dde2352ca1eb82a80a8ab49b6d78d4dd6cdbb7f6551ec141e7"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/manage_docs_sync_verify.py",
+      "sha256": "eec6c020d63955f57a2dfe4fb30c9a1e078bdbac6047a044f8a02d11f54e3808"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/render_agents.py",
+      "sha256": "6352a6c85246cc17ff9b776bf4096b7b53b42333c8e3a5e8fca478d8c432a2bd"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/select_engineering_rules.py",
+      "sha256": "5eb29a65af609eb8ed0923b63ba4392055c9b5854d8053a1a9e077be29fa5b07"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/scripts/verify_agents.py",
+      "sha256": "05fa490d63a453fab432eb8ad7d2793660d699aaa0f333e3fb34c6fa60ed1283"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/SKILL.md",
+      "sha256": "5bc2847df13d6b4c8cfad4d2f58de96c893fbc03a5bf800315e940c91270f614"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7/VERSION",
+      "sha256": "804764353829da1e01e07eee47a895b39ef86e370a6a2cead4db2b4ac278702b"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.7.zip",
+      "sha256": "a2f0f568331581d45dd3babe2b75a355556059d215deb81bb6ff71a796c33921"
     }
   ]
 }

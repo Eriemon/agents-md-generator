@@ -12,8 +12,6 @@
 - `docs/experience/3-plan.md`
 - `docs/experience/history_experience/20260516-152408/3-plan.md`
 
-# Plan Evolution Template
-
 ## Evidence Sources
 - Current and latest historical experience versions for this topic.
 

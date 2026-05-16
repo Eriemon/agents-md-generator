@@ -338,6 +338,7 @@ def control_profile(profile: dict | None, project: Path) -> str:
         f"- Name: {profile.get('name', 'unknown')}.",
         f"- Version: {read_skill_version() or 'unknown'}.",
         f"- Default conversation language: {profile.get('default_conversation_language', '中文')}.",
+        f"- Local governance detail source: `{local_rule_config_path(project, profile)}`; render, verify, and docs-governance scripts read this JSON for long Python task automation, maintainability limits, and project-tool script rules.",
         f"- Purpose/reason: {profile.get('purpose', 'unknown')} / {profile.get('reason', 'unknown')}.",
     ]
     if profile.get("development_requirements"):
@@ -346,9 +347,6 @@ def control_profile(profile: dict | None, project: Path) -> str:
         lines.append(f"- Validation method: {profile['validation_method']}.")
     if profile.get("resource_plan"):
         lines.append(f"- Resource boundaries: {profile['resource_plan']}.")
-    lines.append(
-        f"- Local governance detail source: `{local_rule_config_path(project, profile)}`; render, verify, and docs-governance scripts read this JSON for long Python task automation, maintainability limits, and project-tool script rules."
-    )
     if profile.get("expected_outcome"):
         lines.append(f"- Expected outcome: {profile['expected_outcome']}.")
     audience = profile.get("audience_or_environment")
@@ -376,7 +374,6 @@ def directory_contract(profile: dict | None, project: Path) -> str:
         "- Remote deployment boundary: do not sync local skill-development content to remote servers; deploy only explicit runtime/deployment artifacts unless the user explicitly overrides.",
         "- New feature structure: keep new work inside the confirmed local structure and primary project root; read the local JSON governance config before assuming detailed maintainability or script layout rules.",
         "- Do not add new top-level directories or move ownership boundaries without updating this contract.",
-        f"- Local maintainability, long-task automation, and tool-script governance details are configuration-backed in `{local_rule_config_path(project, profile)}`.",
         f"- Dir manager gate: review directory create/move/delete/rename plans with `{dir_contract.get('folder', 'docs/dir_manager')}/DIR_MANAGER.md` before changing folder structure.",
         f"- Required command before folder changes: `{project_command(project, profile, 'manage_dirs.py', 'review', '<project>', '--input', 'change.json')}`.",
         "- If directory review blocks the change, refuse default execution, explain the risk, and ask for explicit user force-confirmation before proceeding.",
@@ -526,7 +523,6 @@ def skill_design_contract(profile: dict | None, project: Path) -> str:
         f"- Forward testing: {forward_policy}.",
         f"- Validation method: {validation_method}; granularity: {validation_granularity}.",
         f"- Reference material policy: {contract.get('reference_material_policy', 'temporary inputs only')}.",
-        f"- Local long-task automation, maintainability, and script-governance details come from `{local_rule_config_path(project, profile)}`; use scripts that read that JSON instead of duplicating those details in AGENTS.md.",
     ]
     return "\n".join(lines)
 
@@ -535,7 +531,7 @@ def conversation_completion_contract(profile: dict | None) -> str:
     default_language = profile.get('default_conversation_language', '中文') if profile else '中文'
     return "\n".join([
         "- Finish all requested development work in the current conversation whenever feasible.",
-        f"- Default conversation language: {default_language}. All natural-language responses must use {default_language} unless the user explicitly switches languages. Code, commands, logs, raw error text, and proper nouns may remain in their original form.",
+        f"- All natural-language responses must use the configured default language (`{default_language}`) unless the user explicitly switches languages. Code, commands, logs, raw error text, and proper nouns may remain in their original form.",
         "- If work cannot be completed, report blockers, completed files, unverified assumptions, and exact next steps.",
         "- Run the smallest relevant checks during development and final verification before completion claims.",
         "- Preserve user changes and never rewrite the directory contract silently.",

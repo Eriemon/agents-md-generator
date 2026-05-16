@@ -1,6 +1,6 @@
 {
   "cadence_handoffs": 10,
-  "generated_at": "2026-05-16T15:24:09",
+  "generated_at": "2026-05-16T18:03:03",
   "handoff_count": 30,
   "schema_version": 1,
   "target": {
@@ -19,7 +19,7 @@
       ],
       "family": "skill-template",
       "output": "skills/agents-md-generator/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/1-workflow.md",
-      "sha256": "a4543d33e25aa3ebcdc1e7cf96cbd3e11cc636958bad8ad7de39d5fcf43fafb4",
+      "sha256": "4ad6d7ada1e800ce92340811375ed47d59f0ee541e5dff8a826ee28138941a28",
       "source_versions": [
         "docs/experience/1-workflow.md",
         "docs/experience/history_experience/20260516-152408/1-workflow.md"
@@ -33,7 +33,7 @@
       ],
       "family": "skill-template",
       "output": "skills/agents-md-generator/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/2-scripts.md",
-      "sha256": "a2cc7dbe54c907bb0fb9bf804eee87e725fb83e01b5091000cf771eaeac73c07",
+      "sha256": "aaa77f07ed76baccabfb85a9ca73b3db4181410f53a8c4146e8956acacde885e",
       "source_versions": [
         "docs/experience/2-scripts.md",
         "docs/experience/history_experience/20260516-152408/2-scripts.md"
@@ -47,7 +47,7 @@
       ],
       "family": "skill-template",
       "output": "skills/agents-md-generator/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/3-plan.md",
-      "sha256": "f463fad545386da32c99bea04443db9cda67fce5ae776d5bde9ed5f0c8c1fee9",
+      "sha256": "ffec28987271714fa484f375d5d733e8eb7a3b49fb2e4f3d1141470df87e913a",
       "source_versions": [
         "docs/experience/3-plan.md",
         "docs/experience/history_experience/20260516-152408/3-plan.md"
@@ -61,7 +61,7 @@
       ],
       "family": "skill-template",
       "output": "skills/agents-md-generator/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/4-design-ui.md",
-      "sha256": "207486ab7aab9b60d7bca17c259a4177de43382400031eb4230e461cf1c72cf4",
+      "sha256": "dff282fda562017a069eaf48fd8413b7c9de66cba20028c33415b20b1b1e35d6",
       "source_versions": [
         "docs/experience/4-design-ui.md",
         "docs/experience/history_experience/20260516-152408/4-design-ui.md"

@@ -12,8 +12,6 @@
 - `docs/experience/4-design-ui.md`
 - `docs/experience/history_experience/20260516-152408/4-design-ui.md`
 
-# Design UI Evolution Template
-
 ## Evidence Sources
 - Current and latest historical experience versions for this topic.
 

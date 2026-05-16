@@ -192,6 +192,43 @@ def target_evidence_summary(project: Path, target: dict[str, Any]) -> list[str]:
         summary.extend(f"Keyword evidence: {line[:160]}" for line in keyword_excerpt)
     return summary
 
+def resolved_state_evolution_target(project: Path, raw: Any | None) -> tuple[dict[str, Any], bool]:
+    if isinstance(raw, dict):
+        target, errors = normalize_evolution_target(project, raw)
+        if not errors:
+            return target, False
+    return infer_evolution_target(project), raw is not None
+
+def clear_fulfilled_requests(
+    project: Path,
+    state: dict[str, Any],
+    *,
+    clear_experience: bool = False,
+    clear_evolution: bool = False,
+) -> None:
+    if clear_experience:
+        request = experience_request_file(project)
+        if request.exists():
+            request.unlink()
+        state["experience_update_required"] = False
+        state.pop("experience_request_due_at", None)
+        state.pop("experience_request", None)
+    if clear_evolution:
+        request = evolution_request_file(project)
+        if request.exists():
+            request.unlink()
+
+def strip_leading_title(summary: str) -> str:
+    lines = summary.splitlines()
+    index = 0
+    while index < len(lines) and not lines[index].strip():
+        index += 1
+    if index < len(lines) and lines[index].startswith("# "):
+        index += 1
+        while index < len(lines) and not lines[index].strip():
+            index += 1
+    return "\n".join(lines[index:]).strip()
+
 def validate_workflow_schema_for_target(content: str, target: dict[str, Any]) -> list[str]:
     schema = evolution_schema_for(target)
     if not schema:
@@ -261,6 +298,7 @@ def write_evolution_request(project: Path, count: int, target: dict[str, Any], r
 
 def evolution_markdown(topic: dict[str, str], versions: list[dict[str, str]], target: dict[str, Any], summary: str) -> str:
     sources = "\n".join(f"- `{item['path']}`" for item in versions) or "- No source versions available."
+    summary_body = strip_leading_title(summary)
     return "\n".join([
         f"# {topic['title']} Evolution Template",
         "",
@@ -275,7 +313,7 @@ def evolution_markdown(topic: dict[str, str], versions: list[dict[str, str]], ta
         "## Source Versions",
         sources,
         "",
-        summary.strip(),
+        summary_body,
         "",
     ])
 
@@ -333,13 +371,14 @@ def run_evolution(project: Path, force: bool = False) -> dict[str, Any]:
         return {"project": str(project), "skipped": True, "handoff_count": count, "last_evolution_at": last}
     if checkpoint == 0:
         checkpoint = count
-    quality_errors = validate_current_experience_quality(project, include_evolution_cadence=False)
+    quality_errors = validate_current_experience_quality(
+        project,
+        include_evolution_cadence=False,
+        allow_legacy_target_repair=True,
+    )
     if quality_errors:
         return {"project": str(project), "skipped": True, "errors": quality_errors, "reason": "experience quality gate failed"}
-    target_raw = state.get("last_evolution_target")
-    target, target_errors = normalize_evolution_target(project, target_raw if isinstance(target_raw, dict) else None)
-    if target_errors:
-        return {"project": str(project), "skipped": True, "errors": target_errors, "reason": "evolution target validation failed"}
+    target, repaired_target = resolved_state_evolution_target(project, state.get("last_evolution_target"))
     summaries = state.get("last_evolution_summary")
     if not isinstance(summaries, dict):
         request = write_evolution_request(project, checkpoint, target, "AI-authored evolution_summary is required before writing reusable templates")
@@ -400,9 +439,24 @@ def run_evolution(project: Path, force: bool = False) -> dict[str, Any]:
     index_path = root / "evolution-index.json"
     index_path.write_text(json.dumps(index, indent=2, sort_keys=True), encoding="utf-8")
     written.append(index_path.relative_to(project).as_posix())
+    state["last_evolution_target"] = target
     state["last_evolution_at"] = checkpoint
+    clear_fulfilled_requests(
+        project,
+        state,
+        clear_experience=bool(latest_experience_due(count)) and int(state.get("last_experience_at", 0)) >= latest_experience_due(count),
+        clear_evolution=True,
+    )
     save_state(project, state)
-    return {"project": str(project), "written": written, "archived": archived, "handoff_count": checkpoint, "index": str(index_path), "target": target}
+    return {
+        "project": str(project),
+        "written": written,
+        "archived": archived,
+        "handoff_count": checkpoint,
+        "index": str(index_path),
+        "target": target,
+        "repaired_legacy_target": repaired_target,
+    }
 
 def apply_experience_payload(project: Path, payload_path: str) -> dict[str, Any]:
     from manage_docs_scaffold_session import read_input, scaffold
@@ -414,21 +468,21 @@ def apply_experience_payload(project: Path, payload_path: str) -> dict[str, Any]
     requires_atomic_evolution = checkpoint >= EVOLUTION_CADENCE_HANDOFFS and checkpoint % EVOLUTION_CADENCE_HANDOFFS == 0
     payload = read_input(payload_path)
     entries, errors = validate_experience_payload(project, payload)
-    target, target_errors = normalize_evolution_target(project, payload.get("evolution_target") if "evolution_target" in payload else None)
+    evolution_target, target_errors = normalize_evolution_target(project, payload.get("evolution_target") if "evolution_target" in payload else None)
     errors.extend(target_errors)
     summaries = payload_evolution_summary(payload)
     if requires_atomic_evolution and not summaries:
         errors.append("evolution_summary is required before writing reusable templates")
     if summaries:
-        errors.extend(validate_evolution_summaries(project, summaries, target))
+        errors.extend(validate_evolution_summaries(project, summaries, evolution_target))
     if errors:
         return {"project": str(project), "errors": errors}
     archived = archive_experience_files(project)
     written: list[str] = []
     for spec in experience_file_specs(project):
-        target = project / "docs" / "experience" / spec["filename"]
-        target.write_text(with_experience_metadata(project, entries[spec["filename"]], checkpoint), encoding="utf-8")
-        written.append(str(target))
+        experience_file = project / "docs" / "experience" / spec["filename"]
+        experience_file.write_text(with_experience_metadata(project, entries[spec["filename"]], checkpoint), encoding="utf-8")
+        written.append(str(experience_file))
     state["last_experience_at"] = checkpoint
     state["experience_update_required"] = False
     state.pop("experience_request_due_at", None)
@@ -437,7 +491,7 @@ def apply_experience_payload(project: Path, payload_path: str) -> dict[str, Any]
         state["last_experience_payload"] = payload_resolved.relative_to(project).as_posix()
     except ValueError:
         state["last_experience_payload"] = payload_resolved.name
-    state["last_evolution_target"] = target
+    state["last_evolution_target"] = evolution_target
     if summaries:
         state["last_evolution_summary"] = summaries
     else:
@@ -448,6 +502,13 @@ def apply_experience_payload(project: Path, payload_path: str) -> dict[str, Any]
         result["evolution"] = run_evolution(project)
         if result["evolution"].get("errors"):
             result["errors"] = list(result["evolution"]["errors"])
+        else:
+            refreshed = load_state(project)
+            clear_fulfilled_requests(project, refreshed, clear_experience=True, clear_evolution=True)
+            save_state(project, refreshed)
+    else:
+        clear_fulfilled_requests(project, state, clear_experience=True)
+        save_state(project, state)
     return result
 
 def write_experience(project: Path, force: bool = False, payload_path: str | None = None) -> dict[str, Any]:
@@ -464,7 +525,12 @@ def write_experience(project: Path, force: bool = False, payload_path: str | Non
         return {"project": str(project), "skipped": True, "handoff_count": count, "last_experience_at": last}
     return write_experience_request(project, checkpoint or count)
 
-def validate_current_experience_quality(project: Path, *, include_evolution_cadence: bool = True) -> list[str]:
+def validate_current_experience_quality(
+    project: Path,
+    *,
+    include_evolution_cadence: bool = True,
+    allow_legacy_target_repair: bool = False,
+) -> list[str]:
     state = load_state(project)
     errors: list[str] = []
     count = int(state.get("handoff_count", 0))
@@ -477,6 +543,15 @@ def validate_current_experience_quality(project: Path, *, include_evolution_cade
     evolution_due = latest_evolution_due(count)
     if include_evolution_cadence and evolution_due and int(state.get("last_evolution_at", 0)) < evolution_due:
         errors.append(f"cadence requires completed evolution at handoff {evolution_due}")
+    target_raw = state.get("last_evolution_target")
+    if target_raw is not None:
+        if not isinstance(target_raw, dict):
+            if not allow_legacy_target_repair:
+                errors.append("last_evolution_target must be an object; run `manage_docs.py evolve <project> --force` or apply a fresh experience payload to repair legacy state")
+        else:
+            _, target_errors = normalize_evolution_target(project, target_raw)
+            for item in target_errors:
+                errors.append(f"last_evolution_target: {item}")
     entries = current_experience_files(project)
     expected = [spec["filename"] for spec in experience_file_specs(project)]
     for filename in expected:

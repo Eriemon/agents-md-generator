@@ -283,16 +283,18 @@ def build_experience_request(project: Path, count: int) -> dict[str, Any]:
     filenames = [spec["filename"] for spec in specs]
     latest_handoff = project / "docs" / "handoff" / "HANDOFF.md"
     checkpoint = latest_experience_due(count) or count
+    requires_atomic_evolution = checkpoint >= EVOLUTION_CADENCE_HANDOFFS and checkpoint % EVOLUTION_CADENCE_HANDOFFS == 0
     conversations = recent_conversation_context(project, limit=10)
     handoff_window_payload = handoff_window(project, checkpoint)
     conversation_window_payload = recent_conversation_window(project)
-    return {
+    request = {
         "schema_version": 1,
         "project": str(project),
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "handoff_count": count,
         "cadence_checkpoint": checkpoint,
         "requires_ai_generation": True,
+        "requires_atomic_evolution": requires_atomic_evolution,
         "ai_must_read_recent_conversations": True,
         "conversation_context_limit": 10,
         "conversation_context_missing": not conversations,
@@ -330,6 +332,16 @@ def build_experience_request(project: Path, count: int) -> dict[str, Any]:
             "evolution_summary": {"1-workflow.md": "# Workflow Evolution Template\\n\\n## Evidence Sources\\n..."},
         },
     }
+    if requires_atomic_evolution:
+        from manage_docs_evolution import evolution_schema_for, infer_evolution_target, target_schema_label
+
+        evolution_target = infer_evolution_target(project)
+        schema = evolution_schema_for(evolution_target)
+        request["evolution_target"] = evolution_target
+        request["target_schema_label"] = target_schema_label(evolution_target)
+        request["flow_requirements"] = schema.get("flow_requirements", [])
+        request["mixed_content_risks"] = schema.get("mixed_content_risks", [])
+    return request
 
 def write_experience_request(project: Path, count: int) -> dict[str, Any]:
     request = build_experience_request(project, count)
@@ -340,6 +352,8 @@ def write_experience_request(project: Path, count: int) -> dict[str, Any]:
     state["experience_update_required"] = True
     state["experience_request_due_at"] = int(request.get("cadence_checkpoint", count))
     state["experience_request"] = target.relative_to(project).as_posix()
+    if isinstance(request.get("evolution_target"), dict):
+        state["last_evolution_target"] = request["evolution_target"]
     save_state(project, state)
     return {
         "project": str(project),

@@ -12,8 +12,6 @@
 - `docs/experience/2-scripts.md`
 - `docs/experience/history_experience/20260516-152408/2-scripts.md`
 
-# Scripts Evolution Template
-
 ## Evidence Sources
 - Current and latest historical experience versions for this topic.
 

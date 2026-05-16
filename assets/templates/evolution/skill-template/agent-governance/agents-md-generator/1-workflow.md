@@ -12,8 +12,6 @@
 - `docs/experience/1-workflow.md`
 - `docs/experience/history_experience/20260516-152408/1-workflow.md`
 
-# Workflow Evolution Template
-
 ## Evidence Sources
 - Current and latest historical experience versions for this topic.
 
