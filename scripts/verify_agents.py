@@ -9,21 +9,29 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents_common import (
-    GLOBAL_CODEX_AGENTS_SYNC_COMMAND,
-    ROOT_AGENTS_SYNC_COMMAND,
     SKIP_DIRS,
+    decomposition_plan_path,
     emit_json,
     global_codex_agents_status,
+    inspect_project,
+    load_global_rule_overrides,
     parse_agents_metadata,
+    project_profile,
     read_installed_skill_version,
     resolve_project,
+    root_agents_sync_command,
+    global_codex_agents_sync_command,
 )
 from manage_docs import verify_docs
 
 
 COMMAND_RE = re.compile(r"`([^`\n]+)`")
 PATH_RE = re.compile(r"`([^`\n]+(?:/|\\|\.md|\.json|\.toml|\.yml|\.yaml|\.py|\.ts|\.tsx|\.go|\.php)[^`\n]*)`")
-ROOT_AGENTS_MAX_BYTES = 15 * 1024
+ROOT_AGENTS_MAX_BYTES = 16 * 1024
+LANGUAGE_LOCK_RE = re.compile(
+    r"All natural-language responses must use\s+(.+?)\s+unless the user explicitly switches languages\.",
+    flags=re.IGNORECASE,
+)
 
 
 def validate_markers(text: str, file: str, errors: list[str]) -> None:
@@ -62,6 +70,54 @@ def validate_strong_control(text: str, file: str, project: Path, errors: list[st
     docs_result = verify_docs(project)
     errors.extend(f"{file}: {item}" for item in docs_result["errors"])
     profile = read_json(project / ".agents" / "agents-control.json")
+    if not str(profile.get("default_conversation_language", "")).strip():
+        errors.append(f"{file}: strong-control profile must explicitly set default_conversation_language")
+    remote_contract = profile.get("remote_server_contract", {}) if isinstance(profile.get("remote_server_contract", {}), dict) else {}
+    if remote_contract:
+        remote_body = section_body(text, "## Remote Server Contract")
+        if remote_body is None:
+            errors.append(f"{file}: strong-control profile with remote_server_contract requires ## Remote Server Contract")
+        else:
+            if remote_contract.get("enabled"):
+                registry = remote_contract.get("server_registry", [])
+                routes = remote_contract.get("task_routes", [])
+                if not isinstance(registry, list) or not registry:
+                    errors.append(f"{file}: remote_server_contract.enabled requires server_registry")
+                    registry = []
+                if not isinstance(routes, list) or not routes:
+                    errors.append(f"{file}: remote_server_contract.enabled requires task_routes")
+                    routes = []
+                registry_ids = {str(item.get("id", "")).strip() for item in registry if isinstance(item, dict) and str(item.get("id", "")).strip()}
+                for route in routes:
+                    if not isinstance(route, dict):
+                        errors.append(f"{file}: remote_server_contract.task_routes must contain objects")
+                        continue
+                    task_name = str(route.get("task_name", "")).strip()
+                    primary_id = str(route.get("primary_server_id", "")).strip()
+                    fallback_ids = [str(item).strip() for item in route.get("fallback_server_ids", []) if str(item).strip()] if isinstance(route.get("fallback_server_ids", []), list) else []
+                    route_tasks = route.get("route_tasks", [])
+                    if not task_name:
+                        errors.append(f"{file}: remote_server_contract.task_routes requires task_name")
+                    if not primary_id:
+                        errors.append(f"{file}: remote_server_contract.task_routes requires primary_server_id")
+                    elif primary_id not in registry_ids:
+                        errors.append(f"{file}: remote_server_contract.task_routes references unknown primary_server_id `{primary_id}`")
+                    for fallback_id in fallback_ids:
+                        if fallback_id not in registry_ids:
+                            errors.append(f"{file}: remote_server_contract.task_routes references unknown fallback_server_id `{fallback_id}`")
+                    if not isinstance(route_tasks, list) or not [str(item).strip() for item in route_tasks if str(item).strip()]:
+                        errors.append(f"{file}: remote_server_contract.task_routes requires route_tasks")
+                    if task_name and f"`{task_name}`" not in remote_body:
+                        errors.append(f"{file}: Remote Server Contract must include the task route `{task_name}`")
+                    if primary_id and f"`{primary_id}`" not in remote_body:
+                        errors.append(f"{file}: Remote Server Contract must include the primary server `{primary_id}`")
+                if "automatically try the registered fallback servers in order" not in remote_body:
+                    errors.append(f"{file}: Remote Server Contract must enforce automatic fallback routing")
+                if "stop and update the current work folder AGENTS.md before continuing" not in remote_body:
+                    errors.append(f"{file}: Remote Server Contract must enforce unmatched-task blocking")
+            else:
+                if "No remote server task routes are registered right now" not in remote_body:
+                    errors.append(f"{file}: Remote Server Contract must state that no remote server task routes are registered when remote usage is disabled")
     git_management = str(profile.get("git_management", "")).strip()
     if git_management in {"yes-local-only", "remote-allowed"}:
         release_body = section_body(text, "## Release Contract")
@@ -101,6 +157,24 @@ def validate_strong_control(text: str, file: str, project: Path, errors: list[st
         for required_gate in ("quick_validate", "audit", "verify"):
             if required_gate not in gates_text:
                 errors.append(f"{file}: Skill Design Contract validation gates must include {required_gate}")
+    config = load_global_rule_overrides(project, profile)
+    config_path = config["path"].relative_to(project).as_posix()
+    if config_path not in text:
+        errors.append(f"{file}: strong-control root must reference local governance config `{config_path}`")
+    if not config["exists"]:
+        errors.append(f"{file}: missing local governance config `{config_path}`")
+    for item in config["errors"]:
+        errors.append(f"{file}: invalid local governance config `{config_path}`: {item}")
+    forbidden_snippets = (
+        "Single-file maintainability",
+        "docs/development/decomposition-plans/",
+        ".agents/script-governance-exceptions.json",
+        "Project tool scripts must live under",
+        "scripts/<family>/<function>/<name>.<ext>",
+    )
+    for snippet in forbidden_snippets:
+        if snippet in text:
+            errors.append(f"{file}: local rule detail must move to JSON config instead of AGENTS text ({snippet})")
 
 
 def is_path_reference(raw: str) -> bool:
@@ -176,6 +250,28 @@ def config_backed_command_error(command: str, project: Path) -> str | None:
     return None
 
 
+def documented_script_path_error(command: str, project: Path) -> str | None:
+    tokens = command.split()
+    if len(tokens) < 2 or tokens[0] != "python":
+        return None
+    candidate = project / tokens[1]
+    if tokens[1].endswith(".py") and not candidate.exists():
+        return f"documented command `{command}` references missing script `{tokens[1]}`"
+    return None
+
+
+def validate_decomposition_plan(project: Path, relative_path: str, profile: dict | None = None) -> list[str]:
+    plan_path = decomposition_plan_path(project, relative_path, profile)
+    if not plan_path.is_file():
+        return [f"oversized source file `{relative_path}` requires decomposition plan `{plan_path.relative_to(project).as_posix()}`"]
+    text = plan_path.read_text(encoding="utf-8", errors="ignore")
+    required_sections = load_global_rule_overrides(project, profile)["data"]["source_file_limits"].get("required_plan_sections", [])
+    missing = [section for section in required_sections if f"## {section}" not in text]
+    if missing:
+        return [f"{plan_path.relative_to(project).as_posix()}: missing decomposition plan sections {missing}"]
+    return []
+
+
 def should_skip(path: Path, project: Path, include_skipped: bool = False) -> bool:
     if include_skipped:
         return False
@@ -186,11 +282,14 @@ def should_skip(path: Path, project: Path, include_skipped: bool = False) -> boo
     return bool(set(parts) & SKIP_DIRS)
 
 
-def verify(project: Path, include_skipped: bool = False) -> dict:
+def verify(project: Path, include_skipped: bool = False, installed_skill_dir_override: str | Path | None = None) -> dict:
     errors: list[str] = []
     warnings: list[str] = []
     checked: list[str] = []
-    installed_version = read_installed_skill_version()
+    profile = project_profile(project)
+    facts = inspect_project(project)
+    installed_version = read_installed_skill_version(override_dir=installed_skill_dir_override)
+    root_repair_command = root_agents_sync_command(project, profile, installed_skill_dir_override)
     for agents in sorted(project.rglob("AGENTS.md")):
         if should_skip(agents, project, include_skipped):
             continue
@@ -200,7 +299,7 @@ def verify(project: Path, include_skipped: bool = False) -> dict:
             root_metadata_repair_required = False
             size = len(text.encode("utf-8"))
             if size > ROOT_AGENTS_MAX_BYTES:
-                errors.append(f"{checked[-1]}: exceeds 15KB limit ({size} bytes)")
+                errors.append(f"{checked[-1]}: exceeds 16KB limit ({size} bytes)")
             managed_root = "Managed by agent:" in text or (project / ".agents" / "agents-control.json").exists()
             if managed_root:
                 metadata = parse_agents_metadata(text)
@@ -229,8 +328,11 @@ def verify(project: Path, include_skipped: bool = False) -> dict:
                 if not metadata.get("default_language"):
                     errors.append("AGENTS.md: missing default language metadata")
                     root_metadata_repair_required = True
+                elif not LANGUAGE_LOCK_RE.search(text):
+                    errors.append("AGENTS.md: missing enforced default-language reply rule")
+                    root_metadata_repair_required = True
                 if root_metadata_repair_required:
-                    errors.append(f"AGENTS.md: run `{ROOT_AGENTS_SYNC_COMMAND}` to refresh root metadata before continuing")
+                    errors.append(f"AGENTS.md: run `{root_repair_command}` to refresh root metadata before continuing")
         validate_markers(text, checked[-1], errors)
         validate_strong_control(text, checked[-1], project, errors)
         if "{{" in text or "}}" in text:
@@ -254,13 +356,22 @@ def verify(project: Path, include_skipped: bool = False) -> dict:
             config_error = config_backed_command_error(command, project)
             if config_error:
                 errors.append(f"{checked[-1]}: {config_error}")
+            script_error = documented_script_path_error(command, project)
+            if script_error:
+                errors.append(f"{checked[-1]}: {script_error}")
             if command.startswith(("make ", "npm ", "pnpm ", "yarn ", "bun ", "python ", "pytest", "go ", "composer ", "ruff ", "mypy ", "npx ")):
                 continue
-    global_status = global_codex_agents_status()
+    for item in facts.get("oversized_source_files", []) or []:
+        relative_path = str(item.get("path", "")).strip()
+        if relative_path:
+            errors.extend(validate_decomposition_plan(project, relative_path, profile))
+    errors.extend(str(item) for item in facts.get("tool_script_layout_violations", []) or [])
+    errors.extend(str(item) for item in facts.get("script_triad_gaps", []) or [])
+    global_status = global_codex_agents_status(project_root=project, profile=profile)
     if (project / "skills" / "agents-md-generator" / "SKILL.md").is_file() and not global_status["baseline_ok"]:
         reason_text = ", ".join(global_status["repair_reasons"]) or "unknown global Codex AGENTS baseline issue"
         errors.append(
-            f"global .codex/AGENTS.md is not healthy for agents-md-generator development ({reason_text}); run `{GLOBAL_CODEX_AGENTS_SYNC_COMMAND}`"
+            f"global .codex/AGENTS.md is not healthy for agents-md-generator development ({reason_text}); run `{global_codex_agents_sync_command(project, profile)}`"
         )
     return {"checked_files": checked, "errors": errors, "warnings": warnings, "global_codex_agents_status": global_status}
 
@@ -269,8 +380,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Verify AGENTS.md generated content.")
     parser.add_argument("project", nargs="?", default=".")
     parser.add_argument("--include-skipped", action="store_true", help="Also scan skipped directories such as ref, vendor, and build outputs.")
+    parser.add_argument("--installed-skill-dir", default=None)
     args = parser.parse_args()
-    emit_json(verify(resolve_project(args.project), args.include_skipped))
+    emit_json(verify(resolve_project(args.project), args.include_skipped, args.installed_skill_dir))
 
 
 if __name__ == "__main__":

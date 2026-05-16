@@ -16,10 +16,10 @@
       ],
       "family": "skill-template",
       "output": "skills/agents-md-generator/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/1-workflow.md",
-      "sha256": "8b7c2b9d0ee26c84b89330877abebbf227faf33975acce2a859bc7f63b30ff09",
+      "sha256": "a4543d33e25aa3ebcdc1e7cf96cbd3e11cc636958bad8ad7de39d5fcf43fafb4",
       "source_versions": [
         "docs/experience/1-workflow.md",
-        "docs/experience/history_experience/20260514-134203/1-workflow.md"
+        "docs/experience/history_experience/20260516-152408/1-workflow.md"
       ],
       "target_type": "agents-md-generator",
       "topic": "1-workflow.md"
@@ -30,10 +30,10 @@
       ],
       "family": "skill-template",
       "output": "skills/agents-md-generator/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/2-scripts.md",
-      "sha256": "916baedb4eeeda06de75820ab67576ef2413d7ed4788b981d9d66272eefc4e7a",
+      "sha256": "a2cc7dbe54c907bb0fb9bf804eee87e725fb83e01b5091000cf771eaeac73c07",
       "source_versions": [
         "docs/experience/2-scripts.md",
-        "docs/experience/history_experience/20260514-134203/2-scripts.md"
+        "docs/experience/history_experience/20260516-152408/2-scripts.md"
       ],
       "target_type": "agents-md-generator",
       "topic": "2-scripts.md"
@@ -44,10 +44,10 @@
       ],
       "family": "skill-template",
       "output": "skills/agents-md-generator/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/3-plan.md",
-      "sha256": "70418b961b77530ff5e3f4fbdb8d689cf0dbfba092d4235c6a5cc679c38a0a1a",
+      "sha256": "f463fad545386da32c99bea04443db9cda67fce5ae776d5bde9ed5f0c8c1fee9",
       "source_versions": [
         "docs/experience/3-plan.md",
-        "docs/experience/history_experience/20260514-134203/3-plan.md"
+        "docs/experience/history_experience/20260516-152408/3-plan.md"
       ],
       "target_type": "agents-md-generator",
       "topic": "3-plan.md"
@@ -58,10 +58,10 @@
       ],
       "family": "skill-template",
       "output": "skills/agents-md-generator/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/4-design-ui.md",
-      "sha256": "c1d27b3363fedf6f4c0a315cba977c92017b863b355d3a2d3c69b679f2ccef34",
+      "sha256": "207486ab7aab9b60d7bca17c259a4177de43382400031eb4230e461cf1c72cf4",
       "source_versions": [
         "docs/experience/4-design-ui.md",
-        "docs/experience/history_experience/20260514-134203/4-design-ui.md"
+        "docs/experience/history_experience/20260516-152408/4-design-ui.md"
       ],
       "target_type": "agents-md-generator",
       "topic": "4-design-ui.md"

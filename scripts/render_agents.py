@@ -12,13 +12,19 @@ from agents_common import (
     RELEASE_CORE_WORKTREE_RULE,
     current_timestamp,
     detect_scopes,
+    ensure_global_rule_overrides_file,
     emit_json,
     extract_commands,
     extract_context,
+    global_codex_agents_sync_command,
     inspect_project,
+    load_global_rule_overrides,
+    project_profile,
     preferred_skill_version,
     read_skill_version,
     resolve_project,
+    root_agents_sync_command,
+    script_command,
 )
 from manage_dirs import apply_structure_fix, structure_gate
 from manage_docs import bootstrap_experience, branch_gate, infer_evolution_target, preflight_docs, scaffold as scaffold_docs
@@ -26,7 +32,28 @@ from manage_docs import bootstrap_experience, branch_gate, infer_evolution_targe
 
 GENERATED_START = "<!-- AGENTS-GENERATED:START"
 GENERATED_END = "<!-- AGENTS-GENERATED:END"
-ROOT_AGENTS_MAX_BYTES = 15 * 1024
+ROOT_AGENTS_MAX_BYTES = 16 * 1024
+
+
+def source_mode_installed_skill_arg(project: Path, profile: dict | None) -> str:
+    if not isinstance(profile, dict):
+        return ""
+    if profile.get("kind") == "skill" and str(profile.get("name", "")).strip() == "agents-md-generator":
+        skill_dir = project / "skills" / "agents-md-generator"
+        if skill_dir.is_dir():
+            return f" --installed-skill-dir {skill_dir.relative_to(project).as_posix()}"
+    return ""
+
+
+def project_command(project: Path, profile: dict | None, script_name: str, *args: str) -> str:
+    command = script_command(project, script_name, *args, profile=profile)
+    if script_name == "verify_agents.py":
+        command += source_mode_installed_skill_arg(project, profile)
+    return command
+
+
+def local_rule_config_path(project: Path, profile: dict | None) -> str:
+    return load_global_rule_overrides(project, profile)["path"].relative_to(project).as_posix()
 
 
 def command_rows(commands: list[dict[str, str]]) -> str:
@@ -71,7 +98,7 @@ def root_size_errors(paths_to_text: list[tuple[str, str]]) -> list[str]:
             continue
         size = len(text.encode("utf-8"))
         if size > ROOT_AGENTS_MAX_BYTES:
-            errors.append(f"{label}: exceeds 15KB limit ({size} bytes); compress hand-written content before writing")
+            errors.append(f"{label}: exceeds 16KB limit ({size} bytes); compress hand-written content before writing")
     return errors
 
 
@@ -298,11 +325,11 @@ def load_profile(project: Path, raw: str | None) -> dict | None:
     return data
 
 
-def control_profile(profile: dict | None) -> str:
+def control_profile(profile: dict | None, project: Path) -> str:
     if not profile:
         return "\n".join([
             "- Strong control: not configured.",
-            "- Run `python scripts/collect_design_profile.py <project> --answers answers.json --write` before claiming strict control.",
+            f"- Run `{project_command(project, profile, 'collect_design_profile.py', '<project>', '--answers', 'answers.json', '--write')}` before claiming strict control.",
             "- Until configured, ask the mandatory design questions before writing controlled AGENTS.md output.",
         ])
     lines = [
@@ -319,6 +346,9 @@ def control_profile(profile: dict | None) -> str:
         lines.append(f"- Validation method: {profile['validation_method']}.")
     if profile.get("resource_plan"):
         lines.append(f"- Resource boundaries: {profile['resource_plan']}.")
+    lines.append(
+        f"- Local governance detail source: `{local_rule_config_path(project, profile)}`; render, verify, and docs-governance scripts read this JSON for long Python task automation, maintainability limits, and project-tool script rules."
+    )
     if profile.get("expected_outcome"):
         lines.append(f"- Expected outcome: {profile['expected_outcome']}.")
     audience = profile.get("audience_or_environment")
@@ -333,22 +363,24 @@ def control_profile(profile: dict | None) -> str:
     return "\n".join(lines)
 
 
-def directory_contract(profile: dict | None) -> str:
+def directory_contract(profile: dict | None, project: Path) -> str:
     if not profile:
         return "- Directory contract: not confirmed. Do not freeze structure until the user confirms local, remote, and feature-addition layout."
     contract = profile.get("directory_contract", {})
     dir_contract = profile.get("dir_manager_contract", {})
+    archive_command = project_command(project, profile, "manage_dirs.py", "archive", "<project>", "--reason", "force-confirmed-directory-override")
     lines = [
         f"- Confirmed: {contract.get('confirmed', False)}.",
         f"- Local structure: {contract.get('local', 'not specified')}.",
         f"- Remote structure: {contract.get('remote', 'not specified')}.",
         "- Remote deployment boundary: do not sync local skill-development content to remote servers; deploy only explicit runtime/deployment artifacts unless the user explicitly overrides.",
-        f"- New feature structure: {contract.get('feature_rules', 'not specified')}.",
+        "- New feature structure: keep new work inside the confirmed local structure and primary project root; read the local JSON governance config before assuming detailed maintainability or script layout rules.",
         "- Do not add new top-level directories or move ownership boundaries without updating this contract.",
+        f"- Local maintainability, long-task automation, and tool-script governance details are configuration-backed in `{local_rule_config_path(project, profile)}`.",
         f"- Dir manager gate: review directory create/move/delete/rename plans with `{dir_contract.get('folder', 'docs/dir_manager')}/DIR_MANAGER.md` before changing folder structure.",
-        "- Required command before folder changes: `python scripts/manage_dirs.py review <project> --input change.json`.",
+        f"- Required command before folder changes: `{project_command(project, profile, 'manage_dirs.py', 'review', '<project>', '--input', 'change.json')}`.",
         "- If directory review blocks the change, refuse default execution, explain the risk, and ask for explicit user force-confirmation before proceeding.",
-        f"- After user force-confirmation and before applying the blocked folder change, archive old dir manager content to `{dir_contract.get('history', 'docs/dir_manager/history_dir_manager')}/YYYYMMDD-HHMMSS/` with `python scripts/manage_dirs.py archive <project> --reason \"force-confirmed directory override\"`.",
+        f"- After user force-confirmation and before applying the blocked folder change, archive old dir manager content to `{dir_contract.get('history', 'docs/dir_manager/history_dir_manager')}/YYYYMMDD-HHMMSS/` with `{archive_command}`.",
     ]
     primary_root = str(contract.get("primary_project_root", "")).strip()
     if primary_root:
@@ -357,7 +389,53 @@ def directory_contract(profile: dict | None) -> str:
     return "\n".join(lines)
 
 
-def release_contract(profile: dict | None) -> str:
+def remote_server_contract(profile: dict | None) -> str:
+    if not profile:
+        return "- Remote server contract: not configured. If future work needs remote server validation, confirm and lock the server through agents-md-generator before proceeding."
+    contract = profile.get("remote_server_contract", {})
+    if not contract:
+        return "- Remote server contract: not configured. If future work needs remote server validation, confirm and lock the server through agents-md-generator before proceeding."
+    if not contract.get("enabled"):
+        return "\n".join([
+            "- Remote server usage: disabled for this work folder.",
+            "- No remote server task routes are registered right now.",
+            "- If future work needs remote server validation, re-enter the AGENTS update flow and define the required server routes before proceeding.",
+        ])
+    registry = contract.get("server_registry", []) if isinstance(contract.get("server_registry", []), list) else []
+    routes = contract.get("task_routes", []) if isinstance(contract.get("task_routes", []), list) else []
+    lines = [
+        "- Remote server usage: enabled.",
+        f"- Registered remote server count: {len(registry)}.",
+        f"- Task route count: {len(routes)}.",
+    ]
+    for server in registry:
+        if not isinstance(server, dict):
+            continue
+        functions_text = "; ".join(str(item) for item in server.get("functions", []) if str(item).strip()) if isinstance(server.get("functions", []), list) else ""
+        lines.append(
+            f"- Registered server `{server.get('id', 'unknown')}`: {server.get('name', 'unknown')} / {server.get('category', 'Uncategorized')} / functions: {functions_text or 'not specified'}."
+        )
+    for route in routes:
+        if not isinstance(route, dict):
+            continue
+        fallback_ids = [str(item).strip() for item in route.get("fallback_server_ids", []) if str(item).strip()] if isinstance(route.get("fallback_server_ids", []), list) else []
+        route_tasks = "; ".join(str(item) for item in route.get("route_tasks", []) if str(item).strip()) if isinstance(route.get("route_tasks", []), list) else ""
+        route_functions = "; ".join(str(item) for item in route.get("route_functions", []) if str(item).strip()) if isinstance(route.get("route_functions", []), list) else ""
+        lines.append(
+            f"- Task route `{route.get('task_name', 'unknown')}`: primary `{route.get('primary_server_id', 'unknown')}`; fallbacks: {', '.join(f'`{item}`' for item in fallback_ids) if fallback_ids else 'none'}."
+        )
+        lines.append(f"- Route tasks: {route_tasks or 'not specified'}.")
+        lines.append(f"- Route functions: {route_functions or 'not specified'}.")
+        lines.append(
+            f"- When the user requests remote server validation for `{route.get('task_name', 'unknown')}`, you must start with primary `{route.get('primary_server_id', 'unknown')}`."
+        )
+    lines.append("- If the matched primary remote server fails `check` or `workspace-check`, automatically try the registered fallback servers in order.")
+    lines.append("- If no registered task route matches the requested task, stop and update the current work folder AGENTS.md before continuing.")
+    lines.append("- If the user wants a different task-to-server mapping, update the current work folder AGENTS.md first; do not bypass the route table ad hoc.")
+    return "\n".join(lines)
+
+
+def release_contract(profile: dict | None, project: Path) -> str:
     if not profile:
         return "- Release contract: not configured. Do not claim installable release packaging until the user confirms dist and zip rules."
     release = profile.get("release_contract", {})
@@ -369,14 +447,16 @@ def release_contract(profile: dict | None) -> str:
         f"- Branch model: {profile.get('branch_model', 'not specified')}; protected branches: {protected_text}.",
         "- Development branches are allowed only as temporary local work branches.",
         f"- {RELEASE_CORE_WORKTREE_RULE}",
-        "- Before releasing an installable `dist/` package: commit all work, merge into `master`, record the release, delete local branches other than `master` and `release`, and use `python scripts/manage_docs.py release-prepare <project> --version vX.Y.Z --skill-dir skills/<skill-name>` when branch cleanup should be automated.",
-        "- Build release artifacts with `python scripts/manage_docs.py package-release <project> --version vX.Y.Z --skill-dir skills/<skill-name>`.",
+        f"- Before releasing an installable `dist/` package: commit all work, merge into `master`, record the release, delete local branches other than `master` and `release`, and use `{project_command(project, profile, 'manage_docs.py', 'release-prepare', '<project>', '--version', 'vX.Y.Z', '--skill-dir', 'skills/<skill-name>')}` when branch cleanup should be automated.",
+        f"- Build release artifacts with `{project_command(project, profile, 'manage_docs.py', 'package-release', '<project>', '--version', 'vX.Y.Z', '--skill-dir', 'skills/<skill-name>')}`.",
         f"- Installable `dist/` release copies must be sanitized before packaging when `sanitization_required` is `{release.get('sanitization_required', False)}`; use typed placeholders such as `<REDACTED_API_KEY>`, `<REDACTED_PASSWORD>`, `<REDACTED_EMAIL>`, and `<REDACTED_LOCAL_PATH>` instead of real sensitive values.",
         f"- Release receipt file named {release.get('receipt_file', 'RELEASE_RECEIPT.json')} must exist inside each installable release directory.",
+        "- Different-version release directories and matching zip files are immutable history by default; do not delete, overwrite, or rewrite them during a new packaging run.",
+        "- Rebuilding the same version may replace only the current target release directory and its matching zip; no other `dist/` artifact may change.",
         f"- Sanitization scope: `{release.get('sanitization_scope', 'not-configured')}`; sanitization mode: `{release.get('sanitization_mode', 'not-configured')}`.",
         f"- The release receipt must record sanitization actions when `sanitization_receipt_required` is `{release.get('sanitization_receipt_required', False)}`; undeclared or unfinished sanitization makes the release non-installable.",
         f"- Dist folder: `{release.get('dist_folder', 'dist')}`; release folder pattern: `{release.get('release_folder_pattern', '<name>-vx.x.x')}`; zip required: {release.get('zip_required', True)}.",
-        "- Before and after packaging, run `python scripts/manage_docs.py release-gate <project> --version vX.Y.Z --skill-dir skills/<skill-name> --phase pre|post`.",
+        f"- Before and after packaging, run `{project_command(project, profile, 'manage_docs.py', 'release-gate', '<project>', '--version', 'vX.Y.Z', '--skill-dir', 'skills/<skill-name>', '--phase', 'pre|post')}`.",
         "- Install only from a versioned `dist/<name>-vX.Y.Z/` release directory that contains a validated `RELEASE_RECEIPT.json` and passes the sanitization gate; source directory installs are forbidden.",
         f"- Repo-local installs use validation level `{release.get('repo_install_validation_level', 'strong')}`; standalone copied release folders use `{release.get('external_install_validation_level', 'reduced_assurance')}`.",
         "- Keep the release commit and the current `docs/git_manager/CHANGELOG.md` entry together.",
@@ -420,7 +500,7 @@ def engineering_rule_contract(profile: dict | None) -> str:
     return "\n".join(lines)
 
 
-def skill_design_contract(profile: dict | None) -> str:
+def skill_design_contract(profile: dict | None, project: Path) -> str:
     if not profile or profile.get("kind") != "skill":
         return "\n".join([
             "- Skill design contract: not configured for this project.",
@@ -437,7 +517,7 @@ def skill_design_contract(profile: dict | None) -> str:
     forward_policy = str(contract.get('forward_testing_policy', 'not specified')).strip() or 'not specified'
     if forward_policy != "not specified":
         forward_policy = "use fresh fixtures or real targets for risky generation, docs governance, install, directory, release, compatibility, or verification changes"
-    return "\n".join([
+    lines = [
         f"- Trigger scenarios: {contract.get('trigger_scenarios', 'not specified')}.",
         f"- Design patterns: {patterns_text or 'not specified'}.",
         f"- Resource boundaries: {contract.get('resource_plan', 'not specified')}.",
@@ -446,13 +526,16 @@ def skill_design_contract(profile: dict | None) -> str:
         f"- Forward testing: {forward_policy}.",
         f"- Validation method: {validation_method}; granularity: {validation_granularity}.",
         f"- Reference material policy: {contract.get('reference_material_policy', 'temporary inputs only')}.",
-    ])
+        f"- Local long-task automation, maintainability, and script-governance details come from `{local_rule_config_path(project, profile)}`; use scripts that read that JSON instead of duplicating those details in AGENTS.md.",
+    ]
+    return "\n".join(lines)
 
 
 def conversation_completion_contract(profile: dict | None) -> str:
+    default_language = profile.get('default_conversation_language', '中文') if profile else '中文'
     return "\n".join([
         "- Finish all requested development work in the current conversation whenever feasible.",
-        f"- Default conversation language: {profile.get('default_conversation_language', '中文') if profile else '中文'}. Unless the user explicitly switches language, continue in that language.",
+        f"- Default conversation language: {default_language}. All natural-language responses must use {default_language} unless the user explicitly switches languages. Code, commands, logs, raw error text, and proper nouns may remain in their original form.",
         "- If work cannot be completed, report blockers, completed files, unverified assumptions, and exact next steps.",
         "- Run the smallest relevant checks during development and final verification before completion claims.",
         "- Preserve user changes and never rewrite the directory contract silently.",
@@ -495,12 +578,12 @@ def experience_log_contract(profile: dict | None) -> str:
     ])
 
 
-def documentation_governance_contract(profile: dict | None) -> str:
+def documentation_governance_contract(profile: dict | None, project: Path) -> str:
     if not profile:
         return "\n".join([
             "- Docs governance: not configured.",
             "- Strong-control runs must create `docs/handoff/`, `docs/experience/`, `docs/development/`, `docs/install_configuration/`, `docs/git_manager/`, and `docs/dir_manager/`.",
-            "- Run `python scripts/manage_docs.py scaffold <project>` before claiming docs governance is ready.",
+            f"- Run `{project_command(project, profile, 'manage_docs.py', 'scaffold', '<project>')}` before claiming docs governance is ready.",
         ])
     contract = profile.get("docs_contract", {})
     handoff = contract.get("handoff", {})
@@ -516,9 +599,9 @@ def documentation_governance_contract(profile: dict | None) -> str:
         targets_text = str(targets)
     return "\n".join([
         f"- Docs root: `{contract.get('root', 'docs')}`; latest handoff: `{handoff.get('current', 'docs/handoff/HANDOFF.md')}` is always the newest task handoff.",
-        f"- Before a new task, read `{handoff.get('current', 'docs/handoff/HANDOFF.md')}`, run `python scripts/manage_docs.py resume-check <project>`, and repair interrupted sessions with `python scripts/manage_docs.py resume-repair <project> --input recovery.json` before new work continues.",
-        "- After reading the prior handoff and before implementation, run `python scripts/manage_docs.py start-session <project> --input session.json` to record the active session.",
-        f"- Every completed development conversation must write `{handoff.get('current', 'docs/handoff/HANDOFF.md')}`; use `python scripts/manage_docs.py handoff <project> --input handoff.json` at task completion.",
+        f"- Before a new task, read `{handoff.get('current', 'docs/handoff/HANDOFF.md')}`, run `{project_command(project, profile, 'manage_docs.py', 'resume-check', '<project>')}`, and repair interrupted sessions with `{project_command(project, profile, 'manage_docs.py', 'resume-repair', '<project>', '--input', 'recovery.json')}` before new work continues.",
+        f"- After reading the prior handoff and before implementation, run `{project_command(project, profile, 'manage_docs.py', 'start-session', '<project>', '--input', 'session.json')}` to record the active session.",
+        f"- Every completed development conversation must write `{handoff.get('current', 'docs/handoff/HANDOFF.md')}`; use `{project_command(project, profile, 'manage_docs.py', 'handoff', '<project>', '--input', 'handoff.json')}` at task completion.",
         f"- Experience folder: `{experience.get('folder', 'docs/experience')}` maintains 10 project-specific numbered experience files including `docs/experience/1-workflow.md`, `docs/experience/2-scripts.md`, `docs/experience/3-plan.md`, `docs/experience/4-design-ui.md`, plus `5-*.md` through `10-*.md`.",
         f"- Experience cadence: every 5 completed handoffs create an AI update request plus the current evidence window using up to {experience.get('conversation_context_limit', 10)} recent conversation snapshots; the active agent should immediately apply an AI-authored payload in the same conversation, and previous current files are archived to `{experience.get('history', 'docs/experience/history_experience')}/YYYYMMDD-HHMMSS/` before refreshed files are written with cadence metadata.",
         f"- Auto evolution: every {experience.get('evolution_every_handoffs', 10)} completed handoffs requires valid `evolution_summary` content in the same payload so experience refresh and evolution finish atomically; approved experience is distilled into indexed templates under `{experience.get('evolution_templates', 'assets/templates/evolution/')}` using the exact matching family, category, and type target, and topics stay project-specific without being copied into both template families.",
@@ -526,7 +609,7 @@ def documentation_governance_contract(profile: dict | None) -> str:
         "- AGENTS rendering must not scan the whole `assets/templates/` tree. Only the exact matching evolution target may be read as supplemental guidance, and unmatched sibling templates are ignored.",
         f"- Git manager: keep the current change summary in `{git.get('folder', 'docs/git_manager')}/CHANGELOG.md`, archive older entries under `{git.get('folder', 'docs/git_manager')}/history_git_manager/YYYYMMDD-HHMMSS/`, and rotate with `manage_docs.py git-changelog`.",
         f"- Dir manager: keep strict local and remote deployment structure review rules under `{dir_manager.get('folder', 'docs/dir_manager')}/`; run `manage_dirs.py review`, preserve `history_dir_manager/` archives, and keep remote deployment structure governance in the same contract.",
-        "- Directory changes require `python scripts/manage_dirs.py review <project> --input change.json`; blocked reviews require explicit user force-confirmation and risk capture in handoff.",
+        f"- Directory changes require `{project_command(project, profile, 'manage_dirs.py', 'review', '<project>', '--input', 'change.json')}`; blocked reviews require explicit user force-confirmation and risk capture in handoff.",
         f"- Force-confirmed directory overrides must archive old dir manager content to `{dir_manager.get('history', 'docs/dir_manager/history_dir_manager')}/YYYYMMDD-HHMMSS/` before applying the folder change.",
         f"- Handoff history: archive the previous HANDOFF.md to `{handoff.get('history', 'docs/handoff/history_handoff')}` with `{handoff.get('archive_pattern', 'HANDOFF-YYYYMMDD-HHMMSS.md')}` before writing a new one; keep development records at `{development.get('current', 'docs/development/DEVELOPMENT.md')}` and install configuration for {targets_text} under `{install.get('folder', 'docs/install_configuration')}`.",
     ])
@@ -548,14 +631,15 @@ def template_values(project: Path, profile: dict | None = None, template_dir: Pa
         "GENERATOR_VERSION": current_version,
         "DEFAULT_LANGUAGE": default_language,
         "PROJECT_OVERVIEW": project_overview(facts),
-        "CONTROL_PROFILE": control_profile(profile),
-        "DIRECTORY_CONTRACT": directory_contract(profile),
-        "RELEASE_CONTRACT": release_contract(profile),
+        "CONTROL_PROFILE": control_profile(profile, project),
+        "DIRECTORY_CONTRACT": directory_contract(profile, project),
+        "REMOTE_SERVER_CONTRACT": remote_server_contract(profile),
+        "RELEASE_CONTRACT": release_contract(profile, project),
         "ENGINEERING_RULE_CONTRACT": engineering_rule_contract(profile),
-        "SKILL_DESIGN_CONTRACT": skill_design_contract(profile),
+        "SKILL_DESIGN_CONTRACT": skill_design_contract(profile, project),
         "CONVERSATION_COMPLETION_CONTRACT": conversation_completion_contract(profile),
         "EXPERIENCE_LOG_CONTRACT": experience_log_contract(profile),
-        "DOCUMENTATION_GOVERNANCE_CONTRACT": documentation_governance_contract(profile),
+        "DOCUMENTATION_GOVERNANCE_CONTRACT": documentation_governance_contract(profile, project),
         "VERIFICATION_STATUS": "unverified",
         "COMMAND_SOURCE": command_source,
         "COMMAND_ROWS": command_rows(commands),
@@ -661,8 +745,9 @@ def render_root(project: Path, template_dir: Path | None = None, profile: dict |
                 "**Precedence:** the closest `AGENTS.md` to the files being changed wins. Explicit user prompts override this file.",
                 compact_section("project-overview", "Project Overview", values["PROJECT_OVERVIEW"], 3),
                 compact_section("control-profile", "Control Profile", values["CONTROL_PROFILE"], control_max),
-                compact_section("directory-contract", "Directory Contract", values["DIRECTORY_CONTRACT"], 5),
-                compact_section("release-contract", "Release Contract", values["RELEASE_CONTRACT"], 9),
+                compact_section("directory-contract", "Directory Contract", values["DIRECTORY_CONTRACT"], 20),
+                compact_section("remote-server-contract", "Remote Server Contract", values["REMOTE_SERVER_CONTRACT"], 18),
+                compact_section("release-contract", "Release Contract", values["RELEASE_CONTRACT"], 13),
                 compact_section("engineering-rule-contract", "Engineering Rule Contract", values["ENGINEERING_RULE_CONTRACT"], engineering_max),
                 compact_section("skill-design-contract", "Skill Design Contract", values["SKILL_DESIGN_CONTRACT"], skill_max),
                 "\n".join([
@@ -673,7 +758,7 @@ def render_root(project: Path, template_dir: Path | None = None, profile: dict |
                     limit_command_rows(values["COMMAND_ROWS"]),
                     "<!-- AGENTS-GENERATED:END commands -->",
                 ]),
-                compact_section("conversation-completion-contract", "Conversation Completion Contract", values["CONVERSATION_COMPLETION_CONTRACT"], 2),
+                compact_section("conversation-completion-contract", "Conversation Completion Contract", values["CONVERSATION_COMPLETION_CONTRACT"], 3),
                 compact_section("documentation-governance-contract", "Documentation Governance Contract", values["DOCUMENTATION_GOVERNANCE_CONTRACT"], 12),
                 compact_section("directory-coverage", "Directory Coverage", values["DIRECTORY_COVERAGE"], 2),
             ]
@@ -791,6 +876,7 @@ def main() -> None:
                 "requires_user_confirmation": True,
             })
             raise SystemExit(1)
+        ensure_global_rule_overrides_file(project, profile)
         scaffold_docs(project)
         facts = inspect_project(project)
         if facts.get("session_history_bootstrap_required"):

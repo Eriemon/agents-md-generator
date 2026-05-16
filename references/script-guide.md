@@ -14,8 +14,8 @@ All scripts use Python standard library only.
 ## Detect
 
 ```bash
-python scripts/inspect_project.py /path/to/project
-python scripts/detect_scopes.py /path/to/project
+python skills/agents-md-generator/scripts/inspect_project.py /path/to/project
+python skills/agents-md-generator/scripts/detect_scopes.py /path/to/project
 ```
 
 Outputs JSON facts for language, framework, package manager, CI, AI configs, directories, files, whether root `AGENTS.md` exists, and suggested scoped AGENTS.md directories.
@@ -23,21 +23,21 @@ Outputs JSON facts for language, framework, package manager, CI, AI configs, dir
 ## Extract
 
 ```bash
-python scripts/collect_design_profile.py /path/to/project
-python scripts/collect_design_profile.py /path/to/project --kind skill
-python scripts/collect_design_profile.py /path/to/project --kind engineering
-python scripts/collect_design_profile.py /path/to/project --start
-python scripts/collect_design_profile.py /path/to/project --start-takeover
-python scripts/collect_design_profile.py /path/to/project --resume
-python scripts/collect_design_profile.py /path/to/project --resume-takeover
-python scripts/collect_design_profile.py /path/to/project --answer-file partial.json
-python scripts/collect_design_profile.py /path/to/project --reset-interview
-python scripts/collect_design_profile.py /path/to/project --answers answers.json
-python scripts/collect_design_profile.py /path/to/project --answers answers.json --write
-python scripts/select_engineering_rules.py --list
-python scripts/select_engineering_rules.py --task refactor --mode mini --scope on-demand
-python scripts/extract_commands.py /path/to/project
-python scripts/extract_context.py /path/to/project
+python skills/agents-md-generator/scripts/collect_design_profile.py /path/to/project
+python skills/agents-md-generator/scripts/collect_design_profile.py /path/to/project --kind skill
+python skills/agents-md-generator/scripts/collect_design_profile.py /path/to/project --kind engineering
+python skills/agents-md-generator/scripts/collect_design_profile.py /path/to/project --start
+python skills/agents-md-generator/scripts/collect_design_profile.py /path/to/project --start-takeover
+python skills/agents-md-generator/scripts/collect_design_profile.py /path/to/project --resume
+python skills/agents-md-generator/scripts/collect_design_profile.py /path/to/project --resume-takeover
+python skills/agents-md-generator/scripts/collect_design_profile.py /path/to/project --answer-file partial.json
+python skills/agents-md-generator/scripts/collect_design_profile.py /path/to/project --reset-interview
+python skills/agents-md-generator/scripts/collect_design_profile.py /path/to/project --answers answers.json
+python skills/agents-md-generator/scripts/collect_design_profile.py /path/to/project --answers answers.json --write
+python skills/agents-md-generator/scripts/select_engineering_rules.py --list
+python skills/agents-md-generator/scripts/select_engineering_rules.py --task refactor --mode mini --scope on-demand
+python skills/agents-md-generator/scripts/extract_commands.py /path/to/project
+python skills/agents-md-generator/scripts/extract_context.py /path/to/project
 ```
 
 `collect_design_profile.py --start` creates `.agents/design-interview-state.json` and returns only the current question group. If the current work folder already has landed content and the root `AGENTS.md` is missing or version-abnormal, `--start` should switch into takeover mode automatically instead of launching the full interview. `--start-takeover` and `--resume-takeover` expose that mode explicitly. `--resume` restores the unfinished group instead of silently restarting. `--answer-file partial.json` accepts answers for only the current group, then advances to group confirmation, the next group, or final `alignment_confirmed` confirmation. If an unfinished interview exists, starting a new one must return `resume_required` until the caller resumes it or explicitly abandons it with `--reset-interview`. Skill and engineering interviews both require the directory-contract group so local structure, remote structure, and future feature placement are always confirmed even for new projects.
@@ -57,42 +57,42 @@ Skill development profiles require `trigger_scenarios`, `skill_design_patterns`,
 ## Render
 
 ```bash
-python scripts/render_agents.py /path/to/project
-python scripts/render_agents.py /path/to/project --profile /path/to/project/.agents/agents-control.json
-python scripts/render_agents.py /path/to/project --write
-python scripts/render_agents.py /path/to/project --profile /path/to/project/.agents/agents-control.json --write --confirm-structure-fix
-python scripts/render_agents.py /path/to/project --profile /path/to/project/.agents/agents-control.json --write --confirm-docs-layout
-python scripts/render_agents.py /path/to/project --profile /path/to/project/.agents/agents-control.json --write --confirm-branch-governance
-python scripts/render_agents.py /path/to/project --template-dir /path/to/templates
+python skills/agents-md-generator/scripts/render_agents.py /path/to/project
+python skills/agents-md-generator/scripts/render_agents.py /path/to/project --profile /path/to/project/.agents/agents-control.json
+python skills/agents-md-generator/scripts/render_agents.py /path/to/project --write
+python skills/agents-md-generator/scripts/render_agents.py /path/to/project --profile /path/to/project/.agents/agents-control.json --write --confirm-structure-fix
+python skills/agents-md-generator/scripts/render_agents.py /path/to/project --profile /path/to/project/.agents/agents-control.json --write --confirm-docs-layout
+python skills/agents-md-generator/scripts/render_agents.py /path/to/project --profile /path/to/project/.agents/agents-control.json --write --confirm-branch-governance
+python skills/agents-md-generator/scripts/render_agents.py /path/to/project --template-dir /path/to/templates
 ```
 
-Default mode is dry-run and prints the compressed root draft. `--profile` enables strong-control sections from `.agents/agents-control.json`; without it, output must say strong control is not configured. `--write` writes AGENTS.md files inside the target project, creates the `docs/` governance tree when a profile is present, and preserves hand-written content outside generated sections. The root `AGENTS.md` must stay within `15KB`; other AGENTS files do not have this hard size cap. If preserved hand-written root content breaks that limit, `--write` fails before changing files. It must not create a root-level `experience/`; all experience summaries belong under `docs/experience/` as 10 numbered files. If structure governance is blocked for a strong-control work folder, `--write` exits before writing AGENTS.md or docs governance unless `--confirm-structure-fix` records explicit user confirmation. If branch governance is blocked for a strong-control work folder, `--write` exits before writing AGENTS.md or docs governance unless `--confirm-branch-governance` records explicit user confirmation. If docs preflight reports an ambiguous or conflicting existing `docs/` layout, `--write` exits before writing AGENTS.md or docs governance unless `--confirm-docs-layout` records explicit user confirmation. `--template-dir` is mainly for tests or deliberate template overrides; otherwise use bundled templates in `assets/templates/`. AGENTS rendering must not scan the entire templates tree: it only reads the root/scoped AGENTS templates plus, when present, the single exact matching evolution target as supplemental guidance.
+Default mode is dry-run and prints the compressed root draft. `--profile` enables strong-control sections from `.agents/agents-control.json`; without it, output must say strong control is not configured. `--write` writes AGENTS.md files inside the target project, creates the `docs/` governance tree when a profile is present, and preserves hand-written content outside generated sections. The root `AGENTS.md` must stay within `16KB`; other AGENTS files do not have this hard size cap. If preserved hand-written root content breaks that limit, `--write` fails before changing files. It must not create a root-level `experience/`; all experience summaries belong under `docs/experience/` as 10 numbered files. If structure governance is blocked for a strong-control work folder, `--write` exits before writing AGENTS.md or docs governance unless `--confirm-structure-fix` records explicit user confirmation. If branch governance is blocked for a strong-control work folder, `--write` exits before writing AGENTS.md or docs governance unless `--confirm-branch-governance` records explicit user confirmation. If docs preflight reports an ambiguous or conflicting existing `docs/` layout, `--write` exits before writing AGENTS.md or docs governance unless `--confirm-docs-layout` records explicit user confirmation. `--template-dir` is mainly for tests or deliberate template overrides; otherwise use bundled templates in `assets/templates/`. AGENTS rendering must not scan the entire templates tree: it only reads the root/scoped AGENTS templates plus, when present, the single exact matching evolution target as supplemental guidance.
 
 ## Docs Governance
 
 ```bash
-python scripts/manage_docs.py preflight /path/to/project
-python scripts/manage_docs.py scaffold /path/to/project
-python scripts/manage_docs.py start-session /path/to/project --input session.json
-python scripts/manage_docs.py resume-check /path/to/project
-python scripts/manage_docs.py resume-repair /path/to/project --input recovery.json
-python scripts/manage_docs.py handoff /path/to/project --input handoff.json
-python scripts/manage_docs.py experience /path/to/project
-python scripts/manage_docs.py experience /path/to/project --force
-python scripts/manage_docs.py experience /path/to/project --payload experience-payload.json
-python scripts/manage_docs.py bootstrap-experience /path/to/project
-python scripts/manage_docs.py evolve /path/to/project --force
-python scripts/manage_docs.py branch-gate /path/to/project
-python scripts/manage_docs.py development /path/to/project --stage release --input stage.json
-python scripts/manage_docs.py verify /path/to/project
-python scripts/manage_dirs.py init /path/to/project
-python scripts/manage_dirs.py structure-gate /path/to/project
-python scripts/manage_dirs.py apply-structure-fix /path/to/project
-python scripts/manage_dirs.py takeover-fix /path/to/project
-python scripts/manage_dirs.py scan /path/to/project --write
-python scripts/manage_dirs.py review /path/to/project --input change.json
-python scripts/manage_dirs.py archive /path/to/project --reason "force-confirmed directory override"
-python scripts/manage_dirs.py verify /path/to/project
+python skills/agents-md-generator/scripts/manage_docs.py preflight /path/to/project
+python skills/agents-md-generator/scripts/manage_docs.py scaffold /path/to/project
+python skills/agents-md-generator/scripts/manage_docs.py start-session /path/to/project --input session.json
+python skills/agents-md-generator/scripts/manage_docs.py resume-check /path/to/project
+python skills/agents-md-generator/scripts/manage_docs.py resume-repair /path/to/project --input recovery.json
+python skills/agents-md-generator/scripts/manage_docs.py handoff /path/to/project --input handoff.json
+python skills/agents-md-generator/scripts/manage_docs.py experience /path/to/project
+python skills/agents-md-generator/scripts/manage_docs.py experience /path/to/project --force
+python skills/agents-md-generator/scripts/manage_docs.py experience /path/to/project --payload experience-payload.json
+python skills/agents-md-generator/scripts/manage_docs.py bootstrap-experience /path/to/project
+python skills/agents-md-generator/scripts/manage_docs.py evolve /path/to/project --force
+python skills/agents-md-generator/scripts/manage_docs.py branch-gate /path/to/project
+python skills/agents-md-generator/scripts/manage_docs.py development /path/to/project --stage release --input stage.json
+python skills/agents-md-generator/scripts/manage_docs.py verify /path/to/project
+python skills/agents-md-generator/scripts/manage_dirs.py init /path/to/project
+python skills/agents-md-generator/scripts/manage_dirs.py structure-gate /path/to/project
+python skills/agents-md-generator/scripts/manage_dirs.py apply-structure-fix /path/to/project
+python skills/agents-md-generator/scripts/manage_dirs.py takeover-fix /path/to/project
+python skills/agents-md-generator/scripts/manage_dirs.py scan /path/to/project --write
+python skills/agents-md-generator/scripts/manage_dirs.py review /path/to/project --input change.json
+python skills/agents-md-generator/scripts/manage_dirs.py archive /path/to/project --reason "force-confirmed directory override"
+python skills/agents-md-generator/scripts/manage_dirs.py verify /path/to/project
 ```
 
 `preflight` is read-only. It checks whether `docs/` is absent, already has a complete AGENTS.md governance tree, or has an ambiguous/conflicting existing layout. It returns `status`, `docs_exists`, `safe_to_scaffold`, `conflicts`, `requires_user_confirmation`, and `question`. If confirmation is required, ask the user before writing AGENTS.md or scaffolding docs governance.
@@ -127,27 +127,32 @@ When git management is enabled, the generated Release Contract and git-manager g
 ## Verify
 
 ```bash
-python scripts/verify_agents.py /path/to/project
-python scripts/verify_agents.py /path/to/project --include-skipped
-python scripts/check_freshness.py /path/to/project
-python scripts/audit_skill.py /path/to/agents-md-generator
-python scripts/evaluate_skill.py /path/to/agents-md-generator /path/to/project
-python scripts/manage_docs.py release-prepare <project> --version vX.Y.Z --skill-dir skills/<skill-name>
-python scripts/manage_docs.py package-release <project> --version vX.Y.Z --skill-dir skills/<skill-name>
-python scripts/install_skill.py dist/<skill-name>-vX.Y.Z --target skip
-python scripts/install_skill.py dist/<skill-name>-vX.Y.Z --target codex --write
-python scripts/install_skill.py dist/<skill-name>-vX.Y.Z --target custom --custom-root /path/to/skills --write
+python skills/agents-md-generator/scripts/verify_agents.py /path/to/project --installed-skill-dir skills/agents-md-generator
+python skills/agents-md-generator/scripts/verify_agents.py /path/to/project
+python skills/agents-md-generator/scripts/verify_agents.py /path/to/project --include-skipped
+python skills/agents-md-generator/scripts/check_freshness.py /path/to/project
+python skills/agents-md-generator/scripts/audit_skill.py /path/to/agents-md-generator
+python skills/agents-md-generator/scripts/evaluate_skill.py /path/to/agents-md-generator /path/to/project
+python skills/agents-md-generator/scripts/manage_docs.py release-prepare <project> --version vX.Y.Z --skill-dir skills/<skill-name>
+python skills/agents-md-generator/scripts/manage_docs.py package-release <project> --version vX.Y.Z --skill-dir skills/<skill-name>
+python skills/agents-md-generator/scripts/install_skill.py dist/<skill-name>-vX.Y.Z --target skip
+python skills/agents-md-generator/scripts/install_skill.py dist/<skill-name>-vX.Y.Z --target codex --write
+python skills/agents-md-generator/scripts/install_skill.py dist/<skill-name>-vX.Y.Z --target custom --custom-root /path/to/skills --write
 ```
 
-`verify_agents.py` checks generated markers, unresolved placeholders, path references, core structure, docs governance structure, dir manager files, config-backed package/Make/composer commands, root AGENTS version metadata, root AGENTS version match against the current local installed `agents-md-generator`, and the root `15KB` AGENTS.md size limit. Root metadata is only valid when both `agents_version` and `generator_version` exist and both match the current installed `agents-md-generator` version; otherwise the workspace should be treated as trigger-required and should ask whether to enter AGENTS/docs/workspace design or restructuring instead of silently continuing as normal. For strong-control Skill projects, it also requires an exact `## Skill Design Contract` section with design patterns, resource boundaries, progressive disclosure, validation gates, and forward-testing policy. By default it skips development/reference/build trees such as `ref/`, `.git/`, `vendor/`, `dist/`, `build/`, `target/`, and `node_modules/`; use `--include-skipped` only when intentionally auditing those directories. `check_freshness.py` compares Last updated metadata with git history when available. `audit_skill.py` checks this skill's structure, frontmatter, referenced resources, and Python script compilation.
+`verify_agents.py` checks generated markers, unresolved placeholders, path references, core structure, docs governance structure, dir manager files, config-backed package/Make/composer commands, root AGENTS version metadata, root AGENTS version match against the current local installed `agents-md-generator`, the enforced root reply-language rule, the root `16KB` AGENTS.md size limit, and the local JSON governance config. Root metadata is only valid when both `agents_version` and `generator_version` exist and both match the current installed `agents-md-generator` version; otherwise the workspace should be treated as trigger-required and should ask whether to enter AGENTS/docs/workspace design or restructuring instead of silently continuing as normal. If root metadata includes `default_language`, the root `AGENTS.md` must also include an explicit natural-language reply rule that binds replies to that configured language unless the user explicitly switches languages. For source-mode self-verification of this repository before installation, use `--installed-skill-dir skills/agents-md-generator` so the command verifies against the current source tree rather than an older installed copy. For strong-control Skill projects, it also requires an exact `## Skill Design Contract` section with design patterns, resource boundaries, progressive disclosure, validation gates, and forward-testing policy. The root file must point to `.agents/global-rule-overrides.json`, that global JSON governance config must exist and validate, oversized controlled files must satisfy the config-defined decomposition-plan rule, non-GUI project tool scripts must satisfy the config-defined `scripts/<family>/<function>/<name>.<ext>` plus mirrored `shell`, `bat`, and `powershell` rules, and root AGENTS text must not keep inlining those details once they move into config. The same config also carries long-running Python heartbeat policy. By default it skips development/reference/build trees such as `ref/`, `.git/`, `vendor/`, `dist/`, `build/`, `target/`, and `node_modules/`; use `--include-skipped` only when intentionally auditing those directories. `check_freshness.py` compares Last updated metadata with git history when available. `audit_skill.py` checks this skill's structure, frontmatter, referenced resources, and Python script compilation.
+
+`collect_design_profile.py` treats `default_conversation_language` as a formal required input for AGENTS generation and takeover-restructure flows. Interactive grouped interviews must ask and confirm question `32` before continuing, and batch generation via `--answers <answers.json> --write` must reject answer sets that omit `default_conversation_language` instead of silently falling back to `中文`.
+
+`collect_design_profile.py` also treats `use_remote_server` as a mandatory interactive gate for AGENTS generation and takeover-restructure flows. Remote structure governance and remote-server task routing are separate decisions: takeover mode may confirm the structure policy with minimal questions, but it still must explicitly ask whether remote servers are needed. If the user enables remote servers, the script must stop normal progression until `erie-remote-ssh` is available, the server list is configured, an explicit task-route table is submitted from `choices`, and `check` plus `workspace-check` succeed for every referenced primary or fallback server. Missing `erie-remote-ssh` must route to an install confirmation using the fixed GitHub source `https://github.com/Eriemon/remote-ssh.git` with install spec `skill=erie-remote-ssh`, `source_path=.`, `dest_name=erie-remote-ssh`. Missing or disabled server lists must route to a configuration confirmation before route mapping can continue. After the route table is verified, the rendered root `AGENTS.md` must include an explicit natural-language reply rule for the configured `default_conversation_language`, persist the remote server registry plus task routes, require automatic fallback from a failed primary to registered fallback servers, and state that unmatched remote tasks must update AGENTS.md before validation continues.
 
 `inspect_project.py` now also reports the health of the global user-level `.codex/AGENTS.md` entry file. Its `global_codex_agents_*` fields distinguish missing, empty, unmanaged, and outdated baseline states so repository-level root AGENTS repair and user-level entry-point repair can be handled separately. The global file is not a repository-specific rule file: it should only require agents to read the current work folder root `AGENTS.md` first and should never duplicate branch, release, or layout policy from a repository root.
 
 `sync-global-codex-agents` writes or refreshes the user-level `~/.codex/AGENTS.md` / `$CODEX_HOME/AGENTS.md` baseline. If the global file is missing or empty, `--write` writes the full baseline immediately. If the file already contains the managed `global-codex-baseline` block, only that block is replaced and manual content outside the block is preserved. If the file has non-empty manual content but no managed block, the command must not overwrite it silently; instead it returns `requires_user_confirmation=true` and recommends inserting the managed block near the top of the file after any opening comments.
 
-`package-release` copies the skill source into `dist/<skill-name>-vX.Y.Z/`, then sanitizes the release copy only. For skill-development releases, broad sanitization replaces detected secrets, passwords, emails, and local absolute paths with typed placeholders such as `<REDACTED_API_KEY>` and records every rewritten file in `RELEASE_RECEIPT.json`. Binary files that still contain sensitive content after detection are a hard failure; the script must stop instead of guessing how to rewrite them.
+`package-release` copies the skill source into `dist/<skill-name>-vX.Y.Z/`, then sanitizes the release copy only. For skill-development releases, broad sanitization replaces detected secrets, passwords, emails, and local absolute paths with typed placeholders such as `<REDACTED_API_KEY>` and records every rewritten file in `RELEASE_RECEIPT.json`. Binary files that still contain sensitive content after detection are a hard failure; the script must stop instead of guessing how to rewrite them. Same-version rebuilds may replace only the current target release directory and its matching zip; different-version release artifacts are immutable history and must not change.
 
-`release-gate` still requires branch/worktree/release-asset correctness, but content validation now uses receipt-declared sanitization parity rather than byte-for-byte parity with the source tree. File membership must still match the source skill exactly, yet content differences are allowed only when the receipt declares the sanitized file and the release copy matches the deterministic sanitization result. Undeclared diffs, missing sanitization records, tampered sanitized files, or leftover sensitive content fail the gate.
+`release-gate` still requires branch/worktree/release-asset correctness, but content validation now uses receipt-declared sanitization parity rather than byte-for-byte parity with the source tree. File membership must still match the source skill exactly, yet content differences are allowed only when the receipt declares the sanitized file and the release copy matches the deterministic sanitization result. Undeclared diffs, missing sanitization records, tampered sanitized files, leftover sensitive content, or cross-version `dist/` artifact changes outside the current release target fail the gate.
 
 `install_skill.py` is a post-release install confirmation helper for skill development only. Dry-run mode emits yes/no options and defaults to skip. It accepts only versioned release directories such as `dist/<skill-name>-vX.Y.Z/`, requires `RELEASE_RECEIPT.json`, and rejects source skill directories. Repository-local `dist/` installs perform strong validation by rechecking `master`, `release`, clean-worktree state, and receipt-backed sanitization evidence; copied standalone release folders can install only under reduced assurance after receipt and file-hash validation. It installs only with `--write`, supports `codex` and `custom` targets, and refuses to overwrite an existing skill unless `--replace` records explicit user confirmation. Engineering projects must not route users into this install helper. Replacement first moves the old installed skill to the sibling `skill_backups/<skill-name>-YYYYMMDD-HHMMSS/` folder, then preserves old `assets/templates/evolution/{engineering-template,skill-template}` files. If an evolved template conflicts with the new release, the installer keeps the new file, copies the old file as an `.installed-template-conflict` sibling, and reports `template_conflicts` for manual merge. The install result now also reports `global_codex_agents_status` so users can immediately see whether the global `.codex/AGENTS.md` entry baseline still needs to be synced.
 
@@ -158,7 +163,7 @@ For reference capability coverage, read `references/capability-coverage.md`. It 
 ## Compatibility
 
 ```bash
-python scripts/create_agent_shims.py /path/to/project
+python skills/agents-md-generator/scripts/create_agent_shims.py /path/to/project
 ```
 
 Creates CLAUDE.md and GEMINI.md next to each AGENTS.md. It prefers relative symlinks; if symlinks are unavailable it writes a managed shim. Existing non-managed files are preserved.

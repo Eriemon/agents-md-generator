@@ -1,6 +1,6 @@
 # AGENTS.md Review Checklist
 
-Run `scripts/verify_agents.py` first, then use this checklist for judgment that scripts cannot fully automate.
+Run `python skills/agents-md-generator/scripts/verify_agents.py . --installed-skill-dir skills/agents-md-generator` first, then use this checklist for judgment that scripts cannot fully automate.
 
 ## Table of Contents
 
@@ -14,25 +14,25 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 | Gate | Required evidence |
 |------|-------------------|
 | Structure | `quick_validate.py skills/agents-md-generator` passes for this skill |
-| Facts | `python scripts/inspect_project.py <project>` output reviewed |
-| Design profile | grouped design interview completed with `collect_design_profile.py --start/--resume/--answer-file`, then `python scripts/collect_design_profile.py <project> --answers answers.json --write` completed when strong control is required |
-| Commands | `python scripts/extract_commands.py <project>` output reviewed |
-| Context | `python scripts/extract_context.py <project>` output reviewed |
-| Scopes | `python scripts/detect_scopes.py <project>` output reviewed |
-| Content | `python scripts/verify_agents.py <project>` has no errors and does not scan skipped development/reference trees by default |
-| Docs preflight | `python scripts/manage_docs.py preflight <project>` is safe, or user confirmation is recorded for an ambiguous/conflicting existing `docs/` layout |
-| Session bootstrap | When the workspace already has landed content but no root `AGENTS.md`, `python scripts/manage_docs.py bootstrap-experience <project>` has been reviewed and exact-cwd session matching is correct |
-| Docs governance | `python scripts/manage_docs.py verify <project>` has no errors for strong-control projects |
-| Branch governance | `python scripts/manage_docs.py branch-gate <project>` passes before strong-control generation on external work folders |
-| Structure governance | `python scripts/manage_dirs.py structure-gate <project>` passes or explicit confirmation for normalization is recorded before strong-control generation continues |
-| Directory governance | `python scripts/manage_dirs.py verify <project>` passes, and folder changes have a passing `manage_dirs.py review` result |
-| Book rules | `python scripts/select_engineering_rules.py --list` or `--task <type>` used when a book-derived engineering rule set is selected |
+| Facts | `python skills/agents-md-generator/scripts/inspect_project.py <project>` output reviewed |
+| Design profile | grouped design interview completed with `collect_design_profile.py --start/--resume/--answer-file`, then `python skills/agents-md-generator/scripts/collect_design_profile.py <project> --answers answers.json --write` completed when strong control is required |
+| Commands | `python skills/agents-md-generator/scripts/extract_commands.py <project>` output reviewed |
+| Context | `python skills/agents-md-generator/scripts/extract_context.py <project>` output reviewed |
+| Scopes | `python skills/agents-md-generator/scripts/detect_scopes.py <project>` output reviewed |
+| Content | `python skills/agents-md-generator/scripts/verify_agents.py <project>` has no errors and does not scan skipped development/reference trees by default |
+| Docs preflight | `python skills/agents-md-generator/scripts/manage_docs.py preflight <project>` is safe, or user confirmation is recorded for an ambiguous/conflicting existing `docs/` layout |
+| Session bootstrap | When the workspace already has landed content but no root `AGENTS.md`, `python skills/agents-md-generator/scripts/manage_docs.py bootstrap-experience <project>` has been reviewed and exact-cwd session matching is correct |
+| Docs governance | `python skills/agents-md-generator/scripts/manage_docs.py verify <project>` has no errors for strong-control projects |
+| Branch governance | `python skills/agents-md-generator/scripts/manage_docs.py branch-gate <project>` passes before strong-control generation on external work folders |
+| Structure governance | `python skills/agents-md-generator/scripts/manage_dirs.py structure-gate <project>` passes or explicit confirmation for normalization is recorded before strong-control generation continues |
+| Directory governance | `python skills/agents-md-generator/scripts/manage_dirs.py verify <project>` passes, and folder changes have a passing `manage_dirs.py review` result |
+| Book rules | `python skills/agents-md-generator/scripts/select_engineering_rules.py --list` or `--task <type>` used when a book-derived engineering rule set is selected |
 | Skill design | `references/skill-design-coverage.md` reviewed when the target is Skill development |
-| Freshness | `python scripts/check_freshness.py <project>` reviewed for existing AGENTS.md |
-| Compatibility | `python scripts/create_agent_shims.py <project>` used only when requested |
+| Freshness | `python skills/agents-md-generator/scripts/check_freshness.py <project>` reviewed for existing AGENTS.md |
+| Compatibility | `python skills/agents-md-generator/scripts/create_agent_shims.py <project>` used only when requested |
 | Install confirmation | only skill-development release flows ask about `install_skill.py`; source directories must be rejected, release receipts must validate, and replacement installs must show `backup_path` and no unreviewed template loss |
-| Skill self-audit | `python scripts/audit_skill.py skills/agents-md-generator` has no errors after skill edits |
-| Fact-level validation | `python scripts/evaluate_skill.py skills/agents-md-generator <project>` returns `"ok": true` after skill edits |
+| Skill self-audit | `python skills/agents-md-generator/scripts/audit_skill.py skills/agents-md-generator` has no errors after skill edits |
+| Fact-level validation | `python skills/agents-md-generator/scripts/evaluate_skill.py skills/agents-md-generator <project>` returns `"ok": true` after skill edits |
 
 ## Content Checks
 
@@ -47,8 +47,15 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - Book-derived engineering rules use exactly one primary active rule set, mode `mini` or `nano`, explicit scope, and no full material in AGENTS.md.
 - Strong-control AGENTS.md includes Control Profile, Directory Contract, Release Contract, Engineering Rule Contract, Conversation Completion Contract, and Documentation Governance Contract.
 - Strong-control Skill AGENTS.md includes Skill Design Contract with design patterns, resource boundaries, progressive disclosure, validation gates, and forward-testing policy.
-- Root `AGENTS.md` stays within `15KB`; scoped `AGENTS.md` files are not rejected for exceeding the old line-count rule.
+- Root `AGENTS.md` stays within `16KB`; scoped `AGENTS.md` files are not rejected for exceeding the old line-count rule.
+- Root `AGENTS.md` should point to `.agents/global-rule-overrides.json` instead of repeating maintainability, script-layout, or long-task heartbeat detail in prose.
+- Review the config-backed gates from `.agents/global-rule-overrides.json`: handwritten source files and project tool scripts default to the 1000-line limit, oversized files need the configured decomposition-plan sections, and non-GUI tools must satisfy the configured `scripts/<family>/<function>/<name>.<ext>` plus mirrored `shell`, `bat`, and `powershell` variants.
+- Long-running Python automation policy is also config-backed: if a task is expected to run long, the flow must ask first before enabling thread heartbeat follow-up, and completion should delete the heartbeat after continuation.
 - Skill and engineering design interviews expose selectable options, repeat `review_summary` confirmation after each answer group, persist unfinished progress in `.agents/design-interview-state.json`, and set `alignment_confirmed=true` only after the final full-design confirmation.
+- Question `32` for `default_conversation_language` must be explicitly asked and confirmed in every AGENTS generation or takeover-restructure flow; do not infer it from defaults or repository heuristics.
+- Question `45` for `use_remote_server` must be explicitly asked in every AGENTS generation or takeover-restructure flow. If the user enables remote servers, the workflow must not bypass the dependency/configuration/task-route-mapping/validation gates.
+- When remote servers are enabled, the remote server contract must record a server registry plus one or more task routes. Explicit user route-task assignments win; otherwise each route falls back to the selected primary server `functions` so the task list is never empty.
+- Takeover mode may minimize identity questions, but remote structure governance must stay separate from remote-server enablement and task-route mapping; known structure facts do not remove the requirement to ask whether remote servers are needed.
 - New and existing projects both must answer the directory-contract group so local structure, remote structure, and feature-placement rules are explicit before strong control is written.
 - Skill development profiles include detailed development requirements, development purpose, expected result, validation method, and validation granularity before strong control is written.
 - User-developed Skills live under `skills/<skill-name>/SKILL.md`; `SKILL.md` frontmatter `name` exactly matches the folder name and uses lowercase letters, digits, and hyphens.
@@ -65,6 +72,8 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - User requests containing `计划`, `规划`, or `准备` should first run the current-workspace/current-repository/current-work-folder root `AGENTS.md` check.
 - If that root check passes, the trigger path should only report that the check passed and must not silently continue into AGENTS design work.
 - If that root check fails, the trigger path should report the exact abnormal reason and ask whether to enter AGENTS.md design or restructuring.
+- Batch writes with `collect_design_profile.py --answers <answers.json> --write` must reject missing `default_conversation_language`; silent fallback to `中文` is not allowed.
+- When remote servers are enabled, missing `erie-remote-ssh` must trigger an install confirmation using the fixed GitHub source, missing server configuration must trigger a configuration confirmation, and remote task routes must be built from `erie-remote-ssh choices`; no ad hoc server guesses are allowed.
 - Existing `docs/` layouts are preflighted; ambiguous or conflicting layouts require user confirmation before AGENTS.md or docs governance writes.
 - Strong control requires `.agents/agents-control.json` and the docs governance tree; local reference paths may stay in that profile but must not be copied into AGENTS.md.
 - Root-level `experience/` is not allowed; 10 numbered experience files and history belong under `docs/experience/`.
@@ -89,9 +98,9 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - Directory Contract fixes local structure, remote structure, remote deployment workspace planning, and future feature-addition structure before implementation.
 - Directory Contract must include an enforced primary project root for strong-control projects, and dir_manager planning must not silently bless unrelated root-level source folders.
 - Remote deployment tasks must not sync local skill-development content to servers unless the user explicitly overrides; deploy only intended runtime or deployment artifacts.
-- Directory changes must pass `docs/dir_manager/DIR_MANAGER.md` review and `python scripts/manage_dirs.py review <project> --input change.json`.
+- Directory changes must pass `docs/dir_manager/DIR_MANAGER.md` review and `python skills/agents-md-generator/scripts/manage_dirs.py review <project> --input change.json`.
 - Blocked directory reviews require a clear refusal, severe-risk explanation, and explicit user force-confirmation before any folder structure change.
-- Force-confirmed blocked directory changes require `python scripts/manage_dirs.py archive <project> --reason "force-confirmed directory override"` before applying the change, preserving old content under `docs/dir_manager/history_dir_manager/<timestamp>/`.
+- Force-confirmed blocked directory changes require `python skills/agents-md-generator/scripts/manage_dirs.py archive <project> --reason "force-confirmed directory override"` before applying the change, preserving old content under `docs/dir_manager/history_dir_manager/<timestamp>/`.
 - Release Contract fixes `dist/<name>-vx.x.x` and matching zip package expectations without remote push.
 - User-level `.codex/AGENTS.md` is treated as an entry-point baseline, not a repository rule dump: it must tell agents to read the current work folder root `AGENTS.md` first and must not carry repository-specific branch, release, or layout policy.
 - For this skill repository, an empty or missing global `.codex/AGENTS.md` is a real governance failure, not a cosmetic warning.
@@ -99,11 +108,14 @@ Run `scripts/verify_agents.py` first, then use this checklist for judgment that 
 - After release packaging and validation, only skill-development flows ask yes/no whether to install; engineering projects must not prompt for skill installation.
 - Before installable `dist/` release, local work is committed, development branches are merged into `master`, and local branches other than `master` and `release` are deleted unless the user explicitly changes the branch policy.
 - Installable release directories must contain `RELEASE_RECEIPT.json`, repository-local installs must preserve strong branch/worktree validation, copied standalone release folders must be labeled as reduced assurance instead of silently treated as equivalent, and receipt-declared sanitization must explain every allowed content difference from the source skill.
+- Different-version release directories and matching zip files are immutable history by default. Same-version rebuilds may replace only the current target release directory and zip, and release gates must fail if any other `dist/` artifact changes.
 - Binary files with sensitive content are a hard failure unless the workflow gains an explicit safe sanitizer for that file type; do not silently ship them.
 - Replacement installs back up the old skill to `skill_backups/` and preserve installed evolution templates, reporting conflicts instead of silently overwriting them.
 - Commit and release summaries rotate through `docs/git_manager/CHANGELOG.md`; previous current entries are archived under `docs/git_manager/history_git_manager/YYYYMMDD-HHMMSS/`.
 - Release gates run on `master`, with only local `master` and `release` branches present, and post-package validation confirms the release commit includes the dist artifacts and changelog update.
 - Commands are labeled verified only when actually executed.
+- Root `AGENTS.md` with `default_language` metadata must also contain an explicit reply-language rule stating that natural-language responses stay in that configured language unless the user explicitly switches languages.
+- Root `AGENTS.md` with an enabled remote server contract must contain `## Remote Server Contract`, each registered task route with its primary server, fallback relationships, the automatic fallback rule, and a rule that unmatched remote tasks must update AGENTS.md before validation continues.
 - Generated markers are balanced and hand-written content outside markers is preserved.
 - No `{{PLACEHOLDER}}` tokens remain in generated output.
 - Verification skips `ref/`, `.git/`, `vendor/`, build outputs, caches, and dependency folders unless `--include-skipped` is intentionally used.

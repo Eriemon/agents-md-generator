@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.5.5-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.5.7-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -56,7 +56,7 @@ Agent 规则文件如果靠记忆编写，很容易过期或失真。AGENTS.md G
 | --- | --- |
 | `SKILL.md` | 面向 Agent 的触发、流程、约束和验证规则。 |
 | `agents/openai.yaml` | Skill 列表和调用入口的 UI 元数据。 |
-| `scripts/` | 项目检查、设计画像采集、渲染、验证、审计和 shim 创建脚本。 |
+| `scripts/` | 项目检查、设计画像采集、访谈状态管理、文档治理辅助、渲染、验证、审计和 shim 创建脚本。 |
 | `assets/templates/` | root/scoped `AGENTS.md` 渲染模板。 |
 | `references/` | 脚本指南、审查清单、问题库、覆盖说明和 AGENTS.md 指导。 |
 
@@ -73,6 +73,7 @@ python scripts/extract_context.py <project>
 python scripts/render_agents.py <project>
 python scripts/verify_agents.py <project>
 python scripts/audit_skill.py .
+python scripts/manage_docs.py verify <project>
 ```
 
 Strong-control 生成依赖设计画像。先运行设计访谈，把答案保存为 JSON，再用生成的 profile 渲染：
@@ -83,6 +84,8 @@ python scripts/collect_design_profile.py <project> --answers answers.json --writ
 python scripts/render_agents.py <project> --profile <project>/.agents/agents-control.json
 python scripts/verify_agents.py <project>
 ```
+
+`v0.5.7` 这一版还把 docs 治理和设计访谈能力拆成了更清晰的辅助脚本，例如 `scripts/agents_project_facts.py`、`scripts/design_interview_state.py`、`scripts/design_profile_builder.py`、`scripts/design_questions.py`、`scripts/design_remote_gate.py`，以及 `scripts/manage_docs_*.py` 家族，便于分别校验 release、experience、脚手架、同步验证和共享脱敏逻辑。
 
 兼容 shim 需要显式选择：
 
@@ -118,8 +121,8 @@ Jiyuan Liu 和 He Li 隶属于东南大学电子科学与工程学院。
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {0.5.5},
-  date         = {2026-05-11},
+  version      = {0.5.7},
+  date         = {2026-05-16},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}

@@ -21,6 +21,9 @@ Patterns can be combined. A strong Skill often uses Inversion to collect intent,
 - Put reusable deterministic code in `scripts/`; test scripts by running them.
 - Put output templates and copied starter material in `assets/`.
 - Keep `agents/openai.yaml` aligned with `SKILL.md` and regenerate or update it when stale.
+- Keep default-language handling aligned across interview prompts, rendered AGENTS.md output, verification rules, and `agents/openai.yaml`; do not let any one layer silently weaken the language contract.
+- Keep remote-server governance aligned across interview prompts, dependency gates, rendered AGENTS.md output, verification rules, and `agents/openai.yaml`; do not let any one layer bypass `erie-remote-ssh`.
+- Keep remote structure governance separate from remote-server enablement and task-route mapping. A minimal takeover interview may infer structure facts, but it still must ask `use_remote_server` explicitly before any remote task route can be written.
 
 ## AGENTS.md Contract
 
@@ -33,6 +36,8 @@ For Skill development, generated AGENTS.md should include a Skill Design Contrac
 - Validation gates such as `quick_validate.py`, skill audit, AGENTS.md verification, and full evaluate chain.
 - Validation method and validation granularity, including whether acceptance is automated, manual, forward-tested, or a combination.
 - Forward-testing policy for complex or high-risk Skills.
+- An explicit default-language reply rule in the root `AGENTS.md` whenever `default_language` metadata is present.
+- A dedicated remote-server contract in the root `AGENTS.md` whenever remote usage is enabled, including the registered server registry, per-task primary/fallback routes, the automatic fallback gate, and the unmatched-task blocking gate.
 
 Strong-control generated AGENTS.md should also include a Documentation Governance Contract. This contract records `docs/handoff/HANDOFF.md` as the newest handoff, requires time-suffixed handoff history, refreshes 10 numbered `docs/experience/` files every five handoffs, points stage, install, and git management records to `docs/development/`, `docs/install_configuration/`, and `docs/git_manager/`, requires `docs/dir_manager/` review before local or remote deployment folder structure changes, and archives old dir manager content to `docs/dir_manager/history_dir_manager/<timestamp>/` before user force-confirmed blocked changes are applied.
 
@@ -46,6 +51,12 @@ Strong-control generated AGENTS.md should also include a Documentation Governanc
 - Keep experience lessons in 10 numbered `docs/experience/` files; never create a root-level `experience/` folder.
 - New user-developed Skills belong in `skills/<skill-name>/`, and the `SKILL.md` frontmatter name must match that folder.
 - Require selectable interview options and repeated summary confirmation before writing a strong-control profile.
+- Require an explicit `default_conversation_language` answer before any AGENTS generation or takeover write; implicit fallback defaults are not acceptable.
+- Require an explicit `use_remote_server` decision in interactive AGENTS generation flows; if remote usage is enabled, require erie-remote-ssh install/configure/choices/check/workspace-check completion before write, persist a normalized server registry plus task routes, and fall back to primary-server `functions` when a route omits explicit task responsibilities.
+- Require the rendered root `AGENTS.md` to keep the explicit default-language rule and to state that remote validation must start with the matched task route's primary server, automatically try fallback servers after failed validation, and block unmatched tasks until AGENTS is updated.
+- Put shared cross-repository principles in global `.codex/AGENTS.md`, but keep repository-specific long-task heartbeat detail, decomposition-plan locations, and GUI script exceptions in a local JSON governance config.
+- Root `AGENTS.md` should point to `.agents/global-rule-overrides.json` instead of restating config-level maintainability and script-governance detail.
+- The local JSON governance config locks source-file limits, decomposition-plan requirements, and non-GUI `scripts/<family>/<function>/<name>.<ext>` plus mirrored `shell`, `bat`, and `powershell` rules.
 - Use a strict directory governance gate for folder moves; blocked reviews require explicit user force-confirmation and old dir manager content archival before execution.
 - Keep local reference paths and temporary source folders out of generated AGENTS.md.
 
@@ -55,6 +66,8 @@ Before claiming a Skill AGENTS.md is strict, verify that:
 
 - The Skill Design Contract is generated from `.agents/agents-control.json`.
 - The contract contains design patterns, resource boundaries, progressive disclosure, validation gates, validation method, validation granularity, and forward-testing policy.
+- The generation flow explicitly asks for the default conversation language, the rendered root AGENTS.md locks natural-language replies to it, and verification fails if either side is missing.
+- The generation flow explicitly asks whether remote servers are enabled, routes missing remote dependencies and server configuration through explicit user confirmation, records task-routed primary/fallback remote servers in AGENTS.md, and verification fails if the remote gate is incomplete.
 - Temporary reference material is distilled into stable guidance and not copied as local paths.
 - Docs governance verification confirms handoff, history, 10 numbered experience files, development, install configuration, git manager files, and remote deployment directory planning exist.
 - The full validation chain reports no unresolved placeholders or local reference leaks.

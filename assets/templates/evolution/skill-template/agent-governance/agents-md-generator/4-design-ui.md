@@ -10,7 +10,7 @@
 
 ## Source Versions
 - `docs/experience/4-design-ui.md`
-- `docs/experience/history_experience/20260514-134203/4-design-ui.md`
+- `docs/experience/history_experience/20260516-152408/4-design-ui.md`
 
 # Design UI Evolution Template
 
@@ -21,18 +21,19 @@
 - Use when a future design ui task matches the same repository governance constraints and needs reusable guidance rather than a copied experience note.
 
 ## Distilled Workflow
-- Inspect evidence, identify the concrete design ui failure, write a regression check, implement narrowly, verify targeted behavior, and update governance evidence only after the check passes.
+- Inspect current evidence, identify the concrete design ui failure or requirement, update the smallest responsible script/template/config surface, run the narrow regression for that topic, then rerun repository verification before handoff.
 
 ## Key Decisions
 - Keep deterministic scripts responsible for validation and file movement; keep AI-authored payloads responsible for synthesis and judgment.
+- Preserve the global-principles versus local-config split when recording reusable guidance.
 
 ## Common Problems
-- Do not paste raw handoff content, do not duplicate the same text across template families, and do not mix skill-specific guidance into engineering templates.
+- Do not paste raw handoff content, do not duplicate the same text across template families, and do not move repository-private detail back into AGENTS prose.
 
 ## Non-Reusable Content
-- Omit release timestamps, temporary file paths, and conversation-only details that do not change future implementation choices.
+- Omit release timestamps, temporary file paths, and conversation-only detail that does not change future implementation choices.
 
 ## Application Checklist
 - Confirm the template family and category match the target repository.
-- Confirm the experience source passed quality validation.
+- Confirm the source experience passed quality validation.
 - Confirm the resulting guidance is a synthesis, not a copy.

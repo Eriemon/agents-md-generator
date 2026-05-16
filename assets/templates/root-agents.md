@@ -21,6 +21,11 @@
 {{DIRECTORY_CONTRACT}}
 <!-- AGENTS-GENERATED:END directory-contract -->
 
+<!-- AGENTS-GENERATED:START remote-server-contract -->
+## Remote Server Contract
+{{REMOTE_SERVER_CONTRACT}}
+<!-- AGENTS-GENERATED:END remote-server-contract -->
+
 <!-- AGENTS-GENERATED:START release-contract -->
 ## Release Contract
 {{RELEASE_CONTRACT}}

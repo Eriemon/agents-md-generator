@@ -19,6 +19,8 @@ Start grouped interviews with `python scripts/collect_design_profile.py <project
 | ID | Branch | Ask |
 |----|--------|-----|
 | 1 | all | Confirm whether this is skill development or engineering development. Skill development goes to 2; engineering development goes to 11. |
+| 32 | all | What is the default conversation language that must be written into the control profile and enforced in the root `AGENTS.md`? |
+| 45 | all | Should this work folder enable remote servers? If yes, complete install/configure/route-mapping/check/workspace-check gates, build one or more task routes with `task_name`, `primary_server_id`, and optional `fallback_server_ids`, and if a route omits explicit tasks, fall back to the selected primary server `functions`. |
 | 2 | skill | What does this skill do? |
 | 3 | skill | Why develop this skill? |
 | 4 | skill | Are there reference materials? They are temporary inputs and must be manually deleted after development. |
