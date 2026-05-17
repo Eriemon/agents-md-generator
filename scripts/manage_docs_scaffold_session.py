@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from manage_docs_shared import *
 from manage_docs_sync_verify import verify_docs
+from manage_dirs import CURRENT_STRUCTURE, DIR_MANAGER_MD, PLANNED_STRUCTURE
 
 def preflight_docs(project: Path) -> dict[str, Any]:
     docs = docs_root(project)
@@ -135,7 +136,7 @@ def migrate_legacy_docs(project: Path) -> list[str]:
         shutil.rmtree(legacy_experience)
     return migrated
 
-def scaffold(project: Path) -> dict[str, Any]:
+def scaffold(project: Path, refresh_existing_state: bool = True) -> dict[str, Any]:
     created: list[str] = []
     for rel_path in DOC_DIRS:
         path = project / rel_path
@@ -156,12 +157,20 @@ def scaffold(project: Path) -> dict[str, Any]:
             path.write_text(content, encoding="utf-8")
             created.append(rel_path)
     state = load_state(project)
+    state_missing = not (project / STATE_PATH).exists()
     state.setdefault("handoff_count", 0)
     state.setdefault("last_experience_at", 0)
-    state["dir_manager_last_scan"] = datetime.now().isoformat(timespec="seconds")
-    save_state(project, state)
-    dir_result = init_dir_manager(project)
-    created.extend(path for path in dir_result.get("written", []) if path not in created)
+    should_refresh_dir_manager = refresh_existing_state or any(
+        not (project / rel).exists()
+        for rel in [DIR_MANAGER_MD, CURRENT_STRUCTURE, PLANNED_STRUCTURE]
+    )
+    if should_refresh_dir_manager:
+        state["dir_manager_last_scan"] = datetime.now().isoformat(timespec="seconds")
+        save_state(project, state)
+        dir_result = init_dir_manager(project)
+        created.extend(path for path in dir_result.get("written", []) if path not in created)
+    elif state_missing:
+        save_state(project, state)
     created.extend(path for path in ensure_experience_files(project) if path not in created)
     return {"project": str(project), "created": created, "migrated": migrated, "state": state}
 
@@ -270,7 +279,9 @@ def write_handoff(project: Path, input_path: str | None) -> dict[str, Any]:
     return result
 
 def write_active_session(project: Path, input_path: str | None) -> dict[str, Any]:
-    scaffold(project)
+    # Starting a session in an already-governed repository should not rewrite
+    # tracked dir-manager baselines or docs-governance timestamps.
+    scaffold(project, refresh_existing_state=False)
     data = read_input(input_path)
     handoff = project / "docs" / "handoff" / "HANDOFF.md"
     active = {

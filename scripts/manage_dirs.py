@@ -153,13 +153,57 @@ def remote_structure(project: Path) -> str:
     return raw
 
 
+def remote_environment_policy(project: Path) -> dict[str, Any]:
+    profile = control_profile(project)
+    contract = profile.get("directory_contract", {}) if isinstance(profile.get("directory_contract"), dict) else {}
+    policy = contract.get("remote_environment_policy", {})
+    return policy if isinstance(policy, dict) else {}
+
+
+def remote_runtime_archive_policy(project: Path) -> dict[str, Any]:
+    profile = control_profile(project)
+    contract = profile.get("directory_contract", {}) if isinstance(profile.get("directory_contract"), dict) else {}
+    policy = contract.get("remote_runtime_archive_policy", {})
+    return policy if isinstance(policy, dict) else {}
+
+
 def remote_deployment_plan(project: Path) -> dict[str, Any]:
     workspace = remote_structure(project)
+    environment_policy = remote_environment_policy(project)
+    runtime_policy = remote_runtime_archive_policy(project)
     planned = [] if workspace == "not configured" else [workspace]
+    if workspace != "not configured":
+        conda_template = normalize_rel(str(environment_policy.get("path_template", "")).strip())
+        active_template = normalize_rel(str(runtime_policy.get("active_path_template", "")).strip())
+        backup_template = normalize_rel(str(runtime_policy.get("backup_path_template", "")).strip())
+        for template in [conda_template, active_template, backup_template]:
+            if template:
+                planned.append(f"{workspace.rstrip('/')}/{template}")
+        if backup_template:
+            parts = backup_template.split("/")
+            while len(parts) > 1:
+                parts.pop()
+                planned.append(f"{workspace.rstrip('/')}/{'/'.join(parts)}")
+    planned = sorted(dict.fromkeys(planned))
     return {
         "workspace_root": workspace,
         "planned_structure": planned,
         "protected_paths": planned,
+        "conda_environment": {
+            "status": environment_policy.get("status", "disabled"),
+            "scope": environment_policy.get("scope", "remote-only"),
+            "manager": environment_policy.get("manager", "conda-prefix"),
+            "path_template": str(environment_policy.get("path_template", "")).strip(),
+            "required_when_remote_configured": bool(environment_policy.get("required_when_remote_configured", True)),
+        },
+        "runtime_artifacts": {
+            "status": runtime_policy.get("status", "disabled"),
+            "active_path_template": str(runtime_policy.get("active_path_template", "")).strip(),
+            "backup_path_template": str(runtime_policy.get("backup_path_template", "")).strip(),
+            "run_id_required": bool(runtime_policy.get("run_id_required", True)),
+            "archive_after_verification": bool(runtime_policy.get("archive_after_verification", False)),
+            "archive_trigger": str(runtime_policy.get("archive_trigger", "")).strip(),
+        },
         "review_required_for": ["create", "move", "delete", "rename"],
         "block_on_failed_review": True,
         "force_override_requires_user_confirmation": True,
@@ -344,6 +388,62 @@ def allowed_path(path: str, planned: dict[str, Any]) -> bool:
     return any(normalized == item or normalized.startswith(item.rstrip("/") + "/") for item in allowed)
 
 
+def remote_workspace_root(remote_plan: dict[str, Any]) -> str:
+    workspace = normalize_rel(str(remote_plan.get("workspace_root", "")).strip())
+    return "" if workspace in {"", "not configured"} else workspace
+
+
+def join_remote_workspace_path(workspace: str, relative: str) -> str:
+    relative_norm = normalize_rel(relative)
+    if not workspace:
+        return relative_norm
+    if not relative_norm:
+        return workspace
+    return f"{workspace.rstrip('/')}/{relative_norm}"
+
+
+def allowed_remote_path(path: str, remote_plan: dict[str, Any]) -> bool:
+    workspace = remote_workspace_root(remote_plan)
+    if not workspace:
+        return False
+    normalized = join_remote_workspace_path(workspace, path)
+    allowed = [normalize_rel(item) for item in remote_plan.get("planned_structure", []) if str(item).strip()]
+    parents: set[str] = set()
+    for item in allowed:
+        parts = item.split("/")
+        for index in range(1, len(parts)):
+            parents.add("/".join(parts[:index]))
+    if normalized in parents:
+        return True
+    for item in allowed:
+        if normalized == item or normalized.startswith(item.rstrip("/") + "/"):
+            return True
+        if "<" in item and ">" in item:
+            prefix = item.split("<", 1)[0].rstrip("/")
+            if prefix and normalized.startswith(prefix + "/"):
+                return True
+    return False
+
+
+def remote_runtime_reason(path: str, target: str | None, remote_plan: dict[str, Any], artifact_state: str) -> str | None:
+    runtime = remote_plan.get("runtime_artifacts", {}) if isinstance(remote_plan.get("runtime_artifacts"), dict) else {}
+    active_template = normalize_rel(str(runtime.get("active_path_template", "")).strip())
+    backup_template = normalize_rel(str(runtime.get("backup_path_template", "")).strip())
+    normalized = normalize_rel(target if target else path)
+    if not normalized:
+        return None
+    active_root = active_template.split("<run-id>", 1)[0].rstrip("/") if active_template else ""
+    backup_root = backup_template.split("<run-id>", 1)[0].rstrip("/") if backup_template else ""
+    if active_root and not normalized.startswith(active_root + "/") and normalized.split("/", 1)[0] not in {
+        backup_root.split("/", 1)[0] if backup_root else "",
+        ".conda",
+    }:
+        return f"remote runtime artifacts must stay under `{active_template}`; received `{normalized}`"
+    if artifact_state == "verified" and backup_root and not normalized.startswith(backup_root + "/"):
+        return f"verified remote runtime artifacts must be archived under `{backup_template}`; received `{normalized}`"
+    return None
+
+
 def critical_move_reason(action: str, path: str, target: str | None) -> str | None:
     normalized = normalize_rel(path)
     target_norm = normalize_rel(target or "") if target else ""
@@ -368,6 +468,7 @@ def review_change(project: Path, input_path: str) -> dict[str, Any]:
     if not isinstance(changes, list):
         changes = []
     planned = load_planned(project)
+    remote_plan = planned.get("remote_deployment", {}) if isinstance(planned.get("remote_deployment"), dict) else {}
     reasons: list[str] = []
     risks: list[str] = []
     for change in changes:
@@ -375,8 +476,10 @@ def review_change(project: Path, input_path: str) -> dict[str, Any]:
             reasons.append("each change must be a JSON object")
             continue
         action = str(change.get("action", "")).strip().lower()
+        environment = str(change.get("environment", "local")).strip().lower() or "local"
         path = str(change.get("path", "")).strip()
         target = str(change.get("target", "")).strip() if change.get("target") is not None else None
+        artifact_state = str(change.get("artifact_state", "")).strip().lower()
         if action not in {"create", "move", "delete", "rename"}:
             reasons.append(f"unsupported action `{action}`")
             continue
@@ -384,13 +487,22 @@ def review_change(project: Path, input_path: str) -> dict[str, Any]:
             invalid = invalid_path_reason(value)
             if invalid:
                 reasons.append(invalid)
-        if action == "create" and path and not allowed_path(path, planned):
-            reasons.append(f"new path `{normalize_rel(path)}` is not listed in planned_structure.json")
-        critical = critical_move_reason(action, path, target)
-        if critical:
-            reasons.append(critical)
-        if action in {"move", "rename"} and target and not allowed_path(target, planned):
-            reasons.append(f"target path `{normalize_rel(target)}` is not listed in planned_structure.json")
+        if environment == "remote":
+            if action == "create" and path and not allowed_remote_path(path, remote_plan):
+                reasons.append(f"remote path `{normalize_rel(path)}` is not listed in planned_structure.json remote_deployment planning")
+            runtime_reason = remote_runtime_reason(path, target, remote_plan, artifact_state)
+            if runtime_reason:
+                reasons.append(runtime_reason)
+            if action in {"move", "rename"} and target and not allowed_remote_path(target, remote_plan):
+                reasons.append(f"remote target path `{normalize_rel(target)}` is not listed in planned_structure.json remote_deployment planning")
+        else:
+            if action == "create" and path and not allowed_path(path, planned):
+                reasons.append(f"new path `{normalize_rel(path)}` is not listed in planned_structure.json")
+            critical = critical_move_reason(action, path, target)
+            if critical:
+                reasons.append(critical)
+            if action in {"move", "rename"} and target and not allowed_path(target, planned):
+                reasons.append(f"target path `{normalize_rel(target)}` is not listed in planned_structure.json")
     approved = not reasons
     if not approved:
         risks = [
@@ -463,8 +575,20 @@ def verify_dir_manager(project: Path) -> dict[str, Any]:
             errors.append(f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.workspace_root must be configured or `not configured`")
         if not isinstance(remote.get("planned_structure"), list):
             errors.append(f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.planned_structure must be a list")
+        if not isinstance(remote.get("conda_environment"), dict):
+            errors.append(f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.conda_environment must be configured")
+        if not isinstance(remote.get("runtime_artifacts"), dict):
+            errors.append(f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.runtime_artifacts must be configured")
         if not isinstance(remote.get("review_required_for"), list):
             errors.append(f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.review_required_for must be a list")
+        conda = remote.get("conda_environment", {}) if isinstance(remote.get("conda_environment"), dict) else {}
+        runtime = remote.get("runtime_artifacts", {}) if isinstance(remote.get("runtime_artifacts"), dict) else {}
+        if isinstance(conda, dict) and "path_template" not in conda:
+            errors.append(f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.conda_environment.path_template must be configured")
+        if isinstance(runtime, dict):
+            for key in ["active_path_template", "backup_path_template", "run_id_required", "archive_after_verification", "archive_trigger"]:
+                if key not in runtime:
+                    errors.append(f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.runtime_artifacts.{key} must be configured")
     if current and planned:
         primary_root = normalize_rel(str(planned.get("primary_project_root", "")).strip())
         if planned.get("enforce_primary_project_root") and primary_root:

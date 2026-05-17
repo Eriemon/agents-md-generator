@@ -18,10 +18,6 @@ PLACEHOLDER_RE = re.compile(r"{{[A-Z0-9_]+}}")
 LOCAL_REFERENCE_RE = re.compile(r"G:[/\\]html|ref[/\\](agent-rules|html)", flags=re.IGNORECASE)
 
 
-def quick_validate_path() -> Path:
-    return Path.home() / ".codex" / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py"
-
-
 def command_entry(name: str, argv: list[str], cwd: Path, result: subprocess.CompletedProcess[str]) -> dict[str, Any]:
     entry: dict[str, Any] = {
         "name": name,
@@ -104,7 +100,6 @@ def repo_root_for(skill_dir: Path) -> Path:
 
 def evaluate(skill_dir: Path, project: Path) -> dict[str, Any]:
     repo_root = repo_root_for(skill_dir)
-    quick_validate = quick_validate_path()
     self_eval_env = dict(
         os.environ,
         AGENTS_MD_EVALUATE_RUNNING="1",
@@ -112,8 +107,9 @@ def evaluate(skill_dir: Path, project: Path) -> dict[str, Any]:
     )
     commands = [
         run_command("unit_tests", [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"], repo_root, self_eval_env),
-        run_command("quick_validate", [sys.executable, str(quick_validate), str(skill_dir)], repo_root, self_eval_env),
+        run_command("quick_validate", [sys.executable, str(skill_dir / "scripts" / "quick_validate.py"), str(skill_dir)], repo_root, self_eval_env),
         run_command("audit_skill", [sys.executable, str(skill_dir / "scripts" / "audit_skill.py"), str(skill_dir)], repo_root, self_eval_env),
+        run_command("manage_docs_verify", [sys.executable, str(skill_dir / "scripts" / "manage_docs.py"), "verify", str(project)], repo_root, self_eval_env),
         run_command("verify_agents", [sys.executable, str(skill_dir / "scripts" / "verify_agents.py"), str(project)], repo_root, self_eval_env),
         render_entry(skill_dir, project),
     ]
@@ -133,7 +129,7 @@ def main() -> None:
     parser.add_argument("project", nargs="?", default=None)
     args = parser.parse_args()
     skill_dir = resolve_project(args.skill_dir)
-    project = resolve_project(args.project) if args.project else skill_dir.parent.resolve()
+    project = resolve_project(args.project) if args.project else repo_root_for(skill_dir)
     emit_json(evaluate(skill_dir, project))
 
 

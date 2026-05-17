@@ -1,8 +1,8 @@
 {
   "skill_name": "agents-md-generator",
-  "version": "v0.5.8",
+  "version": "v0.6.2",
   "source_path": "skills/agents-md-generator",
-  "generated_at": "2026-05-16T18:37:04",
+  "generated_at": "2026-05-17T12:54:40",
   "current_branch": "master",
   "local_branches": [
     "master",
@@ -26,35 +26,35 @@
   "files": [
     {
       "path": "agents/openai.yaml",
-      "sha256": "bdb0b768918afe373828cc7310a5a04f3f4b2d1f2d692411e8926d3832f76495"
+      "sha256": "b7d2502ee1f8a9328a7a865654a1560207098bb8bdf30959db8fbd32e36d8e0f"
     },
     {
       "path": "assets/templates/evolution/evolution-index.json",
-      "sha256": "1c7770d0e0aea9be7ad586fb3d4b61ab24610012366ef923948dce329b39fe7c"
+      "sha256": "fbc9a55f91daab54725fcc294adad663b0cfe638ed9a2a9a931ffc15cb6d9511"
     },
     {
       "path": "assets/templates/evolution/skill-template/agent-governance/agents-md-generator/1-workflow.md",
-      "sha256": "4ad6d7ada1e800ce92340811375ed47d59f0ee541e5dff8a826ee28138941a28"
+      "sha256": "b48c75f05b84612fb8ec088a9609c270585bd71c75c87afb09215b4560a20d8b"
     },
     {
       "path": "assets/templates/evolution/skill-template/agent-governance/agents-md-generator/2-scripts.md",
-      "sha256": "aaa77f07ed76baccabfb85a9ca73b3db4181410f53a8c4146e8956acacde885e"
+      "sha256": "4bf636856726cef213349682480e902c345f8e74ee8be5fb27aab70791bf64f1"
     },
     {
       "path": "assets/templates/evolution/skill-template/agent-governance/agents-md-generator/3-plan.md",
-      "sha256": "ffec28987271714fa484f375d5d733e8eb7a3b49fb2e4f3d1141470df87e913a"
+      "sha256": "f8b3a2d6b3961b6ef0cc8b4b0d72419a4b884c086457b736b02b0eb1cbf2d81d"
     },
     {
       "path": "assets/templates/evolution/skill-template/agent-governance/agents-md-generator/4-design-ui.md",
-      "sha256": "dff282fda562017a069eaf48fd8413b7c9de66cba20028c33415b20b1b1e35d6"
+      "sha256": "d8d9aa6fd314de3c0367c67cb0b9ed588aeb0e0fd47069113c842d0bf3eba9d2"
     },
     {
       "path": "assets/templates/evolution/skill-template/agent-governance/agents-md-generator/template-index.json",
-      "sha256": "71400b19e4997ec9ddad40d43946c6730c09c73131601344a605afabeb41207d"
+      "sha256": "f29b7bdd1198b27da51df44779a03cca019688a9155faf5869a1080402d6292c"
     },
     {
       "path": "assets/templates/global-codex-agents.md",
-      "sha256": "092d18547342f9918186e9fe3ccf3edfe9f003d03d7a1bac7d169712c04562eb"
+      "sha256": "b4a28af3713d3cd212d3b583716af04777c07f8a798d79302aaea95c6708e92c"
     },
     {
       "path": "assets/templates/root-agents.md",
@@ -74,7 +74,7 @@
     },
     {
       "path": "references/capability-coverage.md",
-      "sha256": "1e249df62b4bcbb253d1890fd34ccb66c5ad90a906095c9ac6bc3cdf77a46202"
+      "sha256": "899fb5eab7dcb653c491d20ca1e56c7d578464b18305ed15631e38c68983ae79"
     },
     {
       "path": "references/evaluation-scenarios.md",
@@ -82,19 +82,19 @@
     },
     {
       "path": "references/question-bank.md",
-      "sha256": "9c322761712f880ea6d59c71bacdb26c72ae039795cc543a030233b9de5c4036"
+      "sha256": "e00998301dbbad825254ba913e8defe5bcf2470bbbc2020725b474c526677aff"
     },
     {
       "path": "references/review-checklist.md",
-      "sha256": "a731304b0ea4a4e3c1fbeb4884684f0032bc72e640db8975ee22491e4fd54a4f"
+      "sha256": "6cbae5cc009db15258634e4be4c6d3b223ff8a2eb08f10ba8d0c88ae2b1780a4"
     },
     {
       "path": "references/script-guide.md",
-      "sha256": "15e830ada44ffde511a26ddf5c1947e3806d428d537d5f2c16bdc3f682852d6f"
+      "sha256": "40a42780c0b591d0aae9746795da306eabab3bbe581c2c111d71b055c1ec5275"
     },
     {
       "path": "references/skill-design-coverage.md",
-      "sha256": "72c58a7f46c6a5cf146bc01cae06b0016c797937df2991a5c1044681521679ad"
+      "sha256": "b0421ccfd9dbf5e65bd9afdef4156f9e0dbecaf04533310c8edc1ef3a679d9dd"
     },
     {
       "path": "scripts/agents_common.py",
@@ -102,11 +102,11 @@
     },
     {
       "path": "scripts/agents_project_facts.py",
-      "sha256": "7f5b28c10fa6f168fe663c9fcfc7a72070b4a6a5dead758f674c1c979bc4df98"
+      "sha256": "4ce5bc04dfa974675ef3cd2bf02c53794a7104d79b16ff7567726bb212cc4955"
     },
     {
       "path": "scripts/audit_skill.py",
-      "sha256": "3ee7317c80080dc7e4d508423bc0cd69fa1923ec9b999a0059c257b05af2c553"
+      "sha256": "0075173b63fe2732a85b081e1d037c34bf0e70b2a88037f100974df4f408156d"
     },
     {
       "path": "scripts/check_freshness.py",
@@ -122,15 +122,15 @@
     },
     {
       "path": "scripts/design_interview_state.py",
-      "sha256": "6d1b162a5c79f707ab2f7895139828c98d8da1ca7a435c83c6eabb09a13ebefd"
+      "sha256": "788233cb6fc71472aa7e99c7624341a56dca7cc15bbbf581c5e7aac65e64a1d5"
     },
     {
       "path": "scripts/design_profile_builder.py",
-      "sha256": "3431409ecb0b7087a3feec57230f0025da0403e300601c48de161e9bdb2bb2d6"
+      "sha256": "ea56eeb78d75c0cc5301bcbc784d0b172c1ec8f781a83adfbe3ed46638b2c60c"
     },
     {
       "path": "scripts/design_questions.py",
-      "sha256": "d2e9ee0e3f712956363afeac71cbbef930554132ece4b8cae4d0f1313a36a23d"
+      "sha256": "9137ac1bb49d98e07c722315f2e506f75d36cc7e5a140b1b04812321f87be7c5"
     },
     {
       "path": "scripts/design_remote_gate.py",
@@ -142,7 +142,7 @@
     },
     {
       "path": "scripts/evaluate_skill.py",
-      "sha256": "6a56362aaea0c15f6a55447852240771ccb40a3549b82e9fd477f19db13aacdb"
+      "sha256": "a1cbba7f2b0a3d681326c6768a27c8e0a3a95cc2ab6e143756e16a5d6fb6ca56"
     },
     {
       "path": "scripts/extract_commands.py",
@@ -162,7 +162,7 @@
     },
     {
       "path": "scripts/manage_dirs.py",
-      "sha256": "7f1c7962a185e6fa6e6a6c7f809643cf455d4f519953f1129c473bc4dd2f0c56"
+      "sha256": "9cfe77cbd75aafc6856a3972ef906cb29687d360764406de9267bf0985ee9617"
     },
     {
       "path": "scripts/manage_docs.py",
@@ -182,7 +182,7 @@
     },
     {
       "path": "scripts/manage_docs_scaffold_session.py",
-      "sha256": "b024efee62923c33ae8f9c3766ebf1c83d712c7737c6058eb99921981129dbeb"
+      "sha256": "c46b4db14b8a8f9b00e4b21aec5c0960f7ef837f3006611cc7f7b0843d3625d1"
     },
     {
       "path": "scripts/manage_docs_shared.py",
@@ -193,8 +193,12 @@
       "sha256": "eec6c020d63955f57a2dfe4fb30c9a1e078bdbac6047a044f8a02d11f54e3808"
     },
     {
+      "path": "scripts/quick_validate.py",
+      "sha256": "71f6f0808f58eed35a63f3e6365409700c29bc89f5c4d2a843284498a9a61e10"
+    },
+    {
       "path": "scripts/render_agents.py",
-      "sha256": "de9269f250c53fcc2d680259df940c45adb35a87eb27f6b0472b5515ad9ca79a"
+      "sha256": "8dd0ef32d2b93938b76ed11381e2bc6367941dbf325ee200b85b083393ce8db2"
     },
     {
       "path": "scripts/select_engineering_rules.py",
@@ -202,15 +206,15 @@
     },
     {
       "path": "scripts/verify_agents.py",
-      "sha256": "05fa490d63a453fab432eb8ad7d2793660d699aaa0f333e3fb34c6fa60ed1283"
+      "sha256": "0787b24993edf79c48d303dba82003b454f1d236ae76577ffd8e7821ab099b69"
     },
     {
       "path": "SKILL.md",
-      "sha256": "6c499071bfa8731bb34ff13f5f46ce2728c6e1acc9745b27ecac2f6a312815d2"
+      "sha256": "c5bdf819681dc0620842d62761040a41d6d87d3d89a791b60e7baa63f17f62e6"
     },
     {
       "path": "VERSION",
-      "sha256": "a1b673b99e58bf43ed12acef82a7d38e4761a9d7be814be99ac0f96d3e9d5932"
+      "sha256": "cd168fbc331b21b21275f840d14bd55eb4cddb7d01e2d39d16c667e7a9ecbe6e"
     }
   ],
   "other_version_artifacts": [
@@ -4529,6 +4533,594 @@
     {
       "path": "dist/agents-md-generator-v0.5.7.zip",
       "sha256": "a2f0f568331581d45dd3babe2b75a355556059d215deb81bb6ff71a796c33921"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/agents/openai.yaml",
+      "sha256": "bdb0b768918afe373828cc7310a5a04f3f4b2d1f2d692411e8926d3832f76495"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/assets/templates/evolution/evolution-index.json",
+      "sha256": "1c7770d0e0aea9be7ad586fb3d4b61ab24610012366ef923948dce329b39fe7c"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/1-workflow.md",
+      "sha256": "4ad6d7ada1e800ce92340811375ed47d59f0ee541e5dff8a826ee28138941a28"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/2-scripts.md",
+      "sha256": "aaa77f07ed76baccabfb85a9ca73b3db4181410f53a8c4146e8956acacde885e"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/3-plan.md",
+      "sha256": "ffec28987271714fa484f375d5d733e8eb7a3b49fb2e4f3d1141470df87e913a"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/4-design-ui.md",
+      "sha256": "dff282fda562017a069eaf48fd8413b7c9de66cba20028c33415b20b1b1e35d6"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/template-index.json",
+      "sha256": "71400b19e4997ec9ddad40d43946c6730c09c73131601344a605afabeb41207d"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/assets/templates/global-codex-agents.md",
+      "sha256": "b4a28af3713d3cd212d3b583716af04777c07f8a798d79302aaea95c6708e92c"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/assets/templates/root-agents.md",
+      "sha256": "fb332912a2c0e07c0b42a83862fd13b72b26fe8ee7041c98467ad53817d804c3"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/assets/templates/scoped-agents.md",
+      "sha256": "0c22cf8c23607fa129d996c8367cd8de0b4ed26f2e7e914ae371e0d13d865705"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/references/agents-md-guidance.md",
+      "sha256": "d289909138a9af87c9fa08400d1c8a003b35d591abce81fe9a8c286d8d384846"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/references/book-rules-coverage.md",
+      "sha256": "ad395f31ef56306e4798a582ea9fa7251ddb1730cfd576911930f30d2d49a180"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/references/capability-coverage.md",
+      "sha256": "899fb5eab7dcb653c491d20ca1e56c7d578464b18305ed15631e38c68983ae79"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/references/evaluation-scenarios.md",
+      "sha256": "f0f6dc71cfd78ce09671c95537aa9410af16128c0f435a6c799e5f3320bf1006"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/references/question-bank.md",
+      "sha256": "9c322761712f880ea6d59c71bacdb26c72ae039795cc543a030233b9de5c4036"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/references/review-checklist.md",
+      "sha256": "322d003b06dff55e7aade87cff1f603fbd3a2ae5a351cf7673734401bc8e9ee0"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/references/script-guide.md",
+      "sha256": "da5eec87446f79477ee227319bdb71a139e6c8a6e53ff8c004d1e8308b9d3717"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/references/skill-design-coverage.md",
+      "sha256": "5e258961bd8d8e6d8b3f5d8d950c209ed3d40673d9c895a7c2637d66e36d6b9a"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/RELEASE_RECEIPT.json",
+      "sha256": "a8b7896aa65f391e9578394a61419dfade04965e87d656855d0b19ebfc80af8e"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/agents_common.py",
+      "sha256": "1cc035f948a7e9c5e9128df70c4ff018a327e3f2a271450db80a45ac5308e507"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/agents_project_facts.py",
+      "sha256": "4ce5bc04dfa974675ef3cd2bf02c53794a7104d79b16ff7567726bb212cc4955"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/audit_skill.py",
+      "sha256": "f7bf128df7b40672be4f2d336112cebc3e897abb7084f608e239ed13cabf0bd4"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/check_freshness.py",
+      "sha256": "1f937f0419c2e18a3baf0cb87fe5fae2e604791c7958ee68f2f3cb4ee9697ead"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/collect_design_profile.py",
+      "sha256": "37924ad84fcc7688e74a625a95148d3468b141a21651973475048ee7fa0e1bd3"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/create_agent_shims.py",
+      "sha256": "aab7ac75247c035a6528e85da2d2d0127d4b41204dcdd42180f1fa207d8b5df5"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/design_interview_state.py",
+      "sha256": "6d1b162a5c79f707ab2f7895139828c98d8da1ca7a435c83c6eabb09a13ebefd"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/design_profile_builder.py",
+      "sha256": "3431409ecb0b7087a3feec57230f0025da0403e300601c48de161e9bdb2bb2d6"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/design_questions.py",
+      "sha256": "d2e9ee0e3f712956363afeac71cbbef930554132ece4b8cae4d0f1313a36a23d"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/design_remote_gate.py",
+      "sha256": "e4a318a1dfacc071f2f650ebc8b6520dba1c1711688c1b8ff82104ea030d7fcb"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/detect_scopes.py",
+      "sha256": "8c262dd5fdc7255d1ec524ba5bec44ee813b1746318ee2446ada119180e21adb"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/evaluate_skill.py",
+      "sha256": "45386a082856cdedd09424f0c3e49aa3373ea39032db74e09e9e98384ae3f536"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/extract_commands.py",
+      "sha256": "e08346e12a14eeb14666a684044626200a85df1980457687cf58cb007eb8fbec"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/extract_context.py",
+      "sha256": "2964e5fc94b8ea45620b11894f185bcb553f98d426ace0d5874abff0e0f2b192"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/inspect_project.py",
+      "sha256": "df356458f92bfdbe197f282610aac7be1f654e266ae21c05cd9a61ebff4ca156"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/install_skill.py",
+      "sha256": "7d9f60a05d9cac2ee3667b3a7a33e6766192793593fde657ae826994b1e38a46"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/manage_dirs.py",
+      "sha256": "7f1c7962a185e6fa6e6a6c7f809643cf455d4f519953f1129c473bc4dd2f0c56"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/manage_docs.py",
+      "sha256": "2aa51812b67df2d2f39de68b6410e5c143dbdbf9653857625e3c1ed1408e5c5a"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/manage_docs_evolution.py",
+      "sha256": "6261a58d4113e53afa42bdba6be0de3bf0b24dc523dfa1815cc381fa811d51f3"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/manage_docs_experience.py",
+      "sha256": "3abed1f7257684d9be141662371b6ee5664eead6bd0ee105af50a07902a41b53"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/manage_docs_release.py",
+      "sha256": "648444552136a9ff3fd59af937726666bb6c95ddb37ea0540e2c377800d13b13"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/manage_docs_scaffold_session.py",
+      "sha256": "b024efee62923c33ae8f9c3766ebf1c83d712c7737c6058eb99921981129dbeb"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/manage_docs_shared.py",
+      "sha256": "36235c63b94ed8dde2352ca1eb82a80a8ab49b6d78d4dd6cdbb7f6551ec141e7"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/manage_docs_sync_verify.py",
+      "sha256": "eec6c020d63955f57a2dfe4fb30c9a1e078bdbac6047a044f8a02d11f54e3808"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/render_agents.py",
+      "sha256": "de9269f250c53fcc2d680259df940c45adb35a87eb27f6b0472b5515ad9ca79a"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/select_engineering_rules.py",
+      "sha256": "5eb29a65af609eb8ed0923b63ba4392055c9b5854d8053a1a9e077be29fa5b07"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/scripts/verify_agents.py",
+      "sha256": "05fa490d63a453fab432eb8ad7d2793660d699aaa0f333e3fb34c6fa60ed1283"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/SKILL.md",
+      "sha256": "73b2b15fece6399c8908240ac9f5b1dbc34a90aae9b4c85de5fd4ca499ca68ad"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8/VERSION",
+      "sha256": "a1b673b99e58bf43ed12acef82a7d38e4761a9d7be814be99ac0f96d3e9d5932"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.5.8.zip",
+      "sha256": "b88a942d311e67abf568c4d4a7e37a4258d5f37d2ee5fc6a5c527ed109cd55b4"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/agents/openai.yaml",
+      "sha256": "bdb0b768918afe373828cc7310a5a04f3f4b2d1f2d692411e8926d3832f76495"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/assets/templates/evolution/evolution-index.json",
+      "sha256": "1c7770d0e0aea9be7ad586fb3d4b61ab24610012366ef923948dce329b39fe7c"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/1-workflow.md",
+      "sha256": "4ad6d7ada1e800ce92340811375ed47d59f0ee541e5dff8a826ee28138941a28"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/2-scripts.md",
+      "sha256": "aaa77f07ed76baccabfb85a9ca73b3db4181410f53a8c4146e8956acacde885e"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/3-plan.md",
+      "sha256": "ffec28987271714fa484f375d5d733e8eb7a3b49fb2e4f3d1141470df87e913a"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/4-design-ui.md",
+      "sha256": "dff282fda562017a069eaf48fd8413b7c9de66cba20028c33415b20b1b1e35d6"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/template-index.json",
+      "sha256": "71400b19e4997ec9ddad40d43946c6730c09c73131601344a605afabeb41207d"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/assets/templates/global-codex-agents.md",
+      "sha256": "b4a28af3713d3cd212d3b583716af04777c07f8a798d79302aaea95c6708e92c"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/assets/templates/root-agents.md",
+      "sha256": "fb332912a2c0e07c0b42a83862fd13b72b26fe8ee7041c98467ad53817d804c3"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/assets/templates/scoped-agents.md",
+      "sha256": "0c22cf8c23607fa129d996c8367cd8de0b4ed26f2e7e914ae371e0d13d865705"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/references/agents-md-guidance.md",
+      "sha256": "d289909138a9af87c9fa08400d1c8a003b35d591abce81fe9a8c286d8d384846"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/references/book-rules-coverage.md",
+      "sha256": "ad395f31ef56306e4798a582ea9fa7251ddb1730cfd576911930f30d2d49a180"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/references/capability-coverage.md",
+      "sha256": "899fb5eab7dcb653c491d20ca1e56c7d578464b18305ed15631e38c68983ae79"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/references/evaluation-scenarios.md",
+      "sha256": "f0f6dc71cfd78ce09671c95537aa9410af16128c0f435a6c799e5f3320bf1006"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/references/question-bank.md",
+      "sha256": "9c322761712f880ea6d59c71bacdb26c72ae039795cc543a030233b9de5c4036"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/references/review-checklist.md",
+      "sha256": "322d003b06dff55e7aade87cff1f603fbd3a2ae5a351cf7673734401bc8e9ee0"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/references/script-guide.md",
+      "sha256": "da5eec87446f79477ee227319bdb71a139e6c8a6e53ff8c004d1e8308b9d3717"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/references/skill-design-coverage.md",
+      "sha256": "5e258961bd8d8e6d8b3f5d8d950c209ed3d40673d9c895a7c2637d66e36d6b9a"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/RELEASE_RECEIPT.json",
+      "sha256": "15f89d6dd687d267df2f7c2ba950be343f3b6a7935918868a4a5fc671a2d3bb8"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/agents_common.py",
+      "sha256": "1cc035f948a7e9c5e9128df70c4ff018a327e3f2a271450db80a45ac5308e507"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/agents_project_facts.py",
+      "sha256": "4ce5bc04dfa974675ef3cd2bf02c53794a7104d79b16ff7567726bb212cc4955"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/audit_skill.py",
+      "sha256": "f7bf128df7b40672be4f2d336112cebc3e897abb7084f608e239ed13cabf0bd4"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/check_freshness.py",
+      "sha256": "1f937f0419c2e18a3baf0cb87fe5fae2e604791c7958ee68f2f3cb4ee9697ead"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/collect_design_profile.py",
+      "sha256": "37924ad84fcc7688e74a625a95148d3468b141a21651973475048ee7fa0e1bd3"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/create_agent_shims.py",
+      "sha256": "aab7ac75247c035a6528e85da2d2d0127d4b41204dcdd42180f1fa207d8b5df5"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/design_interview_state.py",
+      "sha256": "6d1b162a5c79f707ab2f7895139828c98d8da1ca7a435c83c6eabb09a13ebefd"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/design_profile_builder.py",
+      "sha256": "3431409ecb0b7087a3feec57230f0025da0403e300601c48de161e9bdb2bb2d6"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/design_questions.py",
+      "sha256": "d2e9ee0e3f712956363afeac71cbbef930554132ece4b8cae4d0f1313a36a23d"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/design_remote_gate.py",
+      "sha256": "e4a318a1dfacc071f2f650ebc8b6520dba1c1711688c1b8ff82104ea030d7fcb"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/detect_scopes.py",
+      "sha256": "8c262dd5fdc7255d1ec524ba5bec44ee813b1746318ee2446ada119180e21adb"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/evaluate_skill.py",
+      "sha256": "45386a082856cdedd09424f0c3e49aa3373ea39032db74e09e9e98384ae3f536"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/extract_commands.py",
+      "sha256": "e08346e12a14eeb14666a684044626200a85df1980457687cf58cb007eb8fbec"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/extract_context.py",
+      "sha256": "2964e5fc94b8ea45620b11894f185bcb553f98d426ace0d5874abff0e0f2b192"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/inspect_project.py",
+      "sha256": "df356458f92bfdbe197f282610aac7be1f654e266ae21c05cd9a61ebff4ca156"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/install_skill.py",
+      "sha256": "7d9f60a05d9cac2ee3667b3a7a33e6766192793593fde657ae826994b1e38a46"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/manage_dirs.py",
+      "sha256": "7f1c7962a185e6fa6e6a6c7f809643cf455d4f519953f1129c473bc4dd2f0c56"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/manage_docs.py",
+      "sha256": "2aa51812b67df2d2f39de68b6410e5c143dbdbf9653857625e3c1ed1408e5c5a"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/manage_docs_evolution.py",
+      "sha256": "6261a58d4113e53afa42bdba6be0de3bf0b24dc523dfa1815cc381fa811d51f3"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/manage_docs_experience.py",
+      "sha256": "3abed1f7257684d9be141662371b6ee5664eead6bd0ee105af50a07902a41b53"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/manage_docs_release.py",
+      "sha256": "648444552136a9ff3fd59af937726666bb6c95ddb37ea0540e2c377800d13b13"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/manage_docs_scaffold_session.py",
+      "sha256": "b024efee62923c33ae8f9c3766ebf1c83d712c7737c6058eb99921981129dbeb"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/manage_docs_shared.py",
+      "sha256": "36235c63b94ed8dde2352ca1eb82a80a8ab49b6d78d4dd6cdbb7f6551ec141e7"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/manage_docs_sync_verify.py",
+      "sha256": "eec6c020d63955f57a2dfe4fb30c9a1e078bdbac6047a044f8a02d11f54e3808"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/render_agents.py",
+      "sha256": "de9269f250c53fcc2d680259df940c45adb35a87eb27f6b0472b5515ad9ca79a"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/select_engineering_rules.py",
+      "sha256": "5eb29a65af609eb8ed0923b63ba4392055c9b5854d8053a1a9e077be29fa5b07"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/scripts/verify_agents.py",
+      "sha256": "05fa490d63a453fab432eb8ad7d2793660d699aaa0f333e3fb34c6fa60ed1283"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/SKILL.md",
+      "sha256": "73b2b15fece6399c8908240ac9f5b1dbc34a90aae9b4c85de5fd4ca499ca68ad"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0/VERSION",
+      "sha256": "613ff7316ed558079973b8e02ce8dac763243297e0f4c8a584958c579f6e86fd"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.0.zip",
+      "sha256": "b8b8ac23cda70df31d2405df08296cc2fa3a713a08b926b3bbe4d8fb151b78bc"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/agents/openai.yaml",
+      "sha256": "b7d2502ee1f8a9328a7a865654a1560207098bb8bdf30959db8fbd32e36d8e0f"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/assets/templates/evolution/evolution-index.json",
+      "sha256": "fbc9a55f91daab54725fcc294adad663b0cfe638ed9a2a9a931ffc15cb6d9511"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/1-workflow.md",
+      "sha256": "b48c75f05b84612fb8ec088a9609c270585bd71c75c87afb09215b4560a20d8b"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/2-scripts.md",
+      "sha256": "4bf636856726cef213349682480e902c345f8e74ee8be5fb27aab70791bf64f1"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/3-plan.md",
+      "sha256": "f8b3a2d6b3961b6ef0cc8b4b0d72419a4b884c086457b736b02b0eb1cbf2d81d"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/4-design-ui.md",
+      "sha256": "d8d9aa6fd314de3c0367c67cb0b9ed588aeb0e0fd47069113c842d0bf3eba9d2"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/template-index.json",
+      "sha256": "f29b7bdd1198b27da51df44779a03cca019688a9155faf5869a1080402d6292c"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/assets/templates/global-codex-agents.md",
+      "sha256": "b4a28af3713d3cd212d3b583716af04777c07f8a798d79302aaea95c6708e92c"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/assets/templates/root-agents.md",
+      "sha256": "fb332912a2c0e07c0b42a83862fd13b72b26fe8ee7041c98467ad53817d804c3"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/assets/templates/scoped-agents.md",
+      "sha256": "0c22cf8c23607fa129d996c8367cd8de0b4ed26f2e7e914ae371e0d13d865705"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/references/agents-md-guidance.md",
+      "sha256": "d289909138a9af87c9fa08400d1c8a003b35d591abce81fe9a8c286d8d384846"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/references/book-rules-coverage.md",
+      "sha256": "ad395f31ef56306e4798a582ea9fa7251ddb1730cfd576911930f30d2d49a180"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/references/capability-coverage.md",
+      "sha256": "899fb5eab7dcb653c491d20ca1e56c7d578464b18305ed15631e38c68983ae79"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/references/evaluation-scenarios.md",
+      "sha256": "f0f6dc71cfd78ce09671c95537aa9410af16128c0f435a6c799e5f3320bf1006"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/references/question-bank.md",
+      "sha256": "e00998301dbbad825254ba913e8defe5bcf2470bbbc2020725b474c526677aff"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/references/review-checklist.md",
+      "sha256": "01cec20db889adcef3c9e7882dae5a0eeeaf4770ba087d6e681b0025d400ea53"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/references/script-guide.md",
+      "sha256": "40a42780c0b591d0aae9746795da306eabab3bbe581c2c111d71b055c1ec5275"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/references/skill-design-coverage.md",
+      "sha256": "4a0253c8ff2b2e32587cdeb6cdaf16d8d3884774b97647e85897cec2f8f1cea6"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/RELEASE_RECEIPT.json",
+      "sha256": "ea350fd9c9684e507cd1e8ea91b2076f1ec3ddd3062e37c4dfe514ca703dd4d5"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/agents_common.py",
+      "sha256": "1cc035f948a7e9c5e9128df70c4ff018a327e3f2a271450db80a45ac5308e507"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/agents_project_facts.py",
+      "sha256": "4ce5bc04dfa974675ef3cd2bf02c53794a7104d79b16ff7567726bb212cc4955"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/audit_skill.py",
+      "sha256": "f7bf128df7b40672be4f2d336112cebc3e897abb7084f608e239ed13cabf0bd4"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/check_freshness.py",
+      "sha256": "1f937f0419c2e18a3baf0cb87fe5fae2e604791c7958ee68f2f3cb4ee9697ead"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/collect_design_profile.py",
+      "sha256": "37924ad84fcc7688e74a625a95148d3468b141a21651973475048ee7fa0e1bd3"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/create_agent_shims.py",
+      "sha256": "aab7ac75247c035a6528e85da2d2d0127d4b41204dcdd42180f1fa207d8b5df5"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/design_interview_state.py",
+      "sha256": "ada3af12af49b44ffd9a0f65fad5be633eeb8cc8444e14192fbafddb636edfb5"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/design_profile_builder.py",
+      "sha256": "ea56eeb78d75c0cc5301bcbc784d0b172c1ec8f781a83adfbe3ed46638b2c60c"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/design_questions.py",
+      "sha256": "9137ac1bb49d98e07c722315f2e506f75d36cc7e5a140b1b04812321f87be7c5"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/design_remote_gate.py",
+      "sha256": "e4a318a1dfacc071f2f650ebc8b6520dba1c1711688c1b8ff82104ea030d7fcb"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/detect_scopes.py",
+      "sha256": "8c262dd5fdc7255d1ec524ba5bec44ee813b1746318ee2446ada119180e21adb"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/evaluate_skill.py",
+      "sha256": "45386a082856cdedd09424f0c3e49aa3373ea39032db74e09e9e98384ae3f536"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/extract_commands.py",
+      "sha256": "e08346e12a14eeb14666a684044626200a85df1980457687cf58cb007eb8fbec"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/extract_context.py",
+      "sha256": "2964e5fc94b8ea45620b11894f185bcb553f98d426ace0d5874abff0e0f2b192"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/inspect_project.py",
+      "sha256": "df356458f92bfdbe197f282610aac7be1f654e266ae21c05cd9a61ebff4ca156"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/install_skill.py",
+      "sha256": "7d9f60a05d9cac2ee3667b3a7a33e6766192793593fde657ae826994b1e38a46"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/manage_dirs.py",
+      "sha256": "9cfe77cbd75aafc6856a3972ef906cb29687d360764406de9267bf0985ee9617"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/manage_docs.py",
+      "sha256": "2aa51812b67df2d2f39de68b6410e5c143dbdbf9653857625e3c1ed1408e5c5a"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/manage_docs_evolution.py",
+      "sha256": "6261a58d4113e53afa42bdba6be0de3bf0b24dc523dfa1815cc381fa811d51f3"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/manage_docs_experience.py",
+      "sha256": "3abed1f7257684d9be141662371b6ee5664eead6bd0ee105af50a07902a41b53"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/manage_docs_release.py",
+      "sha256": "648444552136a9ff3fd59af937726666bb6c95ddb37ea0540e2c377800d13b13"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/manage_docs_scaffold_session.py",
+      "sha256": "b024efee62923c33ae8f9c3766ebf1c83d712c7737c6058eb99921981129dbeb"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/manage_docs_shared.py",
+      "sha256": "36235c63b94ed8dde2352ca1eb82a80a8ab49b6d78d4dd6cdbb7f6551ec141e7"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/manage_docs_sync_verify.py",
+      "sha256": "eec6c020d63955f57a2dfe4fb30c9a1e078bdbac6047a044f8a02d11f54e3808"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/render_agents.py",
+      "sha256": "8dd0ef32d2b93938b76ed11381e2bc6367941dbf325ee200b85b083393ce8db2"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/select_engineering_rules.py",
+      "sha256": "5eb29a65af609eb8ed0923b63ba4392055c9b5854d8053a1a9e077be29fa5b07"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/scripts/verify_agents.py",
+      "sha256": "0787b24993edf79c48d303dba82003b454f1d236ae76577ffd8e7821ab099b69"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/SKILL.md",
+      "sha256": "c5bdf819681dc0620842d62761040a41d6d87d3d89a791b60e7baa63f17f62e6"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1/VERSION",
+      "sha256": "4d49467953ad7101e41f9ac63cba4f286c4d0508ee3de03a1ba27a8d02f20c96"
+    },
+    {
+      "path": "dist/agents-md-generator-v0.6.1.zip",
+      "sha256": "87017858aa58b0bce4a76f1c02cb9df5f6834d875f68d426facbf5c0c7b95bf5"
     }
   ]
 }

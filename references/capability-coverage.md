@@ -17,7 +17,7 @@ Use external AGENTS.md generator projects as capability references, not as code 
 | Generation | `render_agents.py` renders root/scoped AGENTS.md from templates and extracted facts, adds root version/language metadata, and keeps the root `AGENTS.md` within 16KB |
 | Docs governance | `manage_docs.py` scaffolds `docs/`, rotates handoff files, writes 10 numbered experience summaries, records development stages, verifies governance files, and uses `resume-check` for interrupted session recovery |
 | Directory governance | `manage_dirs.py` scans current structure, records planned local and remote deployment structure, reviews directory change requests, blocks unsafe folder changes, archives old dir manager content for user force-confirmed overrides, and writes review records |
-| Structure/content validation | `verify_agents.py`, `audit_skill.py`, and `evaluate_skill.py` gate markers, placeholders, paths, commands, skipped directories, and skill structure |
+| Structure/content validation | `verify_agents.py`, `audit_skill.py`, `manage_docs.py verify`, and `evaluate_skill.py` gate docs governance, markers, placeholders, paths, commands, skipped directories, and skill structure |
 | Install confirmation | `install_skill.py` is used only for skill-development release flows, asks yes/no install confirmation after release validation, defaults to skip unless Codex or custom target is explicit, rejects source directories, requires `RELEASE_RECEIPT.json`, and preserves backup/template state on replacement |
 | Compatibility shims | `create_agent_shims.py` creates CLAUDE.md and GEMINI.md only when requested, preserving non-managed files |
 | Hooks guidance | Rendered AGENTS.md includes hook policy and forbids bypassing hooks |

@@ -43,6 +43,10 @@ Start grouped interviews with `python scripts/collect_design_profile.py <project
 | 42 | all | What is the governed local directory structure for source, tests, dist, docs, and supporting files? |
 | 43 | all | What is the governed remote directory structure or the explicit statement that no remote structure is configured? |
 | 44 | all | What are the fixed rules for where new features, scripts, docs, tests, and release artifacts must go? |
+| 46 | all | If the remote workspace needs a conda prefix environment, where must it live? Recommended: `.conda/<env-name>/`. If remote is not configured, store `disabled`. |
+| 47 | all | If the remote workspace produces runtime artifacts, what is the active run directory template? Recommended: `runs/<run-id>/`. If remote is not configured, store `disabled`. |
+| 48 | all | If the remote workspace archives verified runtime artifacts, what is the backup directory template? Recommended: `backups/runs/<run-id>/`. If remote is not configured, store `disabled`. |
+| 49 | all | When must remote runtime artifacts leave the active run directory and move into backups? Recommended: `after required verification passes`. If remote is not configured, store `disabled`. |
 | 11 | engineering | What does this project do? |
 | 12 | engineering | Why build this project? |
 | 13 | engineering | What are the expected outcome and goals? |
@@ -68,8 +72,8 @@ Start grouped interviews with `python scripts/collect_design_profile.py <project
 
 | Need | Ask |
 |------|-----|
-| Root AGENTS.md missing | If this work folder already has landed content, do not launch the full design interview. Enter takeover mode, confirm only the project type, name, default language, and remote structure when needed, then force local directory takeover and governance scaffolding. |
-| Root AGENTS.md version abnormal | If the current work folder root `AGENTS.md` is version-abnormal and the folder already has landed content, do not enter the full design interview. Enter takeover mode and continue with forced governance takeover after minimal confirmation. |
+| Root AGENTS.md missing | If this work folder already has landed content, do not launch the full design interview. Enter takeover mode, confirm the minimal identity fields first, then complete the full structured directory contract before forced local directory takeover and governance scaffolding. |
+| Root AGENTS.md version abnormal | If the current work folder root `AGENTS.md` is version-abnormal and the folder already has landed content, do not enter the full design interview. Enter takeover mode, keep identity questions minimal, but still require the full structured directory contract before continuing. |
 | Existing content but no AGENTS | This work folder already has landed content but no root `AGENTS.md`; should I first read the exact-cwd Codex sessions, generate history experience, and then write the latest current experience files before normal AGENTS generation continues? |
 | User says 计划/规划/准备 | Because this is a current workspace/current repository/current work folder planning request, should I first inspect the root `AGENTS.md`, report pass-only when it is healthy, and ask before entering AGENTS design or restructuring when it is abnormal? |
 | Branch governance abnormal | The current work folder branch state does not match the configured branch model; should I enter branch cleanup or release governance before normal generation continues? |

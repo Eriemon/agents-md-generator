@@ -23,7 +23,9 @@ Patterns can be combined. A strong Skill often uses Inversion to collect intent,
 - Keep `agents/openai.yaml` aligned with `SKILL.md` and regenerate or update it when stale.
 - Keep default-language handling aligned across interview prompts, rendered AGENTS.md output, verification rules, and `agents/openai.yaml`; do not let any one layer silently weaken the language contract.
 - Keep remote-server governance aligned across interview prompts, dependency gates, rendered AGENTS.md output, verification rules, and `agents/openai.yaml`; do not let any one layer bypass `erie-remote-ssh`.
-- Keep remote structure governance separate from remote-server enablement and task-route mapping. A minimal takeover interview may infer structure facts, but it still must ask `use_remote_server` explicitly before any remote task route can be written.
+- Keep remote structure governance separate from remote-server enablement and task-route mapping. A takeover interview may minimize identity questions, but it must still ask `use_remote_server` explicitly before any remote task route can be written and it must still complete the structured directory contract, including remote conda and runtime archive policy when remote structure is configured.
+- Keep explicit AGENTS design/update requests separate from `计划` / `规划` / `准备` root-check triggers. Trigger-only checks may stop after reporting root health; explicit governance work must continue into the full interview/update flow.
+- Restrict automatic takeover to version-mismatched old workspaces. Missing root files or missing version metadata must stay on the full grouped interview path.
 
 ## AGENTS.md Contract
 
@@ -33,7 +35,7 @@ For Skill development, generated AGENTS.md should include a Skill Design Contrac
 - Design patterns selected for the Skill and why they matter.
 - Resource boundaries for `SKILL.md`, `references/`, `scripts/`, `assets/`, and `agents/openai.yaml`.
 - Progressive disclosure policy so the root instructions stay concise.
-- Validation gates such as `quick_validate.py`, skill audit, AGENTS.md verification, and full evaluate chain.
+- Validation gates such as `python skills/agents-md-generator/scripts/quick_validate.py skills/agents-md-generator`, skill audit, AGENTS.md verification, and full evaluate chain.
 - Validation method and validation granularity, including whether acceptance is automated, manual, forward-tested, or a combination.
 - Forward-testing policy for complex or high-risk Skills.
 - An explicit default-language reply rule in the root `AGENTS.md` whenever `default_language` metadata is present.
@@ -56,7 +58,7 @@ Strong-control generated AGENTS.md should also include a Documentation Governanc
 - Require the rendered root `AGENTS.md` to keep the explicit default-language rule and to state that remote validation must start with the matched task route's primary server, automatically try fallback servers after failed validation, and block unmatched tasks until AGENTS is updated.
 - Put shared cross-repository principles in global `.codex/AGENTS.md`, but keep repository-specific long-task heartbeat detail, decomposition-plan locations, and GUI script exceptions in a local JSON governance config.
 - Root `AGENTS.md` should point to `.agents/global-rule-overrides.json` instead of restating config-level maintainability and script-governance detail.
-- The local JSON governance config locks source-file limits, decomposition-plan requirements, and non-GUI `scripts/<family>/<function>/<name>.<ext>` plus mirrored `shell`, `bat`, and `powershell` rules.
+- The local JSON governance config locks source-file limits, decomposition-plan requirements, and the fixed non-GUI script quartet `scripts/python/<function>/<name>.py`, `scripts/shell/<function>/<name>.sh`, `scripts/bat/<function>/<name>.bat`, and `scripts/powershell/<function>/<name>.ps1`.
 - Use a strict directory governance gate for folder moves; blocked reviews require explicit user force-confirmation and old dir manager content archival before execution.
 - Keep local reference paths and temporary source folders out of generated AGENTS.md.
 

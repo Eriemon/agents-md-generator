@@ -72,6 +72,29 @@ def validate_strong_control(text: str, file: str, project: Path, errors: list[st
     profile = read_json(project / ".agents" / "agents-control.json")
     if not str(profile.get("default_conversation_language", "")).strip():
         errors.append(f"{file}: strong-control profile must explicitly set default_conversation_language")
+    directory_contract = profile.get("directory_contract", {}) if isinstance(profile.get("directory_contract", {}), dict) else {}
+    directory_body = section_body(text, "## Directory Contract")
+    if directory_body is None:
+        errors.append(f"{file}: strong-control profile requires ## Directory Contract")
+    else:
+        remote_environment = directory_contract.get("remote_environment_policy", {}) if isinstance(directory_contract.get("remote_environment_policy", {}), dict) else {}
+        remote_runtime = directory_contract.get("remote_runtime_archive_policy", {}) if isinstance(directory_contract.get("remote_runtime_archive_policy", {}), dict) else {}
+        if remote_environment.get("status") == "enabled":
+            path_template = str(remote_environment.get("path_template", "")).strip()
+            if not path_template:
+                errors.append(f"{file}: directory_contract.remote_environment_policy.path_template must be configured when enabled")
+            elif path_template not in directory_body:
+                errors.append(f"{file}: Directory Contract must include remote conda environment path `{path_template}`")
+        if remote_runtime.get("status") == "enabled":
+            active_path = str(remote_runtime.get("active_path_template", "")).strip()
+            backup_path = str(remote_runtime.get("backup_path_template", "")).strip()
+            trigger = str(remote_runtime.get("archive_trigger", "")).strip()
+            if active_path and active_path not in directory_body:
+                errors.append(f"{file}: Directory Contract must include remote runtime active path `{active_path}`")
+            if backup_path and backup_path not in directory_body:
+                errors.append(f"{file}: Directory Contract must include remote runtime backup path `{backup_path}`")
+            if trigger and trigger not in directory_body:
+                errors.append(f"{file}: Directory Contract must include remote runtime archive trigger `{trigger}`")
     remote_contract = profile.get("remote_server_contract", {}) if isinstance(profile.get("remote_server_contract", {}), dict) else {}
     if remote_contract:
         remote_body = section_body(text, "## Remote Server Contract")

@@ -13,7 +13,7 @@ Run `python skills/agents-md-generator/scripts/verify_agents.py . --installed-sk
 
 | Gate | Required evidence |
 |------|-------------------|
-| Structure | `quick_validate.py skills/agents-md-generator` passes for this skill |
+| Structure | `python skills/agents-md-generator/scripts/quick_validate.py skills/agents-md-generator` passes for this skill |
 | Facts | `python skills/agents-md-generator/scripts/inspect_project.py <project>` output reviewed |
 | Design profile | grouped design interview completed with `collect_design_profile.py --start/--resume/--answer-file`, then `python skills/agents-md-generator/scripts/collect_design_profile.py <project> --answers answers.json --write` completed when strong control is required |
 | Commands | `python skills/agents-md-generator/scripts/extract_commands.py <project>` output reviewed |
@@ -49,14 +49,14 @@ Run `python skills/agents-md-generator/scripts/verify_agents.py . --installed-sk
 - Strong-control Skill AGENTS.md includes Skill Design Contract with design patterns, resource boundaries, progressive disclosure, validation gates, and forward-testing policy.
 - Root `AGENTS.md` stays within `16KB`; scoped `AGENTS.md` files are not rejected for exceeding the old line-count rule.
 - Root `AGENTS.md` should point to `.agents/global-rule-overrides.json` instead of repeating maintainability, script-layout, or long-task heartbeat detail in prose.
-- Review the config-backed gates from `.agents/global-rule-overrides.json`: handwritten source files and project tool scripts default to the 1000-line limit, oversized files need the configured decomposition-plan sections, and non-GUI tools must satisfy the configured `scripts/<family>/<function>/<name>.<ext>` plus mirrored `shell`, `bat`, and `powershell` variants.
+- Review the config-backed gates from `.agents/global-rule-overrides.json`: handwritten source files and project tool scripts default to the 1000-line limit, oversized files need the configured decomposition-plan sections, and non-GUI tools must satisfy the fixed quartet `scripts/python/<function>/<name>.py`, `scripts/shell/<function>/<name>.sh`, `scripts/bat/<function>/<name>.bat`, and `scripts/powershell/<function>/<name>.ps1`.
 - Long-running Python automation policy is also config-backed: if a task is expected to run long, the flow must ask first before enabling thread heartbeat follow-up, and completion should delete the heartbeat after continuation.
 - Skill and engineering design interviews expose selectable options, repeat `review_summary` confirmation after each answer group, persist unfinished progress in `.agents/design-interview-state.json`, and set `alignment_confirmed=true` only after the final full-design confirmation.
 - Question `32` for `default_conversation_language` must be explicitly asked and confirmed in every AGENTS generation or takeover-restructure flow; do not infer it from defaults or repository heuristics.
 - Question `45` for `use_remote_server` must be explicitly asked in every AGENTS generation or takeover-restructure flow. If the user enables remote servers, the workflow must not bypass the dependency/configuration/task-route-mapping/validation gates.
 - When remote servers are enabled, the remote server contract must record a server registry plus one or more task routes. Explicit user route-task assignments win; otherwise each route falls back to the selected primary server `functions` so the task list is never empty.
-- Takeover mode may minimize identity questions, but remote structure governance must stay separate from remote-server enablement and task-route mapping; known structure facts do not remove the requirement to ask whether remote servers are needed.
-- New and existing projects both must answer the directory-contract group so local structure, remote structure, and feature-placement rules are explicit before strong control is written.
+- Takeover mode may minimize identity questions, but remote structure governance must stay separate from remote-server enablement and task-route mapping; known structure facts do not remove the requirement to ask whether remote servers are needed, and takeover must still complete the structured directory-contract interview before write.
+- New and existing projects both must answer the directory-contract group so local structure, remote structure, feature-placement rules, remote conda placement, and remote runtime archive rules are explicit before strong control is written.
 - Skill development profiles include detailed development requirements, development purpose, expected result, validation method, and validation granularity before strong control is written.
 - User-developed Skills live under `skills/<skill-name>/SKILL.md`; `SKILL.md` frontmatter `name` exactly matches the folder name and uses lowercase letters, digits, and hyphens.
 - If `has_existing_work=yes` for a Skill project, the expected `skills/<skill-name>/SKILL.md` must already exist on disk; answer text alone is not enough.
@@ -68,10 +68,11 @@ Run `python skills/agents-md-generator/scripts/verify_agents.py . --installed-sk
 - If the current file structure violates the governed primary root or allowed top-level roots, the workflow must ask whether to normalize it before modifying files, and the recommended default should be yes.
 - Missing root `AGENTS.md` is a mandatory abnormal state for agents-md-generator root AGENTS/docs/workspace handling; the skill must report the problem and ask whether to enter AGENTS design or restructuring.
 - Missing `agents_version` or `generator_version`, or either value mismatching the installed `agents-md-generator` version, is also a mandatory abnormal state for root AGENTS/docs/workspace handling; do not treat it as a normal warning.
-- Old work folders with landed content plus missing/stale root `AGENTS.md` should enter takeover mode after confirming only the minimal identity fields; they should not be sent through the full grouped interview.
+- Old work folders with landed content plus version-mismatched root `AGENTS.md` may enter takeover mode after confirming only the minimal identity fields first, but they must still complete the structured directory contract before write; missing root files or missing version metadata must stay on the full grouped interview.
 - User requests containing `计划`, `规划`, or `准备` should first run the current-workspace/current-repository/current-work-folder root `AGENTS.md` check.
 - If that root check passes, the trigger path should only report that the check passed and must not silently continue into AGENTS design work.
 - If that root check fails, the trigger path should report the exact abnormal reason and ask whether to enter AGENTS.md design or restructuring.
+- Explicit AGENTS.md / agent-rules / scoped-AGENTS requests should continue into the full design or update flow when the root file is healthy; they must not be downgraded to a pass-only check.
 - Batch writes with `collect_design_profile.py --answers <answers.json> --write` must reject missing `default_conversation_language`; silent fallback to `中文` is not allowed.
 - When remote servers are enabled, missing `erie-remote-ssh` must trigger an install confirmation using the fixed GitHub source, missing server configuration must trigger a configuration confirmation, and remote task routes must be built from `erie-remote-ssh choices`; no ad hoc server guesses are allowed.
 - Existing `docs/` layouts are preflighted; ambiguous or conflicting layouts require user confirmation before AGENTS.md or docs governance writes.
@@ -95,7 +96,7 @@ Run `python skills/agents-md-generator/scripts/verify_agents.py . --installed-sk
 - Category workflow schema should be explicit for current supported targets such as `agent-governance`, `docs-governance`, `FPGA`, `algorithm`, `web/frontend`, `backend/api`, `data/database`, and `general`.
 - Obsolete evolution outputs listed by a prior `evolution-index.json` must be archived before cleanup; do not silently delete or keep cross-family copied templates.
 - AGENTS rendering must not scan the whole `assets/templates/` directory. It may only read the exact matching evolution target as supplemental guidance, and unmatched sibling targets must stay out of the render.
-- Directory Contract fixes local structure, remote structure, remote deployment workspace planning, and future feature-addition structure before implementation.
+- Directory Contract fixes local structure, remote structure, remote deployment workspace planning, future feature-addition structure, remote `.conda/<env-name>/` placement, `runs/<run-id>/` active output layout, `backups/runs/<run-id>/` archive layout, and the archive trigger before implementation.
 - Directory Contract must include an enforced primary project root for strong-control projects, and dir_manager planning must not silently bless unrelated root-level source folders.
 - Remote deployment tasks must not sync local skill-development content to servers unless the user explicitly overrides; deploy only intended runtime or deployment artifacts.
 - Directory changes must pass `docs/dir_manager/DIR_MANAGER.md` review and `python skills/agents-md-generator/scripts/manage_dirs.py review <project> --input change.json`.

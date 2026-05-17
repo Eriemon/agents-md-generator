@@ -20,9 +20,6 @@ STATE_PATH = ".agents/design-interview-state.json"
 TERMINAL_STATUSES = {"completed", "abandoned"}
 TAKEOVER_TERMINAL_STATUSES = {"completed", "abandoned"}
 TAKEOVER_REASON_KEYS = {
-    "missing_root_agents_md",
-    "missing_agents_version",
-    "missing_generator_version",
     "agents_version_mismatch",
     "generator_version_mismatch",
 }
@@ -116,6 +113,10 @@ DIRECTORY_QUESTIONS = [
     ("42", "local_directory_structure", "请明确本地目录结构约定，包含主目录、tests、dist、docs 等位置。"),
     ("43", "remote_directory_structure", "请明确远程目录结构或远程部署边界；如果没有远程环境，也要明确写出没有配置。"),
     ("44", "feature_directory_rules", "请明确新增功能、脚本、文档、测试等后续内容应该进入哪些目录。"),
+    ("46", "remote_conda_environment_layout", "如果远端工作区需要 conda 环境，请明确该前缀环境固定放在哪里；推荐 `.conda/<env-name>/`。如果远端未配置，可保持 disabled。"),
+    ("47", "remote_run_artifact_active_layout", "如果远端会产生运行产物，请明确活动运行目录结构；推荐 `runs/<run-id>/`。如果远端未配置，可保持 disabled。"),
+    ("48", "remote_run_artifact_backup_layout", "如果远端会归档运行产物，请明确归档目录结构；推荐 `backups/runs/<run-id>/`。如果远端未配置，可保持 disabled。"),
+    ("49", "remote_run_archive_trigger", "请明确远端运行产物何时必须从活动目录归档到 backups；推荐 `after required verification passes`。如果远端未配置，可保持 disabled。"),
 ]
 
 EXISTING_WORK_QUESTIONS = [
@@ -127,6 +128,12 @@ DIRECTORY_KEYS = [
     "local_directory_structure",
     "remote_directory_structure",
     "feature_directory_rules",
+]
+REMOTE_DIRECTORY_POLICY_KEYS = [
+    "remote_conda_environment_layout",
+    "remote_run_artifact_active_layout",
+    "remote_run_artifact_backup_layout",
+    "remote_run_archive_trigger",
 ]
 OPTIONAL_EMPTY_KEYS = {"engineering_rule_notes"}
 ALIGNMENT_KEY = "alignment_confirmed"
@@ -161,7 +168,7 @@ SKILL_GROUPS = [
     ["25", "26", "27"],
     ["28", "29", "30"],
     ["31"],
-    ["42", "43", "44"],
+    ["42", "43", "44", "46", "47", "48", "49"],
     ["20", "21"],
 ]
 ENGINEERING_GROUPS = [
@@ -171,12 +178,12 @@ ENGINEERING_GROUPS = [
     ["33", "34", "35"],
     ["36", "37", "38"],
     ["39", "40", "41"],
-    ["42", "43", "44"],
+    ["42", "43", "44", "46", "47", "48", "49"],
     ["20", "21"],
 ]
 TAKEOVER_COMMON_GROUPS = [["1", "32", "45"]]
-TAKEOVER_SKILL_GROUPS = [["6"]]
-TAKEOVER_ENGINEERING_GROUPS = [["16"]]
+TAKEOVER_SKILL_GROUPS = [["6"], ["42", "43", "44", "46", "47", "48", "49"], ["21"]]
+TAKEOVER_ENGINEERING_GROUPS = [["16"], ["42", "43", "44", "46", "47", "48", "49"], ["21"]]
 
 
 QUESTION_OPTIONS: dict[str, list[dict[str, Any]]] = {
@@ -204,6 +211,26 @@ QUESTION_OPTIONS: dict[str, list[dict[str, Any]]] = {
     "directory_contract_confirmed": [
         {"label": "确认目录契约", "value": True, "description": "允许写入本地、远程、新功能目录规则。", "recommended": True},
         {"label": "暂不确认", "value": False, "description": "只输出待确认摘要，不写强控制档案。", "recommended": False},
+    ],
+    "remote_conda_environment_layout": [
+        {"label": ".conda/<env-name>/", "value": ".conda/<env-name>/", "description": "远端 conda 前缀环境固定放在对应工作区根下。", "recommended": True},
+        {"label": "disabled", "value": "disabled", "description": "远端未配置或不在本次目录治理范围内。", "recommended": False},
+        {"label": "用户自定义", "value": "__user_input__", "description": "由用户输入其他远端 conda 前缀目录规则。", "recommended": False},
+    ],
+    "remote_run_artifact_active_layout": [
+        {"label": "runs/<run-id>/", "value": "runs/<run-id>/", "description": "远端运行中的活动产物按运行编号进入 runs 目录。", "recommended": True},
+        {"label": "disabled", "value": "disabled", "description": "远端未配置或本次不治理运行产物。", "recommended": False},
+        {"label": "用户自定义", "value": "__user_input__", "description": "由用户输入其他远端活动运行目录规则。", "recommended": False},
+    ],
+    "remote_run_artifact_backup_layout": [
+        {"label": "backups/runs/<run-id>/", "value": "backups/runs/<run-id>/", "description": "验证完成后的远端运行产物归档到 backups/runs。", "recommended": True},
+        {"label": "disabled", "value": "disabled", "description": "远端未配置或本次不治理运行归档。", "recommended": False},
+        {"label": "用户自定义", "value": "__user_input__", "description": "由用户输入其他远端运行归档目录规则。", "recommended": False},
+    ],
+    "remote_run_archive_trigger": [
+        {"label": "after required verification passes", "value": "after required verification passes", "description": "该仓库要求的验证门禁通过后，活动运行目录必须归档。", "recommended": True},
+        {"label": "disabled", "value": "disabled", "description": "远端未配置或本次不治理运行归档触发时机。", "recommended": False},
+        {"label": "用户自定义", "value": "__user_input__", "description": "由用户输入其他远端归档触发规则。", "recommended": False},
     ],
     "alignment_confirmed": [
         {"label": "是，理解一致", "value": True, "description": "允许写入强控制档案。", "recommended": True},
@@ -326,3 +353,20 @@ def read_json_object(path: Path) -> dict[str, Any]:
 
 def empty(value: Any) -> bool:
     return value is None or value == "" or value == []
+
+
+def remote_directory_configured(raw: Any) -> bool:
+    value = str(raw).strip()
+    if not value:
+        return False
+    lowered = value.lower()
+    if lowered in {"none", "not configured", "disabled"}:
+        return False
+    if "no remote workspace is configured" in lowered:
+        return False
+    return True
+
+
+def remote_directory_policy_required(answers: dict[str, Any] | None) -> bool:
+    answers = answers or {}
+    return bool(answers.get(USE_REMOTE_SERVER_KEY) is True or remote_directory_configured(answers.get("remote_directory_structure", "")))

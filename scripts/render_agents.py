@@ -366,6 +366,8 @@ def directory_contract(profile: dict | None, project: Path) -> str:
         return "- Directory contract: not confirmed. Do not freeze structure until the user confirms local, remote, and feature-addition layout."
     contract = profile.get("directory_contract", {})
     dir_contract = profile.get("dir_manager_contract", {})
+    remote_environment = contract.get("remote_environment_policy", {}) if isinstance(contract.get("remote_environment_policy", {}), dict) else {}
+    remote_runtime = contract.get("remote_runtime_archive_policy", {}) if isinstance(contract.get("remote_runtime_archive_policy", {}), dict) else {}
     archive_command = project_command(project, profile, "manage_dirs.py", "archive", "<project>", "--reason", "force-confirmed-directory-override")
     lines = [
         f"- Confirmed: {contract.get('confirmed', False)}.",
@@ -379,10 +381,19 @@ def directory_contract(profile: dict | None, project: Path) -> str:
         "- If directory review blocks the change, refuse default execution, explain the risk, and ask for explicit user force-confirmation before proceeding.",
         f"- After user force-confirmation and before applying the blocked folder change, archive old dir manager content to `{dir_contract.get('history', 'docs/dir_manager/history_dir_manager')}/YYYYMMDD-HHMMSS/` with `{archive_command}`.",
     ]
+    if str(remote_environment.get("status", "")).strip() == "enabled":
+        lines.insert(3, f"- Remote conda environment: keep remote prefix environments under `{remote_environment.get('path_template', '.conda/<env-name>/')}` and do not scatter them outside the remote workspace root.")
+    else:
+        lines.insert(3, "- Remote conda environment: disabled because no governed remote workspace is configured.")
+    if str(remote_runtime.get("status", "")).strip() == "enabled":
+        lines.insert(4, f"- Remote runtime artifacts: active outputs must stay under `{remote_runtime.get('active_path_template', 'runs/<run-id>/')}`.")
+        lines.insert(5, f"- Remote runtime archive: after `{remote_runtime.get('archive_trigger', 'after required verification passes')}`, archive the run into `{remote_runtime.get('backup_path_template', 'backups/runs/<run-id>/')}` instead of leaving verified results in the active run area.")
+    else:
+        lines.insert(4, "- Remote runtime archive: disabled because no governed remote runtime workspace is configured.")
     primary_root = str(contract.get("primary_project_root", "")).strip()
     if primary_root:
-        lines.insert(3, f"- Primary project root: `{primary_root}` must be the canonical location for the main skill or project content.")
-        lines.insert(4, "- Existing work must already be placed at that primary root before strict control is confirmed.")
+        lines.insert(6, f"- Primary project root: `{primary_root}` must be the canonical location for the main skill or project content.")
+        lines.insert(7, "- Existing work must already be placed at that primary root before strict control is confirmed.")
     return "\n".join(lines)
 
 

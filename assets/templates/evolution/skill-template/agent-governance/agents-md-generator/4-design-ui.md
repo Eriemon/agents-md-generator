@@ -5,33 +5,44 @@
 - Target type: agents-md-generator
 - Source file: 4-design-ui.md
 - Version window: current-plus-latest-history
-- Target source: inferred
+- Target source: ai
 - Rationale: Inferred from project control profile, repository facts, and topic keywords.
 
 ## Source Versions
 - `docs/experience/4-design-ui.md`
-- `docs/experience/history_experience/20260516-152408/4-design-ui.md`
+- `docs/experience/history_experience/20260516-225309/4-design-ui.md`
 
 ## Evidence Sources
-- Current and latest historical experience versions for this topic.
+- Current and latest historical `4-design-ui.md` records.
+- Handoff window 36-40 showing no GUI or visual interface changes.
+- The cadence request and repository facts that define the current work as CLI and docs governance only.
 
 ## Applicable Scenario
-- Use when a future design ui task matches the same repository governance constraints and needs reusable guidance rather than a copied experience note.
+- Use when this repository has no active UI work and the design topic must accurately record that boundary.
+- Also use when future maintainers need guidance for turning this topic back into a real UI/design evidence file once a visual surface exists.
 
 ## Distilled Workflow
-- Inspect current evidence, identify the concrete design ui failure or requirement, update the smallest responsible script/template/config surface, run the narrow regression for that topic, then rerun repository verification before handoff.
+- Inspect the repository facts and current task scope to decide whether any UI, GUI, visual design, or browser-rendered surface actually changed.
+- If no UI changed, explicitly record 暂无 UI 经验 and explain the current interface boundary instead of fabricating visual lessons.
+- If UI work does exist, replace the placeholder boundary with concrete design evidence such as screens reviewed, layout decisions, accessibility checks, and responsive risks.
+- Verify that the design topic remains UI-specific rather than becoming a duplicate scripts or docs-governance note.
 
 ## Key Decisions
-- Keep deterministic scripts responsible for validation and file movement; keep AI-authored payloads responsible for synthesis and judgment.
-- Preserve the global-principles versus local-config split when recording reusable guidance.
+- Preserve truthfulness about the absence of UI work.
+- Keep the file ready for future visual or interaction evidence without mixing unrelated governance content into it.
+- Use design-specific language only when a real visual interface exists.
 
 ## Common Problems
-- Do not paste raw handoff content, do not duplicate the same text across template families, and do not move repository-private detail back into AGENTS prose.
+- Reusing script or validation prose inside the design topic creates false UI memory.
+- Writing only a one-line placeholder fails the repository's quality bar.
+- Future UI work can ship without a design record if this boundary is not maintained.
 
 ## Non-Reusable Content
-- Omit release timestamps, temporary file paths, and conversation-only detail that does not change future implementation choices.
+- Omit temporary command logs and unrelated release details.
+- Do not turn this template into a generic engineering or hardware workflow checklist.
 
 ## Application Checklist
-- Confirm the template family and category match the target repository.
-- Confirm the source experience passed quality validation.
-- Confirm the resulting guidance is a synthesis, not a copy.
+- Confirm whether UI work actually happened.
+- If not, state 暂无 UI 经验 and describe the real interface boundary.
+- If yes, record screenshots, interaction states, accessibility, and responsive validation.
+- Ensure the resulting file stays design-specific.

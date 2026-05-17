@@ -38,7 +38,7 @@ def meaningful_paths(facts: dict[str, Any]) -> bool:
 def takeover_required(project: Path) -> tuple[bool, dict[str, Any]]:
     facts = inspect_project(project)
     reasons = {str(item) for item in facts.get("root_agents_md_trigger_reasons", [])}
-    triggered = bool(reasons & TAKEOVER_REASON_KEYS)
+    triggered = bool(reasons & {"agents_version_mismatch", "generator_version_mismatch"})
     if not triggered:
         return False, facts
     if not meaningful_paths(facts):
@@ -47,9 +47,12 @@ def takeover_required(project: Path) -> tuple[bool, dict[str, Any]]:
 
 def missing_answers(answers: dict[str, Any], kind: str) -> list[str]:
     missing: list[str] = []
+    remote_policy_required = remote_directory_policy_required(answers)
     for item in questions_for(kind):
         key = str(item["answer_key"])
         if key in {"default_conversation_language", USE_REMOTE_SERVER_KEY}:
+            continue
+        if key in REMOTE_DIRECTORY_POLICY_KEYS and not remote_policy_required:
             continue
         if key in OPTIONAL_EMPTY_KEYS and key in answers:
             continue
@@ -223,6 +226,80 @@ def normalize_list(value: Any) -> list[str]:
     if not raw:
         return []
     return [item.strip() for item in raw.replace("，", ",").split(",") if item.strip()]
+
+
+def disabled_remote_environment_policy() -> dict[str, Any]:
+    return {
+        "status": "disabled",
+        "scope": "remote-only",
+        "manager": "conda-prefix",
+        "path_template": "",
+        "required_when_remote_configured": True,
+    }
+
+
+def disabled_remote_runtime_archive_policy() -> dict[str, Any]:
+    return {
+        "status": "disabled",
+        "active_path_template": "",
+        "backup_path_template": "",
+        "run_id_required": True,
+        "archive_after_verification": False,
+        "archive_trigger": "",
+    }
+
+
+def remote_environment_policy(answers: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    if not remote_directory_policy_required(answers):
+        return disabled_remote_environment_policy(), []
+    path_template = str(answers.get("remote_conda_environment_layout", "")).strip()
+    if not path_template:
+        return {}, ["missing required answer: remote_conda_environment_layout"]
+    if path_template.lower() == "disabled":
+        return {}, ["remote_conda_environment_layout cannot be `disabled` when remote structure or remote servers are enabled"]
+    return {
+        "status": "enabled",
+        "scope": "remote-only",
+        "manager": "conda-prefix",
+        "path_template": path_template,
+        "required_when_remote_configured": True,
+    }, []
+
+
+def remote_runtime_archive_policy(answers: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    if not remote_directory_policy_required(answers):
+        return disabled_remote_runtime_archive_policy(), []
+    active_path = str(answers.get("remote_run_artifact_active_layout", "")).strip()
+    backup_path = str(answers.get("remote_run_artifact_backup_layout", "")).strip()
+    trigger = str(answers.get("remote_run_archive_trigger", "")).strip()
+    missing = []
+    if not active_path:
+        missing.append("missing required answer: remote_run_artifact_active_layout")
+    if not backup_path:
+        missing.append("missing required answer: remote_run_artifact_backup_layout")
+    if not trigger:
+        missing.append("missing required answer: remote_run_archive_trigger")
+    if missing:
+        return {}, missing
+    invalid = [
+        key
+        for key, value in {
+            "remote_run_artifact_active_layout": active_path,
+            "remote_run_artifact_backup_layout": backup_path,
+            "remote_run_archive_trigger": trigger,
+        }.items()
+        if value.lower() == "disabled"
+    ]
+    if invalid:
+        return {}, [f"{key} cannot be `disabled` when remote structure or remote servers are enabled" for key in invalid]
+    return {
+        "status": "enabled",
+        "active_path_template": active_path,
+        "backup_path_template": backup_path,
+        "run_id_required": "<run-id>" in active_path or "<run-id>" in backup_path,
+        "archive_after_verification": trigger.casefold() == "after required verification passes".casefold(),
+        "archive_trigger": trigger,
+    }, []
 
 
 def global_rule_overrides_contract() -> dict[str, Any]:
@@ -485,6 +562,12 @@ def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any
     if rule_errors:
         return None, rule_errors
     assert rule_contract is not None
+    remote_environment_contract, remote_environment_errors = remote_environment_policy(answers)
+    if remote_environment_errors:
+        return None, remote_environment_errors
+    remote_runtime_contract, remote_runtime_errors = remote_runtime_archive_policy(answers)
+    if remote_runtime_errors:
+        return None, remote_runtime_errors
     remote_contract, remote_errors = remote_server_contract(project, answers)
     if remote_errors:
         return None, remote_errors
@@ -548,6 +631,8 @@ def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any
             "local": answers["local_directory_structure"],
             "remote": answers["remote_directory_structure"],
             "feature_rules": answers["feature_directory_rules"],
+            "remote_environment_policy": remote_environment_contract,
+            "remote_runtime_archive_policy": remote_runtime_contract,
             **directory_layout_policy(kind, name),
         },
         "experience_contract": {

@@ -9,6 +9,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents_common import emit_json, resolve_project
+from agents_project_facts import decomposition_plan_path, load_global_rule_overrides
 
 
 REQUIRED_FILES = [
@@ -38,6 +39,7 @@ REQUIRED_FILES = [
     "scripts/select_engineering_rules.py",
     "scripts/verify_agents.py",
     "scripts/check_freshness.py",
+    "scripts/quick_validate.py",
     "scripts/create_agent_shims.py",
     "scripts/audit_skill.py",
     "scripts/evaluate_skill.py",
@@ -290,7 +292,10 @@ def validate_global_baseline_template(path: Path, errors: list[str]) -> None:
     required_snippets = (
         "timed follow-up",
         "1000 lines",
-        "scripts/<family>/<function>/<name>.<ext>",
+        "scripts/python/<function>/<name>.py",
+        "scripts/shell/<function>/<name>.sh",
+        "scripts/bat/<function>/<name>.bat",
+        "scripts/powershell/<function>/<name>.ps1",
         "local JSON governance configuration",
     )
     for snippet in required_snippets:
@@ -306,10 +311,29 @@ def validate_global_baseline_template(path: Path, errors: list[str]) -> None:
             errors.append(f"assets/templates/global-codex-agents.md: must not leak repository-specific detail `{snippet}`")
 
 
+def skill_project_root(skill_dir: Path) -> Path:
+    if skill_dir.parent.name == "skills":
+        return skill_dir.parents[1]
+    return skill_dir
+
+
+def validate_decomposition_plan(project_root: Path, relative_path: str) -> list[str]:
+    plan_path = decomposition_plan_path(project_root, relative_path)
+    if not plan_path.is_file():
+        return [f"{relative_path} exceeds configured line limit and requires decomposition plan `{plan_path.relative_to(project_root).as_posix()}`"]
+    text = plan_path.read_text(encoding="utf-8", errors="ignore")
+    required_sections = load_global_rule_overrides(project_root)["data"]["source_file_limits"].get("required_plan_sections", [])
+    missing = [section for section in required_sections if f"## {section}" not in text]
+    if missing:
+        return [f"{plan_path.relative_to(project_root).as_posix()}: missing decomposition plan sections {missing}"]
+    return []
+
+
 def audit(skill_dir: Path) -> dict:
     errors: list[str] = []
     warnings: list[str] = []
     checked: list[str] = []
+    project_root = skill_project_root(skill_dir)
 
     for rel_path in REQUIRED_FILES:
         path = skill_dir / rel_path
@@ -367,7 +391,8 @@ def audit(skill_dir: Path) -> dict:
             errors.append(f"{rel_path} does not compile: {exc.msg}")
         line_count = source.count("\n") + 1
         if line_count > 1000:
-            errors.append(f"{rel_path} exceeds 1000 lines ({line_count})")
+            relative_to_project = script.relative_to(project_root).as_posix() if script.is_relative_to(project_root) else rel_path
+            errors.extend(validate_decomposition_plan(project_root, relative_to_project))
 
     for path in skill_dir.rglob("*"):
         rel_path = path.relative_to(skill_dir).as_posix()
