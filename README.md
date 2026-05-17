@@ -19,24 +19,43 @@
 <h1 align="center">AGENTS.md Generator</h1>
 
 <p align="center">
-  A Codex-ready agent skill for generating and verifying AGENTS.md files for coding agents.
+  A Codex-ready skill for generating, repairing, and verifying AGENTS.md governance from repository facts.
 </p>
 
-AGENTS.md Generator turns an AI coding agent into a more careful repository-onboarding assistant. It provides trigger metadata, operational instructions, templates, deterministic discovery scripts, design-profile prompts, and validation gates for moving from repository facts to verified `AGENTS.md` guidance.
+AGENTS.md Generator helps coding agents produce instruction files that stay grounded in the real repository instead of drifting into guessed policy. It combines trigger metadata, grouped design interviews, deterministic Python scripts, docs-governance helpers, directory-governance gates, and verification checks so an agent can move from repository facts to trustworthy `AGENTS.md` output.
 
-This repository is primarily an **agent skill package**. The Python scripts are the deterministic execution layer, but the main interface is the skill surface an agent can load and follow.
+This repository is primarily an **agent skill package**. The Python scripts are the deterministic execution layer; the main product is the skill workflow an agent can load and follow.
 
-## Why It Exists
+## What It Solves
 
-Agent instruction files decay quickly when they are written from memory. AGENTS.md Generator makes the agent inspect the repository first, ask only for missing human policy, render a focused root or scoped `AGENTS.md`, and verify references before claiming the draft is ready.
+Handwritten agent rule files become stale quickly. Commands stop matching the repo, path references drift, and local operating rules get duplicated in inconsistent places. AGENTS.md Generator gives the agent a stricter path:
 
-Use it when an agent needs to work on:
+- inspect the repository first
+- ask only for missing human policy
+- keep root and scoped `AGENTS.md` files small and focused
+- route docs governance, directory governance, and release governance through scripts
+- verify that metadata, paths, contracts, and reply-language rules are actually consistent
 
-- Root or scoped `AGENTS.md` files for Codex and other coding agents.
-- Repository onboarding rules, command discovery, and local policy capture.
-- Strong-control profiles for skill or engineering projects.
-- CLAUDE.md and GEMINI.md compatibility shims when requested.
-- Freshness checks, command verification, and review of stale agent docs.
+## Core Capabilities
+
+- Root and scoped `AGENTS.md` generation for Codex-style coding agents.
+- Grouped design interviews with resumable state and explicit confirmation gates.
+- Controlled takeover flow for older workspaces with version-mismatched root `AGENTS.md`.
+- Repository fact extraction for commands, docs, CI hints, scopes, and governance signals.
+- Strong-control profiles for skill and engineering projects.
+- Docs governance for handoff, experience, development, install, and git-manager records.
+- Directory-governance review and structure gates through `manage_dirs.py`.
+- Compatibility shim generation for `CLAUDE.md` and `GEMINI.md` when requested.
+- Verification, audit, and full fact-level evaluation for release readiness.
+
+## What's New In v0.6.2
+
+- Clarified the boundary between explicit AGENTS update requests and passive workspace root checks.
+- Tightened takeover behavior so only version-mismatched landed workspaces auto-route into takeover mode.
+- Expanded directory-contract requirements to cover remote conda layout and runtime archive policy.
+- Added `scripts/quick_validate.py` to standardize the release validation chain.
+- Strengthened root verification around `.agents/global-rule-overrides.json`, reply-language rules, and remote directory contract text.
+- Improved docs and directory governance helpers so release, session scaffolding, and review flows stay more deterministic.
 
 ## Skill Architecture
 
@@ -50,44 +69,64 @@ Use it when an agent needs to work on:
   <img src="docs/assets/workflow.svg" alt="AGENTS.md Generator workflow" width="100%">
 </p>
 
+## Typical Paths
+
+1. Healthy workspace root:
+   Run `inspect_project.py`, confirm the root `AGENTS.md` is healthy, and report pass status for workspace-trigger phrases such as `计划`, `规划`, or `准备`.
+2. Explicit AGENTS update:
+   Start the grouped interview, collect the missing policy, render root/scoped files, then verify.
+3. Version-mismatched old workspace:
+   Enter takeover mode, keep identity questions minimal, still complete the structured directory contract, then repair governance.
+4. Strong-control release flow:
+   Run `quick_validate.py`, `audit_skill.py`, `verify_agents.py`, and `evaluate_skill.py` before packaging or installation.
+
 ## Repository Map
 
 | Path | Purpose |
 | --- | --- |
 | `SKILL.md` | Agent-facing routing, workflow, constraints, and verification rules. |
-| `agents/openai.yaml` | UI metadata for skill lists and invocation chips. |
-| `scripts/` | Deterministic project inspection, profile collection, interview-state management, docs-governance helpers, rendering, verification, audit, and shim helpers. |
-| `assets/templates/` | Root and scoped `AGENTS.md` templates used by the renderer. |
-| `references/` | Script guide, review checklist, question bank, coverage notes, and AGENTS.md guidance. |
+| `agents/openai.yaml` | Skill metadata used by the host UI. |
+| `scripts/` | Deterministic inspection, interview, rendering, docs-governance, directory-governance, verification, audit, and evaluation helpers. |
+| `assets/templates/` | Bundled root and scoped `AGENTS.md` templates plus evolution material. |
+| `references/` | Script guide, review checklist, question bank, capability notes, and AGENTS guidance. |
+| `docs/assets/` | Hero, workflow, and architecture diagrams used in this README pair. |
 
 ## Quick Start
 
-Place this repository in a Codex skill search path to use it as an agent skill. For local checks and repository analysis:
+Read-only inspection and scoping:
 
 ```powershell
 python scripts/inspect_project.py <project>
 python scripts/detect_scopes.py <project>
-python scripts/collect_design_profile.py <project>
 python scripts/extract_commands.py <project>
 python scripts/extract_context.py <project>
-python scripts/render_agents.py <project>
+```
+
+Grouped design interview and profile write:
+
+```powershell
+python scripts/collect_design_profile.py <project> --start
+python scripts/collect_design_profile.py <project> --answer-file partial.json
+python scripts/collect_design_profile.py <project> --answers answers.json --write
+```
+
+Render and verify:
+
+```powershell
+python scripts/render_agents.py <project> --profile <project>/.agents/agents-control.json
 python scripts/verify_agents.py <project>
-python scripts/audit_skill.py .
 python scripts/manage_docs.py verify <project>
 ```
 
-Strong-control generation uses a design profile. Start with the design interview, save answers to JSON, then render with the generated profile:
+Skill-release validation:
 
 ```powershell
-python scripts/collect_design_profile.py <project> --kind skill
-python scripts/collect_design_profile.py <project> --answers answers.json --write
-python scripts/render_agents.py <project> --profile <project>/.agents/agents-control.json
-python scripts/verify_agents.py <project>
+python scripts/quick_validate.py .
+python scripts/audit_skill.py .
+python scripts/evaluate_skill.py . <project>
 ```
 
-The `v0.6.2` line also splits docs-governance and interview logic into dedicated helpers such as `scripts/agents_project_facts.py`, `scripts/design_interview_state.py`, `scripts/design_profile_builder.py`, `scripts/design_questions.py`, `scripts/design_remote_gate.py`, and the `scripts/manage_docs_*.py` family. These keep the release workflow, experience cadence, scaffolding, sync/verify, and shared sanitization logic more explicit and easier to validate.
-
-Compatibility shims are opt-in:
+Compatibility shims stay opt-in:
 
 ```powershell
 python scripts/create_agent_shims.py <project>
@@ -97,11 +136,11 @@ python scripts/create_agent_shims.py <project>
 
 AGENTS.md Generator is intentionally narrow:
 
-- It creates and reviews AI coding-agent context files, not general project documentation.
-- It treats commands discovered from files as candidates until they are actually run.
-- It preserves hand-written content outside managed generated blocks.
-- It does not fabricate repository policies, owners, CI behavior, branch names, or security rules.
-- Local secrets, private infrastructure, generated caches, and machine-specific paths should stay out of generated guidance.
+- It creates and reviews agent-governance files, not general project documentation.
+- It treats discovered commands as candidates until they are actually executed.
+- It preserves handwritten content outside managed generated blocks.
+- It keeps maintainability and script-governance detail in config-backed policy instead of repeating it everywhere in prose.
+- It should not emit secrets, private infrastructure details, generated caches, or machine-specific absolute paths.
 
 ## Affiliation
 
@@ -114,8 +153,6 @@ For questions, collaboration, or academic use, contact: [erie@seu.edu.cn](mailto
 
 ## Citation
 
-This skill is maintained by authors from the Heterogeneous Intelligence and Quantum Computing Laboratory(HIQC), School of Electronic Science and Engineering, Southeast University.
-
 If this skill helps your research, teaching, or engineering workflow, please cite it. The canonical citation metadata is maintained in [CITATION.cff](CITATION.cff).
 
 ```bibtex
@@ -124,7 +161,7 @@ If this skill helps your research, teaching, or engineering workflow, please cit
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
   version      = {0.6.2},
-  date         = {2026-05-16},
+  date         = {2026-05-17},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}

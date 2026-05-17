@@ -19,24 +19,43 @@
 <h1 align="center">AGENTS.md Generator</h1>
 
 <p align="center">
-  面向 Codex/Agent 的 AGENTS.md 生成与验证 Skill。
+  面向 Codex 的 AGENTS.md 生成、修复与验证 Skill。
 </p>
 
-AGENTS.md Generator 用来把 AI 编程代理变成更可靠的仓库 onboarding 助手。它提供触发元数据、操作流程、模板、确定性发现脚本、设计画像问题和验证门禁，帮助 Agent 从仓库事实稳定推进到可验证的 `AGENTS.md` 指导文件。
+AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的治理文件，而不是凭记忆拼接规则。它把触发元数据、分组式设计访谈、确定性 Python 脚本、文档治理辅助、目录治理门禁和验证链组合在一起，让 Agent 能从仓库事实稳定走到可信的 `AGENTS.md` 输出。
 
-这个仓库首先是一个 **Agent Skill Package**。Python 脚本是确定性执行层，但主要入口是 Agent 可加载、可遵循的 skill 结构。
+这个仓库首先是一个 **Agent Skill Package**。Python 脚本是确定性执行层，但核心产品其实是 Agent 可加载、可遵循的 skill 工作流。
 
-## 为什么需要它
+## 它解决什么问题
 
-Agent 规则文件如果靠记忆编写，很容易过期或失真。AGENTS.md Generator 要求 Agent 先检查仓库事实，只询问缺失的人类策略，再渲染聚焦的根目录或作用域 `AGENTS.md`，并在声明草稿就绪前验证路径和命令。
+很多 Agent 规则文件一开始写得很认真，但很快就会和真实仓库脱节：命令不再存在，路径已经变化，本地约束被写在多个地方还互相冲突。AGENTS.md Generator 强制 Agent 走一条更稳的路径：
 
-适用场景包括：
+- 先检查仓库事实
+- 只询问缺失的人类策略
+- 保持 root 和 scoped `AGENTS.md` 小而聚焦
+- 让 docs、directory、release 治理尽量走脚本化流程
+- 在声明完成前，验证元数据、路径、契约和回复语言规则是否一致
 
-- 为 Codex 和其他编程 Agent 创建根目录或作用域 `AGENTS.md`。
-- 梳理仓库 onboarding 规则、命令发现和本地策略。
-- 为 skill 或工程项目生成 strong-control profile。
-- 在用户要求时创建 CLAUDE.md 和 GEMINI.md 兼容 shim。
-- 检查陈旧 Agent 文档、命令真实性和引用路径。
+## 核心能力
+
+- 为 Codex 类编程 Agent 生成 root 和 scoped `AGENTS.md`。
+- 提供可恢复状态的分组式设计访谈与确认门禁。
+- 为 root `AGENTS.md` 版本失配的旧工作区提供 takeover 流程。
+- 提取命令、文档、CI 线索、作用域和治理信号等仓库事实。
+- 为 skill 项目和 engineering 项目生成 strong-control profile。
+- 提供 handoff、experience、development、install、git-manager 等 docs 治理辅助。
+- 通过 `manage_dirs.py` 执行目录治理审查与结构门禁。
+- 在需要时生成 `CLAUDE.md` 与 `GEMINI.md` 兼容 shim。
+- 提供验证、审计和 fact-level evaluation，用于发布前把关。
+
+## v0.6.2 重点更新
+
+- 更清楚地区分“显式 AGENTS 更新请求”和“工作区根检查触发”两类入口。
+- 收紧 takeover 条件，只有已经落地且 root 版本失配的旧工作区才会自动进入 takeover。
+- 扩展 directory contract，明确 remote conda 布局和 runtime archive 策略。
+- 新增 `scripts/quick_validate.py`，统一 release 验证入口。
+- 强化 root 验证，对 `.agents/global-rule-overrides.json`、回复语言规则和远端目录契约做更严格检查。
+- 完善 docs 和 directory 治理辅助，让 release、session scaffolding 和 review 流程更确定、更可验证。
 
 ## Skill 架构
 
@@ -50,44 +69,64 @@ Agent 规则文件如果靠记忆编写，很容易过期或失真。AGENTS.md G
   <img src="docs/assets/workflow-cn.svg" alt="AGENTS.md Generator 工作流" width="100%">
 </p>
 
+## 典型使用路径
+
+1. 根文件健康检查：
+   对包含 `计划`、`规划`、`准备` 的工作区触发请求，先检查 root `AGENTS.md` 是否健康，健康就只报告通过。
+2. 显式 AGENTS 更新：
+   启动分组式设计访谈，补足缺失策略，渲染 root/scoped 文件，再执行验证。
+3. 旧工作区接管：
+   对 root 版本失配的已落地工作区进入 takeover，尽量少问身份信息，但仍完整确认 structured directory contract。
+4. 发布前验证：
+   用 `quick_validate.py`、`audit_skill.py`、`verify_agents.py`、`evaluate_skill.py` 组成完整校验链。
+
 ## 仓库结构
 
 | 路径 | 作用 |
 | --- | --- |
 | `SKILL.md` | 面向 Agent 的触发、流程、约束和验证规则。 |
-| `agents/openai.yaml` | Skill 列表和调用入口的 UI 元数据。 |
-| `scripts/` | 项目检查、设计画像采集、访谈状态管理、文档治理辅助、渲染、验证、审计和 shim 创建脚本。 |
-| `assets/templates/` | root/scoped `AGENTS.md` 渲染模板。 |
-| `references/` | 脚本指南、审查清单、问题库、覆盖说明和 AGENTS.md 指导。 |
+| `agents/openai.yaml` | 宿主 UI 使用的 skill 元数据。 |
+| `scripts/` | 检查、访谈、渲染、文档治理、目录治理、验证、审计和评估脚本。 |
+| `assets/templates/` | root/scoped `AGENTS.md` 模板与 evolution 相关模板。 |
+| `references/` | 脚本指南、审查清单、问题库、能力覆盖说明和 AGENTS 指南。 |
+| `docs/assets/` | 本对 README 使用的 hero、workflow 和 architecture 图。 |
 
 ## 快速开始
 
-把本仓库放入 Codex skill 搜索路径即可作为 Agent Skill 使用。做本地检查或仓库分析时：
+只读检查与作用域发现：
 
 ```powershell
 python scripts/inspect_project.py <project>
 python scripts/detect_scopes.py <project>
-python scripts/collect_design_profile.py <project>
 python scripts/extract_commands.py <project>
 python scripts/extract_context.py <project>
-python scripts/render_agents.py <project>
+```
+
+分组式设计访谈与 profile 写入：
+
+```powershell
+python scripts/collect_design_profile.py <project> --start
+python scripts/collect_design_profile.py <project> --answer-file partial.json
+python scripts/collect_design_profile.py <project> --answers answers.json --write
+```
+
+渲染与验证：
+
+```powershell
+python scripts/render_agents.py <project> --profile <project>/.agents/agents-control.json
 python scripts/verify_agents.py <project>
-python scripts/audit_skill.py .
 python scripts/manage_docs.py verify <project>
 ```
 
-Strong-control 生成依赖设计画像。先运行设计访谈，把答案保存为 JSON，再用生成的 profile 渲染：
+Skill 发布前验证：
 
 ```powershell
-python scripts/collect_design_profile.py <project> --kind skill
-python scripts/collect_design_profile.py <project> --answers answers.json --write
-python scripts/render_agents.py <project> --profile <project>/.agents/agents-control.json
-python scripts/verify_agents.py <project>
+python scripts/quick_validate.py .
+python scripts/audit_skill.py .
+python scripts/evaluate_skill.py . <project>
 ```
 
-`v0.6.2` 这一版还把 docs 治理和设计访谈能力拆成了更清晰的辅助脚本，例如 `scripts/agents_project_facts.py`、`scripts/design_interview_state.py`、`scripts/design_profile_builder.py`、`scripts/design_questions.py`、`scripts/design_remote_gate.py`，以及 `scripts/manage_docs_*.py` 家族，便于分别校验 release、experience、脚手架、同步验证和共享脱敏逻辑。
-
-兼容 shim 需要显式选择：
+兼容 shim 仍然是显式选择：
 
 ```powershell
 python scripts/create_agent_shims.py <project>
@@ -95,16 +134,18 @@ python scripts/create_agent_shims.py <project>
 
 ## 边界
 
-- 生成和审查 AI 编程 Agent 上下文文件，不替代通用项目文档。
-- 从仓库文件发现的命令只是候选命令，只有实际运行后才能称为已验证。
-- 保留 managed generated blocks 外的手写内容。
-- 不编造仓库策略、owner、CI 行为、分支名或安全规则。
-- 本地密钥、私有基础设施、生成缓存和机器专属路径不应进入生成指导。
+AGENTS.md Generator 的职责刻意收得很窄：
+
+- 它生成和审查的是 Agent 治理文件，不替代通用项目文档。
+- 从仓库中发现的命令只是候选命令，只有真正执行过才算已验证。
+- 它会保留 managed generated blocks 之外的手写内容。
+- 可维护性和脚本治理细节应尽量放在配置驱动的策略里，而不是在文案里重复堆叠。
+- 它不应该把密钥、私有基础设施、生成缓存或机器专属绝对路径写进输出。
 
 ## 机构说明
 
 Jiyuan Liu 和 He Li 隶属于东南大学电子科学与工程学院。
-两位作者所在团队为东南大学电子科学与工程学院异构智能与量子计算实验室（HIQC课题组），相关工作面向异构智能、量子计算及相关计算系统研究。
+两位作者所在团队为东南大学电子科学与工程学院异构智能与量子计算实验室（HIQC），相关工作面向异构智能、量子计算及相关计算系统研究。
 
 ## 联系方式
 
@@ -112,9 +153,7 @@ Jiyuan Liu 和 He Li 隶属于东南大学电子科学与工程学院。
 
 ## 引用
 
-本 skill 由东南大学电子科学与工程学院异构智能与量子计算实验室（HIQC课题组）相关作者维护。
-
-如果本 skill 对你的研究、教学或工程流程有帮助，请引用。规范引用元数据以 [CITATION.cff](CITATION.cff) 为准。
+如果这个 skill 对你的研究、教学或工程流程有帮助，请引用。规范引用元数据以 [CITATION.cff](CITATION.cff) 为准。
 
 ```bibtex
 @software{liu_2026_agents_md_generator,
@@ -122,7 +161,7 @@ Jiyuan Liu 和 He Li 隶属于东南大学电子科学与工程学院。
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
   version      = {0.6.2},
-  date         = {2026-05-16},
+  date         = {2026-05-17},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}
