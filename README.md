@@ -1,7 +1,7 @@
 <p align="center">
   <a href="README.md"><strong>English</strong></a>
   <span>&nbsp;|&nbsp;</span>
-  <a href="README-CN.md">中文</a>
+  <a href="README-CN.md">Chinese</a>
 </p>
 
 <p align="center">
@@ -72,7 +72,7 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 ## Typical Paths
 
 1. Healthy workspace root:
-   Run `inspect_project.py`, confirm the root `AGENTS.md` is healthy, and report pass status for workspace-trigger phrases such as `计划`, `规划`, or `准备`.
+   Run `inspect_project.py`, confirm the root `AGENTS.md` is healthy, and report pass status for workspace-trigger phrases related to planning or preparation.
 2. Explicit AGENTS update:
    Start the grouped interview, collect the missing policy, render root/scoped files, then verify.
 3. Version-mismatched old workspace:
