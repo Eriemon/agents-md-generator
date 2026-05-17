@@ -1,7 +1,7 @@
 <p align="center">
   <a href="README.md"><strong>English</strong></a>
   <span>&nbsp;|&nbsp;</span>
-  <a href="README-CN.md">Chinese</a>
+  <a href="README-CN.md">中文</a>
 </p>
 
 <p align="center">
