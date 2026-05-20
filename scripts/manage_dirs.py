@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime
+from fnmatch import fnmatch
 import json
 from pathlib import Path
 import re
@@ -11,6 +12,7 @@ from typing import Any
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents_common import SKIP_DIRS, emit_json, read_json, resolve_project
+from agents_decisions import decision_request
 
 
 DIR_MANAGER_DIR = Path("docs") / "dir_manager"
@@ -47,6 +49,37 @@ TAKEOVER_PRESERVE_ROOT_FILES = {
     ".gitattributes",
     ".editorconfig",
 }
+ALLOWED_ROOT_FILES = sorted(TAKEOVER_PRESERVE_ROOT_FILES)
+EPHEMERAL_ROOT_INPUT_FILE_RE = re.compile(
+    r"^(?:answers|first-answers|recovery|session|stage|handoff|change|allowed-change|blocked-change|blocked-remote-change|blocked-remote-source-change)(?:-[a-z0-9._-]+)?\.json$",
+    flags=re.IGNORECASE,
+)
+ALLOWED_ROOT_FILE_PATTERNS = (
+    "answers.json",
+    "*-answers.json",
+    "change.json",
+    "*-change.json",
+    "session.json",
+    "recovery.json",
+    "handoff.json",
+    "stage.json",
+    "changelog.json",
+    "experience-payload.json",
+)
+REMOTE_PROTECTED_PATH_CLASSES = [
+    "workspace-root",
+    "conda-environment-root",
+    "conda-environment",
+    "active-run-root",
+    "active-run",
+    "backup-run-root",
+    "backup-run",
+]
+STRUCTURE_SKIP_FILE_PATTERNS = (
+    ".agents/active-session.json",
+    ".agents/session-*.json",
+    ".agents/release-*.json",
+)
 
 
 def stamp() -> str:
@@ -87,6 +120,8 @@ def scan_structure(project: Path) -> dict[str, Any]:
         if path.is_dir():
             directories.append(rel)
         elif path.is_file():
+            if any(fnmatch(rel, pattern) for pattern in STRUCTURE_SKIP_FILE_PATTERNS):
+                continue
             files.append(rel)
     return {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
@@ -204,6 +239,8 @@ def remote_deployment_plan(project: Path) -> dict[str, Any]:
             "archive_after_verification": bool(runtime_policy.get("archive_after_verification", False)),
             "archive_trigger": str(runtime_policy.get("archive_trigger", "")).strip(),
         },
+        "protected_path_classes": list(REMOTE_PROTECTED_PATH_CLASSES),
+        "require_review_for_all_mutations": True,
         "review_required_for": ["create", "move", "delete", "rename"],
         "block_on_failed_review": True,
         "force_override_requires_user_confirmation": True,
@@ -258,6 +295,7 @@ def planned_structure(project: Path) -> dict[str, Any]:
         "schema_version": 1,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "allowed_new_paths": sorted(current_dirs),
+        "allowed_root_files": list(ALLOWED_ROOT_FILES),
         "primary_project_root": f"{primary_root}/" if primary_root else "",
         "allowed_top_level_roots": sorted({
             normalize_rel(item).split("/", 1)[0] + "/"
@@ -319,6 +357,9 @@ def init_dir_manager(project: Path) -> dict[str, Any]:
                 changed = True
             if rewritten.get("enforce_primary_project_root", False) != enforce_primary:
                 rewritten["enforce_primary_project_root"] = enforce_primary
+                changed = True
+            if rewritten.get("allowed_root_files") != desired_planned.get("allowed_root_files"):
+                rewritten["allowed_root_files"] = desired_planned.get("allowed_root_files", [])
                 changed = True
         if changed:
             rewritten["generated_at"] = desired_planned["generated_at"]
@@ -388,6 +429,19 @@ def allowed_path(path: str, planned: dict[str, Any]) -> bool:
     return any(normalized == item or normalized.startswith(item.rstrip("/") + "/") for item in allowed)
 
 
+def unapproved_root_files(current: dict[str, Any], planned: dict[str, Any]) -> list[str]:
+    violations: list[str] = []
+    for file_path in current.get("files", []):
+        normalized = normalize_rel(file_path)
+        if not normalized or "/" in normalized:
+            continue
+        if EPHEMERAL_ROOT_INPUT_FILE_RE.fullmatch(normalized):
+            continue
+        if not is_allowed_root_file(normalized, planned):
+            violations.append(normalized)
+    return violations
+
+
 def remote_workspace_root(remote_plan: dict[str, Any]) -> str:
     workspace = normalize_rel(str(remote_plan.get("workspace_root", "")).strip())
     return "" if workspace in {"", "not configured"} else workspace
@@ -425,23 +479,85 @@ def allowed_remote_path(path: str, remote_plan: dict[str, Any]) -> bool:
     return False
 
 
-def remote_runtime_reason(path: str, target: str | None, remote_plan: dict[str, Any], artifact_state: str) -> str | None:
+def remote_path_classes(path: str, remote_plan: dict[str, Any]) -> list[str]:
+    normalized = normalize_rel(path)
+    if not normalized:
+        return []
+    classes = ["remote"]
+    runtime = remote_plan.get("runtime_artifacts", {}) if isinstance(remote_plan.get("runtime_artifacts"), dict) else {}
+    conda = remote_plan.get("conda_environment", {}) if isinstance(remote_plan.get("conda_environment"), dict) else {}
+    conda_template = normalize_rel(str(conda.get("path_template", "")).strip())
+    active_template = normalize_rel(str(runtime.get("active_path_template", "")).strip())
+    backup_template = normalize_rel(str(runtime.get("backup_path_template", "")).strip())
+    conda_root = conda_template.split("<", 1)[0].rstrip("/") if conda_template else ""
+    active_root = active_template.split("<", 1)[0].rstrip("/") if active_template else ""
+    backup_root = backup_template.split("<", 1)[0].rstrip("/") if backup_template else ""
+    if not normalized:
+        return classes
+    if not path or normalized == remote_workspace_root(remote_plan):
+        classes.append("workspace-root")
+    if conda_root:
+        if normalized == conda_root:
+            classes.append("conda-environment-root")
+        elif normalized.startswith(conda_root + "/"):
+            classes.append("conda-environment")
+    if active_root:
+        if normalized == active_root:
+            classes.append("active-run-root")
+        elif normalized.startswith(active_root + "/"):
+            classes.append("active-run")
+    if backup_root:
+        if normalized == backup_root:
+            classes.append("backup-run-root")
+        elif normalized.startswith(backup_root + "/"):
+            classes.append("backup-run")
+    return classes
+
+
+def remote_runtime_reasons(action: str, path: str, target: str | None, remote_plan: dict[str, Any], artifact_state: str) -> list[str]:
     runtime = remote_plan.get("runtime_artifacts", {}) if isinstance(remote_plan.get("runtime_artifacts"), dict) else {}
     active_template = normalize_rel(str(runtime.get("active_path_template", "")).strip())
     backup_template = normalize_rel(str(runtime.get("backup_path_template", "")).strip())
+    normalized_path = normalize_rel(path)
     normalized = normalize_rel(target if target else path)
     if not normalized:
-        return None
+        return []
+    reasons: list[str] = []
     active_root = active_template.split("<run-id>", 1)[0].rstrip("/") if active_template else ""
     backup_root = backup_template.split("<run-id>", 1)[0].rstrip("/") if backup_template else ""
     if active_root and not normalized.startswith(active_root + "/") and normalized.split("/", 1)[0] not in {
         backup_root.split("/", 1)[0] if backup_root else "",
         ".conda",
     }:
-        return f"remote runtime artifacts must stay under `{active_template}`; received `{normalized}`"
+        reasons.append(f"remote runtime artifacts must stay under `{active_template}`; received `{normalized}`")
     if artifact_state == "verified" and backup_root and not normalized.startswith(backup_root + "/"):
-        return f"verified remote runtime artifacts must be archived under `{backup_template}`; received `{normalized}`"
-    return None
+        reasons.append(f"verified remote runtime artifacts must be archived under `{backup_template}`; received `{normalized}`")
+    if artifact_state not in {"", "verified"} and backup_root and normalized.startswith(backup_root + "/"):
+        reasons.append(f"unverified remote runtime artifacts must stay in `{active_template}` before archive; received `{normalized}`")
+    protected_classes = set(str(item) for item in remote_plan.get("protected_path_classes", []) if str(item).strip())
+    if action in {"delete", "move", "rename"}:
+        destructive_classes = set(remote_path_classes(normalized_path, remote_plan))
+        if destructive_classes & protected_classes:
+            reasons.append(
+                f"remote {action} is blocked for protected path classes {sorted(destructive_classes & protected_classes)} at `{normalized_path}`"
+            )
+    return reasons
+
+
+def allowed_root_files(planned: dict[str, Any]) -> list[str]:
+    configured = planned.get("allowed_root_files", [])
+    if isinstance(configured, list):
+        values = [str(item).strip() for item in configured if str(item).strip()]
+        if values:
+            return values
+    return list(ALLOWED_ROOT_FILES)
+
+
+def is_allowed_root_file(name: str, planned: dict[str, Any]) -> bool:
+    normalized = str(name).strip()
+    if normalized in set(allowed_root_files(planned)):
+        return True
+    return any(fnmatch(normalized, pattern) for pattern in ALLOWED_ROOT_FILE_PATTERNS)
 
 
 def critical_move_reason(action: str, path: str, target: str | None) -> str | None:
@@ -461,7 +577,7 @@ def critical_move_reason(action: str, path: str, target: str | None) -> str | No
     return None
 
 
-def review_change(project: Path, input_path: str) -> dict[str, Any]:
+def review_change(project: Path, input_path: str, *, dry_run: bool = False) -> dict[str, Any]:
     init_dir_manager(project)
     raw = read_json(Path(input_path).resolve())
     changes = raw.get("changes", []) if isinstance(raw, dict) else []
@@ -471,6 +587,8 @@ def review_change(project: Path, input_path: str) -> dict[str, Any]:
     remote_plan = planned.get("remote_deployment", {}) if isinstance(planned.get("remote_deployment"), dict) else {}
     reasons: list[str] = []
     risks: list[str] = []
+    path_classes: set[str] = set()
+    matched_rules: list[str] = []
     for change in changes:
         if not isinstance(change, dict):
             reasons.append("each change must be a JSON object")
@@ -488,21 +606,30 @@ def review_change(project: Path, input_path: str) -> dict[str, Any]:
             if invalid:
                 reasons.append(invalid)
         if environment == "remote":
-            if action == "create" and path and not allowed_remote_path(path, remote_plan):
+            path_classes.update(remote_path_classes(path, remote_plan))
+            if target:
+                path_classes.update(remote_path_classes(target, remote_plan))
+            if path and action in {"create", "move", "rename", "delete"} and not allowed_remote_path(path, remote_plan):
                 reasons.append(f"remote path `{normalize_rel(path)}` is not listed in planned_structure.json remote_deployment planning")
-            runtime_reason = remote_runtime_reason(path, target, remote_plan, artifact_state)
-            if runtime_reason:
-                reasons.append(runtime_reason)
+                matched_rules.append("remote-path-must-be-planned")
             if action in {"move", "rename"} and target and not allowed_remote_path(target, remote_plan):
                 reasons.append(f"remote target path `{normalize_rel(target)}` is not listed in planned_structure.json remote_deployment planning")
+                matched_rules.append("remote-target-must-be-planned")
+            runtime_reasons = remote_runtime_reasons(action, path, target, remote_plan, artifact_state)
+            if runtime_reasons:
+                reasons.extend(runtime_reasons)
+                matched_rules.append("remote-runtime-governance")
         else:
             if action == "create" and path and not allowed_path(path, planned):
                 reasons.append(f"new path `{normalize_rel(path)}` is not listed in planned_structure.json")
+                matched_rules.append("local-path-must-be-planned")
             critical = critical_move_reason(action, path, target)
             if critical:
                 reasons.append(critical)
+                matched_rules.append("local-critical-boundary")
             if action in {"move", "rename"} and target and not allowed_path(target, planned):
                 reasons.append(f"target path `{normalize_rel(target)}` is not listed in planned_structure.json")
+                matched_rules.append("local-target-must-be-planned")
     approved = not reasons
     if not approved:
         risks = [
@@ -518,14 +645,32 @@ def review_change(project: Path, input_path: str) -> dict[str, Any]:
         "decision": "approved" if approved else "blocked",
         "reasons": reasons,
         "risks": risks,
+        "path_classes": sorted(path_classes),
+        "matched_rules": sorted(dict.fromkeys(matched_rules)),
         "force_confirmation_required": not approved,
         "force_override_archive_required": str(HISTORY_DIR_MANAGER / "YYYYMMDD-HHMMSS") if not approved else "",
         "user_message": "" if approved else "目录结构审查未通过，默认拒绝执行。若用户仍强制要求修改，必须明确确认强制执行该目录结构修改，并接受可能产生的严重危害。",
+        "dry_run": dry_run,
+        "decision_request": {} if approved else decision_request(
+            "force_confirmation",
+            question="目录结构审查未通过。是否明确强制执行该目录结构修改并接受严重风险？",
+            options=[
+                {"label": "不强制执行", "value": "deny", "description": "默认选项；停止目录变更并修改计划。", "recommended": True},
+                {"label": "强制执行", "value": "force", "description": "先归档 dir manager 状态，再由用户承担风险继续。", "recommended": False},
+            ],
+            default="deny",
+            risk="high",
+            next_action="archive dir manager state before any force-confirmed blocked directory mutation",
+            context={"reasons": reasons, "risks": risks},
+        ),
     }
-    review_path = project / CHANGE_REVIEWS / f"review-{stamp()}.json"
-    review_path.parent.mkdir(parents=True, exist_ok=True)
-    review_path.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
-    result["review_file"] = str(review_path)
+    if dry_run:
+        result["review_file"] = ""
+    else:
+        review_path = project / CHANGE_REVIEWS / f"review-{stamp()}.json"
+        review_path.parent.mkdir(parents=True, exist_ok=True)
+        review_path.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
+        result["review_file"] = str(review_path)
     return result
 
 
@@ -558,7 +703,7 @@ def verify_dir_manager(project: Path) -> dict[str, Any]:
     for key in ["directories", "files"]:
         if current and not isinstance(current.get(key), list):
             errors.append(f"{CURRENT_STRUCTURE.as_posix()}: `{key}` must be a list")
-    for key in ["allowed_new_paths", "review_required_for"]:
+    for key in ["allowed_new_paths", "review_required_for", "allowed_root_files"]:
         if planned and not isinstance(planned.get(key), list):
             errors.append(f"{PLANNED_STRUCTURE.as_posix()}: `{key}` must be a list")
     if planned and not isinstance(planned.get("allowed_top_level_roots"), list):
@@ -581,6 +726,10 @@ def verify_dir_manager(project: Path) -> dict[str, Any]:
             errors.append(f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.runtime_artifacts must be configured")
         if not isinstance(remote.get("review_required_for"), list):
             errors.append(f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.review_required_for must be a list")
+        if not isinstance(remote.get("protected_path_classes"), list):
+            errors.append(f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.protected_path_classes must be a list")
+        if remote.get("require_review_for_all_mutations") is not True:
+            errors.append(f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.require_review_for_all_mutations must be true")
         conda = remote.get("conda_environment", {}) if isinstance(remote.get("conda_environment"), dict) else {}
         runtime = remote.get("runtime_artifacts", {}) if isinstance(remote.get("runtime_artifacts"), dict) else {}
         if isinstance(conda, dict) and "path_template" not in conda:
@@ -600,6 +749,8 @@ def verify_dir_manager(project: Path) -> dict[str, Any]:
                 continue
             if not allowed_path(normalized, planned):
                 errors.append(f"{CURRENT_STRUCTURE.as_posix()}: directory violates planned structure: {normalized}")
+        for file_path in unapproved_root_files(current, planned):
+            errors.append(f"{CURRENT_STRUCTURE.as_posix()}: root-level file violates planned structure: {file_path}")
     return {"project": str(project), "checked": checked, "errors": errors}
 
 
@@ -619,6 +770,8 @@ def obvious_structure_fix_candidate(project: Path, profile: dict, planned: dict)
     candidates = []
     for child in sorted(project.iterdir()):
         if child.name in SKIP_DIRS or child.name in {".agents", "docs", "dist", "tests", "ref"}:
+            continue
+        if not child.is_dir():
             continue
         if child.name in allowed_roots:
             continue
@@ -730,6 +883,7 @@ def structure_gate(project: Path) -> dict[str, Any]:
             "auto_fix_plan": [],
             "requires_user_confirmation": False,
             "user_message": "",
+            "decision_request": {},
         }
     planned = load_planned(project) or planned_structure(project)
     current = scan_structure(project)
@@ -744,6 +898,8 @@ def structure_gate(project: Path) -> dict[str, Any]:
             continue
         if not allowed_path(normalized, planned):
             reasons.append(f"directory violates planned structure: {normalized}")
+    for file_path in unapproved_root_files(current, planned):
+        reasons.append(f"root-level file violates planned structure: {file_path}")
     auto_fix_plan: list[dict[str, str]] = []
     candidate = obvious_structure_fix_candidate(project, profile, planned)
     if candidate:
@@ -759,6 +915,18 @@ def structure_gate(project: Path) -> dict[str, Any]:
         "auto_fix_plan": auto_fix_plan,
         "requires_user_confirmation": not approved,
         "user_message": "" if approved else "目录结构不符合治理契约，默认应先按规范整理/迁移。若继续，请明确确认是否执行结构修复，默认推荐“是”。",
+        "decision_request": {} if approved else decision_request(
+            "structure_normalization",
+            question="目录结构不符合治理契约。是否按推荐方案执行结构修复？",
+            options=[
+                {"label": "是，执行修复", "value": "yes", "description": "默认选项；按 auto_fix_plan 或人工整理方案恢复治理结构。", "recommended": True},
+                {"label": "否，暂停", "value": "no", "description": "保留当前结构，暂停会修改工作区结构的操作。", "recommended": False},
+            ],
+            default="yes",
+            risk="high",
+            next_action="run structure fix or manually normalize the work folder, then rerun structure-gate",
+            context={"reasons": reasons, "auto_fix_plan": auto_fix_plan},
+        ),
     }
 
 
@@ -798,6 +966,7 @@ def main() -> None:
     review_parser = subparsers.add_parser("review")
     review_parser.add_argument("project", nargs="?", default=".")
     review_parser.add_argument("--input", required=True)
+    review_parser.add_argument("--dry-run", action="store_true")
 
     structure_parser = subparsers.add_parser("structure-gate")
     structure_parser.add_argument("project", nargs="?", default=".")
@@ -827,7 +996,7 @@ def main() -> None:
     elif args.command == "init":
         emit_json(init_dir_manager(project))
     elif args.command == "review":
-        result = review_change(project, args.input)
+        result = review_change(project, args.input, dry_run=args.dry_run)
         emit_json(result)
         if not result["approved"]:
             raise SystemExit(1)

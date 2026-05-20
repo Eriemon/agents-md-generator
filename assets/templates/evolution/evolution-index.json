@@ -1,7 +1,19 @@
 {
   "cadence_handoffs": 10,
-  "generated_at": "2026-05-16T22:53:11",
-  "handoff_count": 40,
+  "generated_at": "2026-05-19T13:03:28",
+  "handoff_count": 50,
+  "review": {
+    "approved_target": {
+      "category_path": [
+        "agent-governance"
+      ],
+      "family": "skill-template",
+      "rationale": "Inferred from project control profile, repository facts, and topic keywords.",
+      "source": "ai",
+      "type_slug": "agents-md-generator"
+    },
+    "verdict": "approve"
+  },
   "schema_version": 1,
   "target": {
     "category_path": [
@@ -19,10 +31,22 @@
       ],
       "family": "skill-template",
       "output": "skills/agents-md-generator/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/1-workflow.md",
-      "sha256": "b48c75f05b84612fb8ec088a9609c270585bd71c75c87afb09215b4560a20d8b",
+      "review": {
+        "approved_target": {
+          "category_path": [
+            "agent-governance"
+          ],
+          "family": "skill-template",
+          "rationale": "Inferred from project control profile, repository facts, and topic keywords.",
+          "source": "ai",
+          "type_slug": "agents-md-generator"
+        },
+        "verdict": "approve"
+      },
+      "sha256": "cc7ea34b21196eec94759588860b0b08a6cefab1db1ce7eddf5302000e3403d2",
       "source_versions": [
         "docs/experience/1-workflow.md",
-        "docs/experience/history_experience/20260516-225309/1-workflow.md"
+        "docs/experience/history_experience/20260519-130325/1-workflow.md"
       ],
       "target_type": "agents-md-generator",
       "topic": "1-workflow.md"
@@ -33,10 +57,22 @@
       ],
       "family": "skill-template",
       "output": "skills/agents-md-generator/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/2-scripts.md",
-      "sha256": "4bf636856726cef213349682480e902c345f8e74ee8be5fb27aab70791bf64f1",
+      "review": {
+        "approved_target": {
+          "category_path": [
+            "agent-governance"
+          ],
+          "family": "skill-template",
+          "rationale": "Inferred from project control profile, repository facts, and topic keywords.",
+          "source": "ai",
+          "type_slug": "agents-md-generator"
+        },
+        "verdict": "approve"
+      },
+      "sha256": "32a99de8eb0b785bb53e914d25e0e194b7fba335e387af15c87862e7fc4db76e",
       "source_versions": [
         "docs/experience/2-scripts.md",
-        "docs/experience/history_experience/20260516-225309/2-scripts.md"
+        "docs/experience/history_experience/20260519-130325/2-scripts.md"
       ],
       "target_type": "agents-md-generator",
       "topic": "2-scripts.md"
@@ -47,10 +83,22 @@
       ],
       "family": "skill-template",
       "output": "skills/agents-md-generator/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/3-plan.md",
-      "sha256": "f8b3a2d6b3961b6ef0cc8b4b0d72419a4b884c086457b736b02b0eb1cbf2d81d",
+      "review": {
+        "approved_target": {
+          "category_path": [
+            "agent-governance"
+          ],
+          "family": "skill-template",
+          "rationale": "Inferred from project control profile, repository facts, and topic keywords.",
+          "source": "ai",
+          "type_slug": "agents-md-generator"
+        },
+        "verdict": "approve"
+      },
+      "sha256": "7f1944e392539fbb3bf58a357df43b225d70fae3cf4d5431ecc33de801537d58",
       "source_versions": [
         "docs/experience/3-plan.md",
-        "docs/experience/history_experience/20260516-225309/3-plan.md"
+        "docs/experience/history_experience/20260519-130325/3-plan.md"
       ],
       "target_type": "agents-md-generator",
       "topic": "3-plan.md"
@@ -61,10 +109,22 @@
       ],
       "family": "skill-template",
       "output": "skills/agents-md-generator/assets/templates/evolution/skill-template/agent-governance/agents-md-generator/4-design-ui.md",
-      "sha256": "d8d9aa6fd314de3c0367c67cb0b9ed588aeb0e0fd47069113c842d0bf3eba9d2",
+      "review": {
+        "approved_target": {
+          "category_path": [
+            "agent-governance"
+          ],
+          "family": "skill-template",
+          "rationale": "Inferred from project control profile, repository facts, and topic keywords.",
+          "source": "ai",
+          "type_slug": "agents-md-generator"
+        },
+        "verdict": "approve"
+      },
+      "sha256": "51dd7f39620746c77865d7d57de99c9683e16a68e87e47dfdf47502368281f52",
       "source_versions": [
         "docs/experience/4-design-ui.md",
-        "docs/experience/history_experience/20260516-225309/4-design-ui.md"
+        "docs/experience/history_experience/20260519-130325/4-design-ui.md"
       ],
       "target_type": "agents-md-generator",
       "topic": "4-design-ui.md"

@@ -138,7 +138,11 @@ REMOTE_DIRECTORY_POLICY_KEYS = [
 OPTIONAL_EMPTY_KEYS = {"engineering_rule_notes"}
 ALIGNMENT_KEY = "alignment_confirmed"
 GROUP_CONFIRMATION_KEY = "group_confirmed"
+EXTRA_REQUIREMENTS_KEY = "extra_requirements"
+DESIGN_REVIEW_KEY = "design_review"
+REVIEW_REWORK_CONFIRMATION_KEY = "review_rework_confirmed"
 SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+NO_EXTRA_REQUIREMENTS = {"", "none", "no", "no extra", "n/a", "无", "没有", "无补充", "无额外补充", "不补充", "无需补充"}
 
 ENGINEERING_RULE_SETS = {
     "a-philosophy-of-software-design",
@@ -353,6 +357,14 @@ def read_json_object(path: Path) -> dict[str, Any]:
 
 def empty(value: Any) -> bool:
     return value is None or value == "" or value == []
+
+
+def normalize_extra_requirements(value: Any) -> str:
+    if isinstance(value, list):
+        parts = [str(item).strip() for item in value if str(item).strip()]
+        value = "; ".join(parts)
+    normalized = str(value if value is not None else "").strip()
+    return "none" if normalized.casefold() in NO_EXTRA_REQUIREMENTS else normalized
 
 
 def remote_directory_configured(raw: Any) -> bool:

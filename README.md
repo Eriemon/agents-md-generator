@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.6.2-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.6.7-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -46,16 +46,13 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 - Docs governance for handoff, experience, development, install, and git-manager records.
 - Directory-governance review and structure gates through `manage_dirs.py`.
 - Compatibility shim generation for `CLAUDE.md` and `GEMINI.md` when requested.
-- Verification, audit, and full fact-level evaluation for release readiness.
+- Verification, audit, automated review governance, skill-effectiveness evals, and aggregate confidence checks for release readiness.
 
-## What's New In v0.6.2
+## What's New In v0.6.7
 
-- Clarified the boundary between explicit AGENTS update requests and passive workspace root checks.
-- Tightened takeover behavior so only version-mismatched landed workspaces auto-route into takeover mode.
-- Expanded directory-contract requirements to cover remote conda layout and runtime archive policy.
-- Added `scripts/quick_validate.py` to standardize the release validation chain.
-- Strengthened root verification around `.agents/global-rule-overrides.json`, reply-language rules, and remote directory contract text.
-- Improved docs and directory governance helpers so release, session scaffolding, and review flows stay more deterministic.
+- Keeps the repo-local skill-eval and review-governance stack from `v0.6.5`, but now ships `eval_fixtures.py` so the eval runner no longer depends on missing out-of-package test helpers.
+- Extends the script surface with a dedicated fixture helper layer for `run_skill_evals.py`.
+- Preserves the deterministic review-governance, confidence-gate, install, and docs-governance coverage introduced in the previous release line.
 
 ## Skill Architecture
 
@@ -78,7 +75,7 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 3. Version-mismatched old workspace:
    Enter takeover mode, keep identity questions minimal, still complete the structured directory contract, then repair governance.
 4. Strong-control release flow:
-   Run `quick_validate.py`, `audit_skill.py`, `verify_agents.py`, and `evaluate_skill.py` before packaging or installation.
+   Run `quick_validate.py`, `audit_skill.py`, `verify_agents.py`, `evaluate_skill.py`, and the review/eval gates before packaging or installation.
 
 ## Repository Map
 
@@ -88,6 +85,7 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 | `agents/openai.yaml` | Skill metadata used by the host UI. |
 | `scripts/` | Deterministic inspection, interview, rendering, docs-governance, directory-governance, verification, audit, and evaluation helpers. |
 | `assets/templates/` | Bundled root and scoped `AGENTS.md` templates plus evolution material. |
+| `evals/` | Repo-local skill-effectiveness cases used by `run_skill_evals.py`. |
 | `references/` | Script guide, review checklist, question bank, capability notes, and AGENTS guidance. |
 | `docs/assets/` | Hero, workflow, and architecture diagrams used in this README pair. |
 
@@ -124,6 +122,14 @@ Skill-release validation:
 python scripts/quick_validate.py .
 python scripts/audit_skill.py .
 python scripts/evaluate_skill.py . <project>
+python scripts/run_skill_evals.py evals/evals.json
+```
+
+Advanced governance-sensitive release checks:
+
+```powershell
+python scripts/review_governance.py <project> --base <sha> --head HEAD --skill-dir . --mode all
+python scripts/run_confidence_gate.py <project> --review-base <sha> --external-skill-dir <healthy-skill-dir>
 ```
 
 Compatibility shims stay opt-in:
@@ -160,8 +166,8 @@ If this skill helps your research, teaching, or engineering workflow, please cit
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {0.6.2},
-  date         = {2026-05-17},
+  version      = {0.6.7},
+  date         = {2026-05-20},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}

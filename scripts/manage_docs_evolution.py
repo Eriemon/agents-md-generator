@@ -8,6 +8,7 @@ from manage_docs_experience import (
     latest_historical_experience,
     missing_markdown_sections,
     payload_entries,
+    recent_conversation_context,
     payload_evolution_summary,
     similarity,
     validate_experience_content,
@@ -15,6 +16,23 @@ from manage_docs_experience import (
     workflow_experience_errors,
     write_experience_request,
 )
+
+EVOLUTION_REVIEW_REQUEST_PATH = ".agents/evolution-review-request.json"
+REQUIRED_EVOLUTION_REVIEW_EXPLANATION_FIELDS = [
+    "development_flow",
+    "design_flow",
+    "problem_analysis",
+    "classification_rationale",
+    "release_alignment",
+]
+REQUIRED_EVOLUTION_REVIEW_REQUEST_SECTIONS = [
+    "development_flow",
+    "design_flow",
+    "problem_analysis",
+    "classification_rationale",
+    "release_alignment",
+]
+ALLOWED_EVOLUTION_REVIEW_VERDICTS = {"approve", "reject", "approve_with_override"}
 
 def source_versions_for(project: Path, filename: str) -> list[dict[str, str]]:
     versions: list[dict[str, str]] = []
@@ -217,6 +235,159 @@ def clear_fulfilled_requests(
         request = evolution_request_file(project)
         if request.exists():
             request.unlink()
+        review_request = evolution_review_request_file(project)
+        if review_request.exists():
+            review_request.unlink()
+
+def evolution_review_request_file(project: Path) -> Path:
+    return project / EVOLUTION_REVIEW_REQUEST_PATH
+
+def target_identity(target: dict[str, Any]) -> tuple[str, tuple[str, ...], str]:
+    raw_path = target.get("category_path", [])
+    category_path = tuple(str(item).strip() for item in raw_path) if isinstance(raw_path, list) else tuple()
+    return (
+        str(target.get("family", "")).strip(),
+        category_path,
+        str(target.get("type_slug", "")).strip(),
+    )
+
+def targets_match(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    return target_identity(left) == target_identity(right)
+
+def release_alignment_evidence(project: Path, checkpoint: int) -> dict[str, Any]:
+    docs_paths = [
+        path.relative_to(project).as_posix()
+        for path in [
+            project / "docs" / "handoff" / "HANDOFF.md",
+            project / "docs" / "git_manager" / "CHANGELOG.md",
+            project / "docs" / "development" / "DEVELOPMENT.md",
+        ]
+        if path.exists()
+    ]
+    release_receipts = [
+        path.relative_to(project).as_posix()
+        for path in sorted((project / "dist").glob("*/RELEASE_RECEIPT.json"), reverse=True)[:3]
+    ] if (project / "dist").is_dir() else []
+    return {
+        "latest_handoff_path": "docs/handoff/HANDOFF.md",
+        "handoff_window": handoff_window(project, checkpoint),
+        "docs_paths": docs_paths,
+        "recent_conversation_snapshot_paths": [
+            item.get("path", "")
+            for item in recent_conversation_context(project, limit=10)
+            if item.get("path")
+        ],
+        "release_receipt_paths": release_receipts,
+    }
+
+def evolution_review_contract(project: Path, checkpoint: int, target: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "independent_review_required": True,
+        "review_scope": "evolution-only",
+        "blocking": True,
+        "allowed_verdicts": sorted(ALLOWED_EVOLUTION_REVIEW_VERDICTS),
+        "must_check_release_alignment": True,
+        "exact_cwd_sessions_only": True,
+        "reject_requires_session_reread": True,
+        "required_explanation_sections": REQUIRED_EVOLUTION_REVIEW_REQUEST_SECTIONS,
+        "release_alignment_evidence": release_alignment_evidence(project, checkpoint),
+        "target_schema_label": target_schema_label(target),
+    }
+
+def exact_cwd_session_inventory(project: Path) -> dict[str, list[str]]:
+    sessions = matched_codex_sessions(project)
+    return {
+        "session_ids": [str(item.get("id", "")).strip() for item in sessions if str(item.get("id", "")).strip()],
+        "session_paths": [str(item.get("path", "")).replace("\\", "/") for item in sessions if str(item.get("path", "")).strip()],
+    }
+
+def normalize_evolution_review(
+    project: Path,
+    raw: Any | None,
+    payload_target: dict[str, Any],
+) -> tuple[dict[str, Any] | None, list[str], list[str]]:
+    errors: list[str] = []
+    conflicts: list[str] = []
+    if raw is None:
+        return None, ["evolution_review is required before writing reusable templates"], conflicts
+    if not isinstance(raw, dict):
+        return None, ["evolution_review must be an object"], conflicts
+    verdict = str(raw.get("verdict", "")).strip()
+    if verdict not in ALLOWED_EVOLUTION_REVIEW_VERDICTS:
+        errors.append("evolution_review verdict must be approve, reject, or approve_with_override")
+    approved_target, approved_errors = normalize_evolution_target(project, raw.get("approved_target"))
+    original_target, original_errors = normalize_evolution_target(project, raw.get("original_target"))
+    errors.extend(f"evolution_review approved_target: {item}" for item in approved_errors)
+    errors.extend(f"evolution_review original_target: {item}" for item in original_errors)
+    evidence_read = raw.get("evidence_read")
+    if not isinstance(evidence_read, dict):
+        errors.append("evolution_review evidence_read must be an object")
+        evidence_read = {}
+    session_ids = [str(item).strip() for item in evidence_read.get("session_ids", [])] if isinstance(evidence_read.get("session_ids", []), list) else []
+    session_paths = [str(item).replace("\\", "/").strip() for item in evidence_read.get("session_paths", [])] if isinstance(evidence_read.get("session_paths", []), list) else []
+    inventory = exact_cwd_session_inventory(project)
+    allowed_ids = set(inventory["session_ids"])
+    allowed_paths = set(inventory["session_paths"])
+    if any(item and item not in allowed_ids for item in session_ids):
+        errors.append("evolution_review session_ids must match exact-cwd Codex sessions only")
+    if any(item and item not in allowed_paths for item in session_paths):
+        errors.append("evolution_review session_paths must match exact-cwd Codex sessions only")
+    reread = bool(raw.get("session_reread_performed"))
+    reread_reason = str(raw.get("session_reread_reason", "")).strip()
+    if verdict == "reject":
+        conflicts.append("review rejected current target as not release-aligned")
+        if not reread:
+            errors.append("evolution_review reject verdict requires session_reread_performed=true")
+        if not reread_reason:
+            errors.append("evolution_review reject verdict requires session_reread_reason")
+        if not session_ids and not session_paths and allowed_ids:
+            errors.append("evolution_review reject verdict must cite exact-cwd Codex sessions that were reread")
+    explanation = raw.get("full_explanation")
+    if not isinstance(explanation, dict):
+        errors.append("evolution_review full_explanation must be an object")
+        explanation = {}
+    for field in REQUIRED_EVOLUTION_REVIEW_EXPLANATION_FIELDS:
+        if not str(explanation.get(field, "")).strip():
+            errors.append(f"evolution_review full_explanation.{field} is required")
+    if verdict == "approve":
+        if not targets_match(approved_target, payload_target):
+            errors.append("evolution_review approved_target must match payload evolution_target before writing reusable templates")
+    elif verdict == "approve_with_override":
+        if not targets_match(approved_target, payload_target):
+            conflicts.append("approved_target differs from payload evolution_target")
+            errors.append("evolution_review approved_target must match payload evolution_target before writing reusable templates")
+    normalized = {
+        "verdict": verdict,
+        "approved_target": approved_target,
+        "original_target": original_target,
+        "evidence_read": {
+            "conversation_snapshot_paths": [
+                str(item).strip()
+                for item in evidence_read.get("conversation_snapshot_paths", [])
+            ] if isinstance(evidence_read.get("conversation_snapshot_paths", []), list) else [],
+            "handoff_paths": [
+                str(item).strip()
+                for item in evidence_read.get("handoff_paths", [])
+            ] if isinstance(evidence_read.get("handoff_paths", []), list) else [],
+            "docs_paths": [
+                str(item).strip()
+                for item in evidence_read.get("docs_paths", [])
+            ] if isinstance(evidence_read.get("docs_paths", []), list) else [],
+            "release_evidence_paths": [
+                str(item).strip()
+                for item in evidence_read.get("release_evidence_paths", [])
+            ] if isinstance(evidence_read.get("release_evidence_paths", []), list) else [],
+            "session_ids": session_ids,
+            "session_paths": session_paths,
+        },
+        "session_reread_performed": reread,
+        "session_reread_reason": reread_reason,
+        "full_explanation": {
+            field: str(explanation.get(field, "")).strip()
+            for field in REQUIRED_EVOLUTION_REVIEW_EXPLANATION_FIELDS
+        },
+    }
+    return normalized, errors, conflicts
 
 def strip_leading_title(summary: str) -> str:
     lines = summary.splitlines()
@@ -265,6 +436,58 @@ def validate_evolution_summaries(project: Path, summaries: dict[str, str], targe
     if workflow:
         errors.extend(validate_workflow_schema_for_target(workflow, target_info))
     return errors
+
+def write_evolution_review_request(
+    project: Path,
+    count: int,
+    target: dict[str, Any],
+    reason: str,
+    *,
+    conflicts: list[str] | None = None,
+    review: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    candidate_targets = [target]
+    inferred = infer_evolution_target(project)
+    if not targets_match(inferred, target):
+        candidate_targets.append(inferred)
+    request = {
+        "schema_version": 1,
+        "project": str(project),
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "handoff_count": count,
+        "blocking": True,
+        "reason": reason,
+        "target": target,
+        "candidate_targets": candidate_targets,
+        "conflicts": conflicts or [],
+        "review_contract": evolution_review_contract(project, count, target),
+        "required_sections": REQUIRED_EVOLUTION_REVIEW_REQUEST_SECTIONS,
+        "exact_cwd_sessions": exact_cwd_session_inventory(project),
+        "release_alignment_evidence": release_alignment_evidence(project, count),
+        "payload_schema": {
+            "evolution_review": {
+                "verdict": "approve",
+                "approved_target": target,
+                "original_target": target,
+                "evidence_read": {
+                    "session_ids": [],
+                    "session_paths": [],
+                },
+                "session_reread_performed": False,
+                "session_reread_reason": "",
+                "full_explanation": {
+                    field: "..."
+                    for field in REQUIRED_EVOLUTION_REVIEW_EXPLANATION_FIELDS
+                },
+            }
+        },
+    }
+    if isinstance(review, dict):
+        request["submitted_review"] = review
+    path = evolution_review_request_file(project)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(request, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    return {"review_request_written": path.relative_to(project).as_posix(), "reason": reason}
 
 def write_evolution_request(project: Path, count: int, target: dict[str, Any], reason: str) -> dict[str, Any]:
     schema = evolution_schema_for(target)
@@ -316,6 +539,26 @@ def evolution_markdown(topic: dict[str, str], versions: list[dict[str, str]], ta
         summary_body,
         "",
     ])
+
+def review_from_state(project: Path, state: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
+    verdict = str(state.get("last_evolution_review_verdict", "")).strip()
+    target_raw = state.get("last_evolution_review_target")
+    if not verdict and target_raw is None:
+        return None, ["evolution_review is required before writing reusable templates"]
+    errors: list[str] = []
+    if verdict not in ALLOWED_EVOLUTION_REVIEW_VERDICTS:
+        errors.append("last_evolution_review_verdict must be approve, reject, or approve_with_override")
+    target, target_errors = normalize_evolution_target(project, target_raw)
+    errors.extend(f"last_evolution_review_target: {item}" for item in target_errors)
+    sources = state.get("last_evolution_review_sources")
+    if not isinstance(sources, dict):
+        errors.append("last_evolution_review_sources must be an object")
+        sources = {}
+    return {
+        "verdict": verdict,
+        "approved_target": target,
+        "evidence_read": sources,
+    }, errors
 
 def remove_empty_parents(path: Path, stop: Path) -> None:
     current = path
@@ -393,6 +636,34 @@ def run_evolution(project: Path, force: bool = False) -> dict[str, Any]:
     if summary_errors:
         request = write_evolution_request(project, checkpoint, target, "evolution_summary failed quality validation")
         return {"project": str(project), "skipped": True, "errors": summary_errors, **request}
+    review, review_errors = review_from_state(project, state)
+    if review_errors:
+        request = write_evolution_review_request(project, checkpoint, target, "evolution_review is missing or invalid in docs-governance state")
+        return {"project": str(project), "skipped": True, "errors": review_errors, **request}
+    assert review is not None
+    if review["verdict"] == "reject":
+        request = write_evolution_review_request(project, checkpoint, target, "evolution_review rejected the proposed evolution target", review=review)
+        return {
+            "project": str(project),
+            "skipped": True,
+            "errors": ["evolution_review rejected the proposed evolution target"],
+            **request,
+        }
+    if not targets_match(review["approved_target"], target):
+        request = write_evolution_review_request(
+            project,
+            checkpoint,
+            target,
+            "evolution_review approved_target differs from persisted evolution target",
+            conflicts=["approved_target differs from persisted evolution target"],
+            review=review,
+        )
+        return {
+            "project": str(project),
+            "skipped": True,
+            "errors": ["evolution_review approved_target must match payload evolution_target before writing reusable templates"],
+            **request,
+        }
 
     root = evolution_template_root(project)
     target_dir = root / target["family"]
@@ -421,11 +692,30 @@ def run_evolution(project: Path, force: bool = False) -> dict[str, Any]:
             "output": rel_output,
             "source_versions": source_paths,
             "sha256": file_hash(output),
+            "review": {
+                "verdict": review["verdict"],
+                "approved_target": review["approved_target"],
+            },
         }
         template_index.append(row)
         index_entries.append(row)
     index_path = target_dir / "template-index.json"
-    index_path.write_text(json.dumps({"schema_version": 1, "target": target, "templates": template_index}, indent=2, sort_keys=True), encoding="utf-8")
+    index_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "target": target,
+                "review": {
+                    "verdict": review["verdict"],
+                    "approved_target": review["approved_target"],
+                },
+                "templates": template_index,
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
     written.append(index_path.relative_to(project).as_posix())
     index = {
         "schema_version": 1,
@@ -434,6 +724,10 @@ def run_evolution(project: Path, force: bool = False) -> dict[str, Any]:
         "cadence_handoffs": EVOLUTION_CADENCE_HANDOFFS,
         "version_window": "current-plus-latest-history",
         "target": target,
+        "review": {
+            "verdict": review["verdict"],
+            "approved_target": review["approved_target"],
+        },
         "templates": index_entries,
     }
     index_path = root / "evolution-index.json"
@@ -475,8 +769,30 @@ def apply_experience_payload(project: Path, payload_path: str) -> dict[str, Any]
         errors.append("evolution_summary is required before writing reusable templates")
     if summaries:
         errors.extend(validate_evolution_summaries(project, summaries, evolution_target))
+    review_payload = payload.get("evolution_review")
+    normalized_review: dict[str, Any] | None = None
+    review_errors: list[str] = []
+    review_conflicts: list[str] = []
+    if requires_atomic_evolution:
+        normalized_review, review_errors, review_conflicts = normalize_evolution_review(project, review_payload, evolution_target)
+        errors.extend(review_errors)
+        if normalized_review and normalized_review.get("verdict") == "reject":
+            errors.append("evolution_review rejected the proposed evolution target")
     if errors:
-        return {"project": str(project), "errors": errors}
+        result: dict[str, Any] = {"project": str(project), "errors": errors}
+        if requires_atomic_evolution:
+            reason = review_errors[0] if review_errors else "evolution_review blocked reusable template writing"
+            result.update(
+                write_evolution_review_request(
+                    project,
+                    checkpoint,
+                    evolution_target,
+                    reason,
+                    conflicts=review_conflicts,
+                    review=normalized_review if isinstance(normalized_review, dict) else review_payload if isinstance(review_payload, dict) else None,
+                )
+            )
+        return result
     archived = archive_experience_files(project)
     written: list[str] = []
     for spec in experience_file_specs(project):
@@ -496,6 +812,11 @@ def apply_experience_payload(project: Path, payload_path: str) -> dict[str, Any]
         state["last_evolution_summary"] = summaries
     else:
         state.pop("last_evolution_summary", None)
+    if requires_atomic_evolution and normalized_review:
+        state["last_evolution_review_at"] = checkpoint
+        state["last_evolution_review_verdict"] = normalized_review["verdict"]
+        state["last_evolution_review_target"] = normalized_review["approved_target"]
+        state["last_evolution_review_sources"] = normalized_review["evidence_read"]
     save_state(project, state)
     result: dict[str, Any] = {"project": str(project), "written": written, "archived": archived, "handoff_count": checkpoint}
     if requires_atomic_evolution:

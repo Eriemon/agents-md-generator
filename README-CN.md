@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.6.2-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.6.7-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -46,16 +46,13 @@ AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的�
 - 提供 handoff、experience、development、install、git-manager 等 docs 治理辅助。
 - 通过 `manage_dirs.py` 执行目录治理审查与结构门禁。
 - 在需要时生成 `CLAUDE.md` 与 `GEMINI.md` 兼容 shim。
-- 提供验证、审计和 fact-level evaluation，用于发布前把关。
+- 提供验证、审计、自动 review 治理、skill-effectiveness eval 和 aggregate confidence gate，用于发布前把关。
 
-## v0.6.2 重点更新
+## v0.6.7 重点更新
 
-- 更清楚地区分“显式 AGENTS 更新请求”和“工作区根检查触发”两类入口。
-- 收紧 takeover 条件，只有已经落地且 root 版本失配的旧工作区才会自动进入 takeover。
-- 扩展 directory contract，明确 remote conda 布局和 runtime archive 策略。
-- 新增 `scripts/quick_validate.py`，统一 release 验证入口。
-- 强化 root 验证，对 `.agents/global-rule-overrides.json`、回复语言规则和远端目录契约做更严格检查。
-- 完善 docs 和 directory 治理辅助，让 release、session scaffolding 和 review 流程更确定、更可验证。
+- 保留 `v0.6.5` 引入的 skill eval、review governance 和 confidence gate 能力，同时新增 `eval_fixtures.py`，让 eval 运行器不再依赖缺失的包外测试 helper。
+- 为 `run_skill_evals.py` 补齐仓库内 fixture 辅助层，收紧发布包自洽性。
+- 继续沿用上一版引入的 deterministic review、install、docs governance 与 release 证据链。
 
 ## Skill 架构
 
@@ -78,7 +75,7 @@ AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的�
 3. 旧工作区接管：
    对 root 版本失配的已落地工作区进入 takeover，尽量少问身份信息，但仍完整确认 structured directory contract。
 4. 发布前验证：
-   用 `quick_validate.py`、`audit_skill.py`、`verify_agents.py`、`evaluate_skill.py` 组成完整校验链。
+   用 `quick_validate.py`、`audit_skill.py`、`verify_agents.py`、`evaluate_skill.py` 以及 review/eval 门禁组成完整校验链。
 
 ## 仓库结构
 
@@ -88,6 +85,7 @@ AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的�
 | `agents/openai.yaml` | 宿主 UI 使用的 skill 元数据。 |
 | `scripts/` | 检查、访谈、渲染、文档治理、目录治理、验证、审计和评估脚本。 |
 | `assets/templates/` | root/scoped `AGENTS.md` 模板与 evolution 相关模板。 |
+| `evals/` | 供 `run_skill_evals.py` 使用的仓库内 skill-effectiveness 用例。 |
 | `references/` | 脚本指南、审查清单、问题库、能力覆盖说明和 AGENTS 指南。 |
 | `docs/assets/` | 本对 README 使用的 hero、workflow 和 architecture 图。 |
 
@@ -124,6 +122,14 @@ Skill 发布前验证：
 python scripts/quick_validate.py .
 python scripts/audit_skill.py .
 python scripts/evaluate_skill.py . <project>
+python scripts/run_skill_evals.py evals/evals.json
+```
+
+治理敏感 release 的进阶检查：
+
+```powershell
+python scripts/review_governance.py <project> --base <sha> --head HEAD --skill-dir . --mode all
+python scripts/run_confidence_gate.py <project> --review-base <sha> --external-skill-dir <healthy-skill-dir>
 ```
 
 兼容 shim 仍然是显式选择：
@@ -160,8 +166,8 @@ Jiyuan Liu 和 He Li 隶属于东南大学电子科学与工程学院。
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {0.6.2},
-  date         = {2026-05-17},
+  version      = {0.6.7},
+  date         = {2026-05-20},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}

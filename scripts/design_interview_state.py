@@ -8,6 +8,14 @@ from typing import Any
 from design_profile_builder import *
 from design_questions import *
 from design_remote_gate import *
+from design_review_gate import (
+    answers_without_design_review,
+    design_review_request,
+    design_review_requires_rework,
+    normalize_extra_requirements,
+    validate_design_review,
+)
+from agents_decisions import decision_request
 
 def state_path(project: Path) -> Path:
     return project / STATE_PATH
@@ -74,6 +82,12 @@ def initial_takeover_state(project: Path) -> dict[str, Any]:
         },
     }
 
+def move_to_extra_requirements(project: Path, state: dict[str, Any]) -> dict[str, Any]:
+    state["status"] = "awaiting_extra_requirements"
+    state.setdefault("answers", {}).pop(DESIGN_REVIEW_KEY, None)
+    write_state(project, state)
+    return interactive_payload(project, state)
+
 def advance_after_remote_gate(project: Path, state: dict[str, Any]) -> dict[str, Any]:
     index = int(state.get("current_group_index", 0))
     if str(state.get("mode", "interactive")) == "takeover" and index + 1 >= len(state.get("groups", [])):
@@ -82,7 +96,7 @@ def advance_after_remote_gate(project: Path, state: dict[str, Any]) -> dict[str,
         state["current_group_index"] = index + 1
         state["status"] = "collecting_group"
     else:
-        state["status"] = "awaiting_final_alignment"
+        return move_to_extra_requirements(project, state)
     write_state(project, state)
     return interactive_payload(project, state)
 
@@ -147,7 +161,7 @@ def confirmed_keys_for_state(state: dict[str, Any], include_current: bool = Fals
     keys: list[str] = []
     groups = state.get("groups", [])
     confirmed_indices = set(int(item) for item in state.get("confirmed_group_indices", []))
-    if include_current and state.get("status") in {"awaiting_group_confirmation", "awaiting_final_alignment", "completed"}:
+    if include_current and state.get("status") in {"awaiting_group_confirmation", "awaiting_extra_requirements", "awaiting_final_alignment", "awaiting_design_review", "completed"}:
         confirmed_indices.add(int(state.get("current_group_index", 0)))
     for index, group in enumerate(groups):
         if index in confirmed_indices and isinstance(group, list):
@@ -157,7 +171,7 @@ def confirmed_keys_for_state(state: dict[str, Any], include_current: bool = Fals
 def remaining_groups_for_state(state: dict[str, Any]) -> list[list[str]]:
     groups = state.get("groups", [])
     index = int(state.get("current_group_index", 0))
-    if state.get("status") in {"awaiting_final_alignment", "completed"}:
+    if state.get("status") in {"awaiting_extra_requirements", "awaiting_final_alignment", "awaiting_design_review", "awaiting_review_rework", "completed"}:
         return []
     return [[str(item) for item in group] for group in groups[index:]] if isinstance(groups, list) else []
 
@@ -200,6 +214,24 @@ def interactive_payload(
         )
         confirmation_question = "请确认当前问题组是否正确；如果否，请修正本组字段并重新确认。"
         next_action = "confirm_current_group"
+    elif status == "awaiting_extra_requirements":
+        current_group = []
+        questions = [
+            {
+                "question_id": "extra-requirements",
+                "answer_key": EXTRA_REQUIREMENTS_KEY,
+                "required": True,
+                "branch": "all",
+                "ask": "完整分组访谈已结束。是否还有额外要补充的需求、约束、风险或偏好？如果没有，请回答 none/无补充。",
+                "options": [
+                    {"label": "无补充", "value": "none", "description": "记录 extra_requirements=none，然后进入最终一致性确认。", "recommended": True},
+                    {"label": "用户输入", "value": "__user_input__", "description": "补充内容会写入控制档案并稳定渲染到 AGENTS.md。", "recommended": False},
+                ],
+            }
+        ]
+        review = review_summary(state.get("answers", {}), str(kind) if kind else None, [], confirmed_keys, final=False)
+        confirmation_question = "请提交 extra_requirements；没有补充也必须显式记录 none。"
+        next_action = "answer_extra_requirements"
     elif status == "awaiting_final_alignment":
         current_group = []
         questions = [
@@ -222,6 +254,29 @@ def interactive_payload(
         )
         confirmation_question = "请确认整个设计访谈已经完整一致；如果需要修正，请附带修正字段重新提交。"
         next_action = "confirm_final_alignment"
+    elif status == "awaiting_design_review":
+        current_group = []
+        questions = [
+            {
+                "question_id": "design-review",
+                "answer_key": DESIGN_REVIEW_KEY,
+                "required": True,
+                "branch": "all",
+                "ask": "最终一致性已确认。请执行代理拉起新的审查子智能体审查完整方案，并提交结构化 design_review JSON。",
+                "options": [
+                    {"label": "提交子智能体审查 JSON", "value": "__user_input__", "description": "必须包含 reviewer_type=subagent、verdict、findings、required_user_confirmations、两个 hash 和 review_summary。", "recommended": True},
+                ],
+            }
+        ]
+        review = review_summary(state.get("answers", {}), str(kind) if kind else None, [], confirmed_keys, final=True)
+        confirmation_question = "只有子智能体 approve、无待用户确认、且 hash 匹配时，访谈才能 completed。"
+        next_action = "submit_design_review"
+    elif status == "awaiting_review_rework":
+        current_group = []
+        questions = []
+        review = review_summary(state.get("answers", {}), str(kind) if kind else None, [], confirmed_keys, final=True)
+        confirmation_question = "审查要求返工。请确认修正项并提交 review_rework_confirmed=true 加上需要修正的字段；旧 design_review 会失效，之后必须重新最终确认和子智能体审查。"
+        next_action = "confirm_review_rework"
     elif status == "completed":
         current_group = []
         questions = []
@@ -345,6 +400,55 @@ def interactive_payload(
         "session_state_path": str(state_path(project)),
         "errors": errors or [],
     }
+    if status == "awaiting_remote_install_confirmation":
+        payload["decision_request"] = decision_request(
+            "remote_dependency_install",
+            question="需要远程服务器能力，但 erie-remote-ssh 未安装。是否先安装该技能？",
+            options=questions[0].get("options", []) if questions else [],
+            default=True,
+            risk="medium",
+            next_action="install erie-remote-ssh or disable use_remote_server before continuing",
+            context={"dependency": REMOTE_SSH_SKILL_NAME, "url": REMOTE_SSH_GIT_URL},
+        )
+    elif status == "awaiting_remote_configuration_confirmation":
+        payload["decision_request"] = decision_request(
+            "remote_server_configuration",
+            question="当前没有可用的远程服务器列表。是否进入远程服务器配置流程？",
+            options=questions[0].get("options", []) if questions else [],
+            default="guided",
+            risk="high",
+            next_action="configure remote server access, then rerun collect_design_profile.py --resume",
+            context={"remote_discover": remote_gate.get("discover", {}) if isinstance(remote_gate, dict) else {}},
+        )
+    elif status == "awaiting_remote_server_route_mapping":
+        payload["decision_request"] = decision_request(
+            "remote_server_route_mapping",
+            question="请确认远程任务到服务器的主备路由后再写入 AGENTS.md。",
+            options=questions[0].get("options", []) if questions else [],
+            default=questions[0].get("options", [{}])[0].get("value") if questions and questions[0].get("options") else None,
+            risk="high",
+            next_action="submit remote_server_task_routes with primary and optional fallback server IDs",
+            context={"server_count": len(questions[0].get("options", [])) if questions else 0},
+        )
+    elif status == "awaiting_review_rework":
+        pending = state.get("pending_design_review", {}) if isinstance(state.get("pending_design_review"), dict) else {}
+        payload["decision_request"] = decision_request(
+            "design_review_rework",
+            question="子智能体审查未批准或仍有待用户确认事项。请确认并提交修正字段后重新进入最终一致性与审查。",
+            options=[
+                {"label": "确认返工", "value": True, "description": "提交 review_rework_confirmed=true 和至少一个修正字段。", "recommended": True},
+                {"label": "暂不继续", "value": False, "description": "保持阻断状态，不写入控制档案。", "recommended": False},
+            ],
+            default=True,
+            risk="high",
+            next_action="submit correction fields, then repeat final alignment and subagent review",
+            context={
+                "findings": pending.get("findings", []),
+                "required_user_confirmations": pending.get("required_user_confirmations", []),
+            },
+        )
+    else:
+        payload["decision_request"] = {}
     if mode == "takeover":
         payload["takeover_trigger_reasons"] = list(state.get("takeover_trigger_reasons", []))
     if remote_gate:
@@ -360,6 +464,14 @@ def interactive_payload(
             payload["remote_server_choices"] = remote_gate.get("choices", {}).get("servers", [])
     if status == "completed":
         payload["answers_snapshot"] = dict(state.get("answers", {}))
+    if status == "awaiting_design_review":
+        if isinstance(state.get("design_review_request"), dict):
+            payload["design_review_request"] = state["design_review_request"]
+        if isinstance(state.get("profile_preview"), dict):
+            payload["profile_preview"] = state["profile_preview"]
+        payload["answers_for_review"] = answers_without_design_review(dict(state.get("answers", {})))
+    if status == "awaiting_review_rework" and isinstance(state.get("pending_design_review"), dict):
+        payload["pending_design_review"] = state["pending_design_review"]
     return payload
 
 def update_groups_after_common_confirmation(state: dict[str, Any]) -> None:
@@ -449,17 +561,11 @@ def autogenerated_takeover_answers(project: Path, state: dict[str, Any]) -> dict
 
 def complete_takeover(project: Path, state: dict[str, Any]) -> dict[str, Any]:
     final_answers = autogenerated_takeover_answers(project, state)
-    profile, errors = build_profile(project, final_answers)
-    if errors:
-        emit_json(interactive_payload(project, state, errors=errors))
-        raise SystemExit(1)
+    final_answers.pop(ALIGNMENT_KEY, None)
+    final_answers.pop(DESIGN_REVIEW_KEY, None)
     state["answers"] = final_answers
-    state["status"] = "completed"
-    state["profile_preview"] = profile
-    write_state(project, state)
-    payload_out = interactive_payload(project, state)
-    payload_out["profile_preview"] = profile
-    return payload_out
+    state.pop("profile_preview", None)
+    return move_to_extra_requirements(project, state)
 
 def validate_group_answers(payload: dict[str, Any], expected_keys: list[str]) -> list[str]:
     return validate_group_answers_with_optional(payload, expected_keys, expected_keys)
@@ -641,7 +747,7 @@ def confirm_group(project: Path, state: dict[str, Any], payload: dict[str, Any])
             state["current_group_index"] = index + 1
             state["status"] = "collecting_group"
         else:
-            state["status"] = "awaiting_final_alignment"
+            return move_to_extra_requirements(project, state)
         write_state(project, state)
         return interactive_payload(project, state)
 
@@ -663,13 +769,56 @@ def group_index_for_key(kind: str, answer_key: str) -> int | None:
             return index
     return None
 
+def group_index_for_key_in_state(state: dict[str, Any], answer_key: str) -> int | None:
+    groups = state.get("groups", [])
+    for index, group in enumerate(groups if isinstance(groups, list) else []):
+        if isinstance(group, list) and answer_key in question_ids_to_keys([str(item) for item in group]):
+            return index
+    kind = str(state.get("kind") or state.get("answers", {}).get("development_type", "")).strip()
+    if kind in {"skill", "engineering"}:
+        return group_index_for_key(kind, answer_key)
+    return None
+
+
+def all_answer_keys_for_state(state: dict[str, Any]) -> set[str]:
+    kind = str(state.get("kind") or state.get("answers", {}).get("development_type", "")).strip()
+    keys = {item["answer_key"] for item in questions_for(kind)} if kind in {"skill", "engineering"} else set()
+    keys.add(EXTRA_REQUIREMENTS_KEY)
+    return keys
+
+
+def answer_extra_requirements(project: Path, state: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    if EXTRA_REQUIREMENTS_KEY not in payload:
+        emit_json(interactive_payload(project, state, errors=[f"missing required answer: {EXTRA_REQUIREMENTS_KEY}"]))
+        raise SystemExit(1)
+    extra = normalize_extra_requirements(payload.get(EXTRA_REQUIREMENTS_KEY))
+    state.setdefault("answers", {})[EXTRA_REQUIREMENTS_KEY] = extra
+    state["status"] = "awaiting_final_alignment"
+    state.pop("profile_preview", None)
+    state.pop("design_review_request", None)
+    state.setdefault("answers", {}).pop(DESIGN_REVIEW_KEY, None)
+    write_state(project, state)
+    return interactive_payload(project, state)
+
+
+def enter_design_review(project: Path, state: dict[str, Any], final_answers: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
+    final_answers.pop(DESIGN_REVIEW_KEY, None)
+    state["answers"] = final_answers
+    state["status"] = "awaiting_design_review"
+    state["profile_preview"] = profile
+    state["design_review_request"] = design_review_request(project, final_answers, profile)
+    write_state(project, state)
+    payload_out = interactive_payload(project, state)
+    payload_out["profile_preview"] = profile
+    return payload_out
+
+
 def finalize_alignment(project: Path, state: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
     if ALIGNMENT_KEY not in payload or not isinstance(payload[ALIGNMENT_KEY], bool):
         emit_json(interactive_payload(project, state, errors=[f"{ALIGNMENT_KEY} must be provided as true or false"]))
         raise SystemExit(1)
     correction_keys = [key for key in payload if key != ALIGNMENT_KEY]
-    kind = str(state.get("kind") or state.get("answers", {}).get("development_type", "")).strip()
-    all_keys = {item["answer_key"] for item in questions_for(kind)}
+    all_keys = all_answer_keys_for_state(state)
     if any(key not in all_keys for key in correction_keys):
         emit_json(interactive_payload(project, state, errors=["alignment corrections must reference known design-answer fields"]))
         raise SystemExit(1)
@@ -684,13 +833,7 @@ def finalize_alignment(project: Path, state: dict[str, Any], payload: dict[str, 
         if errors:
             emit_json(interactive_payload(project, state, errors=errors))
             raise SystemExit(1)
-        state["answers"] = final_answers
-        state["status"] = "completed"
-        state["profile_preview"] = profile
-        write_state(project, state)
-        payload_out = interactive_payload(project, state)
-        payload_out["profile_preview"] = profile
-        return payload_out
+        return enter_design_review(project, state, final_answers, profile)
 
     if not correction_keys:
         emit_json(interactive_payload(project, state, errors=["alignment rejection requires correction fields or --reset-interview"]))
@@ -703,12 +846,89 @@ def finalize_alignment(project: Path, state: dict[str, Any], payload: dict[str, 
         if empty(value):
             emit_json(interactive_payload(project, state, errors=[f"missing required answer: {key}"]))
             raise SystemExit(1)
+    if EXTRA_REQUIREMENTS_KEY in corrections:
+        corrections[EXTRA_REQUIREMENTS_KEY] = normalize_extra_requirements(corrections[EXTRA_REQUIREMENTS_KEY])
     state.setdefault("answers", {}).update(corrections)
-    indices = [group_index_for_key(kind, key) for key in correction_keys]
+    state.setdefault("answers", {}).pop(DESIGN_REVIEW_KEY, None)
+    indices = [group_index_for_key_in_state(state, key) for key in correction_keys if key != EXTRA_REQUIREMENTS_KEY]
+    if not indices:
+        state["status"] = "awaiting_final_alignment"
+        write_state(project, state)
+        return interactive_payload(project, state)
     target_index = min(index for index in indices if index is not None)
     state["current_group_index"] = target_index
     state["status"] = "awaiting_group_confirmation"
     state["confirmed_group_indices"] = [index for index in state.get("confirmed_group_indices", []) if int(index) < target_index]
+    write_state(project, state)
+    return interactive_payload(project, state)
+
+
+def submit_design_review(project: Path, state: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    review = payload.get(DESIGN_REVIEW_KEY)
+    answers = dict(state.get("answers", {}))
+    profile = state.get("profile_preview") if isinstance(state.get("profile_preview"), dict) else None
+    errors = validate_design_review(project, answers, review, profile, require_approval=False)
+    if errors:
+        emit_json(interactive_payload(project, state, errors=errors))
+        raise SystemExit(1)
+    assert isinstance(review, dict)
+    if design_review_requires_rework(review):
+        state["pending_design_review"] = review
+        state.setdefault("answers", {}).pop(DESIGN_REVIEW_KEY, None)
+        state["status"] = "awaiting_review_rework"
+        write_state(project, state)
+        return interactive_payload(project, state)
+    answers[DESIGN_REVIEW_KEY] = review
+    profile, profile_errors = build_profile(project, answers)
+    if profile_errors:
+        emit_json(interactive_payload(project, state, errors=profile_errors))
+        raise SystemExit(1)
+    state["answers"] = answers
+    state["profile_preview"] = profile
+    state["status"] = "completed"
+    state.pop("pending_design_review", None)
+    write_state(project, state)
+    payload_out = interactive_payload(project, state)
+    payload_out["profile_preview"] = profile
+    return payload_out
+
+
+def answer_review_rework(project: Path, state: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    if payload.get(REVIEW_REWORK_CONFIRMATION_KEY) is not True:
+        emit_json(interactive_payload(project, state, errors=[f"{REVIEW_REWORK_CONFIRMATION_KEY} must be true before rework corrections are accepted"]))
+        raise SystemExit(1)
+    correction_keys = [key for key in payload if key != REVIEW_REWORK_CONFIRMATION_KEY]
+    if not correction_keys:
+        emit_json(interactive_payload(project, state, errors=["design review rework requires at least one correction field"]))
+        raise SystemExit(1)
+    all_keys = all_answer_keys_for_state(state)
+    if any(key not in all_keys for key in correction_keys):
+        emit_json(interactive_payload(project, state, errors=["review rework corrections must reference known design-answer fields"]))
+        raise SystemExit(1)
+    corrections = {key: payload[key] for key in correction_keys}
+    for key, value in corrections.items():
+        if key in OPTIONAL_EMPTY_KEYS:
+            continue
+        if key == EXTRA_REQUIREMENTS_KEY:
+            corrections[key] = normalize_extra_requirements(value)
+            continue
+        if empty(value):
+            emit_json(interactive_payload(project, state, errors=[f"missing required answer: {key}"]))
+            raise SystemExit(1)
+    answers = state.setdefault("answers", {})
+    answers.update(corrections)
+    answers.pop(DESIGN_REVIEW_KEY, None)
+    state.pop("pending_design_review", None)
+    state.pop("design_review_request", None)
+    state.pop("profile_preview", None)
+    indices = [group_index_for_key_in_state(state, key) for key in correction_keys if key != EXTRA_REQUIREMENTS_KEY]
+    if indices:
+        target_index = min(index for index in indices if index is not None)
+        state["current_group_index"] = target_index
+        state["confirmed_group_indices"] = [index for index in state.get("confirmed_group_indices", []) if int(index) < target_index]
+        state["status"] = "awaiting_group_confirmation"
+    else:
+        state["status"] = "awaiting_final_alignment"
     write_state(project, state)
     return interactive_payload(project, state)
 
@@ -720,6 +940,31 @@ def ensure_no_pending_interview_on_write(project: Path, answers: dict[str, Any])
     if state_answers == {key: answers[key] for key in state_answers if key in answers} and state.get("status") == "completed":
         return []
     return ["design interview is still pending; use --resume or --reset-interview before --write"]
+
+def explicit_remote_server_error(answers: dict[str, Any]) -> list[str]:
+    if USE_REMOTE_SERVER_KEY in answers and isinstance(answers.get(USE_REMOTE_SERVER_KEY), bool):
+        return []
+    return ["use_remote_server must be explicitly provided before --write"]
+
+
+def explicit_extra_requirements_error(answers: dict[str, Any]) -> list[str]:
+    if EXTRA_REQUIREMENTS_KEY in answers:
+        return []
+    return ["extra_requirements must be explicitly provided before --write"]
+
+
+def ensure_design_review_approved_on_write(project: Path, answers: dict[str, Any], profile: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    errors.extend(ensure_no_pending_interview_on_write(project, answers))
+    errors.extend(explicit_remote_server_error(answers))
+    errors.extend(explicit_extra_requirements_error(answers))
+    if answers.get(ALIGNMENT_KEY) is not True:
+        errors.append("alignment_confirmed must be true before --write")
+    if DESIGN_REVIEW_KEY not in answers:
+        errors.append("design_review must be provided before --write")
+        return errors
+    errors.extend(validate_design_review(project, answers, answers.get(DESIGN_REVIEW_KEY), profile, require_approval=True))
+    return errors
 
 def explicit_default_language_error(answers: dict[str, Any]) -> list[str]:
     if str(answers.get("default_conversation_language", "")).strip():

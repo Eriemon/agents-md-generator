@@ -24,6 +24,7 @@ Patterns can be combined. A strong Skill often uses Inversion to collect intent,
 - Keep default-language handling aligned across interview prompts, rendered AGENTS.md output, verification rules, and `agents/openai.yaml`; do not let any one layer silently weaken the language contract.
 - Keep remote-server governance aligned across interview prompts, dependency gates, rendered AGENTS.md output, verification rules, and `agents/openai.yaml`; do not let any one layer bypass `erie-remote-ssh`.
 - Keep remote structure governance separate from remote-server enablement and task-route mapping. A takeover interview may minimize identity questions, but it must still ask `use_remote_server` explicitly before any remote task route can be written and it must still complete the structured directory contract, including remote conda and runtime archive policy when remote structure is configured.
+- Keep local root-file governance explicit. Strong-control directory contracts should carry a fixed root-level file whitelist, should whitelist only a small fixed set of root governance files, and must not silently allow new root-level files outside the governed primary project root.
 - Keep explicit AGENTS design/update requests separate from `计划` / `规划` / `准备` root-check triggers. Trigger-only checks may stop after reporting root health; explicit governance work must continue into the full interview/update flow.
 - Restrict automatic takeover to version-mismatched old workspaces. Missing root files or missing version metadata must stay on the full grouped interview path.
 
@@ -53,6 +54,7 @@ Strong-control generated AGENTS.md should also include a Documentation Governanc
 - Keep experience lessons in 10 numbered `docs/experience/` files; never create a root-level `experience/` folder.
 - New user-developed Skills belong in `skills/<skill-name>/`, and the `SKILL.md` frontmatter name must match that folder.
 - Require selectable interview options and repeated summary confirmation before writing a strong-control profile.
+- Return structured `decision_request` payloads for blocking branch, release/install, structure, directory, and remote-server confirmations so callers do not parse prose prompts.
 - Require an explicit `default_conversation_language` answer before any AGENTS generation or takeover write; implicit fallback defaults are not acceptable.
 - Require an explicit `use_remote_server` decision in interactive AGENTS generation flows; if remote usage is enabled, require erie-remote-ssh install/configure/choices/check/workspace-check completion before write, persist a normalized server registry plus task routes, and fall back to primary-server `functions` when a route omits explicit task responsibilities.
 - Require the rendered root `AGENTS.md` to keep the explicit default-language rule and to state that remote validation must start with the matched task route's primary server, automatically try fallback servers after failed validation, and block unmatched tasks until AGENTS is updated.
@@ -60,6 +62,8 @@ Strong-control generated AGENTS.md should also include a Documentation Governanc
 - Root `AGENTS.md` should point to `.agents/global-rule-overrides.json` instead of restating config-level maintainability and script-governance detail.
 - The local JSON governance config locks source-file limits, decomposition-plan requirements, and the fixed non-GUI script quartet `scripts/python/<function>/<name>.py`, `scripts/shell/<function>/<name>.sh`, `scripts/bat/<function>/<name>.bat`, and `scripts/powershell/<function>/<name>.ps1`.
 - Use a strict directory governance gate for folder moves; blocked reviews require explicit user force-confirmation and old dir manager content archival before execution.
+- Treat `render_agents.py --write --confirm-structure-fix` as permission to attempt the conservative structure fix, not permission to bypass the gate. The write path must rerun `structure-gate` after the fix attempt and stay blocked if any violation remains.
+- Require remote mutation governance for all actions, not only create targets. Remote source and target paths must both stay inside the governed remote plan, protected remote path classes must block destructive actions by default, and runtime artifact state must control whether a path belongs in active runs or backups.
 - Keep local reference paths and temporary source folders out of generated AGENTS.md.
 
 ## Review Gate

@@ -333,7 +333,13 @@ def build_experience_request(project: Path, count: int) -> dict[str, Any]:
         },
     }
     if requires_atomic_evolution:
-        from manage_docs_evolution import evolution_schema_for, infer_evolution_target, target_schema_label
+        from manage_docs_evolution import (
+            evolution_review_contract,
+            evolution_schema_for,
+            infer_evolution_target,
+            release_alignment_evidence,
+            target_schema_label,
+        )
 
         evolution_target = infer_evolution_target(project)
         schema = evolution_schema_for(evolution_target)
@@ -341,6 +347,11 @@ def build_experience_request(project: Path, count: int) -> dict[str, Any]:
         request["target_schema_label"] = target_schema_label(evolution_target)
         request["flow_requirements"] = schema.get("flow_requirements", [])
         request["mixed_content_risks"] = schema.get("mixed_content_risks", [])
+        request["requires_extra_evolution_review"] = True
+        request["review_scope"] = "evolution-only"
+        request["review_blocking"] = True
+        request["review_contract"] = evolution_review_contract(project, checkpoint, evolution_target)
+        request["release_alignment_evidence"] = release_alignment_evidence(project, checkpoint)
     return request
 
 def write_experience_request(project: Path, count: int) -> dict[str, Any]:

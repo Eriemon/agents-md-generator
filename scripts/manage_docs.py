@@ -68,6 +68,7 @@ def main() -> None:
     sync_root_parser.add_argument("project", nargs="?", default=".")
     sync_root_parser.add_argument("--write", action="store_true")
     sync_root_parser.add_argument("--installed-skill-dir", default=None)
+    sync_root_parser.add_argument("--mark-verified", action="store_true")
 
     sync_global_parser = subparsers.add_parser("sync-global-codex-agents")
     sync_global_parser.add_argument("project", nargs="?", default=".")
@@ -93,6 +94,11 @@ def main() -> None:
 
     branch_gate_parser = subparsers.add_parser("branch-gate")
     branch_gate_parser.add_argument("project", nargs="?", default=".")
+
+    work_folder_gate_parser = subparsers.add_parser("work-folder-gate")
+    work_folder_gate_parser.add_argument("project", nargs="?", default=".")
+    work_folder_gate_parser.add_argument("--skill-dir", required=True)
+    work_folder_gate_parser.add_argument("--mode", choices=["development", "release"], default="development")
 
     verify_parser = subparsers.add_parser("verify")
     verify_parser.add_argument("project", nargs="?", default=".")
@@ -134,7 +140,12 @@ def main() -> None:
         if result.get("errors"):
             raise SystemExit(1)
     elif args.command == "sync-root-agents":
-        result = sync_root_agents(project, write=args.write, installed_skill_dir_override=args.installed_skill_dir)
+        result = sync_root_agents(
+            project,
+            write=args.write,
+            installed_skill_dir_override=args.installed_skill_dir,
+            mark_verified=args.mark_verified,
+        )
         emit_json(result)
         if result.get("errors"):
             raise SystemExit(1)
@@ -162,6 +173,11 @@ def main() -> None:
         result = branch_gate(project)
         emit_json(result)
         if not result["approved"]:
+            raise SystemExit(1)
+    elif args.command == "work-folder-gate":
+        result = work_folder_gate(project, args.skill_dir, args.mode)
+        emit_json(result)
+        if not result["ok"]:
             raise SystemExit(1)
     elif args.command == "verify":
         result = verify_docs(project)

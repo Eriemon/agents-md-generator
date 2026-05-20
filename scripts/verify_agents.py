@@ -72,6 +72,9 @@ def validate_strong_control(text: str, file: str, project: Path, errors: list[st
     profile = read_json(project / ".agents" / "agents-control.json")
     if not str(profile.get("default_conversation_language", "")).strip():
         errors.append(f"{file}: strong-control profile must explicitly set default_conversation_language")
+    extra_requirements = str(profile.get("extra_requirements", "")).strip()
+    if extra_requirements and extra_requirements.casefold() != "none" and extra_requirements not in text:
+        errors.append(f"{file}: Control Profile must render extra_requirements from .agents/agents-control.json")
     directory_contract = profile.get("directory_contract", {}) if isinstance(profile.get("directory_contract", {}), dict) else {}
     directory_body = section_body(text, "## Directory Contract")
     if directory_body is None:

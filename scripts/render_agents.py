@@ -343,6 +343,9 @@ def control_profile(profile: dict | None, project: Path) -> str:
     ]
     if profile.get("development_requirements"):
         lines.append(f"- Development requirements: {profile['development_requirements']}.")
+    extra_requirements = str(profile.get("extra_requirements", "")).strip()
+    if extra_requirements and extra_requirements.casefold() != "none":
+        lines.append(f"- Additional user requirements: {extra_requirements}.")
     if profile.get("validation_method"):
         lines.append(f"- Validation method: {profile['validation_method']}.")
     if profile.get("resource_plan"):
@@ -873,6 +876,14 @@ def main() -> None:
                 emit_json({
                     "errors": ["structure governance fix failed before writing AGENTS.md or docs governance"],
                     "structure_fix": structure_fix,
+                })
+                raise SystemExit(1)
+            structure_result = structure_gate(project)
+            if not structure_result.get("approved", True):
+                emit_json({
+                    "errors": ["structure governance remains blocked after the confirmed structure fix attempt"],
+                    "structure_fix": structure_fix,
+                    "structure_gate": structure_result,
                 })
                 raise SystemExit(1)
         docs_preflight = preflight_docs(project)

@@ -13,6 +13,7 @@ from agents_common import emit_json, resolve_project, run_git
 
 TIMESTAMP_RE = re.compile(r"Last updated:\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})")
 DATE_RE = re.compile(r"Last updated:\s*(\d{4}-\d{2}-\d{2})")
+VERIFIED_RE = re.compile(r"Last verified:\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})")
 
 
 def parse_datetime(raw: str) -> datetime | None:
@@ -45,6 +46,10 @@ def normalize_datetime(value: datetime) -> str:
     return value.isoformat(timespec="seconds")
 
 
+def comparable_datetime(value: datetime) -> datetime:
+    return value.replace(tzinfo=None)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Check whether AGENTS.md may be stale versus git history.")
     parser.add_argument("project", nargs="?", default=".")
@@ -54,9 +59,16 @@ def main() -> None:
     changed_files: list[str] = []
     last_updated = None
     last_updated_raw = None
+    last_verified = None
+    last_verified_raw = None
     comparison_source = "missing"
+    freshness_source = "missing"
     if agents.exists():
         text = agents.read_text(encoding="utf-8", errors="ignore")
+        verified_match = VERIFIED_RE.search(text)
+        if verified_match:
+            last_verified_raw = verified_match.group(1)
+            last_verified = parse_datetime(last_verified_raw)
         timestamp_match = TIMESTAMP_RE.search(text)
         if timestamp_match:
             last_updated_raw = timestamp_match.group(1)
@@ -78,8 +90,15 @@ def main() -> None:
                         last_updated = fallback
                         comparison_source = "date_midnight_fallback" if fallback else "missing"
 
-    if last_updated:
-        git_result = run_git(project, ["log", "--name-only", "--pretty=format:", f"--since={normalize_datetime(last_updated)}"])
+    freshness_time = last_updated
+    freshness_source = comparison_source
+    if last_verified and (not last_updated or comparable_datetime(last_verified) >= comparable_datetime(last_updated)):
+        freshness_time = last_verified
+        freshness_source = "last_verified"
+        comparison_source = "last_verified"
+
+    if freshness_time:
+        git_result = run_git(project, ["log", "--name-only", "--pretty=format:", f"--since={normalize_datetime(freshness_time)}"])
     else:
         git_result = run_git(project, ["status", "--short"])
     if git_result.returncode == 0:
@@ -96,8 +115,12 @@ def main() -> None:
         "last_updated": normalize_datetime(last_updated) if last_updated else None,
         "last_updated_raw": last_updated_raw,
         "last_updated_at": normalize_datetime(last_updated) if last_updated else None,
+        "last_verified": normalize_datetime(last_verified) if last_verified else None,
+        "last_verified_raw": last_verified_raw,
+        "last_verified_at": normalize_datetime(last_verified) if last_verified else None,
         "comparison_source": comparison_source,
-        "stale": bool(changed_files) or last_updated is None,
+        "freshness_source": freshness_source,
+        "stale": bool(changed_files) or freshness_time is None,
         "changed_files": changed_files,
     })
 

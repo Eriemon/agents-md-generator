@@ -104,8 +104,17 @@ def main() -> None:
         if status == "awaiting_remote_server_route_mapping":
             emit_json(answer_remote_server_route_mapping(project, state, payload))
             return
+        if status == "awaiting_extra_requirements":
+            emit_json(answer_extra_requirements(project, state, payload))
+            return
         if status == "awaiting_final_alignment":
             emit_json(finalize_alignment(project, state, payload))
+            return
+        if status == "awaiting_design_review":
+            emit_json(submit_design_review(project, state, payload))
+            return
+        if status == "awaiting_review_rework":
+            emit_json(answer_review_rework(project, state, payload))
             return
         emit_json(interactive_payload(project, state, errors=[f"cannot answer interview in status: {status}"]))
         raise SystemExit(1)
@@ -127,16 +136,13 @@ def main() -> None:
     assert profile is not None
     result: dict[str, Any] = attach_alignment({"project": str(project), "profile": profile, "errors": []}, answers, profile.get("kind"))
     if args.write:
-        pending_errors = ensure_no_pending_interview_on_write(project, answers)
+        pending_errors = ensure_design_review_approved_on_write(project, answers, profile)
         if pending_errors:
             payload = attach_alignment({"project": str(project), "errors": pending_errors}, answers, profile.get("kind"))
             state = read_state(project)
             if state:
                 payload["pending_interview"] = interactive_payload(project, state, status_override="resume_required")
             emit_json(payload)
-            raise SystemExit(1)
-        if answers.get(ALIGNMENT_KEY) is not True:
-            emit_json(attach_alignment({"project": str(project), "errors": ["alignment_confirmed must be true before --write"]}, answers, profile.get("kind")))
             raise SystemExit(1)
         result["written"] = str(write_profile(project, profile))
     emit_json(result)

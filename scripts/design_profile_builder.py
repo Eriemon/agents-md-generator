@@ -228,6 +228,22 @@ def normalize_list(value: Any) -> list[str]:
     return [item.strip() for item in raw.replace("，", ",").split(",") if item.strip()]
 
 
+def invalid_remote_relative_template_reason(raw: str) -> str | None:
+    value = str(raw).strip()
+    normalized = value.replace("\\", "/")
+    if not value:
+        return "template must not be empty"
+    if re.match(r"^[A-Za-z]:[/\\]", value) or normalized.startswith("/"):
+        return "template must stay relative to the remote workspace root"
+    if ".." in normalized.split("/"):
+        return "template must not contain parent traversal"
+    if any(char in value for char in "*?|"):
+        return "template must not contain wildcard or unsafe shell characters"
+    if "//" in normalized:
+        return "template must not contain repeated path separators"
+    return None
+
+
 def disabled_remote_environment_policy() -> dict[str, Any]:
     return {
         "status": "disabled",
@@ -257,6 +273,9 @@ def remote_environment_policy(answers: dict[str, Any]) -> tuple[dict[str, Any], 
         return {}, ["missing required answer: remote_conda_environment_layout"]
     if path_template.lower() == "disabled":
         return {}, ["remote_conda_environment_layout cannot be `disabled` when remote structure or remote servers are enabled"]
+    invalid = invalid_remote_relative_template_reason(path_template)
+    if invalid:
+        return {}, [f"remote_conda_environment_layout {invalid}: {path_template}"]
     return {
         "status": "enabled",
         "scope": "remote-only",
@@ -292,6 +311,16 @@ def remote_runtime_archive_policy(answers: dict[str, Any]) -> tuple[dict[str, An
     ]
     if invalid:
         return {}, [f"{key} cannot be `disabled` when remote structure or remote servers are enabled" for key in invalid]
+    template_errors: list[str] = []
+    for key, value in {
+        "remote_run_artifact_active_layout": active_path,
+        "remote_run_artifact_backup_layout": backup_path,
+    }.items():
+        invalid_reason = invalid_remote_relative_template_reason(value)
+        if invalid_reason:
+            template_errors.append(f"{key} {invalid_reason}: {value}")
+    if template_errors:
+        return {}, template_errors
     return {
         "status": "enabled",
         "active_path_template": active_path,
@@ -562,12 +591,13 @@ def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any
     if rule_errors:
         return None, rule_errors
     assert rule_contract is not None
+    validation_errors: list[str] = []
     remote_environment_contract, remote_environment_errors = remote_environment_policy(answers)
-    if remote_environment_errors:
-        return None, remote_environment_errors
+    validation_errors.extend(remote_environment_errors)
     remote_runtime_contract, remote_runtime_errors = remote_runtime_archive_policy(answers)
-    if remote_runtime_errors:
-        return None, remote_runtime_errors
+    validation_errors.extend(remote_runtime_errors)
+    if validation_errors:
+        return None, validation_errors
     remote_contract, remote_errors = remote_server_contract(project, answers)
     if remote_errors:
         return None, remote_errors
@@ -660,6 +690,7 @@ def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any
         "engineering_rule_contract": rule_contract,
         "remote_server_contract": remote_contract,
         "development_requirements": answers["development_requirements"],
+        "extra_requirements": normalize_extra_requirements(answers.get(EXTRA_REQUIREMENTS_KEY, "none")),
         "expected_outcome": answers["expected_outcome"],
         "validation_method": answers["validation_method"],
         "validation_granularity": answers["validation_granularity"],
@@ -672,6 +703,8 @@ def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any
     if kind == "skill":
         profile["skill_layout"] = layout
         profile["skill_design_contract"] = skill_design_contract(answers)
+    if isinstance(answers.get(DESIGN_REVIEW_KEY), dict):
+        profile[DESIGN_REVIEW_KEY] = answers[DESIGN_REVIEW_KEY]
     return profile, []
 
 def write_profile(project: Path, profile: dict[str, Any]) -> Path:

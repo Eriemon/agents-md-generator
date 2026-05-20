@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import json
 import re
 from pathlib import Path
 import sys
@@ -12,10 +13,14 @@ from agents_common import emit_json, resolve_project
 from agents_project_facts import decomposition_plan_path, load_global_rule_overrides
 
 
-REQUIRED_FILES = [
+CORE_REQUIRED_FILES = [
     "SKILL.md",
+]
+
+SELF_REQUIRED_FILES = [
     "VERSION",
     "agents/openai.yaml",
+    "evals/evals.json",
     "references/agents-md-guidance.md",
     "references/book-rules-coverage.md",
     "references/capability-coverage.md",
@@ -29,28 +34,35 @@ REQUIRED_FILES = [
     "assets/templates/global-codex-agents.md",
     "scripts/inspect_project.py",
     "scripts/collect_design_profile.py",
+    "scripts/design_review_gate.py",
     "scripts/extract_commands.py",
     "scripts/extract_context.py",
     "scripts/detect_scopes.py",
     "scripts/render_agents.py",
     "scripts/manage_docs.py",
     "scripts/manage_dirs.py",
+    "scripts/agents_decisions.py",
     "scripts/install_skill.py",
+    "scripts/review_governance.py",
     "scripts/select_engineering_rules.py",
     "scripts/verify_agents.py",
     "scripts/check_freshness.py",
     "scripts/quick_validate.py",
+    "scripts/run_confidence_gate.py",
+    "scripts/run_skill_evals.py",
+    "scripts/eval_fixtures.py",
     "scripts/create_agent_shims.py",
     "scripts/audit_skill.py",
     "scripts/evaluate_skill.py",
 ]
 
-DISALLOWED_ROOT_DOCS = {"README.md", "CHANGELOG.md", "INSTALL.md", "INSTALLATION.md"}
+SELF_DISALLOWED_ROOT_DOCS = {"README.md", "CHANGELOG.md", "INSTALL.md", "INSTALLATION.md"}
 DISALLOWED_CACHE_SUFFIXES = {".pyc", ".pyo"}
 LOCAL_REFERENCE_RE = re.compile(
     r"G:[/\\]html|ref[/\\](agent-rules|html)|\b[A-Za-z]:[/\\][^\s`'\"<>)]*",
     flags=re.IGNORECASE,
 )
+SKILL_NAME_RE = re.compile(r"^[a-z0-9-]+$")
 TEMPLATE_PLACEHOLDER_RE = re.compile(r"{{([A-Z0-9_]+)}}")
 KNOWN_TEMPLATE_PLACEHOLDERS = {
     "root-agents.md": {
@@ -124,18 +136,30 @@ REFERENCE_ALIGNMENT_RULES = {
         "use_remote_server",
         "automatic fallback rule",
         "unmatched remote tasks must update AGENTS.md",
+        "root-level file whitelist",
+        "confirm-structure-fix",
+        "source and target paths must both stay inside the governed remote plan",
         "1000",
         ".agents/global-rule-overrides.json",
         "thread heartbeat",
         "shell",
         "powershell",
+        "extra_requirements",
+        "reviewer_type=\"subagent\"",
+        "reviewed_answers_hash",
     ),
     "references/script-guide.md": (
         "default_conversation_language",
         "explicit natural-language reply rule",
         "use_remote_server",
+        "extra_requirements",
+        "design_review",
+        "reviewed_profile_hash",
         "task-route table",
         "update AGENTS.md before validation continues",
+        "allow the conservative structure-fix attempt",
+        "allowed_root_files",
+        "path_classes",
         "--installed-skill-dir skills/agents-md-generator",
         ".agents/global-rule-overrides.json",
         "global JSON governance config",
@@ -146,9 +170,39 @@ REFERENCE_ALIGNMENT_RULES = {
         "use_remote_server",
         "automatic fallback gate",
         "unmatched-task blocking gate",
+        "root-level file whitelist",
+        "confirm-structure-fix",
+        "remote mutation governance for all actions",
         "global `.codex/AGENTS.md`",
         "local JSON governance config",
     ),
+}
+SKILL_REQUIRED_SNIPPETS = (
+    "root-level files outside the governed primary project root",
+    "allow the conservative structure-fix attempt",
+    "rerun `structure-gate`",
+    "remote `create`, `move`, `delete`, or `rename` must keep both source and target paths inside the governed remote plan",
+    "allowed_root_files",
+    "remote_deployment.protected_path_classes",
+)
+REQUIRED_SKILL_DESIGN_PATTERNS = {
+    "Tool Wrapper",
+    "Generator",
+    "Reviewer",
+    "Inversion",
+    "Pipeline",
+}
+REQUIRED_EVAL_CASE_IDS = {
+    "detect_missing_root_agents",
+    "generator_version_takeover",
+    "root_level_whitelist_gate",
+    "exact_cwd_evolution_review",
+    "generic_audit_split",
+    "evaluate_failure_classification",
+    "install_release_completeness",
+    "review_governance_companion_checks",
+    "design_review_gate",
+    "isolated_eval_runtime_dependency",
 }
 
 
@@ -159,11 +213,28 @@ def parse_frontmatter(text: str) -> dict[str, str]:
     if end == -1:
         return {}
     data: dict[str, str] = {}
+    current_key: str | None = None
+    current_multiline: list[str] = []
     for line in text[4:end].splitlines():
+        if current_key is not None:
+            if line.startswith((" ", "\t")):
+                current_multiline.append(line.strip())
+                continue
+            data[current_key] = " ".join(part for part in current_multiline if part).strip()
+            current_key = None
+            current_multiline = []
         if ":" not in line:
             continue
         key, value = line.split(":", 1)
-        data[key.strip()] = value.strip().strip('"')
+        normalized_key = key.strip()
+        normalized_value = value.strip().strip('"')
+        if normalized_value in {">", ">-", "|", "|-"}:
+            current_key = normalized_key
+            current_multiline = []
+            continue
+        data[normalized_key] = normalized_value
+    if current_key is not None:
+        data[current_key] = " ".join(part for part in current_multiline if part).strip()
     return data
 
 
@@ -184,6 +255,11 @@ def contains_local_reference(text: str) -> bool:
 
 def has_toc(lines: list[str]) -> bool:
     return any("table of contents" in line.lower() or "目录" in line for line in lines[:30])
+
+
+def is_agents_md_generator_skill(skill_dir: Path, frontmatter: dict[str, str] | None = None) -> bool:
+    name = (frontmatter or {}).get("name", "").strip()
+    return skill_dir.name == "agents-md-generator" or name == "agents-md-generator"
 
 
 def parse_openai_interface(text: str) -> dict[str, str] | None:
@@ -259,7 +335,14 @@ def validate_reference_alignment(skill_dir: Path, errors: list[str]) -> None:
             errors.append(f"{rel_path}: missing aligned default-language and remote-server governance guidance")
 
 
-def validate_openai_yaml(path: Path, errors: list[str]) -> None:
+def validate_skill_rule_hardening(text: str, errors: list[str]) -> None:
+    if not all(snippet in text for snippet in SKILL_REQUIRED_SNIPPETS):
+        errors.append("SKILL.md: missing local-root or remote-mutation hardening guidance")
+
+
+def validate_openai_yaml(path: Path, errors: list[str], *, self_skill: bool) -> None:
+    if not self_skill:
+        return
     if not path.exists():
         return
     text = path.read_text(encoding="utf-8", errors="ignore")
@@ -311,10 +394,70 @@ def validate_global_baseline_template(path: Path, errors: list[str]) -> None:
             errors.append(f"assets/templates/global-codex-agents.md: must not leak repository-specific detail `{snippet}`")
 
 
+def validate_evals_contract(path: Path, errors: list[str], *, self_skill: bool) -> None:
+    if not self_skill or not path.exists():
+        return
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        errors.append(f"evals/evals.json: invalid JSON: {exc.msg}")
+        return
+    if not isinstance(data, dict):
+        errors.append("evals/evals.json: root must be a JSON object")
+        return
+    cases = data.get("cases")
+    if not isinstance(cases, list) or not cases:
+        errors.append("evals/evals.json: cases must be a non-empty list")
+        return
+
+    ids: set[str] = set()
+    duplicate_ids: set[str] = set()
+    covered_patterns: set[str] = set()
+    for index, case in enumerate(cases):
+        if not isinstance(case, dict):
+            errors.append(f"evals/evals.json: case {index} must be an object")
+            continue
+        case_id = str(case.get("id", "")).strip()
+        if not case_id:
+            errors.append(f"evals/evals.json: case {index} is missing id")
+        elif case_id in ids:
+            duplicate_ids.add(case_id)
+        else:
+            ids.add(case_id)
+        for key in ("kind", "handler", "description"):
+            if not str(case.get(key, "")).strip():
+                errors.append(f"evals/evals.json: case {case_id or index} is missing {key}")
+        patterns = case.get("patterns")
+        if not isinstance(patterns, list) or not patterns:
+            errors.append(f"evals/evals.json: case {case_id or index} must list Skill design patterns")
+            continue
+        normalized_patterns = {str(pattern).strip() for pattern in patterns if str(pattern).strip()}
+        if not normalized_patterns:
+            errors.append(f"evals/evals.json: case {case_id or index} must list Skill design patterns")
+            continue
+        unknown_patterns = sorted(normalized_patterns - REQUIRED_SKILL_DESIGN_PATTERNS)
+        if unknown_patterns:
+            errors.append(f"evals/evals.json: case {case_id or index} uses unknown Skill design patterns {unknown_patterns}")
+        covered_patterns.update(normalized_patterns & REQUIRED_SKILL_DESIGN_PATTERNS)
+
+    if duplicate_ids:
+        errors.append(f"evals/evals.json: duplicate case ids {sorted(duplicate_ids)}")
+    missing_cases = sorted(REQUIRED_EVAL_CASE_IDS - ids)
+    if missing_cases:
+        errors.append(f"evals/evals.json: missing required effectiveness cases {missing_cases}")
+    missing_patterns = sorted(REQUIRED_SKILL_DESIGN_PATTERNS - covered_patterns)
+    if missing_patterns:
+        errors.append(f"evals/evals.json: missing required Skill design pattern coverage {missing_patterns}")
+
+
 def skill_project_root(skill_dir: Path) -> Path:
     if skill_dir.parent.name == "skills":
         return skill_dir.parents[1]
     return skill_dir
+
+
+def has_repo_governance(project_root: Path) -> bool:
+    return (project_root / ".agents" / "global-rule-overrides.json").is_file()
 
 
 def validate_decomposition_plan(project_root: Path, relative_path: str) -> list[str]:
@@ -334,27 +477,34 @@ def audit(skill_dir: Path) -> dict:
     warnings: list[str] = []
     checked: list[str] = []
     project_root = skill_project_root(skill_dir)
+    skill_path = skill_dir / "SKILL.md"
+    frontmatter = parse_frontmatter(skill_path.read_text(encoding="utf-8", errors="ignore")) if skill_path.exists() else {}
+    self_skill = is_agents_md_generator_skill(skill_dir, frontmatter)
 
-    for rel_path in REQUIRED_FILES:
+    required_files = CORE_REQUIRED_FILES + (SELF_REQUIRED_FILES if self_skill else [])
+    for rel_path in required_files:
         path = skill_dir / rel_path
         checked.append(rel_path)
         if not path.exists():
             errors.append(f"missing required file: {rel_path}")
 
-    for name in DISALLOWED_ROOT_DOCS:
-        if (skill_dir / name).exists():
-            errors.append(f"disallowed extra root documentation file: {name}")
-    if (skill_dir / "AGENTS.md").exists():
+    if self_skill:
+        for name in SELF_DISALLOWED_ROOT_DOCS:
+            if (skill_dir / name).exists():
+                errors.append(f"disallowed extra root documentation file: {name}")
+    if self_skill and (skill_dir / "AGENTS.md").exists():
         errors.append("disallowed skill root AGENTS.md")
 
-    skill_path = skill_dir / "SKILL.md"
     if skill_path.exists():
         text = skill_path.read_text(encoding="utf-8", errors="ignore")
-        fm = parse_frontmatter(text)
+        fm = frontmatter
         if set(fm) != {"name", "description"}:
             errors.append("SKILL.md frontmatter must contain only name and description")
-        if fm.get("name") != "agents-md-generator":
-            errors.append("SKILL.md name must be agents-md-generator")
+        name = fm.get("name", "")
+        if not SKILL_NAME_RE.fullmatch(name):
+            errors.append("SKILL.md name must match [a-z0-9-]+")
+        if name and name != skill_dir.name:
+            errors.append("SKILL.md name must match the skill directory name")
         description = fm.get("description", "")
         if not description.startswith("Use when"):
             errors.append("SKILL.md description must start with 'Use when'")
@@ -368,17 +518,21 @@ def audit(skill_dir: Path) -> dict:
                 errors.append(f"SKILL.md references missing resource: {rel_path}")
         if contains_local_reference(text):
             errors.append("SKILL.md must not depend on local reference folders")
-        validate_skill_contract_alignment(skill_dir, text, errors)
+        if self_skill:
+            validate_skill_contract_alignment(skill_dir, text, errors)
+            validate_skill_rule_hardening(text, errors)
 
     version_path = skill_dir / "VERSION"
-    if version_path.exists():
+    if self_skill and version_path.exists():
         version_text = version_path.read_text(encoding="utf-8", errors="ignore").strip()
         if not re.fullmatch(r"v\d+\.\d+\.\d+", version_text):
             errors.append("VERSION must use semantic format vX.Y.Z")
 
-    validate_openai_yaml(skill_dir / "agents" / "openai.yaml", errors)
-    validate_reference_alignment(skill_dir, errors)
-    validate_global_baseline_template(skill_dir / "assets" / "templates" / "global-codex-agents.md", errors)
+    validate_openai_yaml(skill_dir / "agents" / "openai.yaml", errors, self_skill=self_skill)
+    if self_skill:
+        validate_reference_alignment(skill_dir, errors)
+        validate_global_baseline_template(skill_dir / "assets" / "templates" / "global-codex-agents.md", errors)
+        validate_evals_contract(skill_dir / "evals" / "evals.json", errors, self_skill=self_skill)
 
     for script in sorted((skill_dir / "scripts").glob("*.py")):
         rel_path = script.relative_to(skill_dir).as_posix()
@@ -390,7 +544,7 @@ def audit(skill_dir: Path) -> dict:
         except SyntaxError as exc:
             errors.append(f"{rel_path} does not compile: {exc.msg}")
         line_count = source.count("\n") + 1
-        if line_count > 1000:
+        if line_count > 1000 and has_repo_governance(project_root):
             relative_to_project = script.relative_to(project_root).as_posix() if script.is_relative_to(project_root) else rel_path
             errors.extend(validate_decomposition_plan(project_root, relative_to_project))
 

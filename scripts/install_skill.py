@@ -15,6 +15,7 @@ from datetime import datetime
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents_common import emit_json, global_codex_agents_status, resolve_project
+from agents_decisions import decision_request
 
 ACTIVE_SESSION_PATH = ".agents/active-session.json"
 
@@ -118,11 +119,11 @@ SANITIZED_PLACEHOLDERS = {
 SANITIZED_ASSIGNMENT_RULES = [
     (
         "api_key",
-        re.compile(r"(?im)^(\s*(?:[A-Z0-9]+_)*(?:API[_-]?KEY|ACCESS_TOKEN|AUTH_TOKEN|SECRET|TOKEN)(?:_[A-Z0-9]+)*\s*[:=]\s*)(.+?)\s*$"),
+        re.compile(r"(?m)^(\s*(?:[A-Z0-9]+_)*(?:API[_-]?KEY|ACCESS_TOKEN|AUTH_TOKEN|SECRET|TOKEN)(?:_[A-Z0-9]+)*\s*[:=]\s*)(.+?)\s*$"),
     ),
     (
         "password",
-        re.compile(r"(?im)^(\s*[A-Z0-9_]*PASSWORD[A-Z0-9_]*\s*[:=]\s*)(.+?)\s*$"),
+        re.compile(r"(?m)^(\s*[A-Z0-9_]*PASSWORD[A-Z0-9_]*\s*[:=]\s*)(.+?)\s*$"),
     ),
 ]
 SANITIZED_INLINE_RULES = [
@@ -135,6 +136,7 @@ SANITIZED_BINARY_PATTERNS = [
     ("password", re.compile(br"password", flags=re.IGNORECASE)),
     ("email", re.compile(br"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")),
 ]
+RELEASE_REQUIRED_REFERENCE_PREFIXES = ("runtime/", "integration/", "smoke/", "config/", "scripts/", "references/", "agents/", "assets/")
 
 
 def sanitize_release_text(text: str) -> tuple[str, list[dict[str, str]]]:
@@ -183,6 +185,48 @@ def file_manifest(release_dir: Path, *, exclude: set[str] | None = None) -> list
     return manifest
 
 
+def referenced_release_paths(skill_text: str) -> set[str]:
+    paths: set[str] = set()
+    for raw in re.findall(r"`([^`]+)`", skill_text):
+        value = raw.strip()
+        if "<" in value or ">" in value:
+            continue
+        if not value.startswith(RELEASE_REQUIRED_REFERENCE_PREFIXES):
+            continue
+        paths.add(value.rstrip("/"))
+    return paths
+
+
+def validate_release_completeness(release_dir: Path, receipt: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    skill_path = release_dir / "SKILL.md"
+    if not skill_path.is_file():
+        return ["release directory is missing SKILL.md"]
+
+    actual_manifest = {
+        item["path"]
+        for item in file_manifest(release_dir, exclude={"RELEASE_RECEIPT.json"})
+        if isinstance(item, dict) and str(item.get("path", "")).strip()
+    }
+    skill_text = skill_path.read_text(encoding="utf-8", errors="ignore")
+    for reference in sorted(referenced_release_paths(skill_text)):
+        if reference in actual_manifest:
+            continue
+        if (release_dir / reference).exists():
+            continue
+        if any(path.startswith(reference + "/") for path in actual_manifest):
+            continue
+        errors.append(f"release directory is missing SKILL.md referenced path: {reference}")
+
+    recorded_files = receipt.get("files")
+    if isinstance(recorded_files, list):
+        recorded_manifest = {str(item.get("path", "")).strip() for item in recorded_files if isinstance(item, dict)}
+        for required_name in ("SKILL.md",):
+            if required_name not in recorded_manifest:
+                errors.append(f"release receipt is missing required file entry: {required_name}")
+    return errors
+
+
 def normalize_branch_list_line(line: str) -> str:
     return line.strip().lstrip("*+ ").strip()
 
@@ -221,6 +265,20 @@ def infer_repo_root(release_dir: Path) -> Path | None:
     except Exception:
         return None
     return repo_root if repo_root == root.resolve() else None
+
+
+def source_skill_dir_from_receipt(repo_root: Path, receipt: dict[str, Any]) -> Path | None:
+    source_path = str(receipt.get("source_path", "")).strip()
+    if not source_path:
+        return None
+    candidate = (repo_root / source_path).resolve()
+    if not candidate.exists():
+        return None
+    try:
+        candidate.relative_to(repo_root.resolve())
+    except ValueError:
+        return None
+    return candidate
 
 
 def verify_repo_release_state(repo_root: Path) -> list[str]:
@@ -302,34 +360,84 @@ def validate_release_dir(release_dir: Path) -> dict[str, Any]:
                     errors.append(f"release receipt sanitization placeholders are missing for {rel_path}")
                 declared[rel_path] = item
             expected_declared: set[str] = set()
-            for path in sorted(release_dir.rglob("*")):
-                if not path.is_file() or path.name == receipt_path.name:
-                    continue
-                relative = path.relative_to(release_dir).as_posix()
-                data = path.read_bytes()
-                if is_probably_text_bytes(data):
-                    text = data.decode("utf-8")
-                    sanitized_text, matches = sanitize_release_text(text)
-                    if matches:
-                        expected_declared.add(relative)
-                        row = declared.get(relative)
-                        if row is None:
-                            errors.append(f"release receipt is missing sanitization record for {relative}")
-                        elif str(row.get("sha256", "")).strip() != sha256_file(path):
-                            errors.append(f"release receipt sanitization hash mismatch for {relative}")
+            source_skill_dir = source_skill_dir_from_receipt(repo_root, receipt) if repo_root is not None else None
+            if source_skill_dir is not None:
+                for source_path in sorted(source_skill_dir.rglob("*")):
+                    if not source_path.is_file():
+                        continue
+                    relative = source_path.relative_to(source_skill_dir).as_posix()
+                    if relative == receipt_path.name:
+                        continue
+                    release_path = release_dir / relative
+                    if not release_path.is_file():
+                        continue
+                    source_bytes = source_path.read_bytes()
+                    release_bytes = release_path.read_bytes()
+                    if is_probably_text_bytes(source_bytes):
+                        source_text = source_bytes.decode("utf-8")
+                        expected_text, matches = sanitize_release_text(source_text)
+                        if matches:
+                            expected_declared.add(relative)
+                            row = declared.get(relative)
+                            if row is None:
+                                errors.append(f"release receipt is missing sanitization record for {relative}")
+                            elif str(row.get("sha256", "")).strip() != sha256_file(release_path):
+                                errors.append(f"release receipt sanitization hash mismatch for {relative}")
+                            if not is_probably_text_bytes(release_bytes):
+                                errors.append(f"sanitized release file is not valid UTF-8 text: {relative}")
+                                continue
+                            actual_text = release_bytes.decode("utf-8")
+                            if normalize_line_endings(actual_text) != normalize_line_endings(expected_text):
+                                errors.append(f"sanitized release content mismatch for {relative}")
+                        elif release_bytes != source_bytes:
+                            errors.append(f"undeclared release diff outside sanitization receipt: {relative}")
+                    else:
+                        hits = detect_binary_sensitive_matches(source_bytes)
+                        if hits:
+                            errors.append(f"binary file contains sensitive content and cannot be sanitized safely: {relative}")
+                        elif release_bytes != source_bytes:
+                            errors.append(f"undeclared binary release diff outside sanitization receipt: {relative}")
+                unexpected = sorted(set(declared) - expected_declared)
+                for relative in unexpected:
+                    errors.append(f"release receipt declares unexpected sanitized file: {relative}")
+            else:
+                for path in sorted(release_dir.rglob("*")):
+                    if not path.is_file() or path.name == receipt_path.name:
+                        continue
+                    relative = path.relative_to(release_dir).as_posix()
+                    data = path.read_bytes()
+                    if is_probably_text_bytes(data):
+                        text = data.decode("utf-8")
+                        sanitized_text, matches = sanitize_release_text(text)
+                        if matches:
+                            expected_declared.add(relative)
+                            row = declared.get(relative)
+                            if row is None:
+                                errors.append(f"release receipt is missing sanitization record for {relative}")
+                            elif str(row.get("sha256", "")).strip() != sha256_file(path):
+                                errors.append(f"release receipt sanitization hash mismatch for {relative}")
                         if normalize_line_endings(text) != normalize_line_endings(sanitized_text):
                             errors.append(f"release directory still contains unsanitized sensitive content: {relative}")
+                    elif row is not None:
+                        placeholders = row.get("placeholders")
+                        if isinstance(placeholders, list) and any(str(value) in text for value in placeholders):
+                            expected_declared.add(relative)
+                            if str(row.get("sha256", "")).strip() != sha256_file(path):
+                                errors.append(f"release receipt sanitization hash mismatch for {relative}")
                 else:
                     hits = detect_binary_sensitive_matches(data)
                     if hits:
-                        errors.append(f"release directory contains sensitive binary content: {relative}")
-            unexpected = sorted(set(declared) - expected_declared)
-            for relative in unexpected:
-                errors.append(f"release receipt declares unexpected sanitized file: {relative}")
+                            errors.append(f"release directory contains sensitive binary content: {relative}")
+                for relative, row in declared.items():
+                    release_path = release_dir / relative
+                    if not release_path.is_file():
+                        errors.append(f"release receipt sanitization file entry points to a missing file: {relative}")
+                        continue
+                    if str(row.get("sha256", "")).strip() != sha256_file(release_path):
+                        errors.append(f"release receipt sanitization hash mismatch for {relative}")
     if repo_root is not None:
         errors.extend(verify_repo_release_state(repo_root))
-    if not (release_dir / "SKILL.md").is_file():
-        errors.append("release directory is missing SKILL.md")
+    errors.extend(validate_release_completeness(release_dir, receipt))
     return {
         "skill_name": skill_name,
         "version": version,
@@ -472,6 +580,15 @@ def main() -> None:
         "confirmation_question": "发布包验证完成。是否安装这个技能？请选择是或否；默认是否，跳过安装。",
         "options": install_options(),
     }
+    result["decision_request"] = decision_request(
+        "install_confirmation",
+        question=result["confirmation_question"],
+        options=result["options"],
+        default="skip",
+        risk="medium",
+        next_action="rerun install_skill.py with --write and the selected target when installation is confirmed",
+        context={"release_dir": str(release_dir), "target": args.target},
+    )
     if args.target == "skip" or not args.write:
         emit_json(result)
         return

@@ -10,39 +10,27 @@
 
 ## Source Versions
 - `docs/experience/4-design-ui.md`
-- `docs/experience/history_experience/20260516-225309/4-design-ui.md`
+- `docs/experience/history_experience/20260519-130325/4-design-ui.md`
 
 ## Evidence Sources
-- Current and latest historical `4-design-ui.md` records.
-- Handoff window 36-40 showing no GUI or visual interface changes.
-- The cadence request and repository facts that define the current work as CLI and docs governance only.
+- Current and latest historical experience versions for this topic.
 
 ## Applicable Scenario
-- Use when this repository has no active UI work and the design topic must accurately record that boundary.
-- Also use when future maintainers need guidance for turning this topic back into a real UI/design evidence file once a visual surface exists.
+- Use when a future design ui task matches the same repository governance constraints and needs reusable guidance rather than a copied experience note.
 
 ## Distilled Workflow
-- Inspect the repository facts and current task scope to decide whether any UI, GUI, visual design, or browser-rendered surface actually changed.
-- If no UI changed, explicitly record 暂无 UI 经验 and explain the current interface boundary instead of fabricating visual lessons.
-- If UI work does exist, replace the placeholder boundary with concrete design evidence such as screens reviewed, layout decisions, accessibility checks, and responsive risks.
-- Verify that the design topic remains UI-specific rather than becoming a duplicate scripts or docs-governance note.
+- Inspect evidence, identify the concrete design ui failure, write a regression check, implement narrowly, verify targeted behavior, and update governance evidence only after the check passes.
 
 ## Key Decisions
-- Preserve truthfulness about the absence of UI work.
-- Keep the file ready for future visual or interaction evidence without mixing unrelated governance content into it.
-- Use design-specific language only when a real visual interface exists.
+- Keep deterministic scripts responsible for validation and file movement; keep AI-authored payloads responsible for synthesis and judgment.
 
 ## Common Problems
-- Reusing script or validation prose inside the design topic creates false UI memory.
-- Writing only a one-line placeholder fails the repository's quality bar.
-- Future UI work can ship without a design record if this boundary is not maintained.
+- Do not paste raw handoff content, do not duplicate the same text across template families, and do not mix skill-specific guidance into engineering templates.
 
 ## Non-Reusable Content
-- Omit temporary command logs and unrelated release details.
-- Do not turn this template into a generic engineering or hardware workflow checklist.
+- Omit release timestamps, temporary file paths, and conversation-only details that do not change future implementation choices.
 
 ## Application Checklist
-- Confirm whether UI work actually happened.
-- If not, state 暂无 UI 经验 and describe the real interface boundary.
-- If yes, record screenshots, interaction states, accessibility, and responsive validation.
-- Ensure the resulting file stays design-specific.
+- Confirm the template family and category match the target repository.
+- Confirm the experience source passed quality validation.
+- Confirm the resulting guidance is a synthesis, not a copy.

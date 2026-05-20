@@ -4,6 +4,27 @@ from __future__ import annotations
 from manage_docs_shared import *
 from manage_docs_scaffold_session import write_development, write_git_changelog
 from manage_docs_sync_verify import sync_root_agents
+from agents_decisions import decision_request
+
+INSTALLABLE_SKILL_TOP_LEVEL_EXCLUDES = {
+    "AGENTS.md",
+    "_smoke_runs",
+    "reports",
+    "workflow-state.json",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+}
+INSTALLABLE_SKILL_NESTED_DIR_EXCLUDES = {
+    ".git",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+}
+INSTALLABLE_SKILL_SUFFIX_EXCLUDES = {".pyc", ".pyo"}
+
 
 def run_git(project: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", *args], cwd=project, text=True, capture_output=True, check=False)
@@ -154,6 +175,33 @@ def is_probably_text_bytes(data: bytes) -> bool:
 
 def normalize_line_endings(text: str) -> str:
     return text.replace("\r\n", "\n")
+
+
+def should_include_release_path(path: Path, root: Path) -> bool:
+    relative = path.relative_to(root)
+    parts = relative.parts
+    if not parts:
+        return True
+    if parts[0] in INSTALLABLE_SKILL_TOP_LEVEL_EXCLUDES:
+        return False
+    if any(part in INSTALLABLE_SKILL_NESTED_DIR_EXCLUDES for part in parts):
+        return False
+    if path.suffix in INSTALLABLE_SKILL_SUFFIX_EXCLUDES:
+        return False
+    return True
+
+
+def release_copy_ignore(directory: str, names: list[str]) -> set[str]:
+    ignored: set[str] = set()
+    root = Path(directory)
+    for name in names:
+        candidate = root / name
+        if candidate.name in INSTALLABLE_SKILL_NESTED_DIR_EXCLUDES:
+            ignored.add(name)
+            continue
+        if candidate.suffix in INSTALLABLE_SKILL_SUFFIX_EXCLUDES:
+            ignored.add(name)
+    return ignored
 
 def sanitize_release_text(text: str) -> tuple[str, list[dict[str, str]]]:
     redacted = text
@@ -384,7 +432,7 @@ def release_prepare(project: Path, version: str, skill_dir_raw: str) -> dict[str
         errors.append(f"release prepare requires exactly one temporary development branch, found {extras}")
         return {"ok": False, "errors": errors, "checks": checks}
     if (project / "AGENTS.md").exists():
-        sync_result = sync_root_agents(project, write=True)
+        sync_result = sync_root_agents(project, write=True, installed_skill_dir_override=skill_dir)
         checks["root_agents_sync"] = {
             "updated": sync_result.get("updated", False),
             "reasons": sync_result.get("reasons", []),
@@ -450,8 +498,15 @@ def release_prepare(project: Path, version: str, skill_dir_raw: str) -> dict[str
 def copy_release_tree(skill_dir: Path, release_dir: Path) -> None:
     if release_dir.exists():
         shutil.rmtree(release_dir)
-    ignore = shutil.ignore_patterns(".git", "__pycache__", "*.pyc", "AGENTS.md")
-    shutil.copytree(skill_dir, release_dir, ignore=ignore)
+    release_dir.mkdir(parents=True, exist_ok=True)
+    for source in sorted(skill_dir.iterdir(), key=lambda item: item.name.lower()):
+        if source.name in INSTALLABLE_SKILL_TOP_LEVEL_EXCLUDES:
+            continue
+        target = release_dir / source.name
+        if source.is_dir():
+            shutil.copytree(source, target, ignore=release_copy_ignore)
+        else:
+            shutil.copy2(source, target)
 
 def package_release(project: Path, version: str, skill_dir_raw: str) -> dict[str, Any]:
     profile = read_json(project / ".agents" / "agents-control.json")
@@ -577,14 +632,45 @@ def branch_gate(project: Path) -> dict[str, Any]:
         if status_lines:
             reasons.append("worktree must be clean before continuing under strict branch governance")
     approved = not reasons
+    cleanup_plan = []
+    if not approved:
+        cleanup_plan = [
+            "commit or intentionally remove current worktree changes",
+            "switch back to master",
+            "merge or prepare any temporary development branch",
+            "delete local branches other than master and release after merge",
+            "rerun branch-gate",
+        ]
+    classified_reasons = [
+        {
+            "reason": reason,
+            "risk": "high" if "worktree" in reason or "branch" in reason else "medium",
+            "category": "branch-governance",
+        }
+        for reason in reasons
+    ]
     return {
         "project": str(project),
         "approved": approved,
         "decision": "approved" if approved else "blocked",
         "reasons": reasons,
+        "classified_reasons": classified_reasons,
+        "cleanup_plan": cleanup_plan,
         "checks": checks,
         "force_confirmation_required": not approved,
         "user_message": "" if approved else "分支治理未通过，默认阻止普通生成/整理流程。若用户仍要继续，必须先明确确认是否进入分支整理或发布治理流程。",
+        "decision_request": {} if approved else decision_request(
+            "branch_governance",
+            question="分支治理未通过。是否进入分支整理或发布治理流程？",
+            options=[
+                {"label": "进入治理整理", "value": "cleanup", "description": "按建议步骤整理分支和工作树后重跑门禁。", "recommended": True},
+                {"label": "暂停当前任务", "value": "pause", "description": "保留现场，等待人工处理分支状态。", "recommended": False},
+            ],
+            default="cleanup",
+            risk="high",
+            next_action="run branch cleanup or release governance before continuing",
+            context={"reasons": reasons, "cleanup_plan": cleanup_plan},
+        ),
     }
 
 def parse_version_tuple(value: str) -> tuple[int, int, int]:
@@ -633,10 +719,9 @@ def release_members(root: Path, prefix: Path) -> list[str]:
     for path in root.rglob("*"):
         if not path.is_file():
             continue
-        relative = path.relative_to(prefix).as_posix()
-        parts = relative.split("/")
-        if relative == "AGENTS.md" or ".git" in parts or "__pycache__" in parts or relative.endswith(".pyc"):
+        if not should_include_release_path(path, root):
             continue
+        relative = path.relative_to(prefix).as_posix()
         members.append(relative)
     return sorted(members)
 
@@ -749,6 +834,16 @@ def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str, in
         result["install_confirmation_required"] = True
         result["confirmation_question"] = "释放安装版本后，用户尚未说明是否需要安装。是否需要安装当前发布包？"
         result["install_options"] = install_confirmation_options()
+        result["decision_request"] = decision_request(
+            "install_confirmation",
+            question=result["confirmation_question"],
+            options=result["install_options"],
+            default="skip",
+            risk="medium",
+            next_action="run install_skill.py with the selected target after release validation",
+            context={"release_dir": checks["expected_release_dir"], "version": version},
+        )
     else:
         result["install_confirmation_required"] = False
+        result["decision_request"] = {}
     return result

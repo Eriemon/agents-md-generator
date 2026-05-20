@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,23 @@ from agents_common import (
     rel,
     root_agents_sync_command,
     workspace_has_existing_content,
+)
+
+EPHEMERAL_ROOT_INPUT_FILE_RE = re.compile(
+    r"^(?:answers|first-answers|recovery|session|stage|handoff|change|allowed-change|blocked-change|blocked-remote-change|blocked-remote-source-change)(?:-[a-z0-9._-]+)?\.json$",
+    flags=re.IGNORECASE,
+)
+ALLOWED_ROOT_FILE_PATTERNS = (
+    "answers.json",
+    "*-answers.json",
+    "change.json",
+    "*-change.json",
+    "session.json",
+    "recovery.json",
+    "handoff.json",
+    "stage.json",
+    "changelog.json",
+    "experience-payload.json",
 )
 
 def parse_session_meta(path: Path) -> dict[str, Any]:
@@ -120,6 +138,15 @@ def has_any(root: Path, names: list[str]) -> bool:
 
 def existing_paths(root: Path, names: list[str]) -> list[str]:
     return [name for name in names if (root / name).exists()]
+
+
+def is_allowed_root_file(name: str, allowed_root_files: set[str]) -> bool:
+    normalized = str(name).strip()
+    if normalized in allowed_root_files:
+        return True
+    if EPHEMERAL_ROOT_INPUT_FILE_RE.fullmatch(normalized):
+        return True
+    return any(fnmatch(normalized, pattern) for pattern in ALLOWED_ROOT_FILE_PATTERNS)
 
 def inspect_project(root: Path) -> dict[str, Any]:
     config_files = [name for name in [
@@ -265,6 +292,11 @@ def inspect_project(root: Path) -> dict[str, Any]:
     if isinstance(profile, dict):
         contract = profile.get("directory_contract", {}) if isinstance(profile.get("directory_contract"), dict) else {}
         primary_root = str(contract.get("primary_project_root", "")).strip().strip("/")
+        allowed_root_files = {
+            str(item).strip()
+            for item in contract.get("allowed_root_files", ["AGENTS.md", "CLAUDE.md", "GEMINI.md", ".gitignore", ".gitattributes", ".editorconfig"])
+            if str(item).strip()
+        }
         if primary_root and not (root / primary_root).exists():
             structure_fix_confirmation_required = True
             structure_fix_reasons.append(f"missing primary project root `{primary_root}/`")
@@ -276,6 +308,9 @@ def inspect_project(root: Path) -> dict[str, Any]:
         if allowed_roots:
             for child in root.iterdir():
                 if child.is_file():
+                    if not is_allowed_root_file(child.name, allowed_root_files):
+                        structure_fix_confirmation_required = True
+                        structure_fix_reasons.append(f"root-level file requires review: `{child.name}`")
                     continue
                 if child.name in SKIP_DIRS or child.name in {".agents", "AGENTS.md"}:
                     continue
