@@ -70,6 +70,13 @@
       "patterns": ["Tool Wrapper", "Pipeline"],
       "handler": "isolated_eval_runtime_dependency",
       "description": "Skill effectiveness evals must use packaged runtime fixtures instead of repository-only tests so release and installed copies run independently."
+    },
+    {
+      "id": "code_comment_policy_contract",
+      "kind": "render_verify_regression",
+      "patterns": ["Generator", "Reviewer", "Pipeline"],
+      "handler": "code_comment_policy_contract",
+      "description": "Generated root AGENTS.md must include a configurable Chinese Code Comment Policy, write code_comment_policy config, and verification must reject missing or weakened policy rules."
     }
   ]
 }

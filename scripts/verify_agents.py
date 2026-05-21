@@ -32,6 +32,22 @@ LANGUAGE_LOCK_RE = re.compile(
     r"All natural-language responses must use\s+(.+?)\s+unless the user explicitly switches languages\.",
     flags=re.IGNORECASE,
 )
+CODE_COMMENT_POLICY_REQUIRED_SNIPPETS = (
+    "配置来源：`.agents/global-rule-overrides.json`",
+    "默认只允许非显然意图、不变量、风险、生成边界或公共 API 行为注释",
+    "禁止复述代码",
+    "禁止未经明确要求的批量 AI 注释",
+    "行为变化时必须更新旧注释",
+    "不能把语句、注释、函数粘连到一起",
+    "Python：公共函数/类使用规范 docstring",
+    "普通说明注释放在代码上方",
+    "禁止右侧尾注释",
+    "C/C++：函数、模块核心功能、变量定义和特定功能说明放在代码上方",
+    "所有权/生命周期",
+    "#define",
+    "Verilog/SystemVerilog：信号声明、参数定义、assign 和 always 块内寄存器赋值使用右侧注释",
+    "module/task/function/generate/always 说明放在语句上方",
+)
 
 
 def validate_markers(text: str, file: str, errors: list[str]) -> None:
@@ -203,6 +219,29 @@ def validate_strong_control(text: str, file: str, project: Path, errors: list[st
             errors.append(f"{file}: local rule detail must move to JSON config instead of AGENTS text ({snippet})")
 
 
+def validate_code_comment_policy(text: str, file: str, project: Path, profile: dict, errors: list[str]) -> bool:
+    body = section_body(text, "## Code Comment Policy")
+    if body is None:
+        errors.append(f"{file}: missing Code Comment Policy; refresh the managed root AGENTS.md")
+        return False
+    ok = True
+    for snippet in CODE_COMMENT_POLICY_REQUIRED_SNIPPETS:
+        if snippet not in body:
+            errors.append(f"{file}: Code Comment Policy missing required rule `{snippet}`")
+            ok = False
+    config = load_global_rule_overrides(project, profile)
+    config_path = config["path"].relative_to(project).as_posix()
+    if config_path in body:
+        if not config["exists"]:
+            errors.append(f"{file}: missing local code comment policy config `{config_path}`")
+            ok = False
+        for item in config["errors"]:
+            if "code_comment_policy" in item:
+                errors.append(f"{file}: invalid code comment policy config `{config_path}`: {item}")
+                ok = False
+    return ok
+
+
 def is_path_reference(raw: str) -> bool:
     if raw.startswith(("http://", "https://", "mailto:")):
         return False
@@ -356,6 +395,8 @@ def verify(project: Path, include_skipped: bool = False, installed_skill_dir_ove
                     root_metadata_repair_required = True
                 elif not LANGUAGE_LOCK_RE.search(text):
                     errors.append("AGENTS.md: missing enforced default-language reply rule")
+                    root_metadata_repair_required = True
+                if not validate_code_comment_policy(text, checked[-1], project, profile, errors):
                     root_metadata_repair_required = True
                 if root_metadata_repair_required:
                     errors.append(f"AGENTS.md: run `{root_repair_command}` to refresh root metadata before continuing")

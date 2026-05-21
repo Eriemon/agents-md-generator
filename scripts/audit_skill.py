@@ -24,6 +24,7 @@ SELF_REQUIRED_FILES = [
     "references/agents-md-guidance.md",
     "references/book-rules-coverage.md",
     "references/capability-coverage.md",
+    "references/code-comment-policy.md",
     "references/skill-design-coverage.md",
     "references/question-bank.md",
     "references/review-checklist.md",
@@ -56,7 +57,7 @@ SELF_REQUIRED_FILES = [
     "scripts/evaluate_skill.py",
 ]
 
-SELF_DISALLOWED_ROOT_DOCS = {"README.md", "CHANGELOG.md", "INSTALL.md", "INSTALLATION.md"}
+SELF_DISALLOWED_ROOT_DOCS = {"CHANGELOG.md", "INSTALL.md", "INSTALLATION.md"}
 DISALLOWED_CACHE_SUFFIXES = {".pyc", ".pyo"}
 LOCAL_REFERENCE_RE = re.compile(
     r"G:[/\\]html|ref[/\\](agent-rules|html)|\b[A-Za-z]:[/\\][^\s`'\"<>)]*",
@@ -76,6 +77,7 @@ KNOWN_TEMPLATE_PLACEHOLDERS = {
         "ENGINEERING_RULE_CONTRACT",
         "SKILL_DESIGN_CONTRACT",
         "CONVERSATION_COMPLETION_CONTRACT",
+        "CODE_COMMENT_POLICY",
         "EXPERIENCE_LOG_CONTRACT",
         "DOCUMENTATION_GOVERNANCE_CONTRACT",
         "VERIFICATION_STATUS",
@@ -128,6 +130,10 @@ OPENAI_REQUIRED_PROMPT_SNIPPETS = (
     "future remote server validation must start with the matched task route primary server",
     "automatically try registered fallback servers",
     "stop for unmatched tasks until AGENTS.md is updated",
+    "Code Comment Policy",
+    "code_comment_policy",
+    "禁止未经明确要求的批量 AI 注释",
+    "Python/C/C++/Verilog",
 )
 REFERENCE_ALIGNMENT_RULES = {
     "references/review-checklist.md": (
@@ -177,6 +183,37 @@ REFERENCE_ALIGNMENT_RULES = {
         "local JSON governance config",
     ),
 }
+CODE_COMMENT_ALIGNMENT_RULES = {
+    "references/code-comment-policy.md": (
+        "Python",
+        "C/C++",
+        "Verilog/SystemVerilog",
+        "Good",
+        "Bad",
+        "不能把语句、注释、函数粘连到一起",
+    ),
+    "references/review-checklist.md": (
+        "Generated root `AGENTS.md` must include `## Code Comment Policy`",
+        ".agents/global-rule-overrides.json",
+        "Python/C/C++/Verilog",
+        "配置化注释策略",
+    ),
+    "references/script-guide.md": (
+        "`render_agents.py` emits `## Code Comment Policy`",
+        "code_comment_policy",
+        "`verify_agents.py` rejects managed root `AGENTS.md` files that omit or weaken the code-comment policy",
+    ),
+    "references/skill-design-coverage.md": (
+        "Code Comment Policy",
+        "code_comment_policy",
+        "Python/C/C++/Verilog",
+    ),
+    "references/evaluation-scenarios.md": (
+        "code_comment_policy_contract",
+        "禁止未经明确要求的批量 AI 注释",
+        "弱化策略",
+    ),
+}
 SKILL_REQUIRED_SNIPPETS = (
     "root-level files outside the governed primary project root",
     "allow the conservative structure-fix attempt",
@@ -203,6 +240,7 @@ REQUIRED_EVAL_CASE_IDS = {
     "review_governance_companion_checks",
     "design_review_gate",
     "isolated_eval_runtime_dependency",
+    "code_comment_policy_contract",
 }
 
 
@@ -333,6 +371,13 @@ def validate_reference_alignment(skill_dir: Path, errors: list[str]) -> None:
         text = path.read_text(encoding="utf-8", errors="ignore")
         if not all(snippet in text for snippet in snippets):
             errors.append(f"{rel_path}: missing aligned default-language and remote-server governance guidance")
+    for rel_path, snippets in CODE_COMMENT_ALIGNMENT_RULES.items():
+        path = skill_dir / rel_path
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        if not all(snippet in text for snippet in snippets):
+            errors.append(f"{rel_path}: missing code-comment governance guidance")
 
 
 def validate_skill_rule_hardening(text: str, errors: list[str]) -> None:

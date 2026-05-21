@@ -52,6 +52,7 @@ Run `python skills/agents-md-generator/scripts/verify_agents.py . --installed-sk
 - Book-derived engineering rules use exactly one primary active rule set, mode `mini` or `nano`, explicit scope, and no full material in AGENTS.md.
 - Strong-control AGENTS.md includes Control Profile, Directory Contract, Release Contract, Engineering Rule Contract, Conversation Completion Contract, and Documentation Governance Contract.
 - Strong-control Skill AGENTS.md includes Skill Design Contract with design patterns, resource boundaries, progressive disclosure, validation gates, and forward-testing policy.
+- Generated root `AGENTS.md` must include `## Code Comment Policy`, point to `.agents/global-rule-overrides.json`, and summarize the configurable Chinese Python/C/C++/Verilog 配置化注释策略 without embedding long examples in the root file.
 - Root `AGENTS.md` stays within `16KB`; scoped `AGENTS.md` files are not rejected for exceeding the old line-count rule.
 - Root `AGENTS.md` should point to `.agents/global-rule-overrides.json` instead of repeating maintainability, script-layout, or long-task heartbeat detail in prose.
 - Review the config-backed gates from `.agents/global-rule-overrides.json`: handwritten source files and project tool scripts default to the 1000-line limit, oversized files need the configured decomposition-plan sections, and non-GUI tools must satisfy the fixed quartet `scripts/python/<function>/<name>.py`, `scripts/shell/<function>/<name>.sh`, `scripts/bat/<function>/<name>.bat`, and `scripts/powershell/<function>/<name>.ps1`.

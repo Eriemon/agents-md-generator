@@ -539,6 +539,29 @@ def default_global_rule_overrides() -> dict[str, Any]:
     constraints = default_implementation_constraints()
     script_layout = constraints["script_layout"]
     return {
+        "code_comment_policy": {
+            "language": "中文",
+            "default_policy": "只允许非显然意图、不变量、风险、生成边界或公共 API 行为注释；禁止复述代码；禁止未经明确要求的批量 AI 注释；行为变化时必须更新旧注释。",
+            "formatting": "生成代码必须保留回车/空行分隔，不能把语句、注释、函数粘连到一起。",
+            "python": "公共函数/类使用规范 docstring；普通说明注释放在代码上方；禁止右侧尾注释。",
+            "c_cpp": "函数、模块核心功能、变量定义和特定功能说明放在代码上方；所有权/生命周期、ABI、并发、内存和未定义行为风险必须优先说明；`#define` 宏注释放在右侧。",
+            "verilog_systemverilog": "信号声明、参数定义、assign 和 always 块内寄存器赋值使用右侧注释；声明类型包括 input/output/inout/parameter/localparam/integer/logic/wire/reg/real；module/task/function/generate/always 说明放在语句上方。",
+            "positions": {
+                "python.public_api": "docstring",
+                "python.inline": "above",
+                "python.trailing": "forbidden",
+                "c_cpp.function": "above",
+                "c_cpp.module": "above",
+                "c_cpp.variable": "above",
+                "c_cpp.specific_behavior": "above",
+                "c_cpp.macro_define": "right_side",
+                "verilog_systemverilog.module": "above",
+                "verilog_systemverilog.declaration": "right_side",
+                "verilog_systemverilog.assign": "right_side",
+                "verilog_systemverilog.task_function_generate_always": "above",
+                "verilog_systemverilog.always_register_assignment": "right_side",
+            },
+        },
         "long_python_tasks": {
             "enabled": True, "prompt_before_automation": True, "automation_kind": "heartbeat",
             "default_interval_minutes": 10, "long_running_threshold_minutes": 10,
@@ -617,11 +640,78 @@ def legacy_global_rule_overrides(profile: dict[str, Any] | None) -> dict[str, An
             },
         },
     )
+def validate_code_comment_policy_data(comment_policy: dict[str, Any], *, require_explicit: bool = False) -> list[str]:
+    errors: list[str] = []
+    if not comment_policy:
+        errors.append("code_comment_policy must be a non-empty object")
+        return errors
+    required_text_fields = ("language", "default_policy", "formatting", "python", "c_cpp", "verilog_systemverilog")
+    for key in required_text_fields:
+        if require_explicit and key not in comment_policy:
+            errors.append(f"code_comment_policy.{key} must be explicitly set")
+        if not str(comment_policy.get(key, "")).strip():
+            errors.append(f"code_comment_policy.{key} must be set")
+    required_snippets = {
+        "default_policy": [
+            "非显然意图",
+            "不变量",
+            "风险",
+            "生成边界",
+            "公共 API 行为",
+            "禁止复述代码",
+            "禁止未经明确要求的批量 AI 注释",
+            "行为变化时必须更新旧注释",
+        ],
+        "formatting": ["回车/空行分隔", "不能把语句、注释、函数粘连到一起"],
+        "python": ["docstring", "代码上方", "禁止右侧尾注释"],
+        "c_cpp": ["函数", "模块核心功能", "变量定义", "#define", "右侧", "所有权/生命周期"],
+        "verilog_systemverilog": ["module", "input/output/inout/parameter/localparam/integer/logic/wire/reg/real", "assign", "always", "右侧", "上方"],
+    }
+    for key, snippets in required_snippets.items():
+        value = str(comment_policy.get(key, ""))
+        for snippet in snippets:
+            if snippet not in value:
+                errors.append(f"code_comment_policy.{key} missing required rule `{snippet}`")
+    positions = comment_policy.get("positions")
+    required_positions = {
+        "python.public_api": "docstring",
+        "python.inline": "above",
+        "python.trailing": "forbidden",
+        "c_cpp.function": "above",
+        "c_cpp.module": "above",
+        "c_cpp.variable": "above",
+        "c_cpp.specific_behavior": "above",
+        "c_cpp.macro_define": "right_side",
+        "verilog_systemverilog.module": "above",
+        "verilog_systemverilog.declaration": "right_side",
+        "verilog_systemverilog.assign": "right_side",
+        "verilog_systemverilog.task_function_generate_always": "above",
+        "verilog_systemverilog.always_register_assignment": "right_side",
+    }
+    if require_explicit and "positions" not in comment_policy:
+        errors.append("code_comment_policy.positions must be explicitly set")
+    if not isinstance(positions, dict):
+        errors.append("code_comment_policy.positions must be an object")
+    else:
+        allowed_positions = {"above", "right_side", "docstring", "forbidden"}
+        for key, expected in required_positions.items():
+            if require_explicit and key not in positions:
+                errors.append(f"code_comment_policy.positions.{key} must be explicitly set")
+            value = positions.get(key)
+            if value != expected:
+                errors.append(f"code_comment_policy.positions.{key} must be {expected}")
+        for key, value in positions.items():
+            if value not in allowed_positions:
+                errors.append(f"code_comment_policy.positions.{key} has invalid value {value}")
+    return errors
+
 def validate_global_rule_overrides_data(data: dict[str, Any]) -> list[str]:
     errors: list[str] = []
+    comment_policy = data.get("code_comment_policy", {}) if isinstance(data.get("code_comment_policy", {}), dict) else {}
     long_tasks = data.get("long_python_tasks", {}) if isinstance(data.get("long_python_tasks", {}), dict) else {}
     source_limits = data.get("source_file_limits", {}) if isinstance(data.get("source_file_limits", {}), dict) else {}
     script_layout = data.get("tool_script_layout", {}) if isinstance(data.get("tool_script_layout", {}), dict) else {}
+    errors.extend(validate_code_comment_policy_data(comment_policy))
     if long_tasks.get("automation_kind") != "heartbeat":
         errors.append("long_python_tasks.automation_kind must be heartbeat")
     for key in ("default_interval_minutes", "long_running_threshold_minutes"):
@@ -662,7 +752,19 @@ def load_global_rule_overrides(root: Path, profile: dict[str, Any] | None = None
     path = global_rule_overrides_path(root, profile)
     raw = read_json(path) if path.exists() else {}
     merged = merge_object(defaults, raw) if isinstance(raw, dict) else defaults
-    return {"path": path, "exists": path.is_file(), "data": merged, "errors": validate_global_rule_overrides_data(merged)}
+    errors = validate_global_rule_overrides_data(merged)
+    if path.exists():
+        if not isinstance(raw, dict):
+            errors.append("local governance config must be a JSON object")
+        elif "code_comment_policy" not in raw:
+            errors.append("code_comment_policy must be present in local governance config")
+        else:
+            raw_policy = raw.get("code_comment_policy")
+            if not isinstance(raw_policy, dict):
+                errors.append("code_comment_policy must be a non-empty object")
+            else:
+                errors.extend(validate_code_comment_policy_data(raw_policy, require_explicit=True))
+    return {"path": path, "exists": path.is_file(), "data": merged, "errors": errors}
 def ensure_global_rule_overrides_file(root: Path, profile: dict[str, Any] | None = None) -> dict[str, Any]:
     loaded = load_global_rule_overrides(root, profile)
     path = loaded["path"]

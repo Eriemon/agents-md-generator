@@ -589,6 +589,71 @@ def case_isolated_eval_runtime_dependency(case: dict[str, Any], _helper: EvalFix
     )
 
 
+def case_code_comment_policy_contract(case: dict[str, Any], _helper: EvalFixtures) -> dict[str, Any]:
+    required_snippets = (
+        "配置来源：`.agents/global-rule-overrides.json`",
+        "默认只允许非显然意图、不变量、风险、生成边界或公共 API 行为注释",
+        "禁止未经明确要求的批量 AI 注释",
+        "行为变化时必须更新旧注释",
+        "Python：公共函数/类使用规范 docstring",
+        "C/C++：函数、模块核心功能、变量定义和特定功能说明放在代码上方",
+        "Verilog/SystemVerilog：信号声明、参数定义、assign 和 always 块内寄存器赋值使用右侧注释",
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        project = Path(tmp) / "workspace"
+        project.mkdir()
+        (project / "src").mkdir()
+        (project / "src" / "main.py").write_text("print('demo')\n", encoding="utf-8")
+        render_returncode, _render_stdout, render_stderr = run_script("render_agents.py", project, "--write", cwd=REPO_ROOT)
+        agents_path = project / "AGENTS.md"
+        agents_text = agents_path.read_text(encoding="utf-8", errors="ignore") if agents_path.exists() else ""
+        verify = run_json_script("verify_agents.py", project, cwd=REPO_ROOT)
+        missing_text = agents_text.replace("## Code Comment Policy", "## Code Comment Policy Removed")
+        agents_path.write_text(missing_text, encoding="utf-8")
+        missing_returncode, missing_stdout, missing_stderr = run_script("verify_agents.py", project, cwd=REPO_ROOT)
+        missing_verify = json.loads(missing_stdout) if missing_stdout.strip() else {"errors": [missing_stderr]}
+        agents_path.write_text(agents_text, encoding="utf-8")
+        config_path = project / ".agents" / "global-rule-overrides.json"
+        config = json.loads(config_path.read_text(encoding="utf-8")) if config_path.exists() else {}
+        weakened_config = json.loads(json.dumps(config, ensure_ascii=False))
+        weakened_config.get("code_comment_policy", {}).pop("python", None)
+        config_path.write_text(json.dumps(weakened_config, ensure_ascii=False, indent=2), encoding="utf-8")
+        weakened_returncode, weakened_stdout, weakened_stderr = run_script("verify_agents.py", project, cwd=REPO_ROOT)
+        weakened_verify = json.loads(weakened_stdout) if weakened_stdout.strip() else {"errors": [weakened_stderr]}
+    missing_errors = missing_verify.get("errors", [])
+    weakened_errors = weakened_verify.get("errors", [])
+    with_checks = {
+        "render_succeeded": render_returncode == 0,
+        "rendered_policy": "## Code Comment Policy" in agents_text,
+        "policy_rules": all(snippet in agents_text for snippet in required_snippets),
+        "verify_accepts_policy": verify.get("errors") == [],
+        "verify_rejects_missing_policy": bool(missing_errors) and any("Code Comment Policy" in item for item in missing_errors),
+        "verify_rejects_weakened_policy": bool(weakened_errors) and any("code_comment_policy" in item for item in weakened_errors),
+        "config_written": bool(config.get("code_comment_policy")),
+    }
+    without_checks = {
+        "render_succeeded": False,
+        "rendered_policy": False,
+        "policy_rules": False,
+        "verify_accepts_policy": False,
+        "verify_rejects_missing_policy": False,
+        "verify_rejects_weakened_policy": False,
+        "config_written": False,
+    }
+    return build_case_result(
+        case,
+        with_skill_checks=with_checks,
+        without_skill_checks=without_checks,
+        with_skill_detail={
+            "verify": verify,
+            "missing_verify": missing_verify,
+            "weakened_verify": weakened_verify,
+            "render_stderr": render_stderr,
+        },
+        without_skill_detail={"baseline": "unguided baseline may create AGENTS.md but does not lock comment-generation policy or reject its removal"},
+    )
+
+
 def evaluate_cases(evals: dict[str, Any], *, external_skill_dir: Path | None = None) -> dict[str, Any]:
     helper = EvalFixtures(SCRIPT_DIR)
     handlers = {
@@ -602,6 +667,7 @@ def evaluate_cases(evals: dict[str, Any], *, external_skill_dir: Path | None = N
         "review_governance_companion_checks": case_review_governance_companion_checks,
         "design_review_gate": case_design_review_gate,
         "isolated_eval_runtime_dependency": case_isolated_eval_runtime_dependency,
+        "code_comment_policy_contract": case_code_comment_policy_contract,
     }
     cases = evals.get("cases", [])
     if not isinstance(cases, list):

@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.6.7-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.7.0-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -48,11 +48,11 @@ AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的�
 - 在需要时生成 `CLAUDE.md` 与 `GEMINI.md` 兼容 shim。
 - 提供验证、审计、自动 review 治理、skill-effectiveness eval 和 aggregate confidence gate，用于发布前把关。
 
-## v0.6.7 重点更新
+## v0.7.0 重点更新
 
-- 保留 `v0.6.5` 引入的 skill eval、review governance 和 confidence gate 能力，同时新增 `eval_fixtures.py`，让 eval 运行器不再依赖缺失的包外测试 helper。
-- 为 `run_skill_evals.py` 补齐仓库内 fixture 辅助层，收紧发布包自洽性。
-- 继续沿用上一版引入的 deterministic review、install、docs governance 与 release 证据链。
+- 新增独立的代码注释策略参考，并在生成的 root `AGENTS.md` 中渲染紧凑的注释策略区块。
+- 收紧模板、验证、review 指南、eval 和 agent 元数据中的 comment-policy 覆盖。
+- 更新治理脚本与 evolution templates，让 release 证据、文档门禁和生成指令保持同步。
 
 ## Skill 架构
 
@@ -90,6 +90,8 @@ AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的�
 | `docs/assets/` | 本对 README 使用的 hero、workflow 和 architecture 图。 |
 
 ## 快速开始
+
+直接告诉你的 AI：请安装 https://github.com/Eriemon/agents-md-generator
 
 只读检查与作用域发现：
 
@@ -166,8 +168,8 @@ Jiyuan Liu 和 He Li 隶属于东南大学电子科学与工程学院。
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {0.6.7},
-  date         = {2026-05-20},
+  version      = {0.7.0},
+  date         = {2026-05-21},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}

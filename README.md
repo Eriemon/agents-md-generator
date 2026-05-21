@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.6.7-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.7.0-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -48,11 +48,11 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 - Compatibility shim generation for `CLAUDE.md` and `GEMINI.md` when requested.
 - Verification, audit, automated review governance, skill-effectiveness evals, and aggregate confidence checks for release readiness.
 
-## What's New In v0.6.7
+## What's New In v0.7.0
 
-- Keeps the repo-local skill-eval and review-governance stack from `v0.6.5`, but now ships `eval_fixtures.py` so the eval runner no longer depends on missing out-of-package test helpers.
-- Extends the script surface with a dedicated fixture helper layer for `run_skill_evals.py`.
-- Preserves the deterministic review-governance, confidence-gate, install, and docs-governance coverage introduced in the previous release line.
+- Adds a dedicated code-comment policy reference and renders a compact policy section into generated root `AGENTS.md` files.
+- Tightens comment-policy coverage across templates, verification, review guidance, evals, and agent metadata.
+- Updates governance scripts and evolution templates so release evidence, documentation gates, and generated instructions stay aligned.
 
 ## Skill Architecture
 
@@ -90,6 +90,8 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 | `docs/assets/` | Hero, workflow, and architecture diagrams used in this README pair. |
 
 ## Quick Start
+
+Tell your AI assistant: install https://github.com/Eriemon/agents-md-generator
 
 Read-only inspection and scoping:
 
@@ -166,8 +168,8 @@ If this skill helps your research, teaching, or engineering workflow, please cit
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {0.6.7},
-  date         = {2026-05-20},
+  version      = {0.7.0},
+  date         = {2026-05-21},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}

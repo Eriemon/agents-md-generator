@@ -50,6 +50,11 @@
 {{COMMAND_ROWS}}
 <!-- AGENTS-GENERATED:END commands -->
 
+<!-- AGENTS-GENERATED:START code-comment-policy -->
+## Code Comment Policy
+{{CODE_COMMENT_POLICY}}
+<!-- AGENTS-GENERATED:END code-comment-policy -->
+
 ## Agent Work Loop
 1. Read the nearest `AGENTS.md` before editing files.
 2. Inspect existing patterns and generated facts before adding code.
