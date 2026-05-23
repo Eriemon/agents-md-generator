@@ -51,6 +51,10 @@ def main() -> None:
     evolve_parser.add_argument("project", nargs="?", default=".")
     evolve_parser.add_argument("--force", action="store_true")
 
+    import_evolution_parser = subparsers.add_parser("import-evolution")
+    import_evolution_parser.add_argument("project", nargs="?", default=".")
+    import_evolution_parser.add_argument("--bundle", default=None)
+
     development_parser = subparsers.add_parser("development")
     development_parser.add_argument("project", nargs="?", default=".")
     development_parser.add_argument("--stage", required=True)
@@ -127,6 +131,11 @@ def main() -> None:
             raise SystemExit(1)
     elif args.command == "evolve":
         result = run_evolution(project, force=args.force)
+        emit_json(result)
+        if result.get("errors"):
+            raise SystemExit(1)
+    elif args.command == "import-evolution":
+        result = import_evolution(project, bundle_path=args.bundle)
         emit_json(result)
         if result.get("errors"):
             raise SystemExit(1)

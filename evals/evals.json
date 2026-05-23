@@ -65,11 +65,11 @@
       "description": "Strong-control profile writes must block until final extra requirements are recorded and approved subagent design-review evidence with matching hashes is supplied."
     },
     {
-      "id": "isolated_eval_runtime_dependency",
-      "kind": "release_regression",
+      "id": "source_governance_test_boundary",
+      "kind": "source_governance_regression",
       "patterns": ["Tool Wrapper", "Pipeline"],
-      "handler": "isolated_eval_runtime_dependency",
-      "description": "Skill effectiveness evals must use packaged runtime fixtures instead of repository-only tests so release and installed copies run independently."
+      "handler": "source_governance_test_boundary",
+      "description": "Source-governance test helpers must live under tests/ and be removed from production script paths."
     },
     {
       "id": "code_comment_policy_contract",

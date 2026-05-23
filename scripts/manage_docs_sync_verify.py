@@ -4,14 +4,10 @@ from __future__ import annotations
 import os
 
 from manage_docs_shared import *
+from source_governance import format_source_governance_errors, source_governance_report
 
 
 VERSION_RE = re.compile(r"\bv\d+\.\d+\.\d+\b")
-CONTROL_PROFILE_BLOCK_RE = re.compile(
-    r"(<!-- AGENTS-GENERATED:START control-profile -->.*?<!-- AGENTS-GENERATED:END control-profile -->)",
-    flags=re.DOTALL,
-)
-CONTROL_PROFILE_VERSION_RE = re.compile(r"^-\s+Version:\s*v\d+\.\d+\.\d+\.\s*$", flags=re.MULTILINE)
 
 
 def inferred_skill_dir(project: Path, raw_skill_dir: str | Path | None = None) -> Path | None:
@@ -53,16 +49,26 @@ def current_version_section(text: str) -> str:
     return rest[: next_section.start()] if next_section else rest
 
 
-def version_alignment_gate(project: Path, skill_dir_raw: str | Path | None = None) -> dict[str, Any]:
+def project_skill_version(project: Path, skill_dir_raw: str | Path | None = None) -> tuple[str, str, Path | None]:
     skill_dir = inferred_skill_dir(project, skill_dir_raw)
+    if not skill_dir:
+        return "", "unavailable", None
+    version = read_skill_version(skill_dir)
+    if not version:
+        return "", "unavailable", skill_dir
+    return version, "project-skill", skill_dir
+
+
+def version_alignment_gate(project: Path, skill_dir_raw: str | Path | None = None) -> dict[str, Any]:
+    expected, version_source, skill_dir = project_skill_version(project, skill_dir_raw)
     checked: list[str] = []
     errors: list[str] = []
-    expected = read_skill_version(skill_dir) if skill_dir else ""
     if not expected:
         return {
             "project": str(project),
             "skill_dir": str(skill_dir) if skill_dir else "",
             "expected_version": "",
+            "version_source": version_source,
             "checked": checked,
             "errors": [],
             "ok": True,
@@ -74,14 +80,11 @@ def version_alignment_gate(project: Path, skill_dir_raw: str | Path | None = Non
     if agents.is_file():
         checked.append("AGENTS.md")
         agents_text = agents.read_text(encoding="utf-8", errors="ignore")
-        metadata = parse_agents_metadata(agents_text)
-        for key in ["agents_version", "generator_version"]:
-            actual = str(metadata.get(key, "")).strip()
-            if actual and actual != expected:
-                errors.append(f"AGENTS.md metadata {key} {actual} does not match {expected}")
         control_match = re.search(r"^-\s+Version:\s*(v\d+\.\d+\.\d+)", agents_text, flags=re.MULTILINE)
         if control_match and control_match.group(1) != expected:
-            errors.append(f"AGENTS.md control profile version {control_match.group(1)} does not match {expected}")
+            errors.append(
+                f"AGENTS.md control profile version {control_match.group(1)} does not match project skill VERSION {expected}"
+            )
 
     docs_checks = [
         ("docs/development/DEVELOPMENT.md", "development record"),
@@ -94,19 +97,22 @@ def version_alignment_gate(project: Path, skill_dir_raw: str | Path | None = Non
         checked.append(rel_path)
         actual = first_version(path.read_text(encoding="utf-8", errors="ignore"))
         if actual and actual != expected:
-            errors.append(f"{rel_path} {label} version {actual} does not match {expected}")
+            errors.append(f"{rel_path} {label} version {actual} does not match project skill VERSION {expected}")
 
     git_manager = project / "docs" / "git_manager" / "GIT_MANAGER.md"
     if git_manager.is_file():
         checked.append("docs/git_manager/GIT_MANAGER.md")
         actual = first_version(current_version_section(git_manager.read_text(encoding="utf-8", errors="ignore")))
         if actual and actual != expected:
-            errors.append(f"docs/git_manager/GIT_MANAGER.md current version {actual} does not match {expected}")
+            errors.append(
+                f"docs/git_manager/GIT_MANAGER.md current version {actual} does not match project skill VERSION {expected}"
+            )
 
     return {
         "project": str(project),
         "skill_dir": str(skill_dir),
         "expected_version": expected,
+        "version_source": version_source,
         "checked": checked,
         "errors": errors,
         "ok": not errors,
@@ -174,10 +180,6 @@ def sync_root_agents(
         reasons.append("generator_version_mismatch")
     if not metadata.get("default_language"):
         reasons.append("missing_default_language")
-    control_match = re.search(r"^-\s+Version:\s*(v\d+\.\d+\.\d+)", text, flags=re.MULTILINE)
-    if control_match and control_match.group(1) != expected_version:
-        reasons.append("control_profile_version_mismatch")
-
     sync_required = bool(reasons)
     updated = False
     synced_text = text
@@ -219,17 +221,6 @@ def sync_root_agents(
                 missing_lines.append(new_metadata_line)
             rewritten[insert_at:insert_at] = missing_lines
         synced_text = "\n".join(rewritten).rstrip() + "\n"
-        control_block_match = CONTROL_PROFILE_BLOCK_RE.search(synced_text)
-        if control_block_match:
-            control_block = control_block_match.group(1)
-            replacement = f"- Version: {expected_version}."
-            if CONTROL_PROFILE_VERSION_RE.search(control_block):
-                updated_block = CONTROL_PROFILE_VERSION_RE.sub(replacement, control_block, count=1)
-                synced_text = (
-                    synced_text[: control_block_match.start(1)]
-                    + updated_block
-                    + synced_text[control_block_match.end(1) :]
-                )
         if synced_text != text:
             agents_path.write_text(synced_text, encoding="utf-8")
             updated = True
@@ -383,6 +374,7 @@ def work_folder_gate(project: Path, skill_dir_raw: str, mode: str = "development
     dir_manager = verify_dir_manager(project)
     branch = branch_gate(project)
     version = version_alignment_gate(project, skill_dir)
+    source_governance = source_governance_report(project, control_profile(project))
     freshness_command = run_json_command(project, [sys.executable, str(Path(__file__).resolve().parent / "check_freshness.py"), str(project)])
     freshness = freshness_command["json"]
     errors: list[str] = []
@@ -396,6 +388,7 @@ def work_folder_gate(project: Path, skill_dir_raw: str, mode: str = "development
     if not branch.get("approved", True):
         errors.extend(f"branch-gate: {item}" for item in branch.get("reasons", []))
     errors.extend(f"version-gate: {item}" for item in version.get("errors", []))
+    errors.extend(format_source_governance_errors(source_governance, prefix="source-governance"))
     if freshness_command["returncode"] != 0:
         errors.append("check_freshness command failed")
     if freshness.get("stale") is True:
@@ -414,5 +407,6 @@ def work_folder_gate(project: Path, skill_dir_raw: str, mode: str = "development
         "dir_manager": dir_manager,
         "branch_gate": branch,
         "version_gate": version,
+        "source_governance": source_governance,
         "freshness": freshness,
     }

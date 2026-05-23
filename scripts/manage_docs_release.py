@@ -4,6 +4,11 @@ from __future__ import annotations
 from manage_docs_shared import *
 from manage_docs_scaffold_session import write_development, write_git_changelog
 from manage_docs_sync_verify import sync_root_agents
+from source_governance import (
+    format_source_governance_errors,
+    release_source_governance_report,
+    source_governance_report,
+)
 from agents_decisions import decision_request
 
 INSTALLABLE_SKILL_TOP_LEVEL_EXCLUDES = {
@@ -432,7 +437,7 @@ def release_prepare(project: Path, version: str, skill_dir_raw: str) -> dict[str
         errors.append(f"release prepare requires exactly one temporary development branch, found {extras}")
         return {"ok": False, "errors": errors, "checks": checks}
     if (project / "AGENTS.md").exists():
-        sync_result = sync_root_agents(project, write=True, installed_skill_dir_override=skill_dir)
+        sync_result = sync_root_agents(project, write=True)
         checks["root_agents_sync"] = {
             "updated": sync_result.get("updated", False),
             "reasons": sync_result.get("reasons", []),
@@ -762,6 +767,9 @@ def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str, in
         "receipt_path": expected_release.joinpath(receipt_filename(profile)).relative_to(project).as_posix(),
         "status_lines": status_lines,
     }
+    source_governance = source_governance_report(project, profile)
+    errors.extend(format_source_governance_errors(source_governance, prefix="source-governance"))
+    checks["source_governance_ok"] = source_governance["ok"]
     other_release_exclusions = release_target_exclusions(skill_name, version)
     if source_version and source_version != version:
         errors.append(f"release gate version {version} does not match skill source version {source_version}")
@@ -779,6 +787,9 @@ def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str, in
         if not expected_zip.is_file():
             errors.append(f"missing release zip: {expected_zip.relative_to(project).as_posix()}")
         if expected_release.is_dir():
+            release_governance = release_source_governance_report(project, expected_release, profile)
+            errors.extend(format_source_governance_errors(release_governance, prefix="release-source-governance"))
+            checks["release_source_governance_ok"] = release_governance["ok"]
             source_files = release_members(skill_dir, skill_dir)
             release_files = sorted(item["path"] for item in build_release_file_manifest(expected_release, exclude={receipt_path.name}))
             if source_files != release_files:

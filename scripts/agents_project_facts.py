@@ -26,6 +26,18 @@ from agents_common import (
     root_agents_sync_command,
     workspace_has_existing_content,
 )
+from source_governance import source_governance_report
+import source_governance_config
+from source_governance_config import (
+    default_global_rule_overrides,
+    default_implementation_constraints,
+    global_rule_overrides_path,
+    global_rule_overrides_reference,
+    implementation_constraints_from_profile,
+    load_global_rule_overrides,
+    validate_code_comment_policy_data,
+    validate_global_rule_overrides_data,
+)
 
 EPHEMERAL_ROOT_INPUT_FILE_RE = re.compile(
     r"^(?:answers|first-answers|recovery|session|stage|handoff|change|allowed-change|blocked-change|blocked-remote-change|blocked-remote-source-change)(?:-[a-z0-9._-]+)?\.json$",
@@ -323,21 +335,7 @@ def inspect_project(root: Path) -> dict[str, Any]:
                 structure_fix_reasons.append(f"legacy docs path requires migration: `{display_path(legacy, root)}`")
 
     constraints = implementation_constraints_from_profile(profile, root)
-    max_lines = int(constraints.get("source_file_max_lines", 1000))
-    oversized_source_files = []
-    for path in iter_handwritten_code_files(root, constraints):
-        line_count = file_line_count(path)
-        if line_count <= max_lines:
-            continue
-        relative_path = path.relative_to(root).as_posix()
-        oversized_source_files.append(
-            {
-                "path": relative_path,
-                "line_count": line_count,
-                "max_lines": max_lines,
-                "decomposition_plan": decomposition_plan_path(root, relative_path, profile).relative_to(root).as_posix(),
-            }
-        )
+    source_governance = source_governance_report(root, profile)
     script_layout = script_layout_facts(root, profile)
     overrides = load_global_rule_overrides(root, profile)
 
@@ -377,7 +375,10 @@ def inspect_project(root: Path) -> dict[str, Any]:
         "global_rule_overrides_valid": not overrides["errors"],
         "global_rule_overrides_errors": list(overrides["errors"]),
         "global_rule_overrides": overrides["data"],
-        "oversized_source_files": oversized_source_files,
+        "source_governance": source_governance,
+        "oversized_source_files": source_governance["oversized_source_files"],
+        "test_code_boundary_violations": source_governance["test_code_boundary_violations"],
+        "comment_policy_violations": source_governance["comment_policy_violations"],
         "tool_script_layout_violations": script_layout["tool_script_layout_violations"],
         "script_triad_gaps": script_layout["script_triad_gaps"],
         "gui_script_exemptions": script_layout["gui_script_exemptions"],
@@ -536,279 +537,39 @@ def workflow_runs(root: Path) -> list[dict[str, str]]:
     return rules
 
 def default_global_rule_overrides() -> dict[str, Any]:
-    constraints = default_implementation_constraints()
-    script_layout = constraints["script_layout"]
-    return {
-        "code_comment_policy": {
-            "language": "中文",
-            "default_policy": "只允许非显然意图、不变量、风险、生成边界或公共 API 行为注释；禁止复述代码；禁止未经明确要求的批量 AI 注释；行为变化时必须更新旧注释。",
-            "formatting": "生成代码必须保留回车/空行分隔，不能把语句、注释、函数粘连到一起。",
-            "python": "公共函数/类使用规范 docstring；普通说明注释放在代码上方；禁止右侧尾注释。",
-            "c_cpp": "函数、模块核心功能、变量定义和特定功能说明放在代码上方；所有权/生命周期、ABI、并发、内存和未定义行为风险必须优先说明；`#define` 宏注释放在右侧。",
-            "verilog_systemverilog": "信号声明、参数定义、assign 和 always 块内寄存器赋值使用右侧注释；声明类型包括 input/output/inout/parameter/localparam/integer/logic/wire/reg/real；module/task/function/generate/always 说明放在语句上方。",
-            "positions": {
-                "python.public_api": "docstring",
-                "python.inline": "above",
-                "python.trailing": "forbidden",
-                "c_cpp.function": "above",
-                "c_cpp.module": "above",
-                "c_cpp.variable": "above",
-                "c_cpp.specific_behavior": "above",
-                "c_cpp.macro_define": "right_side",
-                "verilog_systemverilog.module": "above",
-                "verilog_systemverilog.declaration": "right_side",
-                "verilog_systemverilog.assign": "right_side",
-                "verilog_systemverilog.task_function_generate_always": "above",
-                "verilog_systemverilog.always_register_assignment": "right_side",
-            },
-        },
-        "long_python_tasks": {
-            "enabled": True, "prompt_before_automation": True, "automation_kind": "heartbeat",
-            "default_interval_minutes": 10, "long_running_threshold_minutes": 10,
-            "completion_check_strategy": {
-                "require_reliable_signal": True, "allow_process_polling": True,
-                "allow_expected_artifact_check": True, "allow_output_marker": True,
-                "on_unreliable_signal": "deny-automation", "on_completion": "continue-then-delete-heartbeat",
-                "on_incomplete": "wait-for-next-heartbeat",
-            },
-        },
-        "source_file_limits": {
-            "max_lines": constraints["source_file_max_lines"], "included_extensions": list(constraints["line_limit_extensions"]),
-            "excluded_roots": list(constraints["line_limit_exclude_roots"]), "decomposition_plan_root": "docs/development/decomposition-plans",
-            "required_plan_sections": ["Current Size", "Split Boundaries", "Target Files", "Exit Criteria"],
-        },
-        "tool_script_layout": {
-            "required_root": script_layout["required_root"], "families": dict(script_layout["families"]),
-            "required_pattern": script_layout["required_pattern"], "require_full_triad": bool(script_layout["require_full_triad"]),
-            "gui_exception_manifest": ".agents/script-governance-exceptions.json",
-        },
-    }
+    return source_governance_config.default_global_rule_overrides()
+
 
 def default_implementation_constraints() -> dict[str, Any]:
-    return {
-        "source_file_max_lines": 1000,
-        "line_limit_extensions": [".py", ".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".hh", ".sh", ".bat", ".ps1"],
-        "line_limit_scope": "handwritten-source-and-tool-scripts",
-        "line_limit_exclude_roots": ["tests", "dist", "build", "target", "node_modules", "vendor", ".git", "ref"],
-        "script_layout": {
-            "required_root": "scripts", "families": {"python": ".py", "shell": ".sh", "bat": ".bat", "powershell": ".ps1"},
-            "required_pattern": "scripts/<family>/<function>/<name>.<ext>", "require_full_triad": True, "gui_exception_mode": "explicit-manifest",
-        },
-    }
+    return source_governance_config.default_implementation_constraints()
+
+
 def global_rule_overrides_reference(profile: dict[str, Any] | None) -> str:
-    if not isinstance(profile, dict):
-        return ".agents/global-rule-overrides.json"
-    inline = profile.get("global_rule_overrides", {})
-    if isinstance(inline, dict):
-        candidate = str(inline.get("path", "")).strip()
-        if candidate:
-            return candidate
-    legacy = str(profile.get("global_rule_overrides_config", "")).strip()
-    if legacy:
-        return legacy
-    return ".agents/global-rule-overrides.json"
+    return source_governance_config.global_rule_overrides_reference(profile)
+
+
 def global_rule_overrides_path(root: Path, profile: dict[str, Any] | None = None) -> Path:
-    candidate = Path(global_rule_overrides_reference(profile))
-    return candidate if candidate.is_absolute() else (root / candidate)
-def merge_object(base: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
-    merged = dict(base)
-    for key, value in raw.items():
-        if isinstance(value, dict) and isinstance(merged.get(key), dict):
-            merged[key] = merge_object(merged[key], value)
-        else:
-            merged[key] = value
-    return merged
-def legacy_global_rule_overrides(profile: dict[str, Any] | None) -> dict[str, Any]:
-    defaults = default_global_rule_overrides()
-    if not isinstance(profile, dict):
-        return defaults
-    constraints = profile.get("implementation_constraints", {})
-    if not isinstance(constraints, dict) or not constraints:
-        return defaults
-    layout = constraints.get("script_layout", {}) if isinstance(constraints.get("script_layout", {}), dict) else {}
-    return merge_object(
-        defaults,
-        {
-            "source_file_limits": {
-                "max_lines": constraints.get("source_file_max_lines", defaults["source_file_limits"]["max_lines"]),
-                "included_extensions": constraints.get("line_limit_extensions", defaults["source_file_limits"]["included_extensions"]), "excluded_roots": constraints.get("line_limit_exclude_roots", defaults["source_file_limits"]["excluded_roots"]),
-            },
-            "tool_script_layout": {
-                "required_root": layout.get("required_root", defaults["tool_script_layout"]["required_root"]),
-                "families": layout.get("families", defaults["tool_script_layout"]["families"]),
-                "required_pattern": layout.get("required_pattern", defaults["tool_script_layout"]["required_pattern"]), "require_full_triad": layout.get("require_full_triad", defaults["tool_script_layout"]["require_full_triad"]),
-            },
-        },
-    )
+    return source_governance_config.global_rule_overrides_path(root, profile)
+
+
 def validate_code_comment_policy_data(comment_policy: dict[str, Any], *, require_explicit: bool = False) -> list[str]:
-    errors: list[str] = []
-    if not comment_policy:
-        errors.append("code_comment_policy must be a non-empty object")
-        return errors
-    required_text_fields = ("language", "default_policy", "formatting", "python", "c_cpp", "verilog_systemverilog")
-    for key in required_text_fields:
-        if require_explicit and key not in comment_policy:
-            errors.append(f"code_comment_policy.{key} must be explicitly set")
-        if not str(comment_policy.get(key, "")).strip():
-            errors.append(f"code_comment_policy.{key} must be set")
-    required_snippets = {
-        "default_policy": [
-            "非显然意图",
-            "不变量",
-            "风险",
-            "生成边界",
-            "公共 API 行为",
-            "禁止复述代码",
-            "禁止未经明确要求的批量 AI 注释",
-            "行为变化时必须更新旧注释",
-        ],
-        "formatting": ["回车/空行分隔", "不能把语句、注释、函数粘连到一起"],
-        "python": ["docstring", "代码上方", "禁止右侧尾注释"],
-        "c_cpp": ["函数", "模块核心功能", "变量定义", "#define", "右侧", "所有权/生命周期"],
-        "verilog_systemverilog": ["module", "input/output/inout/parameter/localparam/integer/logic/wire/reg/real", "assign", "always", "右侧", "上方"],
-    }
-    for key, snippets in required_snippets.items():
-        value = str(comment_policy.get(key, ""))
-        for snippet in snippets:
-            if snippet not in value:
-                errors.append(f"code_comment_policy.{key} missing required rule `{snippet}`")
-    positions = comment_policy.get("positions")
-    required_positions = {
-        "python.public_api": "docstring",
-        "python.inline": "above",
-        "python.trailing": "forbidden",
-        "c_cpp.function": "above",
-        "c_cpp.module": "above",
-        "c_cpp.variable": "above",
-        "c_cpp.specific_behavior": "above",
-        "c_cpp.macro_define": "right_side",
-        "verilog_systemverilog.module": "above",
-        "verilog_systemverilog.declaration": "right_side",
-        "verilog_systemverilog.assign": "right_side",
-        "verilog_systemverilog.task_function_generate_always": "above",
-        "verilog_systemverilog.always_register_assignment": "right_side",
-    }
-    if require_explicit and "positions" not in comment_policy:
-        errors.append("code_comment_policy.positions must be explicitly set")
-    if not isinstance(positions, dict):
-        errors.append("code_comment_policy.positions must be an object")
-    else:
-        allowed_positions = {"above", "right_side", "docstring", "forbidden"}
-        for key, expected in required_positions.items():
-            if require_explicit and key not in positions:
-                errors.append(f"code_comment_policy.positions.{key} must be explicitly set")
-            value = positions.get(key)
-            if value != expected:
-                errors.append(f"code_comment_policy.positions.{key} must be {expected}")
-        for key, value in positions.items():
-            if value not in allowed_positions:
-                errors.append(f"code_comment_policy.positions.{key} has invalid value {value}")
-    return errors
+    return source_governance_config.validate_code_comment_policy_data(comment_policy, require_explicit=require_explicit)
+
 
 def validate_global_rule_overrides_data(data: dict[str, Any]) -> list[str]:
-    errors: list[str] = []
-    comment_policy = data.get("code_comment_policy", {}) if isinstance(data.get("code_comment_policy", {}), dict) else {}
-    long_tasks = data.get("long_python_tasks", {}) if isinstance(data.get("long_python_tasks", {}), dict) else {}
-    source_limits = data.get("source_file_limits", {}) if isinstance(data.get("source_file_limits", {}), dict) else {}
-    script_layout = data.get("tool_script_layout", {}) if isinstance(data.get("tool_script_layout", {}), dict) else {}
-    errors.extend(validate_code_comment_policy_data(comment_policy))
-    if long_tasks.get("automation_kind") != "heartbeat":
-        errors.append("long_python_tasks.automation_kind must be heartbeat")
-    for key in ("default_interval_minutes", "long_running_threshold_minutes"):
-        value = long_tasks.get(key)
-        if not isinstance(value, int) or value <= 0:
-            errors.append(f"long_python_tasks.{key} must be a positive integer")
-    if not isinstance(long_tasks.get("completion_check_strategy"), dict) or not long_tasks.get("completion_check_strategy"):
-        errors.append("long_python_tasks.completion_check_strategy must be a non-empty object")
-    max_lines = source_limits.get("max_lines")
-    if not isinstance(max_lines, int) or max_lines <= 0:
-        errors.append("source_file_limits.max_lines must be a positive integer")
-    included_extensions = source_limits.get("included_extensions")
-    if not isinstance(included_extensions, list) or not all(str(item).startswith(".") for item in included_extensions):
-        errors.append("source_file_limits.included_extensions must be a list of extensions")
-    if not isinstance(source_limits.get("excluded_roots"), list):
-        errors.append("source_file_limits.excluded_roots must be a list")
-    if not str(source_limits.get("decomposition_plan_root", "")).strip():
-        errors.append("source_file_limits.decomposition_plan_root must be set")
-    required_sections = source_limits.get("required_plan_sections")
-    if not isinstance(required_sections, list) or not all(str(item).strip() for item in required_sections):
-        errors.append("source_file_limits.required_plan_sections must be a non-empty list")
-    families = script_layout.get("families")
-    if not str(script_layout.get("required_root", "")).strip():
-        errors.append("tool_script_layout.required_root must be set")
-    if not isinstance(families, dict) or not families:
-        errors.append("tool_script_layout.families must be a non-empty object")
-    elif not all(str(ext).startswith(".") for ext in families.values()):
-        errors.append("tool_script_layout.families values must be extensions")
-    if not str(script_layout.get("required_pattern", "")).strip():
-        errors.append("tool_script_layout.required_pattern must be set")
-    if not isinstance(script_layout.get("require_full_triad"), bool):
-        errors.append("tool_script_layout.require_full_triad must be boolean")
-    if not str(script_layout.get("gui_exception_manifest", "")).strip():
-        errors.append("tool_script_layout.gui_exception_manifest must be set")
-    return errors
+    return source_governance_config.validate_global_rule_overrides_data(data)
+
+
 def load_global_rule_overrides(root: Path, profile: dict[str, Any] | None = None) -> dict[str, Any]:
-    defaults = legacy_global_rule_overrides(profile)
-    path = global_rule_overrides_path(root, profile)
-    raw = read_json(path) if path.exists() else {}
-    merged = merge_object(defaults, raw) if isinstance(raw, dict) else defaults
-    errors = validate_global_rule_overrides_data(merged)
-    if path.exists():
-        if not isinstance(raw, dict):
-            errors.append("local governance config must be a JSON object")
-        elif "code_comment_policy" not in raw:
-            errors.append("code_comment_policy must be present in local governance config")
-        else:
-            raw_policy = raw.get("code_comment_policy")
-            if not isinstance(raw_policy, dict):
-                errors.append("code_comment_policy must be a non-empty object")
-            else:
-                errors.extend(validate_code_comment_policy_data(raw_policy, require_explicit=True))
-    return {"path": path, "exists": path.is_file(), "data": merged, "errors": errors}
+    return source_governance_config.load_global_rule_overrides(root, profile)
+
+
 def ensure_global_rule_overrides_file(root: Path, profile: dict[str, Any] | None = None) -> dict[str, Any]:
-    loaded = load_global_rule_overrides(root, profile)
-    path = loaded["path"]
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if not path.exists():
-        path.write_text(json.dumps(loaded["data"], indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        loaded = load_global_rule_overrides(root, profile)
-    manifest_path = root / str(loaded["data"]["tool_script_layout"].get("gui_exception_manifest", ".agents/script-governance-exceptions.json")).strip()
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    if not manifest_path.exists():
-        manifest_path.write_text('{\n  "gui_startup": []\n}\n', encoding="utf-8")
-    return loaded
+    return source_governance_config.ensure_global_rule_overrides_file(root, profile)
+
+
 def implementation_constraints_from_profile(profile: dict[str, Any] | None, root: Path | None = None) -> dict[str, Any]:
-    defaults = default_implementation_constraints()
-    if root is not None:
-        overrides = load_global_rule_overrides(root, profile)["data"]
-        source_limits = overrides["source_file_limits"]
-        script_layout = overrides["tool_script_layout"]
-        return {
-            "source_file_max_lines": int(source_limits.get("max_lines", defaults["source_file_max_lines"])),
-            "line_limit_extensions": list(source_limits.get("included_extensions", defaults["line_limit_extensions"])),
-            "line_limit_scope": defaults["line_limit_scope"],
-            "line_limit_exclude_roots": list(source_limits.get("excluded_roots", defaults["line_limit_exclude_roots"])),
-            "script_layout": {
-                "required_root": str(script_layout.get("required_root", defaults["script_layout"]["required_root"])),
-                "families": dict(script_layout.get("families", defaults["script_layout"]["families"])),
-                "required_pattern": str(script_layout.get("required_pattern", defaults["script_layout"]["required_pattern"])),
-                "require_full_triad": bool(script_layout.get("require_full_triad", defaults["script_layout"]["require_full_triad"])),
-                "gui_exception_mode": "explicit-manifest",
-                "gui_exception_manifest": str(script_layout.get("gui_exception_manifest", ".agents/script-governance-exceptions.json")),
-            },
-        }
-    if not isinstance(profile, dict):
-        return defaults
-    raw = profile.get("implementation_constraints", {})
-    if not isinstance(raw, dict):
-        return defaults
-    merged = dict(defaults)
-    merged.update({key: value for key, value in raw.items() if key != "script_layout"})
-    merged["script_layout"] = dict(defaults["script_layout"])
-    script_layout = raw.get("script_layout", {})
-    if isinstance(script_layout, dict):
-        merged["script_layout"].update(script_layout)
-    return merged
+    return source_governance_config.implementation_constraints_from_profile(profile, root)
 
 def iter_handwritten_code_files(root: Path, constraints: dict[str, Any]) -> list[Path]:
     allowed_exts = {str(item).lower() for item in constraints.get("line_limit_extensions", [])}

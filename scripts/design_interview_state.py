@@ -372,7 +372,8 @@ def interactive_payload(
         review = review_summary(state.get("answers", {}), str(kind) if kind else None, [], confirmed_keys, final=False)
         confirmation_question = "用 answer-file 提交 remote_server_task_routes JSON 数组，例如 task_name + primary_server_id + fallback_server_ids。"
         next_action = "map_remote_task_routes"
-    else:  # resume_required
+    else:
+        # Resume the current question group when earlier answers still need completion.
         questions = question_rows(group_ids)
         review = review_summary(
             state.get("answers", {}),

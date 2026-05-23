@@ -14,6 +14,7 @@ from agents_common import (
     detect_scopes,
     ensure_global_rule_overrides_file,
     emit_json,
+    evolution_owner_status,
     extract_commands,
     extract_context,
     global_codex_agents_sync_command,
@@ -259,6 +260,12 @@ def evolution_template_guidance(project: Path, template_dir: Path | None = None)
         target_dir = target_dir / segment
     target_dir = target_dir / target["type_slug"]
     if not target_dir.exists() or not target_dir.is_dir():
+        category_root = target_dir.parent
+        if category_root.exists() and category_root.is_dir():
+            child_dirs = [path for path in sorted(category_root.iterdir()) if path.is_dir()]
+            if len(child_dirs) == 1:
+                target_dir = child_dirs[0]
+    if not target_dir.exists() or not target_dir.is_dir():
         return ""
     lines = [
         f"- Matching evolution template target: family `{target['family']}`, category `{'/'.join(target['category_path'])}`, type `{target['type_slug']}`.",
@@ -276,8 +283,6 @@ def evolution_template_guidance(project: Path, template_dir: Path | None = None)
     if len(lines) == 1:
         return ""
     return "\n".join(lines)
-
-
 def hook_policy(context: dict) -> str:
     hooks = context.get("hook_configs", [])
     if not hooks:
@@ -285,15 +290,11 @@ def hook_policy(context: dict) -> str:
     lines = [f"- Hook framework/config detected: `{path}`." for path in hooks]
     lines.append("- Never bypass hooks with `--no-verify`; fix the underlying failure.")
     return "\n".join(lines)
-
-
 def github_settings(context: dict) -> str:
     settings = context.get("github_settings", [])
     if not settings:
         return "- No GitHub settings or rulesets detected."
     return "\n".join(f"- GitHub setting/ruleset detected: `{path}`." for path in settings)
-
-
 def directory_coverage(context: dict) -> str:
     candidates = context.get("directory_coverage_candidates", [])
     if not candidates:
@@ -302,8 +303,6 @@ def directory_coverage(context: dict) -> str:
         f"- Directory coverage candidate: `{path}/` may need scoped AGENTS.md if it has local rules."
         for path in candidates
     )
-
-
 def heuristic_rows() -> str:
     return "\n".join([
         "| Adding dependency | Ask first |",
@@ -329,7 +328,34 @@ def load_profile(project: Path, raw: str | None) -> dict | None:
     return data
 
 
-def control_profile(profile: dict | None, project: Path) -> str:
+def inferred_project_skill_dir(project: Path, profile: dict | None = None) -> Path | None:
+    effective_profile = profile if isinstance(profile, dict) else None
+    if effective_profile:
+        layout = effective_profile.get("skill_layout") if isinstance(effective_profile.get("skill_layout"), dict) else {}
+        raw_path = str(layout.get("path") or "").strip()
+        if raw_path:
+            candidate = (project / raw_path).resolve()
+            if (candidate / "VERSION").is_file():
+                return candidate
+        name = str(effective_profile.get("name") or "").strip()
+        if effective_profile.get("kind") == "skill" and name:
+            candidate = (project / "skills" / name).resolve()
+            if (candidate / "VERSION").is_file():
+                return candidate
+    skills_root = project / "skills"
+    if skills_root.is_dir():
+        candidates = [path.resolve() for path in skills_root.iterdir() if (path / "VERSION").is_file()]
+        if len(candidates) == 1:
+            return candidates[0]
+    return None
+
+
+def resolved_project_version(project: Path, profile: dict | None = None) -> str:
+    skill_dir = inferred_project_skill_dir(project, profile)
+    return read_skill_version(skill_dir) if skill_dir else ""
+
+
+def control_profile(profile: dict | None, project: Path, project_version: str = "") -> str:
     if not profile:
         return "\n".join([
             "- Strong control: not configured.",
@@ -340,7 +366,7 @@ def control_profile(profile: dict | None, project: Path) -> str:
         "- Strong control: complete.",
         f"- Development type: {profile.get('kind', 'unknown')}.",
         f"- Name: {profile.get('name', 'unknown')}.",
-        f"- Version: {read_skill_version() or 'unknown'}.",
+        f"- Version: {project_version or 'unknown'}.",
         f"- Default conversation language: {profile.get('default_conversation_language', '中文')}.",
         f"- Local governance detail source: `{local_rule_config_path(project, profile)}`; render, verify, and docs-governance scripts read this JSON for long Python task automation, maintainability limits, and project-tool script rules.",
         f"- Purpose/reason: {profile.get('purpose', 'unknown')} / {profile.get('reason', 'unknown')}.",
@@ -462,7 +488,7 @@ def release_contract(profile: dict | None, project: Path) -> str:
         f"- Branch model: {profile.get('branch_model', 'not specified')}; protected branches: {protected_text}.",
         "- Development branches are allowed only as temporary local work branches.",
         f"- {RELEASE_CORE_WORKTREE_RULE}",
-        f"- Before releasing an installable `dist/` package: commit all work, merge into `master`, record the release, delete local branches other than `master` and `release`, and use `{project_command(project, profile, 'manage_docs.py', 'release-prepare', '<project>', '--version', 'vX.Y.Z', '--skill-dir', 'skills/<skill-name>')}` when branch cleanup should be automated.",
+        f"- Before releasing an installable `dist/` package: commit all work, merge into `master`, record the release in `docs/git_manager/CHANGELOG.md`, archive older summaries under `docs/git_manager/history_git_manager/`, delete local branches other than `master` and `release`, and use `{project_command(project, profile, 'manage_docs.py', 'release-prepare', '<project>', '--version', 'vX.Y.Z', '--skill-dir', 'skills/<skill-name>')}` when branch cleanup should be automated.",
         f"- Build release artifacts with `{project_command(project, profile, 'manage_docs.py', 'package-release', '<project>', '--version', 'vX.Y.Z', '--skill-dir', 'skills/<skill-name>')}`.",
         f"- Installable `dist/` release copies must be sanitized before packaging when `sanitization_required` is `{release.get('sanitization_required', False)}`; use typed placeholders such as `<REDACTED_API_KEY>`, `<REDACTED_PASSWORD>`, `<REDACTED_EMAIL>`, and `<REDACTED_LOCAL_PATH>` instead of real sensitive values.",
         f"- Release receipt file named {release.get('receipt_file', 'RELEASE_RECEIPT.json')} must exist inside each installable release directory.",
@@ -556,7 +582,7 @@ def conversation_completion_contract(profile: dict | None) -> str:
     ])
 
 
-def experience_log_contract(profile: dict | None) -> str:
+def experience_log_contract(profile: dict | None, project: Path) -> str:
     folder = "docs/experience"
     pattern = "1-xxxxx.md through 10-xxxxx.md"
     sections = [
@@ -570,6 +596,7 @@ def experience_log_contract(profile: dict | None) -> str:
     required = ["1-workflow.md", "2-scripts.md", "3-plan.md", "4-design-ui.md"]
     conversation_limit = 10
     evolution_every = 10
+    evolution_enabled = False
     if profile:
         contract = profile.get("experience_contract", {})
         folder = contract.get("folder", folder)
@@ -577,19 +604,28 @@ def experience_log_contract(profile: dict | None) -> str:
         sections = contract.get("required_sections", sections)
         required = contract.get("required_files", required)
         conversation_limit = int(contract.get("conversation_context_limit", conversation_limit))
+        evolution_enabled = True
         evolution_every = int(contract.get("evolution_every_handoffs", evolution_every))
-    return "\n".join([
+    lines = [
         f"- Maintain 10 project-specific numbered experience files under `{folder}/`.",
         f"- Fixed files: {', '.join(f'`{folder}/{item}`' for item in required)}.",
         f"- Project-specific files use `{pattern}` with names selected from current repository facts.",
         "- AI authors experience content; scripts only collect evidence, validate payloads, archive old files, and write accepted AI summaries.",
         f"- AI must read recent conversation context before experience updates: up to {conversation_limit} latest conversation snapshots.",
         "- Refresh cadence: every 5 completed handoffs creates an AI update request plus the current handoff/conversation window; the active agent should generate and apply the payload in the same conversation with `manage_docs.py experience --payload experience-payload.json`.",
-        f"- Evolution cadence: every {evolution_every} completed handoffs requires valid `evolution_summary` content in the same payload so evolution completes atomically before the checkpoint is considered current.",
-        "- Evolution summaries must satisfy both path-level family matching and content-level type isolation; skill templates must reject engineering workflow chains, and engineering templates must reject skill-governance workflow chains.",
         f"- Required sections: {', '.join(sections)}.",
         "- Archive old current experience files under `docs/experience/history_experience/YYYYMMDD-HHMMSS/` before writing refreshed versions.",
-    ])
+    ]
+    if evolution_enabled:
+        lines.insert(
+            6,
+            f"- Evolution cadence: every {evolution_every} completed handoffs requires valid `evolution_summary` content in the same payload so evolution completes atomically before the checkpoint is considered current.",
+        )
+        lines.insert(
+            7,
+            "- Evolution summaries must satisfy both path-level family matching and content-level type isolation; accepted summaries write to the owner-local template root, the installed skill template library, or a pending export/import bundle depending on the resolved sink.",
+        )
+    return "\n".join(lines)
 
 
 def documentation_governance_contract(profile: dict | None, project: Path) -> str:
@@ -606,26 +642,39 @@ def documentation_governance_contract(profile: dict | None, project: Path) -> st
     install = contract.get("install_configuration", {})
     git = contract.get("git_manager", {})
     dir_manager = contract.get("dir_manager", {})
+    evolution_enabled = True
     targets = install.get("targets", ["Codex", "Claude", "OpenClaw"])
     if isinstance(targets, list):
         targets_text = ", ".join(str(item) for item in targets)
     else:
         targets_text = str(targets)
-    return "\n".join([
+    lines = [
         f"- Docs root: `{contract.get('root', 'docs')}`; latest handoff: `{handoff.get('current', 'docs/handoff/HANDOFF.md')}` is always the newest task handoff.",
         f"- Before a new task, read `{handoff.get('current', 'docs/handoff/HANDOFF.md')}`, run `{project_command(project, profile, 'manage_docs.py', 'resume-check', '<project>')}`, and repair interrupted sessions with `{project_command(project, profile, 'manage_docs.py', 'resume-repair', '<project>', '--input', 'recovery.json')}` before new work continues.",
         f"- After reading the prior handoff and before implementation, run `{project_command(project, profile, 'manage_docs.py', 'start-session', '<project>', '--input', 'session.json')}` to record the active session.",
         f"- Every completed development conversation must write `{handoff.get('current', 'docs/handoff/HANDOFF.md')}`; use `{project_command(project, profile, 'manage_docs.py', 'handoff', '<project>', '--input', 'handoff.json')}` at task completion.",
         f"- Experience folder: `{experience.get('folder', 'docs/experience')}` maintains 10 project-specific numbered experience files including `docs/experience/1-workflow.md`, `docs/experience/2-scripts.md`, `docs/experience/3-plan.md`, `docs/experience/4-design-ui.md`, plus `5-*.md` through `10-*.md`.",
-        f"- Experience cadence: every 5 completed handoffs create an AI update request plus the current evidence window using up to {experience.get('conversation_context_limit', 10)} recent conversation snapshots; every {experience.get('evolution_every_handoffs', 10)} completed handoffs requires valid `evolution_summary` content in the same payload before the checkpoint is current.",
+        f"- Experience cadence: every 5 completed handoffs create an AI update request plus the current evidence window using up to {experience.get('conversation_context_limit', 10)} recent conversation snapshots; the active agent should apply the accepted AI payload in the same conversation before the checkpoint is considered current.",
         f"- Dir manager: keep strict local and remote deployment structure review rules under `{dir_manager.get('folder', 'docs/dir_manager')}/`; run `manage_dirs.py review`, preserve `history_dir_manager/` archives, and keep remote deployment structure governance in the same contract.",
         f"- Git manager: keep the current change summary in `{git.get('folder', 'docs/git_manager')}/CHANGELOG.md`, archive older entries under `{git.get('folder', 'docs/git_manager')}/history_git_manager/YYYYMMDD-HHMMSS/`, and rotate with `manage_docs.py git-changelog`.",
-        "- AGENTS rendering must not scan the whole `assets/templates/` tree. Only the exact matching evolution target may be read as supplemental guidance, and unmatched sibling templates are ignored.",
-        "- Evolution template writing is isolated by both family and content schema: the exact family, category, and type must match the project kind, and the workflow text must not carry the opposite kind's execution chain.",
         f"- Directory changes require `{project_command(project, profile, 'manage_dirs.py', 'review', '<project>', '--input', 'change.json')}`; blocked reviews require explicit user force-confirmation and risk capture in handoff.",
         f"- Force-confirmed directory overrides must archive old dir manager content to `{dir_manager.get('history', 'docs/dir_manager/history_dir_manager')}/YYYYMMDD-HHMMSS/` before applying the folder change.",
         f"- Handoff history: archive the previous HANDOFF.md to `{handoff.get('history', 'docs/handoff/history_handoff')}` with `{handoff.get('archive_pattern', 'HANDOFF-YYYYMMDD-HHMMSS.md')}` before writing a new one; keep development records at `{development.get('current', 'docs/development/DEVELOPMENT.md')}` and install configuration for {targets_text} under `{install.get('folder', 'docs/install_configuration')}`.",
-    ])
+    ]
+    if evolution_enabled:
+        lines.insert(
+            5,
+            f"- Every {experience.get('evolution_every_handoffs', 10)} completed handoffs, accepted experience must also provide valid `evolution_summary` content so automatic evolution remains atomic before the checkpoint is considered current.",
+        )
+        lines.insert(
+            8,
+            "- AGENTS rendering must not scan the whole `assets/templates/` tree. Only the exact matching evolution target may be read as supplemental guidance, and unmatched sibling templates are ignored.",
+        )
+        lines.insert(
+            9,
+            "- Evolution template writing is isolated by both family and content schema: the exact family, category, and type must match the project kind, the workflow text must not carry the opposite kind's execution chain, and ordinary workspaces must publish reusable templates through the resolved installed-sink or export/import path instead of active local template folders.",
+        )
+    return "\n".join(lines)
 
 
 def code_comment_policy(project: Path, profile: dict | None) -> str:
@@ -653,20 +702,17 @@ def template_values(project: Path, profile: dict | None = None, template_dir: Pa
     context = extract_context(project)
     command_source = ", ".join(sorted({item["source"] for item in commands})) if commands else "none detected"
     default_language = profile.get("default_conversation_language", "中文") if profile else "中文"
-    source_skill_dir = project / "skills" / "agents-md-generator"
-    if isinstance(profile, dict) and profile.get("kind") == "skill" and profile.get("name") == "agents-md-generator" and source_skill_dir.is_dir():
-        current_version = read_skill_version(source_skill_dir)
-    else:
-        current_version, _ = preferred_skill_version()
-    current_version = current_version or "unknown"
+    generator_version, _ = preferred_skill_version()
+    generator_version = generator_version or "unknown"
+    project_version = resolved_project_version(project, profile) or "unknown"
     return {
         "TIMESTAMP": current_timestamp(),
         "VERIFIED_TIMESTAMP": "never",
-        "AGENTS_VERSION": current_version,
-        "GENERATOR_VERSION": current_version,
+        "AGENTS_VERSION": generator_version,
+        "GENERATOR_VERSION": generator_version,
         "DEFAULT_LANGUAGE": default_language,
-        "PROJECT_OVERVIEW": project_overview(facts, current_version),
-        "CONTROL_PROFILE": control_profile(profile, project),
+        "PROJECT_OVERVIEW": project_overview(facts, generator_version),
+        "CONTROL_PROFILE": control_profile(profile, project, project_version),
         "DIRECTORY_CONTRACT": directory_contract(profile, project),
         "REMOTE_SERVER_CONTRACT": remote_server_contract(profile),
         "RELEASE_CONTRACT": release_contract(profile, project),
@@ -674,7 +720,7 @@ def template_values(project: Path, profile: dict | None = None, template_dir: Pa
         "SKILL_DESIGN_CONTRACT": skill_design_contract(profile, project),
         "CONVERSATION_COMPLETION_CONTRACT": conversation_completion_contract(profile),
         "CODE_COMMENT_POLICY": code_comment_policy(project, profile),
-        "EXPERIENCE_LOG_CONTRACT": experience_log_contract(profile),
+        "EXPERIENCE_LOG_CONTRACT": experience_log_contract(profile, project),
         "DOCUMENTATION_GOVERNANCE_CONTRACT": documentation_governance_contract(profile, project),
         "VERIFICATION_STATUS": "unverified",
         "COMMAND_SOURCE": command_source,

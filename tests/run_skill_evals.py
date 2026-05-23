@@ -9,10 +9,12 @@ from pathlib import Path
 from typing import Any
 
 sys.dont_write_bytecode = True
-SCRIPT_DIR = Path(__file__).resolve().parent
-SKILL_DIR = SCRIPT_DIR.parent
-REPO_ROOT = SCRIPT_DIR.parents[2]
-sys.path.insert(0, str(SCRIPT_DIR))
+TESTS_DIR = Path(__file__).resolve().parent
+SKILL_DIR = TESTS_DIR.parent
+SCRIPTS_DIR = SKILL_DIR / "scripts"
+REPO_ROOT = SKILL_DIR
+sys.path.insert(0, str(TESTS_DIR))
+sys.path.insert(0, str(SCRIPTS_DIR))
 
 from agents_common import emit_json
 from eval_fixtures import EvalFixtures
@@ -25,7 +27,7 @@ def run_script(name: str, *args: object, cwd: Path | None = None, env: dict[str,
     import subprocess
 
     result = subprocess.run(
-        [sys.executable, str(SCRIPT_DIR / name), *map(str, args)],
+        [sys.executable, str(SCRIPTS_DIR / name), *map(str, args)],
         cwd=cwd or REPO_ROOT,
         text=True,
         capture_output=True,

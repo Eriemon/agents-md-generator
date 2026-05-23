@@ -8,7 +8,7 @@ from typing import Any
 
 from design_questions import *
 from design_remote_gate import *
-from agents_common import ensure_global_rule_overrides_file, inspect_project, emit_json, resolve_project
+from agents_common import ensure_global_rule_overrides_file, evolution_owner_status, inspect_project, emit_json, resolve_project
 from manage_docs import scaffold as scaffold_docs
 
 def infer_kind(project: Path) -> str:
@@ -350,9 +350,9 @@ def skill_design_contract(answers: dict[str, Any]) -> dict[str, Any]:
         "reference_material_policy": "temporary inputs only; distill durable constraints and remove local reference paths from generated AGENTS.md",
     }
 
-def docs_contract(name: str) -> dict[str, Any]:
+def docs_contract(name: str, evolution_enabled: bool = False) -> dict[str, Any]:
     branch_policy = git_branch_policy()
-    return {
+    contract = {
         "root": "docs",
         "handoff": {
             "current": "docs/handoff/HANDOFF.md",
@@ -378,8 +378,6 @@ def docs_contract(name: str) -> dict[str, Any]:
             "required_files": ["1-workflow.md", "2-scripts.md", "3-plan.md", "4-design-ui.md"],
             "optional_file_pattern": "5-xxxxx.md through 10-xxxxx.md",
             "topic_policy": "Maintain 10 project-specific numbered experience files. The first four names are fixed; choose files 5-10 from current project facts such as testing, validation, release, installation, docs governance, directory governance, or remote deployment.",
-            "evolution_every_handoffs": 10,
-            "evolution_templates": "assets/templates/evolution/<matching-family>/<category>/<type>/",
         },
         "development": {
             "folder": "docs/development",
@@ -413,6 +411,10 @@ def docs_contract(name: str) -> dict[str, Any]:
             "archive_before_force_override": True,
         },
     }
+    if evolution_enabled:
+        contract["experience"]["evolution_every_handoffs"] = 10
+        contract["experience"]["evolution_templates"] = "assets/templates/evolution/<matching-family>/<category>/<type>/"
+    return contract
 
 def git_branch_policy() -> dict[str, Any]:
     return {
@@ -674,8 +676,6 @@ def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any
             "summarize_every_handoffs": 5,
             "ai_generation_required": True,
             "conversation_context_limit": 10,
-            "evolution_every_handoffs": 10,
-            "evolution_templates": "assets/templates/evolution/<matching-family>/<category>/<type>/",
             "required_sections": [
                 "evidence_read",
                 "task_context",
@@ -685,7 +685,6 @@ def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any
                 "next_application",
             ],
         },
-        "docs_contract": docs_contract(name),
         "dir_manager_contract": dir_manager_contract(),
         "engineering_rule_contract": rule_contract,
         "remote_server_contract": remote_contract,
@@ -700,11 +699,16 @@ def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any
     primary_root = str(profile["directory_contract"].get("primary_project_root", "")).strip()
     if primary_root and isinstance(profile.get("git_branch_policy"), dict):
         profile["git_branch_policy"]["release_prepare_allowed_paths"] = [primary_root, "tests", "docs", ".agents", "AGENTS.md", "dist"]
+    evolution_enabled = evolution_owner_status(project)["enabled"]
+    if evolution_enabled:
+        profile["experience_contract"]["evolution_every_handoffs"] = 10
+        profile["experience_contract"]["evolution_templates"] = "assets/templates/evolution/<matching-family>/<category>/<type>/"
     if kind == "skill":
         profile["skill_layout"] = layout
         profile["skill_design_contract"] = skill_design_contract(answers)
     if isinstance(answers.get(DESIGN_REVIEW_KEY), dict):
         profile[DESIGN_REVIEW_KEY] = answers[DESIGN_REVIEW_KEY]
+    profile["docs_contract"] = docs_contract(name, evolution_enabled=evolution_enabled)
     return profile, []
 
 def write_profile(project: Path, profile: dict[str, Any]) -> Path:

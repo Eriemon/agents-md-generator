@@ -16,9 +16,12 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents_common import (
     ensure_global_rule_overrides_file,
+    evolution_owner_status,
+    evolution_template_sink,
     GLOBAL_CODEX_AGENTS_PREAMBLE,
     GLOBAL_CODEX_AGENTS_BLOCK_END,
     GLOBAL_CODEX_AGENTS_BLOCK_START,
+    governance_skill_name,
     RELEASE_CORE_WORKTREE_RULE,
     codex_sessions_root,
     current_timestamp,
@@ -117,6 +120,8 @@ ACTIVE_SESSION_PATH = ".agents/active-session.json"
 IGNORED_RUNTIME_GIT_PATHS = {ACTIVE_SESSION_PATH.replace("\\", "/")}
 EXPERIENCE_REQUEST_PATH = ".agents/experience-update-request.json"
 EVOLUTION_REQUEST_PATH = ".agents/evolution-update-request.json"
+EVOLUTION_IMPORT_REQUEST_PATH = ".agents/evolution-import-request.json"
+EVOLUTION_EXPORT_ROOT = ".agents/evolution-export"
 CONVERSATION_SNAPSHOT_DIR = ".agents/conversation-snapshots"
 HANDOFF_SECTIONS = [
     "Original Plan And Steps",
@@ -443,6 +448,12 @@ def experience_request_file(project: Path) -> Path:
 
 def evolution_request_file(project: Path) -> Path:
     return project / EVOLUTION_REQUEST_PATH
+
+def evolution_import_request_file(project: Path) -> Path:
+    return project / EVOLUTION_IMPORT_REQUEST_PATH
+
+def evolution_export_root(project: Path) -> Path:
+    return project / EVOLUTION_EXPORT_ROOT
 
 def conversation_snapshot_dir(project: Path) -> Path:
     return project / CONVERSATION_SNAPSHOT_DIR

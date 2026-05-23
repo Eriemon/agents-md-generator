@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.7.0-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.9.0-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -48,11 +48,11 @@ AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的�
 - 在需要时生成 `CLAUDE.md` 与 `GEMINI.md` 兼容 shim。
 - 提供验证、审计、自动 review 治理、skill-effectiveness eval 和 aggregate confidence gate，用于发布前把关。
 
-## v0.7.0 重点更新
+## v0.9.0 重点更新
 
-- 新增独立的代码注释策略参考，并在生成的 root `AGENTS.md` 中渲染紧凑的注释策略区块。
-- 收紧模板、验证、review 指南、eval 和 agent 元数据中的 comment-policy 覆盖。
-- 更新治理脚本与 evolution templates，让 release 证据、文档门禁和生成指令保持同步。
+- 新增配置驱动的 source-governance 检查，覆盖注释策略、超长源码探测，以及仅测试辅助脚本的发布边界校验。
+- 将远程目录治理拆成专门模块，并扩展 evolution、confidence gate 与 review 同步相关的 docs-governance 支撑。
+- 刷新模板、参考文档和发布工具链，让代码注释策略、远程契约和 AGENTS 新鲜度检查在打包后继续保持一致。
 
 ## Skill 架构
 
@@ -85,13 +85,26 @@ AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的�
 | `agents/openai.yaml` | 宿主 UI 使用的 skill 元数据。 |
 | `scripts/` | 检查、访谈、渲染、文档治理、目录治理、验证、审计和评估脚本。 |
 | `assets/templates/` | root/scoped `AGENTS.md` 模板与 evolution 相关模板。 |
-| `evals/` | 供 `run_skill_evals.py` 使用的仓库内 skill-effectiveness 用例。 |
+| `evals/` | 供 `tests/run_skill_evals.py` 使用的仓库内 skill-effectiveness 用例。 |
 | `references/` | 脚本指南、审查清单、问题库、能力覆盖说明和 AGENTS 指南。 |
 | `docs/assets/` | 本对 README 使用的 hero、workflow 和 architecture 图。 |
+| `tests/` | 仅用于源码仓库的评测 harness 与 fixtures，不应进入发布包。 |
+
+## 安装
+
+直接告诉你的AI让他安装 https://github.com/Eriemon/agents-md-generator
+
+手动安装方式：
+
+```powershell
+git clone https://github.com/Eriemon/agents-md-generator.git
+cd .\agents-md-generator
+python -m pip install -e .
+```
+
+如果你在 Codex 或其他支持 skill 的宿主里使用它，把仓库放进 skill 搜索路径后重启宿主即可。
 
 ## 快速开始
-
-直接告诉你的 AI：请安装 https://github.com/Eriemon/agents-md-generator
 
 只读检查与作用域发现：
 
@@ -124,7 +137,7 @@ Skill 发布前验证：
 python scripts/quick_validate.py .
 python scripts/audit_skill.py .
 python scripts/evaluate_skill.py . <project>
-python scripts/run_skill_evals.py evals/evals.json
+python tests/run_skill_evals.py evals/evals.json
 ```
 
 治理敏感 release 的进阶检查：
@@ -168,8 +181,8 @@ Jiyuan Liu 和 He Li 隶属于东南大学电子科学与工程学院。
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {0.7.0},
-  date         = {2026-05-21},
+  version      = {0.9.0},
+  date         = {2026-05-23},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}

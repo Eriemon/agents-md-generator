@@ -23,6 +23,7 @@ from agents_common import (
     global_codex_agents_sync_command,
 )
 from manage_docs import verify_docs
+from source_governance import format_source_governance_errors, source_governance_report
 
 
 COMMAND_RE = re.compile(r"`([^`\n]+)`")
@@ -428,10 +429,8 @@ def verify(project: Path, include_skipped: bool = False, installed_skill_dir_ove
                 errors.append(f"{checked[-1]}: {script_error}")
             if command.startswith(("make ", "npm ", "pnpm ", "yarn ", "bun ", "python ", "pytest", "go ", "composer ", "ruff ", "mypy ", "npx ")):
                 continue
-    for item in facts.get("oversized_source_files", []) or []:
-        relative_path = str(item.get("path", "")).strip()
-        if relative_path:
-            errors.extend(validate_decomposition_plan(project, relative_path, profile))
+    source_governance = source_governance_report(project, profile)
+    errors.extend(format_source_governance_errors(source_governance))
     errors.extend(str(item) for item in facts.get("tool_script_layout_violations", []) or [])
     errors.extend(str(item) for item in facts.get("script_triad_gaps", []) or [])
     global_status = global_codex_agents_status(project_root=project, profile=profile)

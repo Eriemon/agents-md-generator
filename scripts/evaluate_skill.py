@@ -52,6 +52,7 @@ def run_command(name: str, argv: list[str], cwd: Path, env: dict[str, str] | Non
 
 def quick_validate_script() -> Path:
     candidates = [
+        TOOL_SKILL_DIR / "scripts" / "quick_validate.py",
         TOOL_SKILL_DIR.parent / ".system" / "skill-creator" / "scripts" / "quick_validate.py",
         Path.home() / ".codex" / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py",
     ]
@@ -63,7 +64,7 @@ def quick_validate_script() -> Path:
 
 def existing_python_roots(skill_dir: Path) -> list[str]:
     roots: list[str] = []
-    for name in ("runtime", "integration", "smoke", "scripts", "tests"):
+    for name in ("runtime", "integration", "scripts", "tests"):
         if (skill_dir / name).exists():
             roots.append(name)
     return roots
@@ -97,9 +98,6 @@ def cleanup_python_caches(skill_dir: Path) -> None:
 
 def cleanup_transient_artifacts(skill_dir: Path) -> None:
     cleanup_python_caches(skill_dir)
-    smoke_root = skill_dir / "_smoke_runs"
-    if smoke_root.is_dir():
-        shutil.rmtree(smoke_root, ignore_errors=True)
 
 
 def render_entry(project: Path, env: dict[str, str] | None = None) -> dict[str, Any]:
@@ -142,13 +140,20 @@ def collect_errors(commands: list[dict[str, Any]]) -> list[str]:
                     errors.append(f"render_agents: unresolved placeholder {item}")
                 for item in parsed.get("local_reference_leaks", []) or []:
                     errors.append(f"render_agents: local reference leak {item}")
+            if name == "source_governance":
+                for item in parsed.get("oversized_source_files", []) or []:
+                    errors.append(f"source_governance: oversized file {item.get('path', '')}")
+                for item in parsed.get("test_code_boundary_violations", []) or []:
+                    errors.append(f"source_governance: test-only design code outside tests {item.get('path', '')}")
+                for item in parsed.get("comment_policy_violations", []) or []:
+                    errors.append(f"source_governance: comment policy violation {item.get('path', '')}: {item.get('message', '')}")
     return errors
 
 
 def error_category_for(command_name: str, *, self_skill: bool) -> str:
     if command_name in {"manage_docs_verify", "verify_agents"}:
         return "self_repo_governance_error" if self_skill else "target_repo_governance_error"
-    if command_name in {"smoke", "validate_script"}:
+    if command_name in {"source_governance", "validate_script"}:
         return "target_repo_behavior_error"
     if command_name in {"audit_skill", "compileall", "quick_validate"}:
         return "tooling_error" if self_skill else "target_repo_behavior_error"
@@ -204,6 +209,31 @@ def classified_errors(commands: list[dict[str, Any]], *, self_skill: bool) -> li
                             "category": "tooling_error",
                             "command": name,
                             "message": f"local reference leak {item}",
+                        }
+                    )
+            if name == "source_governance":
+                for item in parsed.get("oversized_source_files", []) or []:
+                    classified.append(
+                        {
+                            "category": category,
+                            "command": name,
+                            "message": f"oversized file {item.get('path', '')}",
+                        }
+                    )
+                for item in parsed.get("test_code_boundary_violations", []) or []:
+                    classified.append(
+                        {
+                            "category": category,
+                            "command": name,
+                            "message": f"test-only design code outside tests {item.get('path', '')}",
+                        }
+                    )
+                for item in parsed.get("comment_policy_violations", []) or []:
+                    classified.append(
+                        {
+                            "category": category,
+                            "command": name,
+                            "message": f"comment policy violation {item.get('path', '')}: {item.get('message', '')}",
                         }
                     )
     return classified
@@ -281,10 +311,6 @@ def evaluate(skill_dir: Path, project: Path) -> dict[str, Any]:
     else:
         commands.append(run_command("quick_validate", [sys.executable, str(validator), str(skill_dir)], repo_root, base_env))
 
-    smoke_script = skill_dir / "smoke" / "run_smoke.py"
-    if smoke_script.is_file():
-        commands.append(run_command("smoke", [sys.executable, str(smoke_script)], repo_root, base_env))
-
     validate_script = discover_validate_script(skill_dir)
     if validate_script is not None:
         commands.append(
@@ -308,6 +334,10 @@ def evaluate(skill_dir: Path, project: Path) -> dict[str, Any]:
         if self_skill:
             verify_argv.extend(["--installed-skill-dir", str(skill_dir)])
         commands.append(run_command("verify_agents", verify_argv, repo_root, base_env))
+
+    source_governance_script = TOOL_SKILL_DIR / "scripts" / "check_source_governance.py"
+    if source_governance_script.is_file() and ((project / ".agents" / "global-rule-overrides.json").is_file() or self_skill):
+        commands.append(run_command("source_governance", [sys.executable, str(source_governance_script), str(project)], repo_root, base_env))
 
     if self_skill:
         commands.append(render_entry(project, base_env))

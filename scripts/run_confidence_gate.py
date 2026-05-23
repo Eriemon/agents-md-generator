@@ -14,6 +14,7 @@ sys.dont_write_bytecode = True
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
 REPO_ROOT = SCRIPT_DIR.parents[2]
+TESTS_DIR = REPO_ROOT / "tests"
 sys.path.insert(0, str(SCRIPT_DIR))
 
 from agents_common import emit_json, resolve_project
@@ -44,24 +45,10 @@ def run_command(name: str, argv: list[str], cwd: Path) -> dict[str, Any]:
     return command_entry(name, argv, cwd, result)
 
 
-def run_isolated_release_eval(release_dir: Path) -> dict[str, Any]:
-    with tempfile.TemporaryDirectory() as tmp:
-        isolated_skill = Path(tmp) / release_dir.name
-        shutil.copytree(release_dir, isolated_skill, ignore=shutil.ignore_patterns("__pycache__", "_smoke_runs"))
-        return run_command(
-            "isolated_release_eval",
-            [sys.executable, str(isolated_skill / "scripts" / "run_skill_evals.py"), str(isolated_skill / "evals" / "evals.json")],
-            isolated_skill,
-        )
-
-
 def cleanup_transient_artifacts(skill_dir: Path) -> None:
     for path in skill_dir.rglob("__pycache__"):
         if path.is_dir():
             shutil.rmtree(path, ignore_errors=True)
-    smoke_root = skill_dir / "_smoke_runs"
-    if smoke_root.is_dir():
-        shutil.rmtree(smoke_root, ignore_errors=True)
 
 
 def parsed_errors(entry: dict[str, Any]) -> list[str]:
@@ -125,8 +112,9 @@ def confidence_gate(
             [sys.executable, str(SCRIPT_DIR / "verify_agents.py"), str(project), "--installed-skill-dir", str(skill_dir)],
             project,
         ),
+        run_command("source_governance", [sys.executable, str(SCRIPT_DIR / "check_source_governance.py"), str(project)], project),
         run_command("evaluate_skill", [sys.executable, str(SCRIPT_DIR / "evaluate_skill.py"), str(skill_dir), str(project)], project),
-        run_command("run_skill_evals", [sys.executable, str(SCRIPT_DIR / "run_skill_evals.py"), str(evals_path)], project),
+        run_command("run_skill_evals", [sys.executable, str(TESTS_DIR / "run_skill_evals.py"), str(evals_path)], project),
         run_command(
             "work_folder_gate",
             [sys.executable, str(SCRIPT_DIR / "manage_docs.py"), "work-folder-gate", str(project), "--skill-dir", skill_dir_arg, "--mode", "release"],
@@ -167,14 +155,13 @@ def confidence_gate(
         commands.append(
             run_command("install_skip", [sys.executable, str(SCRIPT_DIR / "install_skill.py"), str(release_dir), "--target", "skip"], project)
         )
-        commands.append(run_isolated_release_eval(release_dir))
     if external_skill_dir is not None:
         commands.append(
             run_command(
                 "external_skill_eval",
                 [
                     sys.executable,
-                    str(SCRIPT_DIR / "run_skill_evals.py"),
+                    str(TESTS_DIR / "run_skill_evals.py"),
                     str(evals_path),
                     "--external-skill-dir",
                     str(external_skill_dir),
@@ -193,8 +180,15 @@ def confidence_gate(
                 errors.extend(f"{name}: {item}" for item in parsed.get("reasons", []))
             if name in {"release_gate_pre", "release_gate_post"} and parsed.get("errors"):
                 errors.extend(f"{name}: {item}" for item in parsed.get("errors", []))
-            if name in {"audit_skill", "manage_docs_verify", "verify_agents", "evaluate_skill"} and parsed.get("errors"):
+            if name in {"audit_skill", "manage_docs_verify", "verify_agents", "source_governance", "evaluate_skill"} and parsed.get("errors"):
                 errors.extend(f"{name}: {item}" for item in parsed.get("errors", []))
+            if name == "source_governance":
+                for item in parsed.get("oversized_source_files", []):
+                    errors.append(f"{name}: oversized file {item.get('path', '')}")
+                for item in parsed.get("test_code_boundary_violations", []):
+                    errors.append(f"{name}: test-only design code outside tests {item.get('path', '')}")
+                for item in parsed.get("comment_policy_violations", []):
+                    errors.append(f"{name}: comment policy violation {item.get('path', '')}: {item.get('message', '')}")
             if name == "work_folder_gate" and parsed.get("ok") is False:
                 errors.extend(f"{name}: {item}" for item in parsed.get("errors", []))
             if name == "check_freshness" and parsed.get("stale") is True:
@@ -203,12 +197,12 @@ def confidence_gate(
                 for item in parsed.get("findings", []):
                     if isinstance(item, dict):
                         errors.append(f"review_governance: {item.get('code', 'finding')}: {item.get('message', '')}")
-            if name in {"run_skill_evals", "isolated_release_eval"} and parsed.get("summary", {}).get("ok") is not True:
+            if name == "run_skill_evals" and parsed.get("summary", {}).get("ok") is not True:
                 errors.append(f"{name}: skill-effectiveness cases are not all green")
             if name == "install_skip" and parsed.get("errors"):
                 errors.extend(f"{name}: {item}" for item in parsed.get("errors", []))
             if name == "external_skill_eval" and parsed.get("summary", {}).get("ok") is not True:
-                errors.append("external_skill_eval: external skill smoke case is not green")
+                errors.append("external_skill_eval: external skill evaluation case is not green")
     return {
         "ok": not errors,
         "project": str(project),

@@ -61,6 +61,10 @@ def codex_sessions_root() -> Path:
 def skill_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
+
+def governance_skill_name() -> str:
+    return "agents-md-generator"
+
 def skill_version_file(root: Path | None = None) -> Path:
     return (root or skill_root()) / "VERSION"
 
@@ -79,6 +83,128 @@ def installed_skill_dir(skill_name: str = "agents-md-generator", override_dir: s
     home_root = Path(codex_home).expanduser().resolve() if codex_home else (Path.home() / ".codex").resolve()
     path = home_root / "skills" / skill_name
     return path if path.exists() else None
+
+
+def current_governance_skill_dirs(skill_name: str | None = None, override_dir: str | Path | None = None) -> list[Path]:
+    target_name = skill_name or governance_skill_name()
+    dirs: list[Path] = []
+    runtime = skill_root().resolve()
+    dirs.append(runtime)
+    installed = installed_skill_dir(target_name, override_dir=override_dir)
+    if installed is not None:
+        installed_resolved = installed.resolve()
+        if all(existing != installed_resolved for existing in dirs):
+            dirs.append(installed_resolved)
+    return dirs
+
+
+def evolution_owner_status(
+    project: Path,
+    skill_name: str | None = None,
+    override_dir: str | Path | None = None,
+) -> dict[str, Any]:
+    target_name = skill_name or governance_skill_name()
+    resolved_project = project.resolve()
+    active_skill_dirs = current_governance_skill_dirs(target_name, override_dir=override_dir)
+
+    source_repo_skill_dir = resolved_project / "skills" / target_name
+    if source_repo_skill_dir.is_dir():
+        candidate = source_repo_skill_dir.resolve()
+        if any(candidate == active for active in active_skill_dirs):
+            return {
+                "enabled": True,
+                "mode": "source-repo",
+                "project_root": str(resolved_project),
+                "owner_skill_dir": str(candidate),
+            }
+
+    if any(resolved_project == active for active in active_skill_dirs):
+        return {
+            "enabled": True,
+            "mode": "installed-skill",
+            "project_root": str(resolved_project),
+            "owner_skill_dir": str(resolved_project),
+        }
+
+    return {
+        "enabled": False,
+        "mode": "non-owner",
+        "project_root": str(resolved_project),
+        "owner_skill_dir": "",
+    }
+
+
+def path_is_writable(path: Path) -> bool:
+    target = path if path.suffix == "" else path.parent
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+        probe = target / ".write-probe.tmp"
+        probe.write_text("ok\n", encoding="utf-8")
+        probe.unlink()
+        return True
+    except Exception:
+        return False
+
+
+def installed_governance_skill_dir(
+    skill_name: str | None = None,
+    override_dir: str | Path | None = None,
+) -> Path | None:
+    target_name = skill_name or governance_skill_name()
+    installed = installed_skill_dir(target_name, override_dir=override_dir)
+    return installed.resolve() if installed is not None else None
+
+
+def evolution_template_sink(
+    project: Path,
+    skill_name: str | None = None,
+    override_dir: str | Path | None = None,
+) -> dict[str, Any]:
+    target_name = skill_name or governance_skill_name()
+    status = evolution_owner_status(project, skill_name=target_name, override_dir=override_dir)
+    project_root = project.resolve()
+    if status.get("enabled"):
+        owner_skill_dir = Path(str(status.get("owner_skill_dir", ""))).resolve()
+        template_root = owner_skill_dir / "assets" / "templates" / "evolution"
+        return {
+            "mode": "owner-local",
+            "project_root": str(project_root),
+            "owner_skill_dir": str(owner_skill_dir),
+            "installed_skill_dir": str(owner_skill_dir),
+            "template_root": str(template_root),
+            "export_root": ".agents/evolution-export",
+            "import_request_path": ".agents/evolution-import-request.json",
+            "source_workspace": str(project_root),
+            "writable": path_is_writable(template_root),
+        }
+
+    installed = installed_governance_skill_dir(target_name, override_dir=override_dir)
+    if installed is not None:
+        template_root = installed / "assets" / "templates" / "evolution"
+        if path_is_writable(template_root):
+            return {
+                "mode": "installed-sink",
+                "project_root": str(project_root),
+                "owner_skill_dir": "",
+                "installed_skill_dir": str(installed),
+                "template_root": str(template_root),
+                "export_root": ".agents/evolution-export",
+                "import_request_path": ".agents/evolution-import-request.json",
+                "source_workspace": str(project_root),
+                "writable": True,
+            }
+
+    return {
+        "mode": "export-pending",
+        "project_root": str(project_root),
+        "owner_skill_dir": "",
+        "installed_skill_dir": str(installed) if installed is not None else "",
+        "template_root": "",
+        "export_root": ".agents/evolution-export",
+        "import_request_path": ".agents/evolution-import-request.json",
+        "source_workspace": str(project_root),
+        "writable": True,
+    }
 
 def read_installed_skill_version(skill_name: str = "agents-md-generator", override_dir: str | Path | None = None) -> str:
     installed = installed_skill_dir(skill_name, override_dir=override_dir)

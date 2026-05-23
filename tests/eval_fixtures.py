@@ -11,7 +11,7 @@ from typing import Any
 
 class EvalFixtures:
     def __init__(self, scripts_dir: Path | None = None) -> None:
-        self.scripts_dir = Path(scripts_dir) if scripts_dir is not None else Path(__file__).resolve().parent
+        self.scripts_dir = Path(scripts_dir) if scripts_dir is not None else Path(__file__).resolve().parent.parent / "scripts"
 
     def remote_directory_answers(
         self,

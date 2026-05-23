@@ -33,6 +33,8 @@ SELF_REQUIRED_FILES = [
     "assets/templates/root-agents.md",
     "assets/templates/scoped-agents.md",
     "assets/templates/global-codex-agents.md",
+    "config/source-governance.json",
+    "scripts/check_source_governance.py",
     "scripts/inspect_project.py",
     "scripts/collect_design_profile.py",
     "scripts/design_review_gate.py",
@@ -50,14 +52,14 @@ SELF_REQUIRED_FILES = [
     "scripts/check_freshness.py",
     "scripts/quick_validate.py",
     "scripts/run_confidence_gate.py",
-    "scripts/run_skill_evals.py",
-    "scripts/eval_fixtures.py",
+    "scripts/source_governance.py",
+    "scripts/source_governance_config.py",
     "scripts/create_agent_shims.py",
     "scripts/audit_skill.py",
     "scripts/evaluate_skill.py",
 ]
 
-SELF_DISALLOWED_ROOT_DOCS = {"CHANGELOG.md", "INSTALL.md", "INSTALLATION.md"}
+SELF_DISALLOWED_ROOT_DOCS = {"README.md", "CHANGELOG.md", "INSTALL.md", "INSTALLATION.md"}
 DISALLOWED_CACHE_SUFFIXES = {".pyc", ".pyo"}
 LOCAL_REFERENCE_RE = re.compile(
     r"G:[/\\]html|ref[/\\](agent-rules|html)|\b[A-Za-z]:[/\\][^\s`'\"<>)]*",
@@ -239,7 +241,7 @@ REQUIRED_EVAL_CASE_IDS = {
     "install_release_completeness",
     "review_governance_companion_checks",
     "design_review_gate",
-    "isolated_eval_runtime_dependency",
+    "source_governance_test_boundary",
     "code_comment_policy_contract",
 }
 

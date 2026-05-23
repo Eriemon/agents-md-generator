@@ -17,13 +17,15 @@ from agents_common import emit_json, resolve_project
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_SKILL_DIR = SCRIPT_DIR.parent
 GATE_SCRIPT_NAMES = {
+    "check_source_governance.py",
     "check_freshness.py",
     "collect_design_profile.py",
     "design_questions.py",
     "design_review_gate.py",
-    "eval_fixtures.py",
     "design_interview_state.py",
     "design_profile_builder.py",
+    "source_governance.py",
+    "source_governance_config.py",
     "render_agents.py",
     "manage_dirs.py",
     "manage_docs.py",
@@ -31,7 +33,6 @@ GATE_SCRIPT_NAMES = {
     "manage_docs_sync_verify.py",
     "review_governance.py",
     "run_confidence_gate.py",
-    "run_skill_evals.py",
     "verify_agents.py",
 }
 CLI_SCRIPT_NAMES = GATE_SCRIPT_NAMES | {"install_skill.py"}
@@ -74,13 +75,14 @@ def build_findings(changes: list[str], skill_dir_rel: str) -> list[dict[str, Any
     script_changes = [path for path in changed_under(changed, script_prefix) if path.endswith(".py")]
     gate_changes = [path for path in script_changes if script_name(path) in GATE_SCRIPT_NAMES]
     cli_changes = [path for path in script_changes if script_name(path) in CLI_SCRIPT_NAMES]
+    test_changes = [path for path in changed if path.startswith("tests/") and path.endswith(".py")]
     findings: list[dict[str, Any]] = []
 
-    if script_changes and "tests/test_agents_md_scripts.py" not in changed:
+    if script_changes and not test_changes:
         findings.append(
             finding(
                 "script-change-without-tests",
-                "Script changes require tests/test_agents_md_scripts.py coverage in the same review span.",
+                "Script changes require tests/*.py coverage in the same review span.",
                 script_changes,
             )
         )

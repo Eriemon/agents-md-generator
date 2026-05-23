@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.7.0-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.9.0-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -48,11 +48,11 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 - Compatibility shim generation for `CLAUDE.md` and `GEMINI.md` when requested.
 - Verification, audit, automated review governance, skill-effectiveness evals, and aggregate confidence checks for release readiness.
 
-## What's New In v0.7.0
+## What's New In v0.9.0
 
-- Adds a dedicated code-comment policy reference and renders a compact policy section into generated root `AGENTS.md` files.
-- Tightens comment-policy coverage across templates, verification, review guidance, evals, and agent metadata.
-- Updates governance scripts and evolution templates so release evidence, documentation gates, and generated instructions stay aligned.
+- Adds config-backed source-governance checks for comment policy, oversized-source detection, and release-time boundaries for test-only helpers.
+- Splits remote directory governance into dedicated helpers and expands docs-governance support for evolution, confidence gates, and synchronized review coverage.
+- Refreshes templates, references, and release tooling so code-comment policy, remote contracts, and AGENTS freshness checks stay aligned through packaging.
 
 ## Skill Architecture
 
@@ -85,13 +85,26 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 | `agents/openai.yaml` | Skill metadata used by the host UI. |
 | `scripts/` | Deterministic inspection, interview, rendering, docs-governance, directory-governance, verification, audit, and evaluation helpers. |
 | `assets/templates/` | Bundled root and scoped `AGENTS.md` templates plus evolution material. |
-| `evals/` | Repo-local skill-effectiveness cases used by `run_skill_evals.py`. |
+| `evals/` | Repo-local skill-effectiveness cases used by `tests/run_skill_evals.py`. |
 | `references/` | Script guide, review checklist, question bank, capability notes, and AGENTS guidance. |
 | `docs/assets/` | Hero, workflow, and architecture diagrams used in this README pair. |
+| `tests/` | Repository-only eval harness and fixtures that should not ship inside release copies. |
 
-## Quick Start
+## Install
 
 Tell your AI assistant: install https://github.com/Eriemon/agents-md-generator
+
+Manual setup:
+
+```powershell
+git clone https://github.com/Eriemon/agents-md-generator.git
+cd .\agents-md-generator
+python -m pip install -e .
+```
+
+If you use Codex or another skill-aware host, place this repository in the host's skill search path and restart the host after installation.
+
+## Quick Start
 
 Read-only inspection and scoping:
 
@@ -124,7 +137,7 @@ Skill-release validation:
 python scripts/quick_validate.py .
 python scripts/audit_skill.py .
 python scripts/evaluate_skill.py . <project>
-python scripts/run_skill_evals.py evals/evals.json
+python tests/run_skill_evals.py evals/evals.json
 ```
 
 Advanced governance-sensitive release checks:
@@ -168,8 +181,8 @@ If this skill helps your research, teaching, or engineering workflow, please cit
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {0.7.0},
-  date         = {2026-05-21},
+  version      = {0.9.0},
+  date         = {2026-05-23},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}
