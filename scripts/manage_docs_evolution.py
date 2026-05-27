@@ -104,10 +104,54 @@ def sink_target_dir(root: Path, target: dict[str, Any]) -> Path:
 
 
 def provenance_summary(project: Path, checkpoint: int) -> dict[str, Any]:
+    source_project_name = str(control_profile(project).get("name") or inspect_project(project).get("project_name") or project.name)
+    source_window = handoff_window(project, checkpoint)
+    compact_entries: list[dict[str, Any]] = []
+    for row in source_window.get("entries", []):
+        if not isinstance(row, dict):
+            continue
+        compact_entries.append(
+            {
+                "path": str(row.get("path", "")).replace("\\", "/"),
+                "handoff_count": int(row.get("handoff_count", 0)),
+            }
+        )
     return {
-        "source_workspace": str(project.resolve()),
-        "source_project_name": str(control_profile(project).get("name") or inspect_project(project).get("project_name") or project.name),
-        "source_handoff_window": handoff_window(project, checkpoint),
+        "source_workspace": f"workspace:{source_project_name}",
+        "source_project_name": source_project_name,
+        "source_handoff_window": {
+            "start_handoff_count": int(source_window.get("start_handoff_count", 0)),
+            "end_handoff_count": int(source_window.get("end_handoff_count", 0)),
+            "entries": compact_entries,
+        },
+    }
+
+
+def public_sink_metadata(project: Path, sink: dict[str, Any], provenance: dict[str, Any]) -> dict[str, Any]:
+    project_root = project.resolve()
+
+    def render_path(value: Any) -> str:
+        text = str(value or "").strip()
+        if not text:
+            return ""
+        try:
+            candidate = Path(text).resolve()
+            return candidate.relative_to(project_root).as_posix()
+        except ValueError:
+            return f"external:{Path(text).name or 'workspace'}"
+        except Exception:
+            return text.replace("\\", "/")
+
+    return {
+        "mode": sink.get("mode", ""),
+        "writable": bool(sink.get("writable")),
+        "project_root": ".",
+        "source_workspace": provenance.get("source_workspace", ""),
+        "export_root": str(sink.get("export_root", "")).replace("\\", "/"),
+        "import_request_path": str(sink.get("import_request_path", "")).replace("\\", "/"),
+        "template_root": render_path(sink.get("template_root", "")),
+        "installed_skill_dir": render_path(sink.get("installed_skill_dir", "")),
+        "owner_skill_dir": render_path(sink.get("owner_skill_dir", "")),
     }
 
 
@@ -317,6 +361,7 @@ def run_evolution(project: Path, force: bool = False) -> dict[str, Any]:
     target_dir.mkdir(parents=True, exist_ok=True)
     template_index: list[dict[str, Any]] = []
     provenance = provenance_summary(project, checkpoint)
+    public_sink = public_sink_metadata(project, sink, provenance)
     for topic in core_specs:
         versions = source_versions_for(project, topic["filename"])
         output = target_dir / topic["filename"]
@@ -366,7 +411,7 @@ def run_evolution(project: Path, force: bool = False) -> dict[str, Any]:
         "cadence_handoffs": EVOLUTION_CADENCE_HANDOFFS,
         "version_window": "current-plus-latest-history",
         "target": target,
-        "sink": sink,
+        "sink": public_sink,
         "provenance": provenance,
         "review": {
             "verdict": review["verdict"],

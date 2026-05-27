@@ -543,8 +543,10 @@ def evolution_markdown(
 ) -> str:
     sources = "\n".join(f"- `{item['path']}`" for item in versions) or "- No source versions available."
     summary_body = strip_leading_title(summary)
-    source_workspace = str(provenance.get("source_workspace", "not recorded")).replace("\\", "/")
     source_project = str(provenance.get("source_project_name", "not recorded"))
+    source_workspace_label = "current governed workspace (local path intentionally omitted)"
+    if not str(provenance.get("source_workspace", "")).strip():
+        source_workspace_label = "not recorded"
     source_window = provenance.get("source_handoff_window", {})
     start = source_window.get("start_handoff_count", "?")
     end = source_window.get("end_handoff_count", "?")
@@ -558,7 +560,7 @@ def evolution_markdown(
         f"- Version window: current-plus-latest-history",
         f"- Target source: {target.get('source', 'unknown')}",
         f"- Rationale: {target.get('rationale', 'not recorded')}",
-        f"- Source workspace: {source_workspace}",
+        f"- Source workspace: {source_workspace_label}",
         f"- Source project: {source_project}",
         f"- Source handoff window: {start}-{end}",
         "",

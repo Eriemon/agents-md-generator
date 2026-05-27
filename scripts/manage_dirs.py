@@ -17,8 +17,16 @@ from manage_dirs_remote import (
     allowed_remote_path,
     join_remote_workspace_path,
     remote_path_classes,
+    remote_workspace_settings_reason,
     remote_runtime_reasons,
     remote_workspace_root,
+)
+from workspace_settings_policy import (
+    SETTINGS_FOLDER,
+    REMOTE_DEFAULT_SETTINGS,
+    workspace_settings_contract,
+    workspace_settings_location_reason,
+    workspace_settings_path_classes,
 )
 
 
@@ -30,6 +38,7 @@ CHANGE_REVIEWS = DIR_MANAGER_DIR / "change_reviews"
 HISTORY_DIR_MANAGER = DIR_MANAGER_DIR / "history_dir_manager"
 CRITICAL_PREFIXES = {
     ".agents",
+    ".settings",
     "agents",
     "assets",
     "dist",
@@ -73,6 +82,8 @@ ALLOWED_ROOT_FILE_PATTERNS = (
     "changelog.json",
     "experience-payload.json",
 )
+ROOT_OPTIONAL_WORK_DIRS = ("tests", "reports", "runs", "smoke")
+ROOT_OPTIONAL_WORK_DIR_PREFIXES = ("smoke-",)
 REMOTE_PROTECTED_PATH_CLASSES = [
     "workspace-root",
     "conda-environment-root",
@@ -155,6 +166,8 @@ def dir_manager_doc() -> str:
         "## Blocked By Default",
         "- Paths outside the project, absolute paths, parent traversal, wildcards, or shell-unsafe path characters.",
         "- New top-level folders not listed in `planned_structure.json`.",
+        f"- Workspace engineering config files such as `project.local.json`, `project.remote.json`, or `server_list.local.json` outside `{SETTINGS_FOLDER}/`.",
+        f"- Any remote attempt to copy `{SETTINGS_FOLDER}/*.local.json` such as `{SETTINGS_FOLDER}/server_list.local.json` into the remote workspace.",
         "- Remote deployment folders not listed in `planned_structure.json` remote_deployment planning.",
         "- Moving or deleting `.agents/`, `docs/dir_manager/`, `docs/handoff/`, or `docs/git_manager/`.",
         "- Moving source, tests, docs, dist, scripts, assets, references, or agents folders to unplanned locations.",
@@ -215,6 +228,7 @@ def remote_deployment_plan(project: Path) -> dict[str, Any]:
     runtime_policy = remote_runtime_archive_policy(project)
     planned = [] if workspace == "not configured" else [workspace]
     if workspace != "not configured":
+        planned.append(f"{workspace.rstrip('/')}/{SETTINGS_FOLDER}/")
         conda_template = normalize_rel(str(environment_policy.get("path_template", "")).strip())
         active_template = normalize_rel(str(runtime_policy.get("active_path_template", "")).strip())
         backup_template = normalize_rel(str(runtime_policy.get("backup_path_template", "")).strip())
@@ -231,6 +245,7 @@ def remote_deployment_plan(project: Path) -> dict[str, Any]:
         "workspace_root": workspace,
         "planned_structure": planned,
         "protected_paths": planned,
+        "workspace_settings": workspace_settings_contract(),
         "conda_environment": {
             "status": environment_policy.get("status", "disabled"),
             "scope": environment_policy.get("scope", "remote-only"),
@@ -272,7 +287,7 @@ def profile_layout_policy(project: Path) -> tuple[str, list[str], bool]:
         if str(item).strip()
     ]
     if not allowed and primary:
-        allowed = [primary, "tests", "dist", "docs", ".agents", "ref"]
+        allowed = [primary, "tests", "smoke", "reports", "runs", "dist", "docs", ".agents", "ref"]
     enforce = bool(contract.get("enforce_primary_project_root", False) or primary)
     return primary, allowed, enforce
 
@@ -288,6 +303,7 @@ def planned_structure(project: Path) -> dict[str, Any]:
             if path.is_dir() and path.name not in SKIP_DIRS
         }
     current_dirs.update({
+        f"{SETTINGS_FOLDER}/",
         "docs/",
         "docs/dir_manager/",
         "docs/dir_manager/history_dir_manager/",
@@ -303,6 +319,9 @@ def planned_structure(project: Path) -> dict[str, Any]:
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "allowed_new_paths": sorted(current_dirs),
         "allowed_root_files": list(ALLOWED_ROOT_FILES),
+        "root_optional_work_dirs": list(ROOT_OPTIONAL_WORK_DIRS),
+        "root_optional_work_dir_prefixes": list(ROOT_OPTIONAL_WORK_DIR_PREFIXES),
+        "workspace_settings": workspace_settings_contract(),
         "primary_project_root": f"{primary_root}/" if primary_root else "",
         "allowed_top_level_roots": sorted({
             normalize_rel(item).split("/", 1)[0] + "/"
@@ -427,8 +446,54 @@ def allowed_parent_paths(planned: dict[str, Any]) -> set[str]:
     return parents
 
 
+def configured_root_optional_work_dirs(planned: dict[str, Any]) -> set[str]:
+    configured = planned.get("root_optional_work_dirs", [])
+    values = {normalize_rel(item) for item in configured if normalize_rel(item)}
+    return values or set(ROOT_OPTIONAL_WORK_DIRS)
+
+
+def configured_root_optional_work_dir_prefixes(planned: dict[str, Any]) -> tuple[str, ...]:
+    configured = planned.get("root_optional_work_dir_prefixes", [])
+    values = tuple(normalize_rel(item) for item in configured if normalize_rel(item))
+    return values or ROOT_OPTIONAL_WORK_DIR_PREFIXES
+
+
+def root_optional_work_dir_match(path: str, planned: dict[str, Any]) -> bool:
+    normalized = normalize_rel(path)
+    if not normalized:
+        return False
+    top_level = normalized.split("/", 1)[0]
+    if top_level in configured_root_optional_work_dirs(planned):
+        return True
+    return any(top_level.startswith(prefix) for prefix in configured_root_optional_work_dir_prefixes(planned))
+
+
+def nested_workspace_artifact_reason(path: str, planned: dict[str, Any]) -> str | None:
+    normalized = normalize_rel(path)
+    primary_root = normalize_rel(str(planned.get("primary_project_root", "")).strip())
+    if not normalized or not primary_root:
+        return None
+    prefix = primary_root.rstrip("/") + "/"
+    if normalized == primary_root or not normalized.startswith(prefix):
+        return None
+    relative = normalized[len(prefix) :]
+    components = [part for part in relative.split("/") if part]
+    if not components:
+        return None
+    allowed_dirs = configured_root_optional_work_dirs(planned)
+    prefixes = configured_root_optional_work_dir_prefixes(planned)
+    for component in components:
+        if component in allowed_dirs or any(component.startswith(prefix) for prefix in prefixes):
+            return (
+                f"workspace artifact directory must stay at the work-folder root, not under the primary project root: {normalized}"
+            )
+    return None
+
+
 def allowed_path(path: str, planned: dict[str, Any]) -> bool:
     normalized = normalize_rel(path)
+    if root_optional_work_dir_match(normalized, planned):
+        return True
     allowed = [normalize_rel(item) for item in planned.get("allowed_new_paths", []) if str(item).strip()]
     parents = allowed_parent_paths(planned)
     if normalized in parents:
@@ -445,8 +510,21 @@ def unapproved_root_files(current: dict[str, Any], planned: dict[str, Any]) -> l
         if EPHEMERAL_ROOT_INPUT_FILE_RE.fullmatch(normalized):
             continue
         if not is_allowed_root_file(normalized, planned):
-            violations.append(normalized)
+            explicit_reason = workspace_settings_location_reason(normalized)
+            violations.append(explicit_reason or normalized)
     return violations
+
+
+def workspace_settings_structure_violations(current: dict[str, Any]) -> list[str]:
+    violations: list[str] = []
+    for file_path in current.get("files", []):
+        normalized = normalize_rel(file_path)
+        if not normalized:
+            continue
+        reason = workspace_settings_location_reason(normalized)
+        if reason:
+            violations.append(reason)
+    return sorted(dict.fromkeys(violations))
 
 
 def allowed_root_files(planned: dict[str, Any]) -> list[str]:
@@ -510,10 +588,19 @@ def review_change(project: Path, input_path: str, *, dry_run: bool = False) -> d
             invalid = invalid_path_reason(value)
             if invalid:
                 reasons.append(invalid)
+        if path:
+            path_classes.update(workspace_settings_path_classes(path))
+        if target:
+            path_classes.update(workspace_settings_path_classes(target))
         if environment == "remote":
             path_classes.update(remote_path_classes(path, remote_plan))
             if target:
                 path_classes.update(remote_path_classes(target, remote_plan))
+            for candidate in [path, target] if target else [path]:
+                reason = remote_workspace_settings_reason(candidate) if candidate else None
+                if reason and reason not in reasons:
+                    reasons.append(reason)
+                    matched_rules.append("remote-workspace-settings")
             if path and action in {"create", "move", "rename", "delete"} and not allowed_remote_path(path, remote_plan):
                 reasons.append(f"remote path `{normalize_rel(path)}` is not listed in planned_structure.json remote_deployment planning")
                 matched_rules.append("remote-path-must-be-planned")
@@ -525,6 +612,11 @@ def review_change(project: Path, input_path: str, *, dry_run: bool = False) -> d
                 reasons.extend(runtime_reasons)
                 matched_rules.append("remote-runtime-governance")
         else:
+            for candidate in [path, target] if target else [path]:
+                reason = workspace_settings_location_reason(candidate) if candidate else None
+                if reason and reason not in reasons:
+                    reasons.append(reason)
+                    matched_rules.append("workspace-settings-location")
             if action == "create" and path and not allowed_path(path, planned):
                 reasons.append(f"new path `{normalize_rel(path)}` is not listed in planned_structure.json")
                 matched_rules.append("local-path-must-be-planned")
@@ -611,6 +703,8 @@ def verify_dir_manager(project: Path) -> dict[str, Any]:
     for key in ["allowed_new_paths", "review_required_for", "allowed_root_files"]:
         if planned and not isinstance(planned.get(key), list):
             errors.append(f"{PLANNED_STRUCTURE.as_posix()}: `{key}` must be a list")
+    if planned and not isinstance(planned.get("workspace_settings"), dict):
+        errors.append(f"{PLANNED_STRUCTURE.as_posix()}: `workspace_settings` must be configured")
     if planned and not isinstance(planned.get("allowed_top_level_roots"), list):
         errors.append(f"{PLANNED_STRUCTURE.as_posix()}: `allowed_top_level_roots` must be a list")
     if planned and not planned.get("block_on_failed_review", False):
@@ -644,6 +738,16 @@ def verify_dir_manager(project: Path) -> dict[str, Any]:
                 if key not in runtime:
                     errors.append(f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.runtime_artifacts.{key} must be configured")
     if current and planned:
+        settings_policy = planned.get("workspace_settings", {}) if isinstance(planned.get("workspace_settings"), dict) else {}
+        if settings_policy:
+            if str(settings_policy.get("folder", "")).strip() != SETTINGS_FOLDER:
+                errors.append(f"{PLANNED_STRUCTURE.as_posix()}: workspace_settings.folder must be `{SETTINGS_FOLDER}`")
+            if str(settings_policy.get("local_default_file", "")).strip() != f"{SETTINGS_FOLDER}/project.local.json":
+                errors.append(f"{PLANNED_STRUCTURE.as_posix()}: workspace_settings.local_default_file must be `{SETTINGS_FOLDER}/project.local.json`")
+            if str(settings_policy.get("remote_default_file", "")).strip() != REMOTE_DEFAULT_SETTINGS:
+                errors.append(f"{PLANNED_STRUCTURE.as_posix()}: workspace_settings.remote_default_file must be `{REMOTE_DEFAULT_SETTINGS}`")
+            if bool(settings_policy.get("local_files_remote_blocked")) is not True:
+                errors.append(f"{PLANNED_STRUCTURE.as_posix()}: workspace_settings.local_files_remote_blocked must be true")
         primary_root = normalize_rel(str(planned.get("primary_project_root", "")).strip())
         if planned.get("enforce_primary_project_root") and primary_root:
             if primary_root not in current.get("directories", []) and not any(path.startswith(primary_root + "/") for path in current.get("directories", [])):
@@ -652,8 +756,13 @@ def verify_dir_manager(project: Path) -> dict[str, Any]:
             normalized = normalize_rel(directory)
             if not normalized:
                 continue
+            nested_reason = nested_workspace_artifact_reason(normalized, planned)
+            if nested_reason:
+                errors.append(f"{CURRENT_STRUCTURE.as_posix()}: {nested_reason}")
+                continue
             if not allowed_path(normalized, planned):
                 errors.append(f"{CURRENT_STRUCTURE.as_posix()}: directory violates planned structure: {normalized}")
+        errors.extend(f"{CURRENT_STRUCTURE.as_posix()}: {item}" for item in workspace_settings_structure_violations(current))
         for file_path in unapproved_root_files(current, planned):
             errors.append(f"{CURRENT_STRUCTURE.as_posix()}: root-level file violates planned structure: {file_path}")
     return {"project": str(project), "checked": checked, "errors": errors}
@@ -674,7 +783,7 @@ def obvious_structure_fix_candidate(project: Path, profile: dict, planned: dict)
     }
     candidates = []
     for child in sorted(project.iterdir()):
-        if child.name in SKIP_DIRS or child.name in {".agents", "docs", "dist", "tests", "ref"}:
+        if child.name in SKIP_DIRS or child.name in {".agents", ".settings", "docs", "dist", "tests", "ref"}:
             continue
         if not child.is_dir():
             continue
@@ -698,7 +807,7 @@ def takeover_candidates(project: Path, planned: dict) -> list[Path]:
     if not primary_root:
         return []
     top_primary = primary_root.split("/", 1)[0]
-    preserve_roots = {".agents", "docs", "dist", "tests", "ref", top_primary}
+    preserve_roots = {".agents", ".settings", "docs", "dist", "tests", "ref", top_primary}
     candidates: list[Path] = []
     for child in sorted(project.iterdir()):
         if child.name in SKIP_DIRS:
@@ -800,6 +909,10 @@ def structure_gate(project: Path) -> dict[str, Any]:
     for directory in current.get("directories", []):
         normalized = normalize_rel(directory)
         if not normalized:
+            continue
+        nested_reason = nested_workspace_artifact_reason(normalized, planned)
+        if nested_reason:
+            reasons.append(nested_reason)
             continue
         if not allowed_path(normalized, planned):
             reasons.append(f"directory violates planned structure: {normalized}")

@@ -144,6 +144,7 @@ def scaffold(project: Path, refresh_existing_state: bool = True) -> dict[str, An
             path.mkdir(parents=True, exist_ok=True)
             created.append(rel_path)
     migrated = migrate_legacy_docs(project)
+    handoff_naming = audit_handoff_naming(project)
     files = {
         "docs/handoff/HANDOFF.md": default_handoff(),
         "docs/development/DEVELOPMENT.md": default_development_record(),
@@ -152,6 +153,8 @@ def scaffold(project: Path, refresh_existing_state: bool = True) -> dict[str, An
         "docs/git_manager/CHANGELOG.md": default_git_changelog(),
     }
     for rel_path, content in files.items():
+        if rel_path == "docs/handoff/HANDOFF.md" and handoff_naming["blocking"]:
+            continue
         path = project / rel_path
         if not path.exists():
             path.write_text(content, encoding="utf-8")
@@ -172,7 +175,14 @@ def scaffold(project: Path, refresh_existing_state: bool = True) -> dict[str, An
     elif state_missing:
         save_state(project, state)
     created.extend(path for path in ensure_experience_files(project) if path not in created)
-    return {"project": str(project), "created": created, "migrated": migrated, "state": state}
+    return {
+        "project": str(project),
+        "created": created,
+        "migrated": migrated,
+        "state": state,
+        "handoff_naming": handoff_naming,
+        "errors": list(handoff_naming["errors"]),
+    }
 
 def read_input(path: str | None) -> dict[str, Any]:
     if not path:
@@ -183,16 +193,15 @@ def read_input(path: str | None) -> dict[str, Any]:
     return data
 
 def rotate_handoff(project: Path) -> str | None:
-    current = project / "docs" / "handoff" / "HANDOFF.md"
+    paths = handoff_paths(project)
+    current = paths["current"]
     if not current.exists():
         return None
-    history = project / "docs" / "handoff" / "history_handoff"
+    history = paths["history"]
     history.mkdir(parents=True, exist_ok=True)
-    target = history / f"HANDOFF-{stamp()}.md"
-    while target.exists():
-        target = history / f"HANDOFF-{stamp()}-{len(list(history.glob('HANDOFF-*.md')))}.md"
+    target = unique_handoff_history_path(history, datetime.now())
     shutil.move(str(current), str(target))
-    return str(target)
+    return target.relative_to(project).as_posix()
 
 def handoff_markdown(data: dict[str, Any], count: int) -> str:
     return "\n".join([
@@ -258,12 +267,18 @@ def maybe_write_conversation_snapshot(project: Path, data: dict[str, Any], count
 def write_handoff(project: Path, input_path: str | None) -> dict[str, Any]:
     from manage_docs_evolution import write_experience
 
-    scaffold(project)
+    scaffold_result = scaffold(project)
+    if scaffold_result.get("errors"):
+        return {
+            "project": str(project),
+            "errors": scaffold_result["errors"],
+            "handoff_naming": scaffold_result.get("handoff_naming", {}),
+        }
     archived = rotate_handoff(project)
     state = load_state(project)
     count = int(state.get("handoff_count", 0)) + 1
     data = read_input(input_path)
-    target = project / "docs" / "handoff" / "HANDOFF.md"
+    target = handoff_paths(project)["current"]
     target.write_text(handoff_markdown(data, count), encoding="utf-8")
     snapshot = maybe_write_conversation_snapshot(project, data, count)
     state["handoff_count"] = count
@@ -281,9 +296,16 @@ def write_handoff(project: Path, input_path: str | None) -> dict[str, Any]:
 def write_active_session(project: Path, input_path: str | None) -> dict[str, Any]:
     # Starting a session in an already-governed repository should not rewrite
     # tracked dir-manager baselines or docs-governance timestamps.
-    scaffold(project, refresh_existing_state=False)
+    scaffold_result = scaffold(project, refresh_existing_state=False)
+    if scaffold_result.get("errors"):
+        return {
+            "project": str(project),
+            "errors": scaffold_result["errors"],
+            "blocking": True,
+            "handoff_naming": scaffold_result.get("handoff_naming", {}),
+        }
     data = read_input(input_path)
-    handoff = project / "docs" / "handoff" / "HANDOFF.md"
+    handoff = handoff_paths(project)["current"]
     active = {
         "task": data.get("task", "not recorded"),
         "current_step": data.get("current_step", "not recorded"),
@@ -303,15 +325,26 @@ def read_active_session(project: Path) -> dict[str, Any]:
     return active if isinstance(active, dict) else {}
 
 def resume_check(project: Path, conversation_log: str | None = None) -> dict[str, Any]:
+    naming = audit_handoff_naming(project)
+    if naming["blocking"]:
+        return {
+            "project": str(project),
+            "status": "blocked",
+            "interrupted": False,
+            "blocking": True,
+            "reasons": naming["errors"],
+            "handoff_naming": naming,
+        }
     active = read_active_session(project)
     if not active:
         return {
             "project": str(project),
             "status": "clean",
             "interrupted": False,
+            "blocking": False,
             "reasons": ["no active session found"],
         }
-    handoff = project / "docs" / "handoff" / "HANDOFF.md"
+    handoff = handoff_paths(project)["current"]
     current_hash = file_hash(handoff)
     reasons: list[str] = []
     interrupted = False
@@ -336,6 +369,7 @@ def resume_check(project: Path, conversation_log: str | None = None) -> dict[str
         "project": str(project),
         "status": "interrupted" if interrupted else "clean",
         "interrupted": interrupted,
+        "blocking": False,
         "active_session": active,
         "current_handoff_hash": current_hash,
         "reasons": reasons,
@@ -343,6 +377,15 @@ def resume_check(project: Path, conversation_log: str | None = None) -> dict[str
 
 def resume_repair(project: Path, input_path: str | None) -> dict[str, Any]:
     check = resume_check(project)
+    if check.get("blocking"):
+        return {
+            "project": str(project),
+            "skipped": True,
+            "interrupted": False,
+            "blocking": True,
+            "errors": check["reasons"],
+            "resume_check": check,
+        }
     if not check["interrupted"]:
         return {
             "project": str(project),
@@ -355,6 +398,80 @@ def resume_repair(project: Path, input_path: str | None) -> dict[str, Any]:
     result["interrupted"] = True
     result["resume_check"] = check
     return result
+
+def repair_handoff_names(project: Path, write: bool = False) -> dict[str, Any]:
+    paths = handoff_paths(project)
+    handoff_root = paths["root"]
+    history_dir = paths["history"]
+    current_path = paths["current"]
+    renamed: list[dict[str, str]] = []
+    skipped: list[str] = []
+    errors: list[str] = []
+
+    handoff_root.mkdir(parents=True, exist_ok=True)
+    history_dir.mkdir(parents=True, exist_ok=True)
+
+    current_candidates = [
+        path for path in sorted(handoff_root.iterdir())
+        if path.is_file() and path.suffix.lower() == ".md" and path.name != HANDOFF_CURRENT_FILENAME
+    ] if handoff_root.is_dir() else []
+    extra_current = [
+        path.relative_to(project).as_posix()
+        for path in sorted(handoff_root.iterdir())
+        if path.name not in {HANDOFF_CURRENT_FILENAME, HANDOFF_HISTORY_DIRNAME} and not (path.is_file() and path.suffix.lower() == ".md")
+    ] if handoff_root.is_dir() else []
+    if extra_current:
+        errors.extend(
+            f"cannot repair handoff naming automatically because docs/handoff contains non-governed entries: {item}"
+            for item in extra_current
+        )
+    if current_path.exists():
+        if current_candidates:
+            errors.append("cannot repair handoff naming automatically because docs/handoff contains HANDOFF.md plus additional markdown candidates")
+    elif len(current_candidates) == 1:
+        source = current_candidates[0]
+        if write:
+            source.rename(current_path)
+        renamed.append({"from": source.relative_to(project).as_posix(), "to": current_path.relative_to(project).as_posix()})
+    elif len(current_candidates) > 1:
+        errors.append("cannot repair handoff naming automatically because docs/handoff contains multiple markdown candidates")
+    else:
+        skipped.append("no current handoff rename candidate found")
+
+    for path in sorted(history_dir.iterdir()) if history_dir.is_dir() else []:
+        rel_path = path.relative_to(project).as_posix()
+        if not path.is_file():
+            errors.append(f"cannot repair history handoff naming automatically because a non-file entry exists: {rel_path}")
+            continue
+        if HANDOFF_HISTORY_RE.fullmatch(path.name):
+            continue
+        if path.suffix.lower() != ".md":
+            errors.append(f"cannot repair history handoff naming automatically because a non-markdown file exists: {rel_path}")
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        if not looks_like_handoff_markdown(text):
+            errors.append(f"cannot repair history handoff naming automatically because file does not look like a handoff: {rel_path}")
+            continue
+        generated_at = parse_handoff_generated_at(text)
+        moment = generated_at or datetime.fromtimestamp(path.stat().st_mtime)
+        target = unique_handoff_history_path(history_dir, moment)
+        if target == path:
+            skipped.append(rel_path)
+            continue
+        if write:
+            path.rename(target)
+        renamed.append({"from": rel_path, "to": target.relative_to(project).as_posix()})
+
+    naming = audit_handoff_naming(project)
+    return {
+        "project": str(project),
+        "write_requested": write,
+        "renamed": renamed,
+        "skipped": skipped,
+        "errors": errors,
+        "blocking": bool(errors) or naming["blocking"],
+        "handoff_naming": naming,
+    }
 
 def write_development(project: Path, stage: str, input_path: str | None) -> dict[str, Any]:
     scaffold(project)

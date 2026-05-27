@@ -16,6 +16,11 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents_common import emit_json, global_codex_agents_status, resolve_project
 from agents_decisions import decision_request
+from release_content_policy import (
+    POLICY_VERSION,
+    analyze_release_content_root,
+    validate_recorded_release_content_policy,
+)
 
 ACTIVE_SESSION_PATH = ".agents/active-session.json"
 
@@ -139,6 +144,7 @@ SANITIZED_ASSIGNMENT_RULES = [
 ]
 SANITIZED_INLINE_RULES = [
     ("email", re.compile(r"(?<!\\)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", flags=re.IGNORECASE)),
+    ("local_path", re.compile(r"\b[A-Za-z]:[/\\][^\s`'\"<>)]*")),
     ("local_path", re.compile(r"[A-Za-z]:\\Users\\[^\r\n]+")),
     ("local_path", re.compile(r"/(?:Users|home)/[^\s]+")),
 ]
@@ -173,6 +179,32 @@ def sanitize_release_text(text: str) -> tuple[str, list[dict[str, str]]]:
             matches.append({"rule": rule_name, "placeholder": placeholder})
             redacted = updated
     return redacted, matches
+
+
+def sanitize_evolution_value(value: Any) -> Any:
+    if isinstance(value, str):
+        sanitized, _ = sanitize_release_text(value)
+        return normalize_line_endings(sanitized)
+    if isinstance(value, list):
+        return [sanitize_evolution_value(item) for item in value]
+    if isinstance(value, dict):
+        return {key: sanitize_evolution_value(item) for key, item in value.items()}
+    return value
+
+
+def sanitize_protected_evolution_text(path: Path, text: str) -> str:
+    if path.suffix == ".json":
+        try:
+            data = json.loads(text)
+        except Exception:
+            sanitized, _ = sanitize_release_text(text)
+            normalized = normalize_line_endings(sanitized)
+            return normalized if normalized.endswith("\n") else normalized + "\n"
+        sanitized_data = sanitize_evolution_value(data)
+        return json.dumps(sanitized_data, indent=2, sort_keys=True) + "\n"
+    sanitized, _ = sanitize_release_text(text)
+    normalized = normalize_line_endings(sanitized)
+    return normalized if normalized.endswith("\n") else normalized + "\n"
 
 
 def detect_binary_sensitive_matches(data: bytes) -> list[str]:
@@ -315,6 +347,7 @@ def validate_release_dir(release_dir: Path) -> dict[str, Any]:
     skill_name, version = parse_release_dir(release_dir)
     receipt_path, receipt = read_receipt(release_dir)
     errors: list[str] = []
+    release_content = analyze_release_content_root(release_dir)
     if str(receipt.get("skill_name", "")).strip() != skill_name:
         errors.append("release receipt skill_name does not match release directory name")
     if str(receipt.get("version", "")).strip() != version:
@@ -442,6 +475,24 @@ def validate_release_dir(release_dir: Path) -> dict[str, Any]:
                         errors.append(f"release receipt sanitization hash mismatch for {relative}")
     if repo_root is not None:
         errors.extend(verify_repo_release_state(repo_root))
+    source_skill_dir = source_skill_dir_from_receipt(repo_root, receipt) if repo_root is not None else None
+    source_forbidden_paths: list[str] = []
+    if source_skill_dir is not None:
+        source_forbidden_paths = analyze_release_content_root(
+            source_skill_dir,
+            allow_source_only_repo_local=True,
+        )["forbidden_paths"]
+    policy_errors = validate_recorded_release_content_policy(
+        receipt.get("release_content_policy"),
+        release_content,
+        forbidden_source_paths=source_forbidden_paths,
+        require_source_paths=source_skill_dir is not None,
+    )
+    if release_content["unexpected_top_level_entries"]:
+        policy_errors.append("release content policy rejected unexpected top-level release entries")
+    if release_content["forbidden_paths"]:
+        policy_errors.append("release content policy rejected forbidden development content in release")
+    errors.extend(policy_errors)
     errors.extend(validate_release_completeness(release_dir, receipt))
     return {
         "skill_name": skill_name,
@@ -450,6 +501,10 @@ def validate_release_dir(release_dir: Path) -> dict[str, Any]:
         "repo_root": str(repo_root) if repo_root else "",
         "validation_level": validation_level,
         "provenance_mode": provenance_mode,
+        "policy_version": POLICY_VERSION,
+        "forbidden_source_paths": source_forbidden_paths,
+        "forbidden_release_paths": release_content["forbidden_paths"],
+        "release_content_policy_ok": not policy_errors,
         "errors": errors,
     }
 
@@ -552,6 +607,8 @@ def merge_index_json(old_text: str, new_text: str) -> str | None:
         return None
     if not isinstance(old_data, dict) or not isinstance(new_data, dict):
         return None
+    old_data = sanitize_evolution_value(old_data)
+    new_data = sanitize_evolution_value(new_data)
     merged = dict(new_data)
     old_templates = old_data.get("templates", [])
     new_templates = new_data.get("templates", [])
@@ -570,8 +627,8 @@ def merge_index_json(old_text: str, new_text: str) -> str | None:
 
 
 def merge_protected_evolution_file(old_path: Path, target: Path) -> tuple[str, str | None]:
-    old_text = old_path.read_text(encoding="utf-8", errors="ignore")
-    new_text = target.read_text(encoding="utf-8", errors="ignore")
+    old_text = sanitize_protected_evolution_text(old_path, old_path.read_text(encoding="utf-8", errors="ignore"))
+    new_text = sanitize_protected_evolution_text(target, target.read_text(encoding="utf-8", errors="ignore"))
     if old_path.name.endswith(".json"):
         merged = merge_index_json(old_text, new_text)
         return ("index", merged)
@@ -597,23 +654,28 @@ def preserve_evolution_templates(backup: Path, destination: Path) -> tuple[list[
     for old_path in protected_evolution_files(backup):
         relative = old_path.relative_to(backup)
         target = destination / relative
+        sanitized_old_text = sanitize_protected_evolution_text(old_path, old_path.read_text(encoding="utf-8", errors="ignore"))
         if not target.exists():
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(old_path, target)
+            target.write_text(sanitized_old_text, encoding="utf-8")
             preserved.append(relative.as_posix())
             continue
         if target.read_bytes() == old_path.read_bytes():
+            current_text = target.read_text(encoding="utf-8", errors="ignore")
+            sanitized_current_text = sanitize_protected_evolution_text(target, current_text)
+            if sanitized_current_text != current_text:
+                target.write_text(sanitized_current_text, encoding="utf-8")
             preserved.append(relative.as_posix())
             continue
         kind, merged_text = merge_protected_evolution_file(old_path, target)
         if merged_text is not None:
-            target.write_text(merged_text, encoding="utf-8")
+            target.write_text(sanitize_protected_evolution_text(target, merged_text), encoding="utf-8")
             merged.append(relative.as_posix())
             if kind == "index":
                 merged_index_updates.append(relative.as_posix())
             continue
         conflict_target = conflict_copy_path(target)
-        shutil.copy2(old_path, conflict_target)
+        conflict_target.write_text(sanitized_old_text, encoding="utf-8")
         conflict = {
             "relative_path": relative.as_posix(),
             "installed_version": str(conflict_target),
@@ -665,7 +727,7 @@ def main() -> None:
     release_dir = resolve_project(args.release_dir)
     validation = validate_release_dir(release_dir)
     if validation["errors"]:
-        emit_json({"errors": validation["errors"]})
+        emit_json(validation)
         raise SystemExit(1)
     skill_name = validation["skill_name"]
     destination = target_path(skill_name, args.target, args.codex_home, args.custom_root)
@@ -686,6 +748,10 @@ def main() -> None:
         "receipt_path": validation["receipt_path"],
         "provenance_mode": validation["provenance_mode"],
         "validation_level": validation["validation_level"],
+        "policy_version": validation["policy_version"],
+        "forbidden_source_paths": validation["forbidden_source_paths"],
+        "forbidden_release_paths": validation["forbidden_release_paths"],
+        "release_content_policy_ok": validation["release_content_policy_ok"],
         "global_codex_agents_status": global_codex_agents_status(args.codex_home),
         "confirmation_question": "发布包验证完成。是否安装这个技能？请选择是或否；默认是否，跳过安装。",
         "options": install_options(),

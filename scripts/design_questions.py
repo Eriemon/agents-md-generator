@@ -17,8 +17,8 @@ from manage_docs import scaffold as scaffold_docs
 
 
 STATE_PATH = ".agents/design-interview-state.json"
-TERMINAL_STATUSES = {"completed", "abandoned"}
-TAKEOVER_TERMINAL_STATUSES = {"completed", "abandoned"}
+TERMINAL_STATUSES = {"completed", "completed_read_only", "abandoned"}
+TAKEOVER_TERMINAL_STATUSES = {"completed", "completed_read_only", "abandoned"}
 TAKEOVER_REASON_KEYS = {
     "agents_version_mismatch",
     "generator_version_mismatch",

@@ -123,6 +123,10 @@ EVOLUTION_REQUEST_PATH = ".agents/evolution-update-request.json"
 EVOLUTION_IMPORT_REQUEST_PATH = ".agents/evolution-import-request.json"
 EVOLUTION_EXPORT_ROOT = ".agents/evolution-export"
 CONVERSATION_SNAPSHOT_DIR = ".agents/conversation-snapshots"
+HANDOFF_CURRENT_FILENAME = "HANDOFF.md"
+HANDOFF_HISTORY_DIRNAME = "history_handoff"
+HANDOFF_HISTORY_RE = re.compile(r"^HANDOFF-\d{8}-\d{6}(?:-\d+)?\.md$")
+HANDOFF_GENERATED_AT_RE = re.compile(r"^- Generated at:\s*(.+?)\s*$", flags=re.MULTILINE)
 HANDOFF_SECTIONS = [
     "Original Plan And Steps",
     "Current Step",
@@ -554,8 +558,112 @@ def handoff_count_from_markdown(text: str) -> int:
     match = re.search(r"^- Handoff count:\s*(\d+)\s*$", text, flags=re.MULTILINE)
     return int(match.group(1)) if match else 0
 
+def handoff_paths(project: Path) -> dict[str, Path]:
+    handoff_root = project / "docs" / "handoff"
+    return {
+        "root": handoff_root,
+        "current": handoff_root / HANDOFF_CURRENT_FILENAME,
+        "history": handoff_root / HANDOFF_HISTORY_DIRNAME,
+    }
+
+def docs_governance_initialized(project: Path) -> bool:
+    for rel_path in [*DOC_DIRS, *REQUIRED_DOC_FILES, STATE_PATH]:
+        if (project / rel_path).exists():
+            return True
+    return False
+
+def handoff_history_filename_for_timestamp(moment: datetime, suffix: int | None = None) -> str:
+    stamp_value = moment.strftime("%Y%m%d-%H%M%S")
+    base = f"HANDOFF-{stamp_value}"
+    return f"{base}-{suffix}.md" if suffix is not None else f"{base}.md"
+
+def unique_handoff_history_path(history_dir: Path, moment: datetime) -> Path:
+    target = history_dir / handoff_history_filename_for_timestamp(moment)
+    suffix = 1
+    while target.exists():
+        target = history_dir / handoff_history_filename_for_timestamp(moment, suffix=suffix)
+        suffix += 1
+    return target
+
+def parse_handoff_generated_at(text: str) -> datetime | None:
+    match = HANDOFF_GENERATED_AT_RE.search(text)
+    if not match:
+        return None
+    raw = match.group(1).strip()
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+def looks_like_handoff_markdown(text: str) -> bool:
+    if "# Handoff" not in text:
+        return False
+    present_sections = sum(1 for section in HANDOFF_SECTIONS if f"## {section}" in text)
+    return present_sections >= max(3, len(HANDOFF_SECTIONS) // 2)
+
+def audit_handoff_naming(project: Path) -> dict[str, Any]:
+    paths = handoff_paths(project)
+    handoff_root = paths["root"]
+    history_dir = paths["history"]
+    errors: list[str] = []
+    current_markdown_candidates: list[str] = []
+    invalid_history_markdown: list[str] = []
+    checked: list[str] = [
+        "docs/handoff",
+        "docs/handoff/HANDOFF.md",
+        "docs/handoff/history_handoff",
+    ]
+
+    if handoff_root.exists() and handoff_root.is_dir():
+        for child in sorted(handoff_root.iterdir()):
+            rel_path = child.relative_to(project).as_posix()
+            if child.name == HANDOFF_CURRENT_FILENAME:
+                if not child.is_file():
+                    errors.append(f"handoff naming drift: current handoff path must be a file: {rel_path}")
+                continue
+            if child.name == HANDOFF_HISTORY_DIRNAME:
+                if not child.is_dir():
+                    errors.append(f"handoff naming drift: history handoff path must be a directory: {rel_path}")
+                continue
+            if child.is_file() and child.suffix.lower() == ".md":
+                current_markdown_candidates.append(rel_path)
+                errors.append(
+                    f"handoff naming drift: current handoff must be exactly docs/handoff/{HANDOFF_CURRENT_FILENAME}; found {rel_path}"
+                )
+            else:
+                errors.append(
+                    f"handoff naming drift: docs/handoff only allows {HANDOFF_CURRENT_FILENAME} and {HANDOFF_HISTORY_DIRNAME}/; found {rel_path}"
+                )
+
+    if history_dir.exists() and history_dir.is_dir():
+        for child in sorted(history_dir.iterdir()):
+            rel_path = child.relative_to(project).as_posix()
+            checked.append(rel_path)
+            if not child.is_file():
+                errors.append(f"handoff naming drift: history_handoff only allows archived markdown files; found {rel_path}")
+                continue
+            if child.suffix.lower() != ".md":
+                errors.append(f"handoff naming drift: history handoff archive must be markdown: {rel_path}")
+                continue
+            if not HANDOFF_HISTORY_RE.fullmatch(child.name):
+                invalid_history_markdown.append(rel_path)
+                errors.append(
+                    "handoff naming drift: history handoff archive must match "
+                    f"HANDOFF-YYYYMMDD-HHMMSS.md or HANDOFF-YYYYMMDD-HHMMSS-N.md; found {rel_path}"
+                )
+
+    return {
+        "project": str(project),
+        "ok": not errors,
+        "blocking": bool(errors),
+        "checked": checked,
+        "errors": errors,
+        "current_markdown_candidates": current_markdown_candidates,
+        "invalid_history_markdown": invalid_history_markdown,
+    }
+
 def current_handoff_entry(project: Path) -> dict[str, Any] | None:
-    path = project / "docs" / "handoff" / "HANDOFF.md"
+    path = handoff_paths(project)["current"]
     if not path.exists() or not path.is_file():
         return None
     content = path.read_text(encoding="utf-8", errors="ignore")

@@ -10,6 +10,10 @@ from design_questions import *
 from design_remote_gate import *
 from agents_common import ensure_global_rule_overrides_file, evolution_owner_status, inspect_project, emit_json, resolve_project
 from manage_docs import scaffold as scaffold_docs
+from workspace_settings_policy import workspace_settings_contract
+
+ROOT_OPTIONAL_WORK_DIRS = ("tests", "reports", "runs", "smoke")
+ROOT_OPTIONAL_WORK_DIR_PREFIXES = ("smoke-",)
 
 def infer_kind(project: Path) -> str:
     if (
@@ -121,11 +125,16 @@ def directory_layout_policy(kind: str, name: str) -> dict[str, Any]:
         "allowed_new_paths": [
             primary,
             "tests/",
+            "smoke/",
+            "reports/",
+            "runs/",
             "dist/",
             "docs/",
             ".agents/",
             "ref/",
         ],
+        "root_optional_work_dirs": list(ROOT_OPTIONAL_WORK_DIRS),
+        "root_optional_work_dir_prefixes": list(ROOT_OPTIONAL_WORK_DIR_PREFIXES),
         "enforce_primary_project_root": True,
     }
 
@@ -410,6 +419,7 @@ def docs_contract(name: str, evolution_enabled: bool = False) -> dict[str, Any]:
             "force_override_requires_user_confirmation": True,
             "archive_before_force_override": True,
         },
+        "workspace_settings": workspace_settings_contract(),
     }
     if evolution_enabled:
         contract["experience"]["evolution_every_handoffs"] = 10
@@ -663,6 +673,7 @@ def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any
             "local": answers["local_directory_structure"],
             "remote": answers["remote_directory_structure"],
             "feature_rules": answers["feature_directory_rules"],
+            "workspace_settings_policy": workspace_settings_contract(),
             "remote_environment_policy": remote_environment_contract,
             "remote_runtime_archive_policy": remote_runtime_contract,
             **directory_layout_policy(kind, name),
@@ -698,7 +709,17 @@ def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any
     }
     primary_root = str(profile["directory_contract"].get("primary_project_root", "")).strip()
     if primary_root and isinstance(profile.get("git_branch_policy"), dict):
-        profile["git_branch_policy"]["release_prepare_allowed_paths"] = [primary_root, "tests", "docs", ".agents", "AGENTS.md", "dist"]
+        profile["git_branch_policy"]["release_prepare_allowed_paths"] = [
+            primary_root,
+            "tests",
+            "smoke",
+            "reports",
+            "runs",
+            "docs",
+            ".agents",
+            "AGENTS.md",
+            "dist",
+        ]
     evolution_enabled = evolution_owner_status(project)["enabled"]
     if evolution_enabled:
         profile["experience_contract"]["evolution_every_handoffs"] = 10

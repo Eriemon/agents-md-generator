@@ -58,6 +58,14 @@ def finding(code: str, message: str, paths: list[str], severity: str = "error") 
     }
 
 
+def review_dispatch_policy(mode: str, changes: list[str]) -> str:
+    if not changes:
+        return "none"
+    if mode == "release":
+        return "required_for_release"
+    return "optional"
+
+
 def changed_under(changes: set[str], prefix: str) -> list[str]:
     return sorted(path for path in changes if path.startswith(prefix))
 
@@ -129,6 +137,7 @@ def build_findings(changes: list[str], skill_dir_rel: str) -> list[dict[str, Any
 
 
 def review_request(project: Path, base: str, head: str, changes: list[str], findings: list[dict[str, Any]], mode: str) -> dict[str, Any]:
+    dispatch = review_dispatch_policy(mode, changes)
     return {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "project": str(project),
@@ -137,7 +146,8 @@ def review_request(project: Path, base: str, head: str, changes: list[str], find
         "mode": mode,
         "changed_files": changes,
         "deterministic_findings": findings,
-        "required_manual_review": bool(changes),
+        "review_dispatch_policy": dispatch,
+        "required_manual_review": dispatch == "required_for_release",
         "review_focus": [
             "Confirm the deterministic findings are resolved or intentionally accepted.",
             "Review design consistency for gate semantics, user confirmation wording, and release/install safety.",
@@ -150,6 +160,7 @@ def review_governance(project: Path, base: str, head: str, skill_dir: Path, mode
     changes = changed_files(project, base, head)
     skill_dir_rel = skill_dir.relative_to(project).as_posix() if skill_dir.is_relative_to(project) else skill_dir.as_posix()
     findings = build_findings(changes, skill_dir_rel)
+    dispatch = review_dispatch_policy(mode, changes)
     request = review_request(project, base, head, changes, findings, mode)
     request_path = ""
     if write_request:
@@ -164,6 +175,8 @@ def review_governance(project: Path, base: str, head: str, skill_dir: Path, mode
         "mode": mode,
         "changed_files": changes,
         "findings": findings,
+        "review_dispatch_policy": dispatch,
+        "required_manual_review": dispatch == "required_for_release",
         "ok": not any(item["severity"] == "error" for item in findings),
         "review_request": request,
         "review_request_path": request_path,
@@ -176,7 +189,7 @@ def main() -> None:
     parser.add_argument("--base", required=True)
     parser.add_argument("--head", default="HEAD")
     parser.add_argument("--skill-dir", default=str(DEFAULT_SKILL_DIR))
-    parser.add_argument("--mode", choices=["all", "code", "design"], default="all")
+    parser.add_argument("--mode", choices=["all", "code", "design", "release"], default="all")
     parser.add_argument("--write-request", action="store_true")
     args = parser.parse_args()
 

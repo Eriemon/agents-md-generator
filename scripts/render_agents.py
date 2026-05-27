@@ -399,6 +399,7 @@ def directory_contract(profile: dict | None, project: Path) -> str:
         return "- Directory contract: not confirmed. Do not freeze structure until the user confirms local, remote, and feature-addition layout."
     contract = profile.get("directory_contract", {})
     dir_contract = profile.get("dir_manager_contract", {})
+    settings_policy = contract.get("workspace_settings_policy", {}) if isinstance(contract.get("workspace_settings_policy", {}), dict) else {}
     remote_environment = contract.get("remote_environment_policy", {}) if isinstance(contract.get("remote_environment_policy", {}), dict) else {}
     remote_runtime = contract.get("remote_runtime_archive_policy", {}) if isinstance(contract.get("remote_runtime_archive_policy", {}), dict) else {}
     archive_command = project_command(project, profile, "manage_dirs.py", "archive", "<project>", "--reason", "force-confirmed-directory-override")
@@ -407,6 +408,9 @@ def directory_contract(profile: dict | None, project: Path) -> str:
         f"- Local structure: {contract.get('local', 'not specified')}.",
         f"- Remote structure: {contract.get('remote', 'not specified')}.",
         "- Remote deployment boundary: do not sync local skill-development content to remote servers; deploy only explicit runtime/deployment artifacts unless the user explicitly overrides.",
+        "- Root-level work artifacts: keep `tests/`, `smoke/` and `smoke-*`, `reports/`, `runs/` at work-folder root; do not place them under the primary project root.",
+        f"- Workspace settings: keep work-folder project config under `{settings_policy.get('folder', '.settings')}/`; local-only files use `{settings_policy.get('local_default_file', '.settings/project.local.json')}` or `{settings_policy.get('folder', '.settings')}/<name>.local.json`, and remote workspaces use `{settings_policy.get('remote_default_file', '.settings/project.remote.json')}` or `{settings_policy.get('folder', '.settings')}/<name>.remote.json`.",
+        f"- Security rule: never copy `{settings_policy.get('folder', '.settings')}/*.local.json` such as `{settings_policy.get('folder', '.settings')}/server_list.local.json` to a remote server; keep local private config local and use `.remote.json` files for remote project settings instead.",
         "- New feature structure: keep new work inside the confirmed local structure and primary project root; read the local JSON governance config before assuming detailed maintainability or script layout rules.",
         "- Do not add new top-level directories or move ownership boundaries without updating this contract.",
         f"- Dir manager gate: review directory create/move/delete/rename plans with `{dir_contract.get('folder', 'docs/dir_manager')}/DIR_MANAGER.md` before changing folder structure.",
@@ -427,6 +431,8 @@ def directory_contract(profile: dict | None, project: Path) -> str:
     if primary_root:
         lines.insert(6, f"- Primary project root: `{primary_root}` must be the canonical location for the main skill or project content.")
         lines.insert(7, "- Existing work must already be placed at that primary root before strict control is confirmed.")
+        if str(profile.get("kind", "")).strip().lower() == "skill":
+            lines.insert(8, f"- Skill-local release content: keep eval assets under `{primary_root.rstrip('/')}/evals/`; they stay in the skill package.")
     return "\n".join(lines)
 
 
@@ -491,6 +497,7 @@ def release_contract(profile: dict | None, project: Path) -> str:
         f"- Before releasing an installable `dist/` package: commit all work, merge into `master`, record the release in `docs/git_manager/CHANGELOG.md`, archive older summaries under `docs/git_manager/history_git_manager/`, delete local branches other than `master` and `release`, and use `{project_command(project, profile, 'manage_docs.py', 'release-prepare', '<project>', '--version', 'vX.Y.Z', '--skill-dir', 'skills/<skill-name>')}` when branch cleanup should be automated.",
         f"- Build release artifacts with `{project_command(project, profile, 'manage_docs.py', 'package-release', '<project>', '--version', 'vX.Y.Z', '--skill-dir', 'skills/<skill-name>')}`.",
         f"- Installable `dist/` release copies must be sanitized before packaging when `sanitization_required` is `{release.get('sanitization_required', False)}`; use typed placeholders such as `<REDACTED_API_KEY>`, `<REDACTED_PASSWORD>`, `<REDACTED_EMAIL>`, and `<REDACTED_LOCAL_PATH>` instead of real sensitive values.",
+        "- Installable Skill release content may include `evals/`; reject `tests/`, `test/`, `smoke*`, `reports/`, `runs/`, `_smoke_runs/`, and cache files.",
         f"- Release receipt file named {release.get('receipt_file', 'RELEASE_RECEIPT.json')} must exist inside each installable release directory.",
         "- Different-version release directories and matching zip files are immutable history by default; do not delete, overwrite, or rewrite them during a new packaging run.",
         "- Rebuilding the same version may replace only the current target release directory and its matching zip; no other `dist/` artifact may change.",

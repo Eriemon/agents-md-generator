@@ -97,8 +97,36 @@ def validate_strong_control(text: str, file: str, project: Path, errors: list[st
     if directory_body is None:
         errors.append(f"{file}: strong-control profile requires ## Directory Contract")
     else:
+        settings_policy = directory_contract.get("workspace_settings_policy", {}) if isinstance(directory_contract.get("workspace_settings_policy", {}), dict) else {}
         remote_environment = directory_contract.get("remote_environment_policy", {}) if isinstance(directory_contract.get("remote_environment_policy", {}), dict) else {}
         remote_runtime = directory_contract.get("remote_runtime_archive_policy", {}) if isinstance(directory_contract.get("remote_runtime_archive_policy", {}), dict) else {}
+        settings_folder = str(settings_policy.get("folder", ".settings")).strip() or ".settings"
+        local_default = str(settings_policy.get("local_default_file", ".settings/project.local.json")).strip() or ".settings/project.local.json"
+        remote_default = str(settings_policy.get("remote_default_file", ".settings/project.remote.json")).strip() or ".settings/project.remote.json"
+        if local_default not in directory_body:
+            errors.append(f"{file}: Directory Contract must include local workspace settings path `{local_default}`")
+        if remote_default not in directory_body:
+            errors.append(f"{file}: Directory Contract must include remote workspace settings path `{remote_default}`")
+        if f"`{settings_folder}/*.local.json`" not in directory_body and f"{settings_folder}/*.local.json" not in directory_body:
+            errors.append(f"{file}: Directory Contract must state that `{settings_folder}/*.local.json` is local-only")
+        if "server_list.local.json" not in directory_body:
+            errors.append(f"{file}: Directory Contract must explicitly forbid copying server_list.local.json to remote servers")
+        required_root_artifact_phrases = (
+            "`tests/`",
+            "`smoke/` and `smoke-*`",
+            "`reports/`",
+            "`runs/`",
+            "work-folder root",
+            "do not place them under the primary project root",
+        )
+        for phrase in required_root_artifact_phrases:
+            if phrase not in directory_body:
+                errors.append(f"{file}: Directory Contract must describe root-level workspace artifact rule `{phrase}`")
+        if str(profile.get("kind", "")).strip().lower() == "skill":
+            primary_root = str(directory_contract.get("primary_project_root", "")).strip().rstrip("/")
+            evals_phrase = f"`{primary_root}/evals/`" if primary_root else "/evals/"
+            if evals_phrase not in directory_body:
+                errors.append(f"{file}: Directory Contract must state that skill-local evals stay under `{primary_root}/evals/`")
         if remote_environment.get("status") == "enabled":
             path_template = str(remote_environment.get("path_template", "")).strip()
             if not path_template:
@@ -168,6 +196,18 @@ def validate_strong_control(text: str, file: str, project: Path, errors: list[st
             errors.append(f"{file}: git-managed strong-control project requires ## Release Contract")
         elif "core.worktree" not in release_body or "Do not repoint repositories" not in release_body:
             errors.append(f"{file}: Release Contract must explicitly forbid `git config core.worktree` for git-managed workflows")
+        else:
+            release_required_phrases = (
+                "`evals/`",
+                "`tests/`",
+                "`test/`",
+                "`smoke*`",
+                "`reports/`",
+                "`runs/`",
+            )
+            for phrase in release_required_phrases:
+                if phrase not in release_body:
+                    errors.append(f"{file}: Release Contract must include release-content policy phrase `{phrase}`")
     if profile.get("kind") == "skill":
         contract_body = section_body(text, "## Skill Design Contract")
         if contract_body is None:
@@ -253,6 +293,26 @@ def is_path_reference(raw: str) -> bool:
     if any(char in raw for char in "*?<>|,"):
         return False
     return True
+
+
+def is_expected_contract_example_path(raw: str, profile: dict[str, Any]) -> bool:
+    directory_contract = profile.get("directory_contract", {}) if isinstance(profile.get("directory_contract", {}), dict) else {}
+    settings_policy = (
+        directory_contract.get("workspace_settings_policy", {})
+        if isinstance(directory_contract.get("workspace_settings_policy", {}), dict)
+        else {}
+    )
+    settings_folder = str(settings_policy.get("folder", ".settings")).strip() or ".settings"
+    local_default = str(settings_policy.get("local_default_file", f"{settings_folder}/project.local.json")).strip()
+    remote_default = str(settings_policy.get("remote_default_file", f"{settings_folder}/project.remote.json")).strip()
+    allowed_examples = {
+        local_default or f"{settings_folder}/project.local.json",
+        remote_default or f"{settings_folder}/project.remote.json",
+        f"{settings_folder}/server_list.local.json",
+        ".local.json",
+        ".remote.json",
+    }
+    return raw in allowed_examples
 
 
 def read_json(path: Path) -> dict:
@@ -414,7 +474,12 @@ def verify(project: Path, include_skipped: bool = False, installed_skill_dir_ove
                 continue
             candidate = (agents.parent / raw).resolve()
             root_candidate = (project / raw).resolve()
-            if not candidate.exists() and not root_candidate.exists() and not raw.endswith("/"):
+            if (
+                not candidate.exists()
+                and not root_candidate.exists()
+                and not raw.endswith("/")
+                and not is_expected_contract_example_path(raw, profile)
+            ):
                 warnings.append(f"{checked[-1]}: referenced path may not exist: {raw}")
 
         for match in COMMAND_RE.finditer(text):

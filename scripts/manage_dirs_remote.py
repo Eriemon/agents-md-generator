@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from workspace_settings_policy import SETTINGS_FOLDER, remote_workspace_settings_reason, workspace_settings_path_classes
 
 
 def normalize_rel(raw: str) -> str:
@@ -48,7 +49,7 @@ def remote_path_classes(path: str, remote_plan: dict[str, Any]) -> list[str]:
     normalized = normalize_rel(path)
     if not normalized:
         return []
-    classes = ["remote"]
+    classes = ["remote", *workspace_settings_path_classes(normalized)]
     runtime = remote_plan.get("runtime_artifacts", {}) if isinstance(remote_plan.get("runtime_artifacts"), dict) else {}
     conda = remote_plan.get("conda_environment", {}) if isinstance(remote_plan.get("conda_environment"), dict) else {}
     conda_template = normalize_rel(str(conda.get("path_template", "")).strip())
@@ -86,11 +87,15 @@ def remote_runtime_reasons(action: str, path: str, target: str | None, remote_pl
     if not normalized:
         return []
     reasons: list[str] = []
+    settings_reason = remote_workspace_settings_reason(normalized_path)
+    if settings_reason:
+        reasons.append(settings_reason)
     active_root = active_template.split("<run-id>", 1)[0].rstrip("/") if active_template else ""
     backup_root = backup_template.split("<run-id>", 1)[0].rstrip("/") if backup_template else ""
     if active_root and not normalized.startswith(active_root + "/") and normalized.split("/", 1)[0] not in {
         backup_root.split("/", 1)[0] if backup_root else "",
         ".conda",
+        SETTINGS_FOLDER,
     }:
         reasons.append(f"remote runtime artifacts must stay under `{active_template}`; received `{normalized}`")
     if artifact_state == "verified" and backup_root and not normalized.startswith(backup_root + "/"):

@@ -3,32 +3,19 @@ from __future__ import annotations
 
 from manage_docs_shared import *
 from manage_docs_scaffold_session import write_development, write_git_changelog
-from manage_docs_sync_verify import sync_root_agents
+from manage_docs_sync_verify import sync_root_agents, verify_docs
 from source_governance import (
     format_source_governance_errors,
     release_source_governance_report,
     source_governance_report,
 )
 from agents_decisions import decision_request
-
-INSTALLABLE_SKILL_TOP_LEVEL_EXCLUDES = {
-    "AGENTS.md",
-    "_smoke_runs",
-    "reports",
-    "workflow-state.json",
-    "__pycache__",
-    ".pytest_cache",
-    ".mypy_cache",
-    ".ruff_cache",
-}
-INSTALLABLE_SKILL_NESTED_DIR_EXCLUDES = {
-    ".git",
-    "__pycache__",
-    ".pytest_cache",
-    ".mypy_cache",
-    ".ruff_cache",
-}
-INSTALLABLE_SKILL_SUFFIX_EXCLUDES = {".pyc", ".pyo"}
+from release_content_policy import (
+    POLICY_VERSION,
+    analyze_release_content_root,
+    release_content_policy_receipt,
+    validate_recorded_release_content_policy,
+)
 
 
 def run_git(project: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -182,31 +169,12 @@ def normalize_line_endings(text: str) -> str:
     return text.replace("\r\n", "\n")
 
 
-def should_include_release_path(path: Path, root: Path) -> bool:
-    relative = path.relative_to(root)
-    parts = relative.parts
-    if not parts:
-        return True
-    if parts[0] in INSTALLABLE_SKILL_TOP_LEVEL_EXCLUDES:
-        return False
-    if any(part in INSTALLABLE_SKILL_NESTED_DIR_EXCLUDES for part in parts):
-        return False
-    if path.suffix in INSTALLABLE_SKILL_SUFFIX_EXCLUDES:
-        return False
-    return True
+def source_release_content_analysis(skill_dir: Path) -> dict[str, Any]:
+    return analyze_release_content_root(skill_dir, allow_source_only_repo_local=True)
 
 
-def release_copy_ignore(directory: str, names: list[str]) -> set[str]:
-    ignored: set[str] = set()
-    root = Path(directory)
-    for name in names:
-        candidate = root / name
-        if candidate.name in INSTALLABLE_SKILL_NESTED_DIR_EXCLUDES:
-            ignored.add(name)
-            continue
-        if candidate.suffix in INSTALLABLE_SKILL_SUFFIX_EXCLUDES:
-            ignored.add(name)
-    return ignored
+def release_tree_content_analysis(release_dir: Path) -> dict[str, Any]:
+    return analyze_release_content_root(release_dir)
 
 def sanitize_release_text(text: str) -> tuple[str, list[dict[str, str]]]:
     redacted = text
@@ -366,6 +334,25 @@ def verify_release_sanitization(
         errors.append(f"release receipt declares unexpected sanitized file: {rel_path}")
     return errors
 
+def verify_release_content_policy(
+    receipt: dict[str, Any],
+    *,
+    source_forbidden_paths: list[str],
+    release_analysis: dict[str, Any],
+    require_source_paths: bool,
+) -> list[str]:
+    errors = validate_recorded_release_content_policy(
+        receipt.get("release_content_policy"),
+        release_analysis,
+        forbidden_source_paths=source_forbidden_paths,
+        require_source_paths=require_source_paths,
+    )
+    if release_analysis["unexpected_top_level_entries"]:
+        errors.append("release content policy rejected unexpected top-level release entries")
+    if release_analysis["forbidden_paths"]:
+        errors.append("release content policy rejected forbidden development content in release")
+    return errors
+
 def verify_release_receipt(project: Path, receipt_path: Path, release_dir: Path, skill_name: str, version: str, source_rel: str, *, require_repo_dist: bool) -> list[str]:
     receipt = read_release_receipt(receipt_path)
     errors: list[str] = []
@@ -500,18 +487,15 @@ def release_prepare(project: Path, version: str, skill_dir_raw: str) -> dict[str
         errors.append("release prepare requires a clean worktree after merge and branch cleanup")
     return {"ok": not errors, "errors": errors, "checks": checks}
 
-def copy_release_tree(skill_dir: Path, release_dir: Path) -> None:
+def copy_release_tree(skill_dir: Path, release_dir: Path, included_files: list[str]) -> None:
     if release_dir.exists():
         shutil.rmtree(release_dir)
     release_dir.mkdir(parents=True, exist_ok=True)
-    for source in sorted(skill_dir.iterdir(), key=lambda item: item.name.lower()):
-        if source.name in INSTALLABLE_SKILL_TOP_LEVEL_EXCLUDES:
-            continue
-        target = release_dir / source.name
-        if source.is_dir():
-            shutil.copytree(source, target, ignore=release_copy_ignore)
-        else:
-            shutil.copy2(source, target)
+    for relative in included_files:
+        source = skill_dir / relative
+        target = release_dir / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
 
 def package_release(project: Path, version: str, skill_dir_raw: str) -> dict[str, Any]:
     profile = read_json(project / ".agents" / "agents-control.json")
@@ -521,12 +505,33 @@ def package_release(project: Path, version: str, skill_dir_raw: str) -> dict[str
     project_kind = release_project_kind(project, skill_dir)
     pre = release_gate(project, version, skill_dir_raw, "pre", "unspecified")
     if pre["errors"]:
-        return {"ok": False, "errors": pre["errors"], "pre_gate": pre}
+        return {
+            "ok": False,
+            "errors": pre["errors"],
+            "pre_gate": pre,
+            "policy_version": pre.get("policy_version", POLICY_VERSION),
+            "forbidden_source_paths": pre.get("forbidden_source_paths", []),
+            "forbidden_release_paths": pre.get("forbidden_release_paths", []),
+            "release_content_policy_ok": pre.get("release_content_policy_ok", False),
+        }
     release_dir = project / "dist" / f"{skill_name}-{version}"
     zip_path = project / "dist" / f"{skill_name}-{version}.zip"
     other_release_exclusions = release_target_exclusions(skill_name, version)
     before_other_artifacts = dist_artifact_snapshot(project, other_release_exclusions)
-    copy_release_tree(skill_dir, release_dir)
+    source_content = source_release_content_analysis(skill_dir)
+    forbidden_source_paths = source_content["forbidden_paths"]
+    if forbidden_source_paths:
+        return {
+            "ok": False,
+            "errors": ["package release rejected forbidden development content in skill source"],
+            "pre_gate": pre,
+            "release_dir": display_path(release_dir, project),
+            "policy_version": POLICY_VERSION,
+            "forbidden_source_paths": forbidden_source_paths,
+            "forbidden_release_paths": [],
+            "release_content_policy_ok": False,
+        }
+    copy_release_tree(skill_dir, release_dir, source_content["included_files"])
     receipt_path = release_dir / receipt_filename(profile)
     sanitization, sanitization_errors = sanitize_release_tree(profile, project_kind, skill_dir, release_dir)
     if sanitization_errors:
@@ -544,6 +549,11 @@ def package_release(project: Path, version: str, skill_dir_raw: str) -> dict[str
             "pre_gate": pre,
             "release_dir": display_path(release_dir, project),
         }
+    release_content = release_tree_content_analysis(release_dir)
+    release_policy = release_content_policy_receipt(
+        release_content,
+        forbidden_source_paths=forbidden_source_paths,
+    )
     receipt = {
         "skill_name": skill_name,
         "version": version,
@@ -557,6 +567,7 @@ def package_release(project: Path, version: str, skill_dir_raw: str) -> dict[str
         "validation_level": "strong",
         "provenance_mode": "repository-dist",
         "sanitization": sanitization,
+        "release_content_policy": release_policy,
         "files": build_release_file_manifest(release_dir),
         "other_version_artifacts": after_other_artifacts,
     }
@@ -581,6 +592,10 @@ def package_release(project: Path, version: str, skill_dir_raw: str) -> dict[str
         "receipt_path": display_path(receipt_path, project),
         "pre_gate": pre,
         "post_gate": post,
+        "policy_version": POLICY_VERSION,
+        "forbidden_source_paths": forbidden_source_paths,
+        "forbidden_release_paths": release_content["forbidden_paths"],
+        "release_content_policy_ok": not release_content["unexpected_top_level_entries"] and not release_content["forbidden_paths"],
     }
 
 def branch_gate(project: Path) -> dict[str, Any]:
@@ -720,14 +735,12 @@ def latest_release_dir(project: Path, skill_name: str) -> Path | None:
     return releases[-1][1]
 
 def release_members(root: Path, prefix: Path) -> list[str]:
+    analysis = analyze_release_content_root(root)
+    if prefix == root:
+        return list(analysis["included_files"])
     members: list[str] = []
-    for path in root.rglob("*"):
-        if not path.is_file():
-            continue
-        if not should_include_release_path(path, root):
-            continue
-        relative = path.relative_to(prefix).as_posix()
-        members.append(relative)
+    for relative in analysis["included_files"]:
+        members.append((root / relative).relative_to(prefix).as_posix())
     return sorted(members)
 
 def release_project_kind(project: Path, skill_dir: Path) -> str:
@@ -767,9 +780,20 @@ def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str, in
         "receipt_path": expected_release.joinpath(receipt_filename(profile)).relative_to(project).as_posix(),
         "status_lines": status_lines,
     }
+    docs_verify = verify_docs(project) if docs_governance_initialized(project) else {"project": str(project), "checked": [], "errors": []}
+    if docs_verify.get("errors"):
+        errors.extend(f"docs-verify: {item}" for item in docs_verify["errors"])
+    checks["docs_verify_ok"] = not docs_verify.get("errors")
     source_governance = source_governance_report(project, profile)
     errors.extend(format_source_governance_errors(source_governance, prefix="source-governance"))
     checks["source_governance_ok"] = source_governance["ok"]
+    source_content = source_release_content_analysis(skill_dir)
+    forbidden_source_paths = source_content["forbidden_paths"]
+    checks["policy_version"] = POLICY_VERSION
+    checks["forbidden_source_paths"] = forbidden_source_paths
+    checks["source_release_content_top_level"] = source_content["included_top_level_entries"]
+    if forbidden_source_paths:
+        errors.append("release content policy rejected forbidden development content in skill source")
     other_release_exclusions = release_target_exclusions(skill_name, version)
     if source_version and source_version != version:
         errors.append(f"release gate version {version} does not match skill source version {source_version}")
@@ -787,9 +811,18 @@ def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str, in
         if not expected_zip.is_file():
             errors.append(f"missing release zip: {expected_zip.relative_to(project).as_posix()}")
         if expected_release.is_dir():
-            release_governance = release_source_governance_report(project, expected_release, profile)
+            release_governance = release_source_governance_report(
+                project,
+                expected_release,
+                profile,
+                source_relative_prefix=source_rel,
+            )
             errors.extend(format_source_governance_errors(release_governance, prefix="release-source-governance"))
             checks["release_source_governance_ok"] = release_governance["ok"]
+            release_content = release_tree_content_analysis(expected_release)
+            checks["release_content_top_level"] = release_content["included_top_level_entries"]
+            checks["unexpected_release_top_level_entries"] = release_content["unexpected_top_level_entries"]
+            checks["forbidden_release_paths"] = release_content["forbidden_paths"]
             source_files = release_members(skill_dir, skill_dir)
             release_files = sorted(item["path"] for item in build_release_file_manifest(expected_release, exclude={receipt_path.name}))
             if source_files != release_files:
@@ -798,6 +831,14 @@ def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str, in
                 errors.append(f"missing release receipt: {receipt_path.relative_to(project).as_posix()}")
             else:
                 receipt = read_release_receipt(receipt_path)
+                policy_errors = verify_release_content_policy(
+                    receipt,
+                    source_forbidden_paths=forbidden_source_paths,
+                    release_analysis=release_content,
+                    require_source_paths=True,
+                )
+                checks["release_content_policy_errors"] = policy_errors
+                errors.extend(policy_errors)
                 errors.extend(
                     verify_release_receipt(
                         project,
@@ -840,6 +881,13 @@ def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str, in
         "receipt_path": checks["receipt_path"],
         "provenance_mode": "repository-dist",
         "validation_level": "strong",
+        "policy_version": POLICY_VERSION,
+        "forbidden_source_paths": forbidden_source_paths,
+        "forbidden_release_paths": checks.get("forbidden_release_paths", []),
+        "release_content_policy_ok": not forbidden_source_paths
+        and not checks.get("forbidden_release_paths", [])
+        and not checks.get("unexpected_release_top_level_entries", [])
+        and not checks.get("release_content_policy_errors", []),
     }
     if phase == "post" and install_intent == "unspecified" and project_kind == "skill":
         result["install_confirmation_required"] = True

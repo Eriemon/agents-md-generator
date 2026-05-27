@@ -324,7 +324,9 @@ def resolve_remote_server_for_task(contract: dict[str, Any], task_name: str, ski
             "matched_route": route,
         }
     dependency = remote_dependency_summary()
-    active_skill_dir = skill_dir or Path(str(dependency.get("skill_dir", ""))) if dependency.get("installed") else None
+    active_skill_dir = skill_dir
+    if active_skill_dir is None and dependency.get("installed"):
+        active_skill_dir = Path(str(dependency.get("skill_dir", "")))
     if active_skill_dir is None or not str(active_skill_dir):
         return {
             "ok": False,

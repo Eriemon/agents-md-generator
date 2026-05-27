@@ -42,6 +42,10 @@ def main() -> None:
     resume_repair_parser.add_argument("project", nargs="?", default=".")
     resume_repair_parser.add_argument("--input", default=None)
 
+    repair_handoff_parser = subparsers.add_parser("repair-handoff-names")
+    repair_handoff_parser.add_argument("project", nargs="?", default=".")
+    repair_handoff_parser.add_argument("--write", action="store_true")
+
     experience_parser = subparsers.add_parser("experience")
     experience_parser.add_argument("project", nargs="?", default=".")
     experience_parser.add_argument("--force", action="store_true")
@@ -114,16 +118,35 @@ def main() -> None:
         if getattr(args, "bootstrap_sessions", False):
             result["bootstrap_experience"] = bootstrap_experience(project)
         emit_json(result)
+        if result.get("errors"):
+            raise SystemExit(1)
     elif args.command == "preflight":
         emit_json(preflight_docs(project))
     elif args.command == "handoff":
-        emit_json(write_handoff(project, args.input))
+        result = write_handoff(project, args.input)
+        emit_json(result)
+        if result.get("errors"):
+            raise SystemExit(1)
     elif args.command == "start-session":
-        emit_json(write_active_session(project, args.input))
+        result = write_active_session(project, args.input)
+        emit_json(result)
+        if result.get("errors"):
+            raise SystemExit(1)
     elif args.command == "resume-check":
-        emit_json(resume_check(project, args.conversation_log))
+        result = resume_check(project, args.conversation_log)
+        emit_json(result)
+        if result.get("blocking"):
+            raise SystemExit(1)
     elif args.command == "resume-repair":
-        emit_json(resume_repair(project, args.input))
+        result = resume_repair(project, args.input)
+        emit_json(result)
+        if result.get("errors"):
+            raise SystemExit(1)
+    elif args.command == "repair-handoff-names":
+        result = repair_handoff_names(project, write=args.write)
+        emit_json(result)
+        if result.get("errors") or (args.write and result.get("handoff_naming", {}).get("blocking")):
+            raise SystemExit(1)
     elif args.command == "experience":
         result = write_experience(project, force=args.force, payload_path=args.payload)
         emit_json(result)

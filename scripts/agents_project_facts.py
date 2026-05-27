@@ -38,6 +38,7 @@ from source_governance_config import (
     validate_code_comment_policy_data,
     validate_global_rule_overrides_data,
 )
+from workspace_settings_policy import discover_workspace_settings
 
 EPHEMERAL_ROOT_INPUT_FILE_RE = re.compile(
     r"^(?:answers|first-answers|recovery|session|stage|handoff|change|allowed-change|blocked-change|blocked-remote-change|blocked-remote-source-change)(?:-[a-z0-9._-]+)?\.json$",
@@ -176,6 +177,7 @@ def inspect_project(root: Path) -> dict[str, Any]:
         "Makefile",
         "justfile",
     ] if (root / name).exists()]
+    config_files.extend(discover_workspace_settings(root))
 
     languages: list[str] = []
     framework = "none"
@@ -755,6 +757,7 @@ def extract_context(root: Path) -> dict[str, Any]:
         ".idea/inspectionProfiles/Project_Default.xml",
     ]
     ide_settings = existing_paths(root, ide_names)
+    workspace_settings = discover_workspace_settings(root)
 
     architecture_names = [
         "CODEOWNERS",
@@ -868,6 +871,7 @@ def extract_context(root: Path) -> dict[str, Any]:
         "quality_configs": sorted(dict.fromkeys(quality_configs)),
         "platform_files": sorted(dict.fromkeys(platform_files)),
         "ide_settings": sorted(dict.fromkeys(ide_settings)),
+        "workspace_settings": sorted(dict.fromkeys(workspace_settings)),
         "architecture_files": sorted(dict.fromkeys(architecture_files)),
         "dependency_configs": sorted(dict.fromkeys(dependency_configs)),
         "hook_configs": sorted(dict.fromkeys(hook_configs)),

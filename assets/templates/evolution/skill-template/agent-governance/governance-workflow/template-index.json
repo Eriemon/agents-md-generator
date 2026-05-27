@@ -1,7 +1,4 @@
 {
-  "cadence_handoffs": 10,
-  "generated_at": "2026-05-24T17:36:09",
-  "handoff_count": 70,
   "provenance": {
     "source_handoff_window": {
       "end_handoff_count": 70,
@@ -45,17 +42,6 @@
     "verdict": "approve"
   },
   "schema_version": 1,
-  "sink": {
-    "export_root": ".agents/evolution-export",
-    "import_request_path": ".agents/evolution-import-request.json",
-    "installed_skill_dir": "skills/agents-md-generator",
-    "mode": "owner-local",
-    "owner_skill_dir": "skills/agents-md-generator",
-    "project_root": ".",
-    "source_workspace": "workspace:agents-md-generator",
-    "template_root": "skills/agents-md-generator/assets/templates/evolution",
-    "writable": true
-  },
   "target": {
     "category_path": [
       "agent-governance"
@@ -290,6 +276,5 @@
       "target_type": "governance-workflow",
       "topic": "4-design-ui.md"
     }
-  ],
-  "version_window": "current-plus-latest-history"
+  ]
 }

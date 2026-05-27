@@ -23,6 +23,13 @@
       "description": "Unexpected root-level files should trip the structure gate and require explicit confirmation."
     },
     {
+      "id": "root_workspace_artifact_gate",
+      "kind": "directory_governance_regression",
+      "patterns": ["Reviewer", "Pipeline"],
+      "handler": "root_workspace_artifact_gate",
+      "description": "tests, smoke*, reports, and runs must stay at the work-folder root and be blocked when nested under the primary skill or engineering directory."
+    },
+    {
       "id": "exact_cwd_evolution_review",
       "kind": "docs_governance_regression",
       "patterns": ["Reviewer", "Pipeline"],
@@ -51,18 +58,25 @@
       "description": "Install validation must reject a release whose SKILL.md references missing formal content."
     },
     {
+      "id": "release_content_evals_install_contract",
+      "kind": "release_regression",
+      "patterns": ["Tool Wrapper", "Reviewer", "Pipeline"],
+      "handler": "release_content_evals_install_contract",
+      "description": "Installable skill releases must include skill-local evals while still rejecting tests, smoke*, reports, runs, and other work-folder artifacts."
+    },
+    {
       "id": "review_governance_companion_checks",
       "kind": "review_regression",
       "patterns": ["Reviewer", "Pipeline"],
       "handler": "review_governance_companion_checks",
-      "description": "Governance-sensitive script and version changes must require companion tests, docs, eval coverage, and release records."
+      "description": "Governance-sensitive script and version changes must require companion tests, docs, eval coverage, and release records, while non-release review dispatch stays optional."
     },
     {
       "id": "design_review_gate",
       "kind": "design_interview_regression",
       "patterns": ["Generator", "Reviewer", "Pipeline"],
       "handler": "design_review_gate",
-      "description": "Strong-control profile writes must block until final extra requirements are recorded and approved subagent design-review evidence with matching hashes is supplied."
+      "description": "Strong-control profile writes must block until final extra requirements are recorded and approved subagent design-review evidence with matching hashes is supplied, but read_only interviews must complete without reviewer dispatch until explicitly escalated."
     },
     {
       "id": "source_governance_test_boundary",
@@ -77,6 +91,20 @@
       "patterns": ["Generator", "Reviewer", "Pipeline"],
       "handler": "code_comment_policy_contract",
       "description": "Generated root AGENTS.md must include a configurable Chinese Code Comment Policy, write code_comment_policy config, and verification must reject missing or weakened policy rules."
+    },
+    {
+      "id": "handoff_naming_gate",
+      "kind": "docs_governance_regression",
+      "patterns": ["Reviewer", "Pipeline"],
+      "handler": "handoff_naming_gate",
+      "description": "Governed handoff documents must keep strict current and history naming, block silent scaffold masking, and require explicit repair for renamed files."
+    },
+    {
+      "id": "workspace_settings_gate",
+      "kind": "directory_governance_regression",
+      "patterns": ["Reviewer", "Pipeline"],
+      "handler": "workspace_settings_gate",
+      "description": "Workspace engineering configs must live under .settings, remote review must block all .local.json files, and generated governance must state the local/remote naming contract."
     }
   ]
 }

@@ -311,6 +311,9 @@ def verify_docs(project: Path) -> dict[str, Any]:
         checked.append(rel_path)
         if not (project / rel_path).is_file():
             errors.append(f"missing docs governance file: {rel_path}")
+    handoff_naming = audit_handoff_naming(project)
+    checked.extend(item for item in handoff_naming["checked"] if item not in checked)
+    errors.extend(item for item in handoff_naming["errors"] if item not in errors)
     development_current = project / "docs" / "development" / "DEVELOPMENT.md"
     if development_current.exists():
         errors.extend(validate_development_record(development_current))
@@ -343,7 +346,7 @@ def verify_docs(project: Path) -> dict[str, Any]:
                 errors.append(f"legacy docs path must be migrated into governed docs layout: {legacy.relative_to(project).as_posix()}")
             except ValueError:
                 errors.append(f"legacy docs path must be migrated into governed docs layout: {legacy}")
-    return {"project": str(project), "checked": checked, "errors": errors}
+    return {"project": str(project), "checked": checked, "errors": errors, "handoff_naming": handoff_naming}
 
 
 def run_json_command(project: Path, argv: list[str]) -> dict[str, Any]:
@@ -370,6 +373,7 @@ def work_folder_gate(project: Path, skill_dir_raw: str, mode: str = "development
 
     skill_dir = inferred_skill_dir(project, skill_dir_raw)
     resume = resume_check(project)
+    docs_verify = verify_docs(project) if docs_governance_initialized(project) else {"project": str(project), "checked": [], "errors": []}
     structure = structure_gate(project)
     dir_manager = verify_dir_manager(project)
     branch = branch_gate(project)
@@ -382,6 +386,9 @@ def work_folder_gate(project: Path, skill_dir_raw: str, mode: str = "development
         "blocking": False,
         "reason": "work-folder-gate reports active-session state but does not block the current in-progress session; run resume-check before starting new work.",
     }
+    if resume.get("blocking") is True:
+        errors.extend(f"resume-check: {item}" for item in resume.get("reasons", []))
+    errors.extend(f"docs-verify: {item}" for item in docs_verify.get("errors", []))
     if not structure.get("approved", True):
         errors.extend(f"structure-gate: {item}" for item in structure.get("reasons", []))
     errors.extend(f"dir-manager: {item}" for item in dir_manager.get("errors", []))
@@ -403,6 +410,7 @@ def work_folder_gate(project: Path, skill_dir_raw: str, mode: str = "development
         "errors": errors,
         "resume_check": resume,
         "resume_policy": resume_policy,
+        "docs_verify": docs_verify,
         "structure_gate": structure,
         "dir_manager": dir_manager,
         "branch_gate": branch,

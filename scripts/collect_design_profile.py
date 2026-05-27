@@ -19,9 +19,11 @@ def main() -> None:
     parser.add_argument("--kind", choices=["skill", "engineering"], default=None, help="Legacy flat-question output for the confirmed branch.")
     parser.add_argument("--answers", default=None, help="JSON file containing the full aligned answer set.")
     parser.add_argument("--answer-file", default=None, help="JSON file containing answers for the current interactive interview step.")
+    parser.add_argument("--intent", choices=["write", "read_only"], default="write", help="Intent for interactive interviews: write keeps the existing review gate, read_only completes without subagent review.")
     parser.add_argument("--write", action="store_true", help="Write .agents/agents-control.json and create docs governance artifacts.")
     parser.add_argument("--start", action="store_true", help="Start or restart the grouped interactive design interview.")
     parser.add_argument("--start-takeover", action="store_true", help="Start the minimal takeover interview for an old workspace that lacks a healthy root AGENTS.md.")
+    parser.add_argument("--enter-write-review", action="store_true", help="Escalate a completed read_only interview into the explicit write review gate.")
     parser.add_argument("--resume", action="store_true", help="Resume the current unfinished grouped interactive design interview.")
     parser.add_argument("--resume-takeover", action="store_true", help="Resume the current unfinished takeover interview.")
     parser.add_argument("--reset-interview", action="store_true", help="Abandon the current interactive design interview so a new one can start.")
@@ -39,15 +41,23 @@ def main() -> None:
             return
         if args.start_takeover:
             try:
-                state = initial_takeover_state(project)
+                state = initial_takeover_state(project, intent=args.intent)
             except ValueError as exc:
                 emit_json({"project": str(project), "mode": "takeover", "errors": [str(exc)]})
                 raise SystemExit(1)
         else:
             required, _ = takeover_required(project)
-            state = initial_takeover_state(project) if required else initial_state(project)
+            state = initial_takeover_state(project, intent=args.intent) if required else initial_state(project, intent=args.intent)
         write_state(project, state)
         emit_json(interactive_payload(project, state))
+        return
+
+    if args.enter_write_review:
+        state = read_state(project)
+        if not state:
+            emit_json({"project": str(project), "mode": "interactive", "errors": ["no interview state found; run --start first"]})
+            raise SystemExit(1)
+        emit_json(enter_write_review(project, state))
         return
 
     if args.resume or args.resume_takeover:

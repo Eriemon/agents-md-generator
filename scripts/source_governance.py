@@ -59,7 +59,33 @@ def line_count(path: Path) -> int:
     return path.read_text(encoding="utf-8", errors="ignore").count("\n") + 1
 
 
-def oversized_source_files(root: Path, config: dict[str, Any], *, prefix: str = "") -> list[dict[str, Any]]:
+def decomposition_plan_path(project_root: Path, relative_file: str) -> Path:
+    overrides = load_global_rule_overrides(project_root)["data"]
+    source_limits = overrides.get("source_file_limits", {}) if isinstance(overrides.get("source_file_limits", {}), dict) else {}
+    plan_root = str(source_limits.get("decomposition_plan_root", "docs/development/decomposition-plans")).strip().strip("/\\")
+    sanitized = relative_file.replace("\\", "/").replace(":", "")
+    return project_root / plan_root / f"{sanitized}.md"
+
+
+def has_valid_decomposition_plan(project_root: Path, relative_file: str) -> bool:
+    plan_path = decomposition_plan_path(project_root, relative_file)
+    if not plan_path.is_file():
+        return False
+    text = plan_path.read_text(encoding="utf-8", errors="ignore")
+    overrides = load_global_rule_overrides(project_root)["data"]
+    source_limits = overrides.get("source_file_limits", {}) if isinstance(overrides.get("source_file_limits", {}), dict) else {}
+    required_sections = source_limits.get("required_plan_sections", [])
+    return all(f"## {section}" in text for section in required_sections)
+
+
+def oversized_source_files(
+    root: Path,
+    config: dict[str, Any],
+    *,
+    prefix: str = "",
+    project_root: Path | None = None,
+    source_relative_prefix: str = "",
+) -> list[dict[str, Any]]:
     max_lines = int(config.get("max_lines", 0))
     extensions = {str(item).lower() for item in config.get("hard_fail_extensions", [])}
     violations: list[dict[str, Any]] = []
@@ -70,6 +96,9 @@ def oversized_source_files(root: Path, config: dict[str, Any], *, prefix: str = 
         if count <= max_lines:
             continue
         rel_path = relative_path(path, root)
+        plan_rel_path = f"{source_relative_prefix.rstrip('/')}/{rel_path}" if source_relative_prefix else rel_path
+        if project_root is not None and has_valid_decomposition_plan(project_root, plan_rel_path):
+            continue
         if prefix:
             rel_path = f"{prefix}/{rel_path}"
         violations.append({"path": rel_path, "line_count": count, "max_lines": max_lines})
@@ -170,7 +199,7 @@ def comment_policy_violations(root: Path, config: dict[str, Any], *, prefix: str
 def source_governance_report(project: Path, profile: dict[str, Any] | None = None) -> dict[str, Any]:
     effective = effective_source_governance(project, profile)
     config = effective["config"]
-    oversized = oversized_source_files(project, config)
+    oversized = oversized_source_files(project, config, project_root=project)
     boundary = test_code_boundary_violations(project, config)
     comments = comment_policy_violations(project, config)
     errors = list(effective["errors"])
@@ -187,12 +216,24 @@ def source_governance_report(project: Path, profile: dict[str, Any] | None = Non
     }
 
 
-def release_source_governance_report(project: Path, release_dir: Path, profile: dict[str, Any] | None = None) -> dict[str, Any]:
+def release_source_governance_report(
+    project: Path,
+    release_dir: Path,
+    profile: dict[str, Any] | None = None,
+    *,
+    source_relative_prefix: str = "",
+) -> dict[str, Any]:
     effective = effective_source_governance(project, profile)
     config = dict(effective["config"])
     config["excluded_roots"] = []
     prefix = release_dir.relative_to(project).as_posix() if release_dir.is_relative_to(project) else release_dir.name
-    oversized = oversized_source_files(release_dir, config, prefix=prefix)
+    oversized = oversized_source_files(
+        release_dir,
+        config,
+        prefix=prefix,
+        project_root=project,
+        source_relative_prefix=source_relative_prefix,
+    )
     boundary = test_code_boundary_violations(release_dir, config, prefix=prefix)
     comments = comment_policy_violations(release_dir, config, prefix=prefix)
     return {
