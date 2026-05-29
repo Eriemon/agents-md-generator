@@ -9,37 +9,34 @@
 - Rationale: Inferred from project control profile, repository facts, and topic keywords.
 - Source workspace: current governed workspace (local path intentionally omitted)
 - Source project: agents-md-generator
-- Source handoff window: 66-70
+- Source handoff window: 76-80
 
 ## Source Versions
 - `docs/experience/2-scripts.md`
-- `docs/experience/history_experience/20260524-172127/2-scripts.md`
+- `docs/experience/history_experience/20260527-171409/2-scripts.md`
 
 ## Evidence Sources
-- Latest and previous scripts experience entries plus the install_skill regression and installed audit evidence.
+- Current and previous scripts experience files, verifier output, and the latest runtime-routing regressions.
 
 ## Applicable Scenario
-- Use when a release or install helper preserves prior user artifacts and must keep the installed result safe without discarding accumulated reusable templates.
+- Use when governance scripts emit user-visible command paths or when script/runtime ownership is being refactored.
 
 ## Distilled Workflow
-- Identify every preserve, merge, and fallback branch in the helper before patching only the obvious path.
-- Add a regression fixture that mirrors the real installed-state contamination, including structured JSON provenance where relevant.
-- Implement one installed-safe rewrite layer that can sanitize strings and structured JSON values, and run every preserved output through it before writing.
-- Verify the source helper, then rebuild the release and confirm the installed audit passes on the replaced skill.
+- Centralize runtime-path choice in one helper, then update every script that serializes those paths into AGENTS, docs, JSON, or verifier output.
+- Keep local product/tooling checks separate from installed governance-runtime checks.
+- Add a verifier hard-fail for the forbidden script path pattern.
 
 ## Key Decisions
-- Share one sanitizer across preserve, merge, and fallback paths so no branch bypasses the installed-safety contract.
-- Validate the installed artifact after replacement instead of assuming source-side proof is enough.
+- Treat emitted command paths as public interfaces.
+- Use one shared helper for routing and dedicated regressions for each user-visible boundary.
 
 ## Common Problems
-- Fixing only the merge path leaves unmatched preserved templates or conflict fallbacks unsafe.
-- Regex-based sanitization can create packaging drift unless release parity is rechecked immediately after the change.
+- Shared helpers can contaminate render, verify, and review outputs simultaneously.
+- Script refactors that skip docs or eval updates silently create contract drift.
 
 ## Non-Reusable Content
-- Omit exact release hashes, temporary fixture names, and one-off local paths that do not change future script decisions.
+- Exclude one-off branch names, temporary fixture paths, and machine-local install directories.
 
 ## Application Checklist
-- Enumerate preserve, merge, and fallback branches.
-- Add a real installed-state regression fixture.
-- Apply one installed-safe rewrite layer before writes.
-- Recheck release parity and installed audit after the script change.
+- Confirm the helper, the emitters, the verifier, and the repo-local eval harness were all updated together.
+- Confirm owner and external path regressions both exist.

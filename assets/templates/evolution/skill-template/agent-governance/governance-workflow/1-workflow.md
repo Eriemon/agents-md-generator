@@ -9,43 +9,57 @@
 - Rationale: Inferred from project control profile, repository facts, and topic keywords.
 - Source workspace: current governed workspace (local path intentionally omitted)
 - Source project: agents-md-generator
-- Source handoff window: 66-70
+- Source handoff window: 76-80
 
 ## Source Versions
 - `docs/experience/1-workflow.md`
-- `docs/experience/history_experience/20260524-172127/1-workflow.md`
+- `docs/experience/history_experience/20260527-171409/1-workflow.md`
 
 ## Evidence Sources
-- Latest and immediately previous workflow experience entries for this repository.
-- The latest handoff window, release receipt evidence, installed audit result, and confidence-gate findings.
+- Current and previous workflow experience files, the latest handoff window, release/install evidence, and the current control profile.
 
 ## Applicable Scenario
-- Use when a future agents-md-generator task asks for factual confidence across source, release, install, and governance closure instead of stopping at source-side green tests.
+- Use when a skill-governance repository must split owner-repo bootstrap commands from external installed-runtime commands while keeping release and install proof in the same conversation.
 
 ## Distilled Workflow
-- Inspect repository facts and the current control profile before classifying the problem.
-- Align AGENTS.md rules and docs governance behavior with the intended agent-governance contract before changing scripts or release flows.
-- Reproduce the failure with a targeted regression or gate result, then implement the smallest script or contract change that closes the real loophole.
-- Run focused tests, then the full verify/eval/audit chain, then rebuild the versioned release, rerun release gates, and validate both install-skip and replace-install behavior.
-- Finish by updating handoff and cadence artifacts, marking AGENTS freshness on the final state, and rerunning confidence so repository governance and installed behavior agree.
+- Inspect repository facts and current AGENTS control profile before changing command routing.
+- Decide which commands belong to owner-repo bootstrap, which belong to installed governance runtime, and which belong to the target project itself.
+- Write paired regressions for owner and external paths, implement the smallest routing fix, rerun verify/eval/review gates, rebuild the release, validate install, then close docs cadence and freshness in the same conversation.
+- Workflow phase plan: plan the boundary and failing regressions, develop the narrow routing fix and companion docs updates, test the focused and full validation chain, then release the versioned artifact and install it before claiming closure.
 
 ## Key Decisions
-- Treat release and installation as mandatory parts of the reusable skill-governance workflow, not optional afterthoughts.
-- Return to the earliest failing proof stage whenever a later gate disproves the current confidence claim.
-- Keep release/install commands serial so each gate reads a stable artifact tree.
+- External workspaces call the installed `agents-md-generator` runtime rather than vendoring governance scripts into project-local folders.
+- Owner repositories keep explicit local bootstrap commands so self-development remains deterministic.
+- Release and install evidence are mandatory before claiming the workflow change is complete.
+- The design pattern mix is Tool Wrapper + Reviewer + Pipeline: governance scripts stay skill-owned, reviewer gates block drift, and the release/install/docs chain enforces closure order.
 
 ## Common Problems
-- Source-green changes can still fail after packaging or replacement install if preserved artifacts bypass installed-safety checks.
-- Parallel release/install execution can create noisy transient failures that hide the real state of the release artifact.
-- Confidence often remains blocked by stale governance freshness even after functional fixes are complete.
+- Mixed command ownership causes users to normalize unsafe vendoring behavior.
+- Green source tests without rebuilt release/install evidence create false confidence.
+- Late docs cadence requests can keep the repository non-current even after release and install are green.
+
+## Process Notes
+- 完整流程链: repository fact inspection -> boundary classification -> failing regression plan -> narrow develop step -> targeted test and full validation -> release packaging -> install proof -> docs cadence closeout -> freshness refresh -> final confidence gate.
+- 完整逻辑链: the AGENTS/control-profile contract defines command ownership; tests prove the previous routing was unsafe; reviewer and verifier gates keep docs/evals aligned; release receipts and installed-copy audit prove the artifact teaches the same behavior as source.
+- 闭环: if any later gate turns red, return to the earliest broken proof stage, fix it there, and replay the remaining pipeline stages instead of patching around the last failure.
+
+```mermaid
+flowchart TD
+    A[Plan boundary and failing regression] --> B[Develop the smallest routing fix]
+    B --> C[Test focused and full validation chain]
+    C -->|red| B
+    C --> D[Release versioned dist artifact]
+    D --> E[Install and verify installed copy]
+    E --> F[Close docs cadence and refresh freshness]
+    F --> G[Run final confidence gate]
+```
 
 ## Non-Reusable Content
-- Omit exact timestamps, temporary branch names, local absolute paths, and conversation-only details that do not affect future governance decisions.
+- Do not copy temporary backup paths, one-off timestamps, or local machine-specific release directories into the reusable template.
+- Do not paste full handoff text into the workflow template; keep only the repeatable decision and verification sequence.
 
 ## Application Checklist
-- Inspect repository facts or control-profile facts before implementation.
-- Keep AGENTS.md and docs governance rule alignment visible in the reusable workflow.
-- Add or rerun a regression that proves the old governance or install behavior was wrong.
-- Run focused tests and full verify/audit/eval gates.
-- Rebuild the release, rerun release/install proof, and confirm installed behavior.
-- Close handoff cadence and rerun freshness/confidence on the final state.
+- Confirm repository fact inspection happened before synthesis.
+- Confirm AGENTS or agent-governance rule alignment is explicit.
+- Confirm scripts, tests, verify, and docs governance steps are present before release/install closure.
+- Confirm release or install decision handling appears before the workflow claims completion.

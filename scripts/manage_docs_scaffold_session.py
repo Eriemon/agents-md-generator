@@ -138,6 +138,7 @@ def migrate_legacy_docs(project: Path) -> list[str]:
 
 def scaffold(project: Path, refresh_existing_state: bool = True) -> dict[str, Any]:
     created: list[str] = []
+    profile = project_profile(project)
     for rel_path in DOC_DIRS:
         path = project / rel_path
         if not path.exists():
@@ -149,7 +150,7 @@ def scaffold(project: Path, refresh_existing_state: bool = True) -> dict[str, An
         "docs/handoff/HANDOFF.md": default_handoff(),
         "docs/development/DEVELOPMENT.md": default_development_record(),
         "docs/install_configuration/INSTALL_CONFIGURATION.md": install_configuration_doc(),
-        "docs/git_manager/GIT_MANAGER.md": git_manager_doc(),
+        "docs/git_manager/GIT_MANAGER.md": git_manager_doc(project, profile),
         "docs/git_manager/CHANGELOG.md": default_git_changelog(),
     }
     for rel_path, content in files.items():

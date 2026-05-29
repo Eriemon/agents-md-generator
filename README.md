@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.9.3-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.9.6-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -48,11 +48,11 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 - Compatibility shim generation for `CLAUDE.md` and `GEMINI.md` when requested.
 - Verification, audit, automated review governance, skill-effectiveness evals, and aggregate confidence checks for release readiness.
 
-## What's New In v0.9.3
+## What's New In v0.9.6
 
-- Adds explicit release-content policy helpers so installable releases reject `tests/`, `smoke*`, `reports/`, runtime caches, and other development-only payloads.
-- Adds workspace-settings policy helpers to formalize `.settings/*.local.json` and `.settings/*.remote.json` contracts without leaking private workspace state into generated governance.
-- Expands takeover and release-boundary governance so root AGENTS repair, workspace settings, and package sanitization stay aligned through packaging.
+- Adds `scripts/codex_token_usage_review.py` so Codex session token usage can be summarized from local session evidence in a governed read-only flow.
+- Extends AGENTS routing and documentation to cover token-usage review, including `--hours`, `--json`, and `--verbose` usage patterns.
+- Keeps release-governance, workspace-settings policy, and sanitization rules aligned while expanding read-only operational review coverage.
 
 ## Skill Architecture
 
@@ -130,6 +130,14 @@ python scripts/verify_agents.py <project>
 python scripts/manage_docs.py verify <project>
 ```
 
+Codex token usage review:
+
+```powershell
+python scripts/codex_token_usage_review.py --hours 48
+python scripts/codex_token_usage_review.py --hours 48 --json
+python scripts/codex_token_usage_review.py --hours 48 --verbose
+```
+
 Skill-release validation:
 
 ```powershell
@@ -184,8 +192,8 @@ If this skill helps your research, teaching, or engineering workflow, please cit
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {0.9.3},
-  date         = {2026-05-27},
+  version      = {0.9.6},
+  date         = {2026-05-29},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}

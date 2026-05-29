@@ -32,6 +32,7 @@ RELEASE_CORE_WORKTREE_RULE = "Do not repoint repositories with `git config core.
 GLOBAL_CODEX_AGENTS_PREAMBLE = "<!-- Managed by agents-md-generator: keep manual notes outside the managed global baseline block. -->"
 GLOBAL_CODEX_AGENTS_BLOCK_START = "<!-- AGENTS-GENERATED:START global-codex-baseline -->"
 GLOBAL_CODEX_AGENTS_BLOCK_END = "<!-- AGENTS-GENERATED:END global-codex-baseline -->"
+INSTALLED_GOVERNANCE_RUNTIME_PLACEHOLDER = "<codex-home>/skills/agents-md-generator"
 
 
 def resolve_project(raw: str | Path) -> Path:
@@ -233,6 +234,36 @@ def primary_project_root_from_profile(profile: dict[str, Any] | None) -> str:
         return ""
     return str(directory_contract.get("primary_project_root", "")).strip().strip("/\\")
 
+def governance_runtime_root(
+    root: Path,
+    skill_name: str | None = None,
+    override_dir: str | Path | None = None,
+) -> str:
+    target_name = skill_name or governance_skill_name()
+    status = evolution_owner_status(root, skill_name=target_name, override_dir=override_dir)
+    if status.get("enabled"):
+        owner_skill_dir = Path(str(status.get("owner_skill_dir", ""))).resolve()
+        resolved_root = root.resolve()
+        if owner_skill_dir == resolved_root:
+            return "."
+        try:
+            return owner_skill_dir.relative_to(resolved_root).as_posix()
+        except ValueError:
+            return owner_skill_dir.as_posix()
+    return f"<codex-home>/skills/{target_name}"
+
+def governance_script_path(
+    root: Path,
+    script_name: str,
+    *,
+    skill_name: str | None = None,
+    override_dir: str | Path | None = None,
+) -> str:
+    runtime_root = governance_runtime_root(root, skill_name=skill_name, override_dir=override_dir)
+    if runtime_root == ".":
+        return f"scripts/{script_name}"
+    return f"{runtime_root}/scripts/{script_name}"
+
 def managed_scripts_root(root: Path, profile: dict[str, Any] | None = None) -> str:
     if (root / "scripts").is_dir():
         return "scripts"
@@ -245,13 +276,29 @@ def managed_scripts_root(root: Path, profile: dict[str, Any] | None = None) -> s
         return f"{primary_root}/scripts"
     return "scripts"
 
-def script_command(root: Path, script_name: str, *args: str, profile: dict[str, Any] | None = None) -> str:
-    script_root = managed_scripts_root(root, profile)
-    segments = ["python", f"{script_root}/{script_name}", *[str(item) for item in args if str(item).strip()]]
+def script_command(
+    root: Path,
+    script_name: str,
+    *args: str,
+    profile: dict[str, Any] | None = None,
+    override_dir: str | Path | None = None,
+) -> str:
+    # Governance runtime commands no longer resolve through target-project scripts/.
+    del profile
+    script_path = governance_script_path(root, script_name, override_dir=override_dir)
+    segments = ["python", script_path, *[str(item) for item in args if str(item).strip()]]
     return " ".join(segments)
 
 def root_agents_sync_command(root: Path, profile: dict[str, Any] | None = None, installed_skill_dir_override: str | Path | None = None) -> str:
-    command = script_command(root, "manage_docs.py", "sync-root-agents", ".", "--write", profile=profile)
+    command = script_command(
+        root,
+        "manage_docs.py",
+        "sync-root-agents",
+        ".",
+        "--write",
+        profile=profile,
+        override_dir=installed_skill_dir_override,
+    )
     if installed_skill_dir_override is not None:
         command += f" --installed-skill-dir {Path(installed_skill_dir_override).as_posix()}"
     return command
@@ -313,8 +360,8 @@ def global_codex_agents_status(codex_home: str | None = None, project_root: Path
         "baseline_ok": baseline_ok,
         "repair_required": repair_required,
         "repair_reasons": repair_reasons,
-        "repair_command": global_codex_agents_sync_command(project_root, profile) if project_root else "python scripts/manage_docs.py sync-global-codex-agents . --write",
-        "recommended_action": global_codex_agents_sync_command(project_root, profile) if project_root else "python scripts/manage_docs.py sync-global-codex-agents . --write",
+        "repair_command": global_codex_agents_sync_command(project_root, profile) if project_root else f"python {INSTALLED_GOVERNANCE_RUNTIME_PLACEHOLDER}/scripts/manage_docs.py sync-global-codex-agents . --write",
+        "recommended_action": global_codex_agents_sync_command(project_root, profile) if project_root else f"python {INSTALLED_GOVERNANCE_RUNTIME_PLACEHOLDER}/scripts/manage_docs.py sync-global-codex-agents . --write",
         "requires_user_confirmation": requires_user_confirmation,
         "user_message": user_message,
     }

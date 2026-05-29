@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.9.3-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.9.6-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -48,11 +48,11 @@ AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的�
 - 在需要时生成 `CLAUDE.md` 与 `GEMINI.md` 兼容 shim。
 - 提供验证、审计、自动 review 治理、skill-effectiveness eval 和 aggregate confidence gate，用于发布前把关。
 
-## v0.9.3 重点更新
+## v0.9.6 重点更新
 
-- 新增显式 release-content policy，安装包会拒绝 `tests/`、`smoke*`、`reports/`、运行缓存和其他仅开发期内容。
-- 新增 workspace-settings policy，把 `.settings/*.local.json` 与 `.settings/*.remote.json` 约束正式纳入治理，同时避免私有工作区状态泄露进生成结果。
-- 扩展 takeover 与 release boundary 治理，让 root AGENTS 修复、工作区设置约束与打包净化规则保持一致。
+- 新增 `scripts/codex_token_usage_review.py`，可以在受治理的只读流程里统计本地 Codex sessions 的 token usage。
+- 扩展 AGENTS 路由和配套文档，明确 `--hours`、`--json`、`--verbose` 等 token 用量审查用法。
+- 在继续保持 release-governance、workspace-settings policy 与脱敏规则一致的同时，补强了只读运维审查入口。
 
 ## Skill 架构
 
@@ -130,6 +130,14 @@ python scripts/verify_agents.py <project>
 python scripts/manage_docs.py verify <project>
 ```
 
+Codex token 用量审查：
+
+```powershell
+python scripts/codex_token_usage_review.py --hours 48
+python scripts/codex_token_usage_review.py --hours 48 --json
+python scripts/codex_token_usage_review.py --hours 48 --verbose
+```
+
 Skill 发布前验证：
 
 ```powershell
@@ -184,8 +192,8 @@ Jiyuan Liu 和 He Li 隶属于东南大学电子科学与工程学院。
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {0.9.3},
-  date         = {2026-05-27},
+  version      = {0.9.6},
+  date         = {2026-05-29},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}

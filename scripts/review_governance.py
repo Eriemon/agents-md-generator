@@ -36,6 +36,17 @@ GATE_SCRIPT_NAMES = {
     "verify_agents.py",
 }
 CLI_SCRIPT_NAMES = GATE_SCRIPT_NAMES | {"install_skill.py"}
+RUNTIME_ROUTING_SCRIPT_NAMES = {
+    "agents_common.py",
+    "agents_project_facts.py",
+    "design_takeover.py",
+    "manage_dirs.py",
+    "manage_docs_scaffold_session.py",
+    "manage_docs_shared.py",
+    "manage_docs_sync_verify.py",
+    "render_agents.py",
+    "verify_agents.py",
+}
 
 
 def run_git(project: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -83,6 +94,7 @@ def build_findings(changes: list[str], skill_dir_rel: str) -> list[dict[str, Any
     script_changes = [path for path in changed_under(changed, script_prefix) if path.endswith(".py")]
     gate_changes = [path for path in script_changes if script_name(path) in GATE_SCRIPT_NAMES]
     cli_changes = [path for path in script_changes if script_name(path) in CLI_SCRIPT_NAMES]
+    runtime_routing_changes = [path for path in script_changes if script_name(path) in RUNTIME_ROUTING_SCRIPT_NAMES]
     test_changes = [path for path in changed if path.startswith("tests/") and path.endswith(".py")]
     findings: list[dict[str, Any]] = []
 
@@ -116,6 +128,14 @@ def build_findings(changes: list[str], skill_dir_rel: str) -> list[dict[str, Any
                 "gate-change-without-evals",
                 "Gate behavior changes require eval or evaluation-scenarios coverage in the same review span.",
                 gate_changes,
+            )
+        )
+    if runtime_routing_changes and evals_json not in changed and "tests/run_skill_evals.py" not in changed:
+        findings.append(
+            finding(
+                "runtime-routing-change-without-eval-harness",
+                "Governance runtime routing changes require eval coverage in evals/evals.json or tests/run_skill_evals.py.",
+                runtime_routing_changes,
             )
         )
     if version_file in changed:

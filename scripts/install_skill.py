@@ -135,7 +135,7 @@ SANITIZED_PLACEHOLDERS = {
 SANITIZED_ASSIGNMENT_RULES = [
     (
         "api_key",
-        re.compile(r"(?m)^(\s*(?:[A-Z0-9]+_)*(?:API[_-]?KEY|ACCESS_TOKEN|AUTH_TOKEN|SECRET|TOKEN)(?:_[A-Z0-9]+)*\s*[:=]\s*)(.+?)\s*$"),
+        re.compile(r"(?m)^(\s*(?:[A-Z0-9]+_)*(?:API[_-]?KEY|ACCESS_TOKEN|AUTH_TOKEN|SECRET)(?:_[A-Z0-9]+)*\s*[:=]\s*)(.+?)\s*$"),
     ),
     (
         "password",

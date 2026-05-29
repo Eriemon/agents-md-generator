@@ -38,6 +38,7 @@ from agents_common import (
     root_agents_sync_command,
     render_global_codex_agents_template,
     read_skill_version,
+    script_command,
     resolve_project,
     session_message_rows,
     global_codex_agents_sync_command,
@@ -76,7 +77,7 @@ SANITIZED_PLACEHOLDERS = {
 SANITIZED_ASSIGNMENT_RULES = [
     (
         "api_key",
-        re.compile(r"(?m)^(\s*(?:[A-Z0-9]+_)*(?:API[_-]?KEY|ACCESS_TOKEN|AUTH_TOKEN|SECRET|TOKEN)(?:_[A-Z0-9]+)*\s*[:=]\s*)(.+?)\s*$"),
+        re.compile(r"(?m)^(\s*(?:[A-Z0-9]+_)*(?:API[_-]?KEY|ACCESS_TOKEN|AUTH_TOKEN|SECRET)(?:_[A-Z0-9]+)*\s*[:=]\s*)(.+?)\s*$"),
     ),
     (
         "password",
@@ -929,7 +930,27 @@ def validate_development_record(path: Path) -> list[str]:
         errors.append(f"{path.relative_to(path.parents[2]).as_posix()}: development record is too short")
     return errors
 
-def git_manager_doc() -> str:
+def git_manager_doc(project: Path | None = None, profile: dict[str, Any] | None = None) -> str:
+    release_prepare_command = (
+        script_command(project, "manage_docs.py", "release-prepare", "<project>", "--version", "vX.Y.Z", "--skill-dir", "skills/<skill-name>", profile=profile)
+        if project is not None
+        else "python <codex-home>/skills/agents-md-generator/scripts/manage_docs.py release-prepare <project> --version vX.Y.Z --skill-dir skills/<skill-name>"
+    )
+    release_gate_command = (
+        script_command(project, "manage_docs.py", "release-gate", "<project>", "--version", "vX.Y.Z", "--skill-dir", "skills/<skill-name>", "--phase", "pre|post", profile=profile)
+        if project is not None
+        else "python <codex-home>/skills/agents-md-generator/scripts/manage_docs.py release-gate <project> --version vX.Y.Z --skill-dir skills/<skill-name> --phase pre|post"
+    )
+    package_release_command = (
+        script_command(project, "manage_docs.py", "package-release", "<project>", "--version", "vX.Y.Z", "--skill-dir", "skills/<skill-name>", profile=profile)
+        if project is not None
+        else "python <codex-home>/skills/agents-md-generator/scripts/manage_docs.py package-release <project> --version vX.Y.Z --skill-dir skills/<skill-name>"
+    )
+    changelog_command = (
+        script_command(project, "manage_docs.py", "git-changelog", "<project>", "--input", "changelog.json", profile=profile)
+        if project is not None
+        else "python <codex-home>/skills/agents-md-generator/scripts/manage_docs.py git-changelog <project> --input changelog.json"
+    )
     return "\n".join([
         "# Git Manager",
         "",
@@ -941,16 +962,16 @@ def git_manager_doc() -> str:
         "- Protected branches: `master`, `release`.",
         "- Development branches are allowed as temporary local work branches.",
         "- Before releasing an installable `dist/` package, commit all work and merge development branches into `master`.",
-        "- Use `python scripts/manage_docs.py release-prepare <project> --version vX.Y.Z --skill-dir skills/<skill-name>` to auto-commit governed paths from the active temporary branch, merge it into `master`, and delete the local branch before packaging.",
+        f"- Use `{release_prepare_command}` to auto-commit governed paths from the active temporary branch, merge it into `master`, and delete the local branch before packaging.",
         "- If a branch has unmerged commits, merge it to `master` before cleanup; never discard it silently.",
         "- After release preparation, delete local branches other than `master` and `release`.",
         "- Do not delete remote branches unless the user explicitly requests remote cleanup.",
-        "- Run `python scripts/manage_docs.py release-gate <project> --version vX.Y.Z --skill-dir skills/<skill-name> --phase pre|post` before and after packaging to verify branch, worktree, release artifact, release receipt, and parity gates.",
+        f"- Run `{release_gate_command}` before and after packaging to verify branch, worktree, release artifact, release receipt, and parity gates.",
         "",
         "## Release Configuration",
         "- Place installable releases under `dist/`.",
         "- Name installable release folders as `<name>-vx.x.x` and create a matching zip when required.",
-        "- Build installable releases with `python scripts/manage_docs.py package-release <project> --version vX.Y.Z --skill-dir skills/<skill-name>` so the versioned release directory, matching zip, and `RELEASE_RECEIPT.json` provenance stay aligned.",
+        f"- Build installable releases with `{package_release_command}` so the versioned release directory, matching zip, and `RELEASE_RECEIPT.json` provenance stay aligned.",
         "- Different-version release directories and zip files are immutable history by default; do not delete, overwrite, or rewrite them during a new packaging run.",
         "- Rebuilding the same version may replace only the current target release directory and its matching zip; no other `dist/` artifact may change.",
         "- Installable `dist/` release copies for skill development must be sanitized before packaging; replace sensitive values in the dist copy only and use typed placeholders such as `<REDACTED_API_KEY>`, `<REDACTED_PASSWORD>`, `<REDACTED_EMAIL>`, and `<REDACTED_LOCAL_PATH>`.",
@@ -963,7 +984,7 @@ def git_manager_doc() -> str:
         "## Change Log",
         "- Update `docs/git_manager/CHANGELOG.md` before each commit that changes governed release or git-management behavior.",
         "- Archive the previous `CHANGELOG.md` to `docs/git_manager/history_git_manager/YYYYMMDD-HHMMSS/CHANGELOG.md` before writing the next current entry.",
-        "- Use `python scripts/manage_docs.py git-changelog <project> --input changelog.json` to rotate and write the current change summary.",
+        f"- Use `{changelog_command}` to rotate and write the current change summary.",
         "",
         "## Current Version",
         "- Record the active version here during release preparation and keep detailed changes in `CHANGELOG.md`.",

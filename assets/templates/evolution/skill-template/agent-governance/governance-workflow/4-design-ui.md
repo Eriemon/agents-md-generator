@@ -9,35 +9,34 @@
 - Rationale: Inferred from project control profile, repository facts, and topic keywords.
 - Source workspace: current governed workspace (local path intentionally omitted)
 - Source project: agents-md-generator
-- Source handoff window: 66-70
+- Source handoff window: 76-80
 
 ## Source Versions
 - `docs/experience/4-design-ui.md`
-- `docs/experience/history_experience/20260524-172127/4-design-ui.md`
+- `docs/experience/history_experience/20260527-171409/4-design-ui.md`
 
 ## Evidence Sources
-- Latest and previous design-ui experience entries plus gate messages and install/review decision outputs surfaced to the user.
+- Current and previous design-ui experience files, generated command hints, prompt wording, and verifier/review messages.
 
 ## Applicable Scenario
-- Use when a governance-heavy skill has no graphical UI but still exposes important textual interaction surfaces such as block reasons, install prompts, and repair flows.
+- Use when a repository has no GUI but its safety and workflow are conveyed through text-only generated guidance and gate output.
 
 ## Distilled Workflow
-- Record explicitly when no visual UI changed so this topic stays honest and does not absorb unrelated implementation notes.
-- For text-only interaction surfaces, keep blocking reasons and repair guidance direct enough that users can tell whether the failure is source behavior, release parity, install migration, or freshness drift.
-- Preserve explicit non-silent behavior for governance errors instead of masking them with auto-heal flows.
+- Review generated commands, prompts, and warnings as interface affordances.
+- Separate owner, external, and release/install audiences in the text contract.
+- Prefer short explicit warnings that name the forbidden behavior directly.
 
 ## Key Decisions
-- Treat user-facing gate wording as part of the skill interface even without a GUI.
-- Prefer explicit block messaging over silent repair when the issue affects governance truth or safety.
+- Text-only command hints are still UI and can cause unsafe behavior if they imply the wrong ownership boundary.
+- Audience-specific command guidance is safer than one mixed generic example.
 
 ## Common Problems
-- Reusing this topic for non-UI script details makes the experience set less trustworthy.
-- Text-only skills can still regress their interaction surface when prompts or block messages become ambiguous.
+- Implicit recommendations in examples cause users to trust the wrong path.
+- Prompt, doc, and verifier wording drift leads maintainers to follow whichever string is easiest rather than correct.
 
 ## Non-Reusable Content
-- Omit temporary screenshots, local paths, and one-conversation wording that does not represent a stable interaction rule.
+- Exclude local shell aliases, personal terminal habits, and one-off wording that is not part of the durable contract.
 
 ## Application Checklist
-- State whether any real UI changed.
-- If not, capture only the genuine interaction-surface lesson.
-- Keep block and repair messages explicit for governance-sensitive behavior.
+- Confirm the text guidance identifies the intended audience and the safe command path.
+- Confirm at least one regression protects the user-visible wording.

@@ -521,9 +521,6 @@ def apply_experience_payload(project: Path, payload_path: str) -> dict[str, Any]
             state["last_evolution_summary"] = summaries
         else:
             state.pop("last_evolution_summary", None)
-    else:
-        for key in LEGACY_EVOLUTION_STATE_KEYS:
-            state.pop(key, None)
     if requires_atomic_evolution and normalized_review:
         state["last_evolution_review_at"] = checkpoint
         state["last_evolution_review_verdict"] = normalized_review["verdict"]

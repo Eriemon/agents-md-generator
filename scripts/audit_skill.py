@@ -35,6 +35,7 @@ SELF_REQUIRED_FILES = [
     "assets/templates/global-codex-agents.md",
     "config/source-governance.json",
     "scripts/check_source_governance.py",
+    "scripts/codex_token_usage_review.py",
     "scripts/inspect_project.py",
     "scripts/collect_design_profile.py",
     "scripts/design_review_gate.py",
@@ -137,6 +138,13 @@ OPENAI_REQUIRED_PROMPT_SNIPPETS = (
     "禁止未经明确要求的批量 AI 注释",
     "Python/C/C++/Verilog",
 )
+OPENAI_TOKEN_USAGE_PROMPT_SNIPPETS = (
+    "explicitly asks for codex token usage statistics",
+    "codex_token_usage_review.py",
+    "keep `--sessions-root` inside the active codex sessions tree",
+    "do not trigger this token-usage path for generic cost, optimization, or session-health questions",
+    "only in codex environments where `$codex_home/sessions` or `~/.codex/sessions` exists",
+)
 REFERENCE_ALIGNMENT_RULES = {
     "references/review-checklist.md": (
         "default_conversation_language",
@@ -171,6 +179,10 @@ REFERENCE_ALIGNMENT_RULES = {
         "--installed-skill-dir skills/agents-md-generator",
         ".agents/global-rule-overrides.json",
         "global JSON governance config",
+        "codex_token_usage_review.py",
+        "只在用户明确要求进行 Codex Token 用量统计时调用",
+        "仅在当前环境可解析到 `$CODEX_HOME/sessions` 或 `~/.codex/sessions` 且目录存在时执行",
+        "sessions_root_outside_codex_root",
     ),
     "references/skill-design-coverage.md": (
         "default_conversation_language",
@@ -224,6 +236,13 @@ SKILL_REQUIRED_SNIPPETS = (
     "allowed_root_files",
     "remote_deployment.protected_path_classes",
 )
+SKILL_TOKEN_USAGE_SNIPPETS = (
+    "如果用户明确要求进行 Codex Token 用量统计",
+    "`python skills/agents-md-generator/scripts/codex_token_usage_review.py --hours 48`",
+    "不要进入 AGENTS 设计访谈",
+    "当前环境可解析到 `$CODEX_HOME/sessions` 或 `~/.codex/sessions` 且目录存在时执行",
+    "`--sessions-root` 只允许等于或位于当前 Codex sessions 根目录之下",
+)
 REQUIRED_SKILL_DESIGN_PATTERNS = {
     "Tool Wrapper",
     "Generator",
@@ -245,6 +264,7 @@ REQUIRED_EVAL_CASE_IDS = {
     "design_review_gate",
     "source_governance_test_boundary",
     "code_comment_policy_contract",
+    "codex_token_usage_review_contract",
 }
 
 
@@ -387,6 +407,8 @@ def validate_reference_alignment(skill_dir: Path, errors: list[str]) -> None:
 def validate_skill_rule_hardening(text: str, errors: list[str]) -> None:
     if not all(snippet in text for snippet in SKILL_REQUIRED_SNIPPETS):
         errors.append("SKILL.md: missing local-root or remote-mutation hardening guidance")
+    if not all(snippet in text for snippet in SKILL_TOKEN_USAGE_SNIPPETS):
+        errors.append("SKILL.md: missing explicit Codex token usage routing guidance")
 
 
 def validate_openai_yaml(path: Path, errors: list[str], *, self_skill: bool) -> None:
@@ -412,6 +434,10 @@ def validate_openai_yaml(path: Path, errors: list[str], *, self_skill: bool) -> 
     for snippet in OPENAI_REQUIRED_PROMPT_SNIPPETS:
         if default_prompt and snippet.lower() not in normalized_prompt:
             errors.append("agents/openai.yaml: default_prompt must keep explicit default-language and remote task-routing rules")
+            break
+    for snippet in OPENAI_TOKEN_USAGE_PROMPT_SNIPPETS:
+        if default_prompt and snippet.lower() not in normalized_prompt:
+            errors.append("agents/openai.yaml: default_prompt must document explicit Codex token usage routing")
             break
     if default_prompt and TAKEOVER_REMOTE_PROMPT_RULE.lower() not in normalized_prompt:
         errors.append("agents/openai.yaml: takeover prompt must separate remote structure governance from remote server enablement and task-route mapping")

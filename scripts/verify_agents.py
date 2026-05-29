@@ -12,6 +12,7 @@ from agents_common import (
     SKIP_DIRS,
     decomposition_plan_path,
     emit_json,
+    evolution_owner_status,
     global_codex_agents_status,
     inspect_project,
     load_global_rule_overrides,
@@ -33,6 +34,10 @@ LANGUAGE_LOCK_RE = re.compile(
     r"All natural-language responses must use\s+(.+?)\s+unless the user explicitly switches languages\.",
     flags=re.IGNORECASE,
 )
+PLAN_LANGUAGE_LOCK_RE = re.compile(
+    r"In Plan Mode,\s+any content inside\s+`<proposed_plan>`\s+must use\s+(.+?)\s+unless the user explicitly switches languages\.",
+    flags=re.IGNORECASE,
+)
 CODE_COMMENT_POLICY_REQUIRED_SNIPPETS = (
     "配置来源：`.agents/global-rule-overrides.json`",
     "默认只允许非显然意图、不变量、风险、生成边界或公共 API 行为注释",
@@ -48,6 +53,9 @@ CODE_COMMENT_POLICY_REQUIRED_SNIPPETS = (
     "#define",
     "Verilog/SystemVerilog：信号声明、参数定义、assign 和 always 块内寄存器赋值使用右侧注释",
     "module/task/function/generate/always 说明放在语句上方",
+)
+PROJECT_LOCAL_GOVERNANCE_RUNTIME_RE = re.compile(
+    r"`python\s+(?:scripts/|skills/[^/\s]+/scripts/)(?:manage_docs|manage_dirs|verify_agents|evaluate_skill|review_governance|run_confidence_gate|collect_design_profile|render_agents)\.py\b[^`]*`"
 )
 
 
@@ -380,10 +388,28 @@ def documented_script_path_error(command: str, project: Path) -> str | None:
     tokens = command.split()
     if len(tokens) < 2 or tokens[0] != "python":
         return None
+    if tokens[1].startswith("<codex-home>/"):
+        return None
     candidate = project / tokens[1]
     if tokens[1].endswith(".py") and not candidate.exists():
         return f"documented command `{command}` references missing script `{tokens[1]}`"
     return None
+
+
+def validate_governance_runtime_commands(
+    text: str,
+    file: str,
+    project: Path,
+    installed_skill_dir_override: str | Path | None,
+    errors: list[str],
+) -> None:
+    owner_status = evolution_owner_status(project, override_dir=installed_skill_dir_override)
+    if owner_status.get("enabled"):
+        return
+    for match in PROJECT_LOCAL_GOVERNANCE_RUNTIME_RE.finditer(text):
+        errors.append(
+            f"{file}: project-local governance runtime command is forbidden for non-owner repositories; use installed agents-md-generator runtime instead ({match.group(0)})"
+        )
 
 
 def validate_decomposition_plan(project: Path, relative_path: str, profile: dict | None = None) -> list[str]:
@@ -457,10 +483,14 @@ def verify(project: Path, include_skipped: bool = False, installed_skill_dir_ove
                 elif not LANGUAGE_LOCK_RE.search(text):
                     errors.append("AGENTS.md: missing enforced default-language reply rule")
                     root_metadata_repair_required = True
+                elif not PLAN_LANGUAGE_LOCK_RE.search(text):
+                    errors.append("AGENTS.md: missing enforced Plan Mode default-language rule")
+                    root_metadata_repair_required = True
                 if not validate_code_comment_policy(text, checked[-1], project, profile, errors):
                     root_metadata_repair_required = True
                 if root_metadata_repair_required:
                     errors.append(f"AGENTS.md: run `{root_repair_command}` to refresh root metadata before continuing")
+        validate_governance_runtime_commands(text, checked[-1], project, installed_skill_dir_override, errors)
         validate_markers(text, checked[-1], errors)
         validate_strong_control(text, checked[-1], project, errors)
         if "{{" in text or "}}" in text:

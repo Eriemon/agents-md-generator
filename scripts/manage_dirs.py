@@ -11,7 +11,7 @@ from typing import Any
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from agents_common import SKIP_DIRS, emit_json, read_json, resolve_project
+from agents_common import SKIP_DIRS, emit_json, read_json, resolve_project, script_command
 from agents_decisions import decision_request
 from manage_dirs_remote import (
     allowed_remote_path,
@@ -150,7 +150,9 @@ def scan_structure(project: Path) -> dict[str, Any]:
     }
 
 
-def dir_manager_doc() -> str:
+def dir_manager_doc(project: Path) -> str:
+    review_command = script_command(project, "manage_dirs.py", "review", "<project>", "--input", "change.json")
+    archive_command = script_command(project, "manage_dirs.py", "archive", "<project>", "--reason", "force-confirmed directory override")
     return "\n".join([
         "# Directory Manager",
         "",
@@ -158,7 +160,7 @@ def dir_manager_doc() -> str:
         "",
         "## Required Review",
         "- Read this file before changing folder structure.",
-        "- Run `python scripts/manage_dirs.py review <project> --input change.json` before directory changes.",
+        f"- Run `{review_command}` before directory changes.",
         "- Do not move, rename, or delete governance folders without explicit user force-confirmation.",
         "- If review blocks a change, refuse default execution and explain the risk to the user.",
         "- If the user explicitly force-confirms a blocked change, archive old dir manager content under `history_dir_manager/YYYYMMDD-HHMMSS/` before changing structure.",
@@ -177,7 +179,7 @@ def dir_manager_doc() -> str:
         "- Explain why the request is unreasonable or risky.",
         "- State severe hazards such as broken tests, invalid release packages, stale AGENTS.md scopes, broken history links, or failed skill installation.",
         "- Ask the user to explicitly confirm forced directory structure modification.",
-        "- Run `python scripts/manage_dirs.py archive <project> --reason \"force-confirmed directory override\"` before applying a force-confirmed folder change.",
+        f"- Run `{archive_command}` before applying a force-confirmed folder change.",
         "- Record confirmation and risk in the next handoff.",
         "",
     ])
@@ -344,7 +346,7 @@ def init_dir_manager(project: Path) -> dict[str, Any]:
     (project / CHANGE_REVIEWS).mkdir(parents=True, exist_ok=True)
     (project / HISTORY_DIR_MANAGER).mkdir(parents=True, exist_ok=True)
     if not (project / DIR_MANAGER_MD).exists():
-        (project / DIR_MANAGER_MD).write_text(dir_manager_doc(), encoding="utf-8")
+        (project / DIR_MANAGER_MD).write_text(dir_manager_doc(project), encoding="utf-8")
     desired_planned = planned_structure(project)
     if not (project / PLANNED_STRUCTURE).exists():
         (project / PLANNED_STRUCTURE).write_text(

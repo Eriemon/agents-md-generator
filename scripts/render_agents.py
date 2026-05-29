@@ -582,7 +582,7 @@ def conversation_completion_contract(profile: dict | None) -> str:
     default_language = profile.get('default_conversation_language', '中文') if profile else '中文'
     return "\n".join([
         "- Finish all requested development work in the current conversation whenever feasible.",
-        f"- All natural-language responses must use the configured default language (`{default_language}`) unless the user explicitly switches languages. Code, commands, logs, raw error text, and proper nouns may remain in their original form.",
+        f"- All natural-language responses must use the configured default language (`{default_language}`) unless the user explicitly switches languages. In Plan Mode, any content inside `<proposed_plan>` must use the configured default language (`{default_language}`) unless the user explicitly switches languages. Keep the `<proposed_plan>` tags unchanged; code, commands, logs, raw error text, and proper nouns may remain in their original form.",
         "- If work cannot be completed, report blockers, completed files, unverified assumptions, and exact next steps.",
         "- Run the smallest relevant checks during development and final verification before completion claims.",
         "- Preserve user changes and never rewrite the directory contract silently.",

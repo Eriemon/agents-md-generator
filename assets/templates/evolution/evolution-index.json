@@ -1,33 +1,33 @@
 {
   "cadence_handoffs": 10,
-  "generated_at": "2026-05-24T17:36:09",
-  "handoff_count": 70,
+  "generated_at": "2026-05-27T17:14:13",
+  "handoff_count": 80,
   "provenance": {
     "source_handoff_window": {
-      "end_handoff_count": 70,
+      "end_handoff_count": 80,
       "entries": [
         {
-          "handoff_count": 66,
-          "path": "docs/handoff/history_handoff/HANDOFF-20260523-142309.md"
+          "handoff_count": 76,
+          "path": "docs/handoff/history_handoff/HANDOFF-20260527-142224.md"
         },
         {
-          "handoff_count": 67,
-          "path": "docs/handoff/history_handoff/HANDOFF-20260523-144026.md"
+          "handoff_count": 77,
+          "path": "docs/handoff/history_handoff/HANDOFF-20260527-150818.md"
         },
         {
-          "handoff_count": 68,
-          "path": "docs/handoff/history_handoff/HANDOFF-20260524-160344.md"
+          "handoff_count": 78,
+          "path": "docs/handoff/history_handoff/HANDOFF-20260527-151629.md"
         },
         {
-          "handoff_count": 69,
-          "path": "docs/handoff/history_handoff/HANDOFF-20260524-171413.md"
+          "handoff_count": 79,
+          "path": "docs/handoff/history_handoff/HANDOFF-20260527-164346.md"
         },
         {
-          "handoff_count": 70,
+          "handoff_count": 80,
           "path": "docs/handoff/HANDOFF.md"
         }
       ],
-      "start_handoff_count": 66
+      "start_handoff_count": 76
     },
     "source_project_name": "agents-md-generator",
     "source_workspace": "workspace:agents-md-generator"
@@ -74,30 +74,30 @@
       "output": "skill-template/agent-governance/governance-workflow/1-workflow.md",
       "provenance": {
         "source_handoff_window": {
-          "end_handoff_count": 70,
+          "end_handoff_count": 80,
           "entries": [
             {
-              "handoff_count": 66,
-              "path": "docs/handoff/history_handoff/HANDOFF-20260523-142309.md"
+              "handoff_count": 76,
+              "path": "docs/handoff/history_handoff/HANDOFF-20260527-142224.md"
             },
             {
-              "handoff_count": 67,
-              "path": "docs/handoff/history_handoff/HANDOFF-20260523-144026.md"
+              "handoff_count": 77,
+              "path": "docs/handoff/history_handoff/HANDOFF-20260527-150818.md"
             },
             {
-              "handoff_count": 68,
-              "path": "docs/handoff/history_handoff/HANDOFF-20260524-160344.md"
+              "handoff_count": 78,
+              "path": "docs/handoff/history_handoff/HANDOFF-20260527-151629.md"
             },
             {
-              "handoff_count": 69,
-              "path": "docs/handoff/history_handoff/HANDOFF-20260524-171413.md"
+              "handoff_count": 79,
+              "path": "docs/handoff/history_handoff/HANDOFF-20260527-164346.md"
             },
             {
-              "handoff_count": 70,
+              "handoff_count": 80,
               "path": "docs/handoff/HANDOFF.md"
             }
           ],
-          "start_handoff_count": 66
+          "start_handoff_count": 76
         },
         "source_project_name": "agents-md-generator",
         "source_workspace": "workspace:agents-md-generator"
@@ -114,10 +114,10 @@
         },
         "verdict": "approve"
       },
-      "sha256": "6ea8b29301e8eff2b803bdc74ea617298b4fbb31dd120c274e7fdd11fb1ee484",
+      "sha256": "556f1d5ea031d92a95892830ff0f321552961d3fec6de6d70fabe52737623844",
       "source_versions": [
         "docs/experience/1-workflow.md",
-        "docs/experience/history_experience/20260524-172127/1-workflow.md"
+        "docs/experience/history_experience/20260527-171409/1-workflow.md"
       ],
       "target_type": "governance-workflow",
       "topic": "1-workflow.md"
@@ -130,30 +130,30 @@
       "output": "skill-template/agent-governance/governance-workflow/2-scripts.md",
       "provenance": {
         "source_handoff_window": {
-          "end_handoff_count": 70,
+          "end_handoff_count": 80,
           "entries": [
             {
-              "handoff_count": 66,
-              "path": "docs/handoff/history_handoff/HANDOFF-20260523-142309.md"
+              "handoff_count": 76,
+              "path": "docs/handoff/history_handoff/HANDOFF-20260527-142224.md"
             },
             {
-              "handoff_count": 67,
-              "path": "docs/handoff/history_handoff/HANDOFF-20260523-144026.md"
+              "handoff_count": 77,
+              "path": "docs/handoff/history_handoff/HANDOFF-20260527-150818.md"
             },
             {
-              "handoff_count": 68,
-              "path": "docs/handoff/history_handoff/HANDOFF-20260524-160344.md"
+              "handoff_count": 78,
+              "path": "docs/handoff/history_handoff/HANDOFF-20260527-151629.md"
             },
             {
-              "handoff_count": 69,
-              "path": "docs/handoff/history_handoff/HANDOFF-20260524-171413.md"
+              "handoff_count": 79,
+              "path": "docs/handoff/history_handoff/HANDOFF-20260527-164346.md"
             },
             {
-              "handoff_count": 70,
+              "handoff_count": 80,
               "path": "docs/handoff/HANDOFF.md"
             }
           ],
-          "start_handoff_count": 66
+          "start_handoff_count": 76
         },
         "source_project_name": "agents-md-generator",
         "source_workspace": "workspace:agents-md-generator"
@@ -170,10 +170,10 @@
         },
         "verdict": "approve"
       },
-      "sha256": "c0d251b0584071e9ee1c9f2764aa575cd3881f7dd746d045386d465c0e9549b6",
+      "sha256": "23697978ab018d3f1b02bac79000f7e5f5e695b4e77eeff0017f0bbb14dc30b7",
       "source_versions": [
         "docs/experience/2-scripts.md",
-        "docs/experience/history_experience/20260524-172127/2-scripts.md"
+        "docs/experience/history_experience/20260527-171409/2-scripts.md"
       ],
       "target_type": "governance-workflow",
       "topic": "2-scripts.md"
@@ -186,30 +186,30 @@
       "output": "skill-template/agent-governance/governance-workflow/3-plan.md",
       "provenance": {
         "source_handoff_window": {
-          "end_handoff_count": 70,
+          "end_handoff_count": 80,
           "entries": [
             {
-              "handoff_count": 66,
-              "path": "docs/handoff/history_handoff/HANDOFF-20260523-142309.md"
+              "handoff_count": 76,
+              "path": "docs/handoff/history_handoff/HANDOFF-20260527-142224.md"
             },
             {
-              "handoff_count": 67,
-              "path": "docs/handoff/history_handoff/HANDOFF-20260523-144026.md"
+              "handoff_count": 77,
+              "path": "docs/handoff/history_handoff/HANDOFF-20260527-150818.md"
             },
             {
-              "handoff_count": 68,
-              "path": "docs/handoff/history_handoff/HANDOFF-20260524-160344.md"
+              "handoff_count": 78,
+              "path": "docs/handoff/history_handoff/HANDOFF-20260527-151629.md"
             },
             {
-              "handoff_count": 69,
-              "path": "docs/handoff/history_handoff/HANDOFF-20260524-171413.md"
+              "handoff_count": 79,
+              "path": "docs/handoff/history_handoff/HANDOFF-20260527-164346.md"
             },
             {
-              "handoff_count": 70,
+              "handoff_count": 80,
               "path": "docs/handoff/HANDOFF.md"
             }
           ],
-          "start_handoff_count": 66
+          "start_handoff_count": 76
         },
         "source_project_name": "agents-md-generator",
         "source_workspace": "workspace:agents-md-generator"
@@ -226,10 +226,10 @@
         },
         "verdict": "approve"
       },
-      "sha256": "660fe5ab16ae46bf9f16244e7afe8057256a6125a0ce7d21a14ab85f98480e44",
+      "sha256": "fd7de8a7c528dc02523563455586e07c9ca9794f2b23346d5de1a7564eb78b16",
       "source_versions": [
         "docs/experience/3-plan.md",
-        "docs/experience/history_experience/20260524-172127/3-plan.md"
+        "docs/experience/history_experience/20260527-171409/3-plan.md"
       ],
       "target_type": "governance-workflow",
       "topic": "3-plan.md"
@@ -242,30 +242,30 @@
       "output": "skill-template/agent-governance/governance-workflow/4-design-ui.md",
       "provenance": {
         "source_handoff_window": {
-          "end_handoff_count": 70,
+          "end_handoff_count": 80,
           "entries": [
             {
-              "handoff_count": 66,
-              "path": "docs/handoff/history_handoff/HANDOFF-20260523-142309.md"
+              "handoff_count": 76,
+              "path": "docs/handoff/history_handoff/HANDOFF-20260527-142224.md"
             },
             {
-              "handoff_count": 67,
-              "path": "docs/handoff/history_handoff/HANDOFF-20260523-144026.md"
+              "handoff_count": 77,
+              "path": "docs/handoff/history_handoff/HANDOFF-20260527-150818.md"
             },
             {
-              "handoff_count": 68,
-              "path": "docs/handoff/history_handoff/HANDOFF-20260524-160344.md"
+              "handoff_count": 78,
+              "path": "docs/handoff/history_handoff/HANDOFF-20260527-151629.md"
             },
             {
-              "handoff_count": 69,
-              "path": "docs/handoff/history_handoff/HANDOFF-20260524-171413.md"
+              "handoff_count": 79,
+              "path": "docs/handoff/history_handoff/HANDOFF-20260527-164346.md"
             },
             {
-              "handoff_count": 70,
+              "handoff_count": 80,
               "path": "docs/handoff/HANDOFF.md"
             }
           ],
-          "start_handoff_count": 66
+          "start_handoff_count": 76
         },
         "source_project_name": "agents-md-generator",
         "source_workspace": "workspace:agents-md-generator"
@@ -282,10 +282,10 @@
         },
         "verdict": "approve"
       },
-      "sha256": "61fc1bd499616c3f32cca8d43965b655781ba9b136f9473c62970c3f2623afa6",
+      "sha256": "3004be3a9829db1f2fcb7ebd27930eff60be3d68826e933792cd9f8bee420c26",
       "source_versions": [
         "docs/experience/4-design-ui.md",
-        "docs/experience/history_experience/20260524-172127/4-design-ui.md"
+        "docs/experience/history_experience/20260527-171409/4-design-ui.md"
       ],
       "target_type": "governance-workflow",
       "topic": "4-design-ui.md"

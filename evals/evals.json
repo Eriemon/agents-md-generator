@@ -93,6 +93,27 @@
       "description": "Generated root AGENTS.md must include a configurable Chinese Code Comment Policy, write code_comment_policy config, and verification must reject missing or weakened policy rules."
     },
     {
+      "id": "plan_mode_language_lock_contract",
+      "kind": "render_verify_regression",
+      "patterns": ["Generator", "Reviewer", "Pipeline"],
+      "handler": "plan_mode_language_lock_contract",
+      "description": "Default conversation language governance must also lock Plan Mode `<proposed_plan>` body text, and verification must reject managed roots that keep only the generic reply-language rule."
+    },
+    {
+      "id": "codex_token_usage_review_contract",
+      "kind": "tool_wrapper_regression",
+      "patterns": ["Tool Wrapper", "Pipeline"],
+      "handler": "codex_token_usage_review_contract",
+      "description": "Explicit Codex token usage requests must route to the internal codex_token_usage_review.py tool, and the tool must refuse to run when the active environment cannot resolve a Codex sessions directory."
+    },
+    {
+      "id": "governance_runtime_de_vendoring",
+      "kind": "governance_runtime_regression",
+      "patterns": ["Tool Wrapper", "Reviewer", "Pipeline"],
+      "handler": "governance_runtime_de_vendoring",
+      "description": "External workspaces must call installed agents-md-generator governance runtime commands and must reject project-local vendored governance script commands."
+    },
+    {
       "id": "handoff_naming_gate",
       "kind": "docs_governance_regression",
       "patterns": ["Reviewer", "Pipeline"],

@@ -15,6 +15,8 @@ Create operational context files for AI coding agents. Use facts from the reposi
 
 入口路由要显式区分 4 类任务：`read_only`（解释、分析、规划、现状检查、只读 review）、`design`（收集/修订答案但尚未申请写入）、`write`（正式生成或更新 AGENTS 控制档案）、`governance_high_risk`（evolution 原子更新、release/merge 前治理审查）。只有 `write` 和 `governance_high_risk` 可以触发审查子智能体；`read_only` 明确禁止。
 
+当根 `AGENTS.md` 通过 `default_language` 把默认自然语言回复锁定为某种语言时，这个约束也必须覆盖 Plan Mode：若代理输出 `<proposed_plan>`，标签内的方案正文必须使用该默认语言，除非用户显式切换语言；`<proposed_plan>` 标签本身保持原样，代码、命令、日志、原始错误文本和专有名词可保留原文。
+
 如果用户明确要求创建、更新、审查或修复 `AGENTS.md` / `agent rules` / `scoped AGENTS.md`，先检查根 `AGENTS.md`，然后继续进入完整设计访谈或更新流程；不要因为根文件健康就提前停止。只有当前工作区类“计划 / 规划 / 准备”探测入口在根 `AGENTS.md` 正常时才只报告“检查通过”。
 
 根 `AGENTS.md` 缺失或缺少版本元数据时，先报告异常原因，然后进入完整设计访谈。只有根 `AGENTS.md` 的 `agents_version` 或 `generator_version` 与当前已安装 `agents-md-generator` 版本不一致，并且当前工作文件夹已经有落地内容时，才允许进入最小 takeover 兼容流程。
@@ -22,6 +24,10 @@ Create operational context files for AI coding agents. Use facts from the reposi
 如果全局 `.codex/AGENTS.md` 缺失、为空、或缺少受管基线区块，不要静默忽略；要明确报告“全局入口规则未落盘”，并给出 `python skills/agents-md-generator/scripts/manage_docs.py sync-global-codex-agents . --write` 作为修复命令。
 
 如果是“已有内容但无根 `AGENTS.md`”的工作文件夹，除了结构检查之外，还要读取精确匹配当前工作目录的 Codex sessions：只接受 `.codex/sessions` 中 `session_meta.payload.cwd` 规范化后与当前工作目录完全一致的会话。先用这些会话和现有落地文件补建 `docs/experience/history_experience/` 历史经验，再生成最新的 `docs/experience/*.md`。
+
+如果用户明确要求进行 Codex Token 用量统计，例如直接要求“统计 Codex token usage / Token 用量 / token 消耗”，走只读工具分支：直接运行 `python skills/agents-md-generator/scripts/codex_token_usage_review.py --hours 48`，按用户要求决定是否附加 `--verbose` 或 `--json`，不要进入 AGENTS 设计访谈。这个分支只在当前环境可解析到 `$CODEX_HOME/sessions` 或 `~/.codex/sessions` 且目录存在时执行；如果检测不到 Codex sessions 目录，要明确拒绝执行并说明原因。`--sessions-root` 只允许等于或位于当前 Codex sessions 根目录之下，用于测试或诊断时也不能跳出当前 Codex sessions 树。泛化的成本、优化、会话健康、/status 建议等问题不算显式触发。
+
+外部工作区生成的 AGENTS/docs 治理命令必须调用已安装的 `agents-md-generator` 运行时，例如 `python <codex-home>/skills/agents-md-generator/scripts/manage_docs.py ...`。不要把这些 governance runtime 脚本写成目标项目自己的 `scripts/manage_docs.py` / `scripts/manage_dirs.py`，也不要为了让命令可执行而把本 skill 的脚本复制进目标工作区。只有 `agents-md-generator` owner repo 自身允许继续使用 repo-local `python skills/agents-md-generator/scripts/...` 自举路径。
 
 ## Pipeline
 
@@ -139,7 +145,7 @@ Create operational context files for AI coding agents. Use facts from the reposi
    - Verification must also fail if a strong-control root omits the `.settings` workspace-config contract, weakens the `.local.json` / `.remote.json` naming rule, or fails to forbid copying `.settings/*.local.json` such as `.settings/server_list.local.json` to remote servers.
    - Verification must also fail if the root `AGENTS.md` omits its pointer to `.agents/global-rule-overrides.json`, if that JSON config is missing or malformed, or if generated text still inlines maintainability/script-governance detail that should live in config.
    - Verification must also fail if a managed root `AGENTS.md` omits `## Code Comment Policy`, omits or weakens `code_comment_policy`, loses the Python/C/C++/Verilog language-specific rules, loses the stale-comment update rule, loses the formatting rule that generated code cannot be glued together, or loses the bulk-AI-commenting prohibition.
-   - Verification must also fail if the config-backed maintainability rules are broken: source-governance hard-fail extensions exceeding the configured limit must block immediately, and non-GUI project tool scripts must satisfy the fixed config-backed quartet `scripts/python/<function>/<name>.py`, `scripts/shell/<function>/<name>.sh`, `scripts/bat/<function>/<name>.bat`, and `scripts/powershell/<function>/<name>.ps1`.
+   - Verification must also fail if the config-backed maintainability rules are broken: handwritten source files matched by the configured source-governance hard-fail extensions exceeding the configured limit must block immediately, and non-GUI project tool scripts must satisfy the fixed config-backed quartet `scripts/python/<function>/<name>.py`, `scripts/shell/<function>/<name>.sh`, `scripts/bat/<function>/<name>.bat`, and `scripts/powershell/<function>/<name>.ps1`.
    - When generating or repairing the global `.codex/AGENTS.md`, write only the shared principles there. Keep long-task heartbeat detail, decomposition-plan detail, and GUI exception detail in the local JSON governance config instead of AGENTS text.
    - Run `python skills/agents-md-generator/scripts/manage_docs.py verify <project>` when debugging docs governance failures directly.
    - `manage_docs.py verify`, `work-folder-gate`, `release-gate`, and `run_confidence_gate.py` must all fail when handoff naming drifts inside `docs/handoff/`; a renamed current handoff must never be masked by `scaffold()` creating a fresh placeholder.
@@ -179,7 +185,7 @@ Create operational context files for AI coding agents. Use facts from the reposi
 | `references/evaluation-scenarios.md` | Regression scenarios and skill-effectiveness eval coverage for recent high-risk regressions |
 | `assets/templates/root-agents.md` | Root AGENTS.md structure |
 | `assets/templates/scoped-agents.md` | Directory-scoped AGENTS.md structure |
-| `scripts/manage_docs.py` | Docs governance scaffold, handoff rotation, AI experience requests/payload application, evolution templates, development records, and verification |
-| `scripts/manage_dirs.py` | Strict local and remote folder structure scan, planning, review, blocking, and verification |
+| `scripts/manage_docs.py` | Skill-local governance runtime; owner repo or installed skill uses it to scaffold docs governance, handoff rotation, AI experience requests/payload application, evolution templates, development records, and verification |
+| `scripts/manage_dirs.py` | Skill-local governance runtime; owner repo or installed skill uses it for strict local and remote folder structure scan, planning, review, blocking, and verification |
 | `scripts/review_governance.py` | Deterministic companion-change gate that emits optional review metadata for ordinary analysis and required-for-release review metadata for release/merge risk |
 | `evals/evals.json` | Repo-local skill-effectiveness cases with with-skill versus without-skill expectations |

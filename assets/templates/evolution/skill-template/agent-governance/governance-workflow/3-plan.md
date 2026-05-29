@@ -9,35 +9,34 @@
 - Rationale: Inferred from project control profile, repository facts, and topic keywords.
 - Source workspace: current governed workspace (local path intentionally omitted)
 - Source project: agents-md-generator
-- Source handoff window: 66-70
+- Source handoff window: 76-80
 
 ## Source Versions
 - `docs/experience/3-plan.md`
-- `docs/experience/history_experience/20260524-172127/3-plan.md`
+- `docs/experience/history_experience/20260527-171409/3-plan.md`
 
 ## Evidence Sources
-- Latest and previous planning experience entries plus the release/install confidence checkpoint results.
+- Current and previous planning experience files, latest handoffs, and the validation chain that closed the task.
 
 ## Applicable Scenario
-- Use when a skill task begins as a feature implementation but the success criterion expands into factual confidence across packaging, installation, and governance proof.
+- Use when a governance fix spans implementation, release, install, and docs cadence rather than a single source patch.
 
 ## Distilled Workflow
-- Translate confidence into separate failing conditions for source behavior, release parity, replace-install behavior, installed audit, and governance freshness.
-- Work through those checkpoints in order and expand the plan immediately when a later stage uncovers a new real loophole.
-- Do not stop at the first green layer; continue until every requested proof stage has either passed or been intentionally removed from scope.
+- Plan around proof stages: boundary decision, red test, narrow fix, doc/spec sync, release artifact, install evidence, docs cadence, freshness.
+- Re-plan when inspection changes the root-cause diagnosis.
+- Reserve a final repository-closure stage whenever the user asks for factual or 100% confidence.
 
 ## Key Decisions
-- Treat newly discovered late-stage loopholes as mandatory scope when the user asked for certainty.
-- Keep release/install sequencing explicit so dependent commands are never run in parallel by accident.
+- Lock non-negotiable runtime-boundary assumptions early.
+- Treat release/install/docs cadence as part of implementation scope when they are contractual blockers.
 
 ## Common Problems
-- Plans that stop at unit tests are too weak for release-oriented skill work.
-- Governance freshness is easy to under-plan even though it can block final confidence after every functional stage is green.
+- Planning only around files can hide proof-stage failures.
+- Calling the task done at tests passed leaves repository closure incomplete.
 
 ## Non-Reusable Content
-- Omit one-off release timestamps, local backup paths, and temporary command noise that do not change future planning decisions.
+- Omit incidental command timings, ad hoc shell history, and conversation-only wording.
 
 ## Application Checklist
-- Name each proof stage explicitly.
-- Replan immediately when a later gate disproves the current claim.
-- Reserve time for post-handoff cadence and freshness closure on checkpoint boundaries.
+- Confirm the plan names the final closure gates before work begins.
+- Confirm cadence checkpoints are considered if the handoff count is near a boundary.
