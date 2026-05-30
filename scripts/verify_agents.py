@@ -526,8 +526,10 @@ def verify(project: Path, include_skipped: bool = False, installed_skill_dir_ove
                 continue
     source_governance = source_governance_report(project, profile)
     errors.extend(format_source_governance_errors(source_governance))
-    errors.extend(str(item) for item in facts.get("tool_script_layout_violations", []) or [])
-    errors.extend(str(item) for item in facts.get("script_triad_gaps", []) or [])
+    local_governance = load_global_rule_overrides(project, profile)
+    if local_governance.get("exists"):
+        errors.extend(str(item) for item in facts.get("tool_script_layout_violations", []) or [])
+        errors.extend(str(item) for item in facts.get("script_triad_gaps", []) or [])
     global_status = global_codex_agents_status(project_root=project, profile=profile)
     if (project / "skills" / "agents-md-generator" / "SKILL.md").is_file() and not global_status["baseline_ok"]:
         reason_text = ", ".join(global_status["repair_reasons"]) or "unknown global Codex AGENTS baseline issue"

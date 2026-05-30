@@ -5,6 +5,7 @@ import json
 import re
 from fnmatch import fnmatch
 from pathlib import Path
+import os
 from typing import Any
 
 from agents_common import (
@@ -637,9 +638,13 @@ def script_layout_facts(root: Path, profile: dict[str, Any] | None = None) -> di
     for scripts_root in roots:
         if scripts_root.name != required_root and scripts_root.relative_to(root).as_posix().endswith(f"/{required_root}") is False:
             continue
-        for path in sorted(scripts_root.rglob("*")):
-            if not path.is_file():
-                continue
+        discovered: list[Path] = []
+        for dirpath, dirnames, filenames in os.walk(scripts_root):
+            dirnames[:] = [name for name in dirnames if name not in SKIP_DIRS]
+            current_dir = Path(dirpath)
+            for filename in filenames:
+                discovered.append(current_dir / filename)
+        for path in sorted(discovered):
             rel_path = path.relative_to(root).as_posix()
             if rel_path in gui_set:
                 continue

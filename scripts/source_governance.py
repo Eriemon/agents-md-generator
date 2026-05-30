@@ -133,20 +133,30 @@ def extract_python_comment_violations(path: Path, config: dict[str, Any]) -> lis
     ai_markers = [str(item).lower() for item in gate.get("forbid_ai_comment_markers", [])]
     violations: list[str] = []
     if python_gate.get("require_public_api_docstring", False):
-        tree = ast.parse(text or "\n")
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and not node.name.startswith("_"):
-                if ast.get_docstring(node, clean=False) is None:
-                    violations.append(f"public API `{node.name}` is missing a docstring (line {node.lineno})")
+        try:
+            tree = ast.parse(text or "\n")
+        except SyntaxError as exc:
+            line_no = getattr(exc, "lineno", 0) or 0
+            violations.append(f"python syntax error prevents comment policy parsing (line {line_no})")
+            tree = None
+        if tree is not None:
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and not node.name.startswith("_"):
+                    if ast.get_docstring(node, clean=False) is None:
+                        violations.append(f"public API `{node.name}` is missing a docstring (line {node.lineno})")
     if python_gate.get("forbid_trailing_comment", False) or ai_markers:
-        for token in tokenize.generate_tokens(io.StringIO(text).readline):
-            if token.type != tokenize.COMMENT:
-                continue
-            line_text = text.splitlines()[token.start[0] - 1] if text.splitlines() else ""
-            if python_gate.get("forbid_trailing_comment", False) and line_text[: token.start[1]].strip():
-                violations.append(f"trailing Python comment is not allowed (line {token.start[0]})")
-            if ai_markers and any(marker in token.string.lower() for marker in ai_markers):
-                violations.append(f"AI-generated comment marker is not allowed (line {token.start[0]})")
+        try:
+            for token in tokenize.generate_tokens(io.StringIO(text).readline):
+                if token.type != tokenize.COMMENT:
+                    continue
+                line_text = text.splitlines()[token.start[0] - 1] if text.splitlines() else ""
+                if python_gate.get("forbid_trailing_comment", False) and line_text[: token.start[1]].strip():
+                    violations.append(f"trailing Python comment is not allowed (line {token.start[0]})")
+                if ai_markers and any(marker in token.string.lower() for marker in ai_markers):
+                    violations.append(f"AI-generated comment marker is not allowed (line {token.start[0]})")
+        except tokenize.TokenError as exc:
+            line_no = exc.args[1][0] if len(exc.args) > 1 and isinstance(exc.args[1], tuple) and exc.args[1] else 0
+            violations.append(f"python tokenize error prevents comment policy parsing (line {line_no})")
     return violations
 
 

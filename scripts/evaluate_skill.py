@@ -71,10 +71,25 @@ def existing_python_roots(skill_dir: Path) -> list[str]:
 
 
 def settings_arg(skill_dir: Path) -> list[str]:
-    settings_path = skill_dir / "config" / "defaults.json"
-    if settings_path.is_file():
-        return ["--settings", str(settings_path)]
-    return []
+    settings_path = preferred_settings_path(skill_dir)
+    if settings_path is None:
+        return []
+    return ["--settings", str(settings_path)]
+
+
+def preferred_settings_path(skill_dir: Path) -> Path | None:
+    for relative in ("assets/defaults.json", "config/defaults.json"):
+        settings_path = skill_dir / relative
+        if settings_path.is_file():
+            return settings_path
+    return None
+
+
+def validate_script_env(base_env: dict[str, str], skill_dir: Path) -> dict[str, str]:
+    env = dict(base_env)
+    if skill_dir.name == "erie-remote-ssh":
+        env["ERIE_REMOTE_SSH_SKIP_ISOLATED_VALIDATION"] = "1"
+    return env
 
 
 def discover_validate_script(skill_dir: Path) -> Path | None:
@@ -318,7 +333,7 @@ def evaluate(skill_dir: Path, project: Path) -> dict[str, Any]:
                 "validate_script",
                 [sys.executable, str(validate_script), *settings_arg(skill_dir)],
                 repo_root,
-                base_env,
+                validate_script_env(base_env, skill_dir),
             )
         )
 

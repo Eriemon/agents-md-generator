@@ -180,6 +180,9 @@ def sync_root_agents(
         reasons.append("generator_version_mismatch")
     if not metadata.get("default_language"):
         reasons.append("missing_default_language")
+    control_profile_match = re.search(r"^-\s+Version:\s*(v\d+\.\d+\.\d+)\.$", text, flags=re.MULTILINE)
+    if control_profile_match and control_profile_match.group(1) != expected_version:
+        reasons.append("control_profile_version_mismatch")
     sync_required = bool(reasons)
     updated = False
     synced_text = text
@@ -193,6 +196,15 @@ def sync_root_agents(
             f"<!-- AGENTS-METADATA: agents_version={expected_version}; "
             f"generator_version={expected_version}; default_language={default_language} -->"
         )
+        if control_profile_match:
+            text = re.sub(
+                r"^-\s+Version:\s*v\d+\.\d+\.\d+\.$",
+                f"- Version: {expected_version}.",
+                text,
+                count=1,
+                flags=re.MULTILINE,
+            )
+
         lines = text.splitlines()
         rewritten: list[str] = []
         last_inserted = False

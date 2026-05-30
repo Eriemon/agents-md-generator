@@ -86,6 +86,13 @@
       "description": "Source-governance test helpers must live under tests/ and be removed from production script paths."
     },
     {
+      "id": "root_version_sync_contract",
+      "kind": "governance_runtime_regression",
+      "patterns": ["Tool Wrapper", "Pipeline"],
+      "handler": "root_version_sync_contract",
+      "description": "sync-root-agents must repair both root metadata and the managed Control Profile version line so verify/manage_docs guidance does not point users at a partial fix."
+    },
+    {
       "id": "code_comment_policy_contract",
       "kind": "render_verify_regression",
       "patterns": ["Generator", "Reviewer", "Pipeline"],

@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.9.6-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.9.7-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -48,11 +48,12 @@ AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的�
 - 在需要时生成 `CLAUDE.md` 与 `GEMINI.md` 兼容 shim。
 - 提供验证、审计、自动 review 治理、skill-effectiveness eval 和 aggregate confidence gate，用于发布前把关。
 
-## v0.9.6 重点更新
+## v0.9.7 重点更新
 
-- 新增 `scripts/codex_token_usage_review.py`，可以在受治理的只读流程里统计本地 Codex sessions 的 token usage。
-- 扩展 AGENTS 路由和配套文档，明确 `--hours`、`--json`、`--verbose` 等 token 用量审查用法。
-- 在继续保持 release-governance、workspace-settings policy 与脱敏规则一致的同时，补强了只读运维审查入口。
+- 更新 `scripts/design_remote_gate.py`，让 remote-ssh 相关检查同时兼容 `assets/defaults.json` 和旧版 `config/defaults.json` 配置布局。
+- 加固 `scripts/source_governance.py`，当 Python 语法解析或 tokenize 失败时返回结构化违规信息，而不是让审计链直接崩掉。
+- 扩展 `scripts/manage_docs_sync_verify.py`，新增 Control Profile 版本一致性检查，并可自动修正不匹配的版本行。
+- 调整 `scripts/evaluate_skill.py`，让 `erie-remote-ssh` 在 release 校验时能使用预期的兼容验证环境。
 
 ## Skill 架构
 
@@ -192,8 +193,8 @@ Jiyuan Liu 和 He Li 隶属于东南大学电子科学与工程学院。
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {0.9.6},
-  date         = {2026-05-29},
+  version      = {0.9.7},
+  date         = {2026-05-30},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}

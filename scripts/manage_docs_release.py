@@ -30,6 +30,9 @@ def governed_allowed_paths(profile: dict[str, Any], skill_dir: Path, project: Pa
     configured = policy.get("release_prepare_allowed_paths")
     if isinstance(configured, list) and configured:
         return [str(item).replace("\\", "/").strip().strip("/") for item in configured if str(item).strip()]
+    if skill_dir.resolve() == project.resolve():
+        top_level = source_release_content_analysis(skill_dir)["included_top_level_entries"]
+        return sorted(set([*top_level, "docs", ".agents", "AGENTS.md", "dist"]))
     rel_skill = skill_dir.relative_to(project).as_posix() if skill_dir.is_relative_to(project) else skill_dir.name
     return [rel_skill, "tests", "docs", ".agents", "AGENTS.md", "dist"]
 
@@ -397,7 +400,8 @@ def release_prepare(project: Path, version: str, skill_dir_raw: str) -> dict[str
     profile = read_json(project / ".agents" / "agents-control.json")
     skill_dir = resolve_project(skill_dir_raw if Path(skill_dir_raw).is_absolute() else project / skill_dir_raw)
     current_branch, local_branches, status_lines = current_branch_and_locals(project)
-    protected = sorted((profile.get("git_branch_policy", {}) or {}).get("protected_branches", ["master", "release"]))
+    protected = sorted((profile.get("git_branch_policy", {}) or {}).get("protected_branches", ["main", "release"]))
+    primary_branch = protected[0] if protected else "main"
     extras = sorted(branch for branch in local_branches if branch not in protected)
     errors: list[str] = []
     checks: dict[str, Any] = {
@@ -409,11 +413,11 @@ def release_prepare(project: Path, version: str, skill_dir_raw: str) -> dict[str
     if not current_branch and not local_branches:
         errors.append("release prepare requires a readable local git repository")
         return {"ok": False, "errors": errors, "checks": checks}
-    if current_branch == "master":
+    if current_branch == primary_branch:
         if len(extras) > 1:
             errors.append(f"multiple extra local branches require manual resolution before release prepare: {extras}")
         elif len(extras) == 1:
-            errors.append(f"master cannot guess which extra local branch to prepare automatically: {extras[0]}")
+            errors.append(f"{primary_branch} cannot guess which extra local branch to prepare automatically: {extras[0]}")
         else:
             return {"ok": True, "errors": [], "checks": checks}
         return {"ok": False, "errors": errors, "checks": checks}
@@ -459,14 +463,14 @@ def release_prepare(project: Path, version: str, skill_dir_raw: str) -> dict[str
     elif diff_cached.returncode not in {0, 1}:
         errors.append("release prepare could not inspect staged changes")
         return {"ok": False, "errors": errors, "checks": checks}
-    checkout_master = run_git(project, ["checkout", "master"])
+    checkout_master = run_git(project, ["checkout", primary_branch])
     if checkout_master.returncode != 0:
-        errors.append(f"release prepare failed to checkout master: {(checkout_master.stderr or checkout_master.stdout).strip()}")
+        errors.append(f"release prepare failed to checkout {primary_branch}: {(checkout_master.stderr or checkout_master.stdout).strip()}")
         return {"ok": False, "errors": errors, "checks": checks}
-    merge_message = f"release-prepare: merge {current_branch} into master for {version}"
+    merge_message = f"release-prepare: merge {current_branch} into {primary_branch} for {version}"
     merge = run_git(project, ["merge", "--no-ff", current_branch, "-m", merge_message])
     if merge.returncode != 0:
-        errors.append(f"release prepare failed to merge {current_branch} into master: {(merge.stderr or merge.stdout).strip()}")
+        errors.append(f"release prepare failed to merge {current_branch} into {primary_branch}: {(merge.stderr or merge.stdout).strip()}")
         return {"ok": False, "errors": errors, "checks": checks}
     delete_branch = run_git(project, ["branch", "-d", current_branch])
     if delete_branch.returncode != 0:
@@ -479,8 +483,8 @@ def release_prepare(project: Path, version: str, skill_dir_raw: str) -> dict[str
         "local_branches": final_locals,
         "status_lines": final_status,
     })
-    if final_branch != "master":
-        errors.append("release prepare did not end on master")
+    if final_branch != primary_branch:
+        errors.append(f"release prepare did not end on {primary_branch}")
     if sorted(final_locals) != protected:
         errors.append(f"release prepare did not end with only protected branches {protected}")
     if final_status:
@@ -503,6 +507,8 @@ def package_release(project: Path, version: str, skill_dir_raw: str) -> dict[str
     skill_name = skill_dir.name
     source_rel = skill_dir.relative_to(project).as_posix() if skill_dir.is_relative_to(project) else skill_dir.name
     project_kind = release_project_kind(project, skill_dir)
+    protected = sorted((profile.get("git_branch_policy", {}) or {}).get("protected_branches", ["main", "release"]))
+    primary_branch = protected[0] if protected else "main"
     pre = release_gate(project, version, skill_dir_raw, "pre", "unspecified")
     if pre["errors"]:
         return {
@@ -559,8 +565,8 @@ def package_release(project: Path, version: str, skill_dir_raw: str) -> dict[str
         "version": version,
         "source_path": source_rel,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "current_branch": "master",
-        "local_branches": ["master", "release"],
+        "current_branch": primary_branch,
+        "local_branches": protected,
         "worktree_clean": True,
         "phase_results": {"pre": True, "post": True},
         "packaging_mode": "repository-dist",
@@ -797,10 +803,12 @@ def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str, in
     other_release_exclusions = release_target_exclusions(skill_name, version)
     if source_version and source_version != version:
         errors.append(f"release gate version {version} does not match skill source version {source_version}")
-    if git_branch != "master":
-        errors.append("release gate requires current branch master")
-    if sorted(branches) != ["master", "release"]:
-        errors.append("release gate requires only local branches master and release")
+    protected = sorted((profile.get("git_branch_policy", {}) or {}).get("protected_branches", ["main", "release"]))
+    primary_branch = protected[0] if protected else "main"
+    if git_branch != primary_branch:
+        errors.append(f"release gate requires current branch {primary_branch}")
+    if sorted(branches) != protected:
+        errors.append(f"release gate requires only local branches {', '.join(protected)}")
     if phase == "pre" and status_lines:
         errors.append("pre-release gate requires a clean committed worktree")
     if phase == "post":

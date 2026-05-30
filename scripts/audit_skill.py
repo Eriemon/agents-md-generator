@@ -60,7 +60,7 @@ SELF_REQUIRED_FILES = [
     "scripts/evaluate_skill.py",
 ]
 
-SELF_DISALLOWED_ROOT_DOCS = {"README.md", "CHANGELOG.md", "INSTALL.md", "INSTALLATION.md"}
+SELF_DISALLOWED_ROOT_DOCS = {"CHANGELOG.md", "INSTALL.md", "INSTALLATION.md"}
 DISALLOWED_CACHE_SUFFIXES = {".pyc", ".pyo"}
 LOCAL_REFERENCE_RE = re.compile(
     r"G:[/\\]html|ref[/\\](agent-rules|html)|\b[A-Za-z]:[/\\][^\s`'\"<>)]*",

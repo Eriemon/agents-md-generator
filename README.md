@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.9.6-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.9.7-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -48,11 +48,12 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 - Compatibility shim generation for `CLAUDE.md` and `GEMINI.md` when requested.
 - Verification, audit, automated review governance, skill-effectiveness evals, and aggregate confidence checks for release readiness.
 
-## What's New In v0.9.6
+## What's New In v0.9.7
 
-- Adds `scripts/codex_token_usage_review.py` so Codex session token usage can be summarized from local session evidence in a governed read-only flow.
-- Extends AGENTS routing and documentation to cover token-usage review, including `--hours`, `--json`, and `--verbose` usage patterns.
-- Keeps release-governance, workspace-settings policy, and sanitization rules aligned while expanding read-only operational review coverage.
+- Updates `scripts/design_remote_gate.py` so remote-ssh integration accepts both `assets/defaults.json` and legacy `config/defaults.json` settings layouts.
+- Hardens `scripts/source_governance.py` to report structured violations when Python parsing or tokenization fails instead of crashing the audit chain.
+- Extends `scripts/manage_docs_sync_verify.py` with Control Profile version alignment checks and automatic correction for mismatched version lines.
+- Adjusts `scripts/evaluate_skill.py` so `erie-remote-ssh` can run in the expected compatibility validation environment during release checks.
 
 ## Skill Architecture
 
@@ -192,8 +193,8 @@ If this skill helps your research, teaching, or engineering workflow, please cit
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {0.9.6},
-  date         = {2026-05-29},
+  version      = {0.9.7},
+  date         = {2026-05-30},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}

@@ -568,7 +568,13 @@ def handoff_paths(project: Path) -> dict[str, Path]:
     }
 
 def docs_governance_initialized(project: Path) -> bool:
-    for rel_path in [*DOC_DIRS, *REQUIRED_DOC_FILES, STATE_PATH]:
+    governance_markers = [
+        *REQUIRED_DOC_FILES,
+        "docs/experience/1-workflow.md",
+        "docs/dir_manager/DIR_MANAGER.md",
+        STATE_PATH,
+    ]
+    for rel_path in governance_markers:
         if (project / rel_path).exists():
             return True
     return False

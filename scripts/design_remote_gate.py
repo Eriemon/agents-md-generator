@@ -107,6 +107,15 @@ def normalize_remote_task_routes(raw: Any) -> list[dict[str, Any]]:
         )
     return routes
 
+
+def remote_settings_path(skill_dir: Path) -> Path | None:
+    for relative in ("assets/defaults.json", "config/defaults.json"):
+        candidate = skill_dir / relative
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def remote_skill_dir() -> Path | None:
     override = os.environ.get("AGENTS_MD_REMOTE_SSH_SKILL_DIR", "").strip()
     candidates: list[Path] = []
@@ -122,7 +131,7 @@ def remote_skill_dir() -> Path | None:
             candidate.is_dir()
             and (candidate / "SKILL.md").is_file()
             and (candidate / "scripts" / "remote_ssh.py").is_file()
-            and (candidate / "config" / "defaults.json").is_file()
+            and remote_settings_path(candidate) is not None
         ):
             return candidate
     return None
@@ -137,14 +146,16 @@ def remote_dependency_summary() -> dict[str, Any]:
     }
 
 def remote_ssh_command(skill_dir: Path, subcommand: str, *extra: str) -> list[str]:
-    return [
+    command = [
         sys.executable,
         str(skill_dir / "scripts" / "remote_ssh.py"),
         subcommand,
-        "--settings",
-        str(skill_dir / "config" / "defaults.json"),
-        *extra,
     ]
+    settings_path = remote_settings_path(skill_dir)
+    if settings_path is not None:
+        command.extend(["--settings", str(settings_path)])
+    command.extend(extra)
+    return command
 
 def run_remote_ssh(skill_dir: Path, subcommand: str, *extra: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -244,7 +255,12 @@ def remote_install_command_hint(skill_dir: Path | None = None) -> str:
     return f"Install `{REMOTE_SSH_SKILL_NAME}` from {REMOTE_SSH_GIT_URL}, then rerun `python scripts/collect_design_profile.py <project> --resume`."
 
 def remote_configure_command_hint(skill_dir: Path) -> str:
-    return f"python {skill_dir / 'scripts' / 'remote_ssh.py'} configure --settings {skill_dir / 'config' / 'defaults.json'} --interactive"
+    command = f"python {skill_dir / 'scripts' / 'remote_ssh.py'} configure"
+    settings_path = remote_settings_path(skill_dir)
+    if settings_path is not None:
+        command += f" --settings {settings_path}"
+    command += " --interactive"
+    return command
 
 def remote_gate_payload(state: dict[str, Any]) -> dict[str, Any]:
     gate = state.get("remote_server_gate", {})
