@@ -1,0 +1,390 @@
+{
+  "skill_name": "agents-md-generator",
+  "version": "v0.9.7",
+  "source_path": ".",
+  "generated_at": "2026-05-30T13:44:30",
+  "current_branch": "main",
+  "local_branches": [
+    "main",
+    "release"
+  ],
+  "worktree_clean": true,
+  "phase_results": {
+    "pre": true,
+    "post": true
+  },
+  "packaging_mode": "repository-dist",
+  "validation_level": "strong",
+  "provenance_mode": "repository-dist",
+  "sanitization": {
+    "enabled": false,
+    "scope": "not-configured",
+    "mode": "not-configured",
+    "files": []
+  },
+  "release_content_policy": {
+    "policy_version": "2026-05-26-v2",
+    "top_level_file_mode": "allow-nonforbidden-files",
+    "allowed_top_level_files": [
+      "README.md",
+      "SKILL.md",
+      "VERSION"
+    ],
+    "allowed_top_level_dirs": [
+      "agents",
+      "assets",
+      "config",
+      "evals",
+      "integration",
+      "references",
+      "runtime",
+      "scripts"
+    ],
+    "forbidden_exact_names": [
+      ".mypy_cache",
+      ".pytest_cache",
+      ".ruff_cache",
+      "__pycache__",
+      "_smoke_runs",
+      "reports",
+      "runs",
+      "test",
+      "tests"
+    ],
+    "forbidden_prefixes": [
+      "smoke"
+    ],
+    "forbidden_suffixes": [
+      ".pyc",
+      ".pyo"
+    ],
+    "included_file_count": 76,
+    "included_top_level_entries": [
+      "CITATION.cff",
+      "CONTRIBUTING.md",
+      "LICENSE",
+      "README-CN.md",
+      "README.md",
+      "SECURITY.md",
+      "SKILL.md",
+      "VERSION",
+      "agents",
+      "assets",
+      "config",
+      "evals",
+      "pyproject.toml",
+      "references",
+      "scripts"
+    ],
+    "unexpected_top_level_entries": [],
+    "forbidden_source_paths": [],
+    "forbidden_release_paths": []
+  },
+  "files": [
+    {
+      "path": "agents/openai.yaml",
+      "sha256": "d90896b594a8ffd6743622f69969687d98d843cf744192175a1730bce34aafdf"
+    },
+    {
+      "path": "assets/templates/evolution/evolution-index.json",
+      "sha256": "f804326bf7011aec889c1bc9e987ca74b2cb87865b01fa40539093f005878878"
+    },
+    {
+      "path": "assets/templates/evolution/history_evolution/20260524-172131/skill-template/agent-governance/agents-md-generator/1-workflow.md",
+      "sha256": "42b79494254bacecf8461a121c8af25d24956f0518c851770944053ac0e3209b"
+    },
+    {
+      "path": "assets/templates/evolution/history_evolution/20260524-172131/skill-template/agent-governance/agents-md-generator/2-scripts.md",
+      "sha256": "9e21ad6866db44ee33dcba1c5e064fe2766a1bddb34697f2a5cd2894ee19d0ea"
+    },
+    {
+      "path": "assets/templates/evolution/history_evolution/20260524-172131/skill-template/agent-governance/agents-md-generator/3-plan.md",
+      "sha256": "614c7fcd00e6c299e8acc43390e6242aafbabec0f38e0b6f8f81279f61db1818"
+    },
+    {
+      "path": "assets/templates/evolution/history_evolution/20260524-172131/skill-template/agent-governance/agents-md-generator/4-design-ui.md",
+      "sha256": "73a03a1caaf704635a99286df7e58bdd5ba4f68513dcabeefb4de0742b5d3670"
+    },
+    {
+      "path": "assets/templates/evolution/skill-template/agent-governance/agents-md-generator/template-index.json",
+      "sha256": "6c92da57829fdd6e3880033866c91ad51579ba55b3b50491ee41315d4b236dd4"
+    },
+    {
+      "path": "assets/templates/evolution/skill-template/agent-governance/governance-workflow/1-workflow.md",
+      "sha256": "556f1d5ea031d92a95892830ff0f321552961d3fec6de6d70fabe52737623844"
+    },
+    {
+      "path": "assets/templates/evolution/skill-template/agent-governance/governance-workflow/2-scripts.md",
+      "sha256": "23697978ab018d3f1b02bac79000f7e5f5e695b4e77eeff0017f0bbb14dc30b7"
+    },
+    {
+      "path": "assets/templates/evolution/skill-template/agent-governance/governance-workflow/3-plan.md",
+      "sha256": "fd7de8a7c528dc02523563455586e07c9ca9794f2b23346d5de1a7564eb78b16"
+    },
+    {
+      "path": "assets/templates/evolution/skill-template/agent-governance/governance-workflow/4-design-ui.md",
+      "sha256": "3004be3a9829db1f2fcb7ebd27930eff60be3d68826e933792cd9f8bee420c26"
+    },
+    {
+      "path": "assets/templates/evolution/skill-template/agent-governance/governance-workflow/template-index.json",
+      "sha256": "b2b144ddf37885a066d410bbecca10ca95bbbb432a8743d9818ade02d2864184"
+    },
+    {
+      "path": "assets/templates/global-codex-agents.md",
+      "sha256": "3a375ee3d66e8dd96aa84e05b2ad9560b6f9035b90a534229049f9f1bbc9c4d3"
+    },
+    {
+      "path": "assets/templates/root-agents.md",
+      "sha256": "8c02d46085eebc2a69a02709265206ba30e4a2d4e928877d6f080bb671a1d411"
+    },
+    {
+      "path": "assets/templates/scoped-agents.md",
+      "sha256": "0c22cf8c23607fa129d996c8367cd8de0b4ed26f2e7e914ae371e0d13d865705"
+    },
+    {
+      "path": "CITATION.cff",
+      "sha256": "ca6541548b58b079f85f6d9fbafad68564a293e7f479dc86c15b51c4a671afe8"
+    },
+    {
+      "path": "config/source-governance.json",
+      "sha256": "529fe722405aed52fa7670f5f4b1ab685df70b49e693ed3ef50212f4dbf73c45"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "sha256": "c1b7a2bf069275e444b758832340ed90aedac466d6fa1df77b6314a6361181ce"
+    },
+    {
+      "path": "evals/evals.json",
+      "sha256": "fb214d61e8757bad4d87c4b6175284de5b2365cc2e30394647e96b4af0abdc23"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "5cf70a88d5db22a1b0d7a73ec0ab250afe2f4fbcf2168782799357308e7e7add"
+    },
+    {
+      "path": "pyproject.toml",
+      "sha256": "d766112ff19affc46aee52a00d42dc17f28a9af479e129aa1f6cd32d834f128b"
+    },
+    {
+      "path": "README-CN.md",
+      "sha256": "53b189a08e96697e89f89db7d613848df9a16309102844aad8a433591000f562"
+    },
+    {
+      "path": "README.md",
+      "sha256": "77710da32f77bb82270e596c3d07ce7b010393b2af59ba86952c8d935a789a3d"
+    },
+    {
+      "path": "references/agents-md-guidance.md",
+      "sha256": "d289909138a9af87c9fa08400d1c8a003b35d591abce81fe9a8c286d8d384846"
+    },
+    {
+      "path": "references/book-rules-coverage.md",
+      "sha256": "ad395f31ef56306e4798a582ea9fa7251ddb1730cfd576911930f30d2d49a180"
+    },
+    {
+      "path": "references/capability-coverage.md",
+      "sha256": "7c350c24f5029b5f869ddd177b1a42aa0d949217dae073ec144ad10e21bf9119"
+    },
+    {
+      "path": "references/code-comment-policy.md",
+      "sha256": "1ec965d00a6231b24dc7aadf37ab7b26168179b3fc8bea95a6a5db769e8538ec"
+    },
+    {
+      "path": "references/evaluation-scenarios.md",
+      "sha256": "065325025ab1dd1d176323f7c62d0728fd1ed85b0d7bbf6c83956c94d283a34f"
+    },
+    {
+      "path": "references/question-bank.md",
+      "sha256": "e00998301dbbad825254ba913e8defe5bcf2470bbbc2020725b474c526677aff"
+    },
+    {
+      "path": "references/review-checklist.md",
+      "sha256": "3a73bde31b9192d69946bf92dea9658d18dad9d365dec69bd850a1016844904f"
+    },
+    {
+      "path": "references/script-guide.md",
+      "sha256": "14e446c931b28d825548f59c57f8b5d52b75dc0d172b42bbb105bbf58ef5582d"
+    },
+    {
+      "path": "references/skill-design-coverage.md",
+      "sha256": "36624b6228536c1cd1f418401fa00d46c24a9dd37f0738a8fbc293fb1d26f94c"
+    },
+    {
+      "path": "scripts/agents_common.py",
+      "sha256": "02c18e3b3e6fa511542eea9b3c6ea85e2608439a3757c8048404519e7cb56749"
+    },
+    {
+      "path": "scripts/agents_decisions.py",
+      "sha256": "8ec61fe72d02d5b67ebdc7100b2e8c04a90c5cf0be0bd396655474213ea17c06"
+    },
+    {
+      "path": "scripts/agents_project_facts.py",
+      "sha256": "fa7c46200c759bbe1e672bfcb5a6e0eb00ef03f056885fdd4cb50d9cb111cc55"
+    },
+    {
+      "path": "scripts/audit_skill.py",
+      "sha256": "e6aef44139ab1be0d96a16440b5428bed1f44484b76cb3b4f6e4359d98c3ef97"
+    },
+    {
+      "path": "scripts/check_freshness.py",
+      "sha256": "ca5cbba9c9b3b3b005fdb8ead58ebb9c61c9101bab876a6b4833a6a442238582"
+    },
+    {
+      "path": "scripts/check_source_governance.py",
+      "sha256": "115ac3c0fa879a270a523f39c19f77bba72460939a3dbb612e88ed28b77e0785"
+    },
+    {
+      "path": "scripts/codex_token_usage_review.py",
+      "sha256": "a7f7d1df48d0362a2c533ecb0e36a8ff374ec9aa57f2c3aee79e2234f0bedcd6"
+    },
+    {
+      "path": "scripts/collect_design_profile.py",
+      "sha256": "6cab3543833ff39999f5ba53425baf1145a620359f0f52311662fa8679259a3d"
+    },
+    {
+      "path": "scripts/create_agent_shims.py",
+      "sha256": "aab7ac75247c035a6528e85da2d2d0127d4b41204dcdd42180f1fa207d8b5df5"
+    },
+    {
+      "path": "scripts/design_interview_state.py",
+      "sha256": "94dcc53f53ed89f14597801ac26d6a4af12bd93e3e9b331929fd5fa936c7fe6d"
+    },
+    {
+      "path": "scripts/design_profile_builder.py",
+      "sha256": "7b67b5412465f7555d2ceb3677019b56804b5d84803007476362ee915d0fe67f"
+    },
+    {
+      "path": "scripts/design_questions.py",
+      "sha256": "b4bae9b5500de09a94cd2c89febd24e58c20a3dacafa55611e5b85430cb8bde2"
+    },
+    {
+      "path": "scripts/design_remote_gate.py",
+      "sha256": "26bb21c20858534c5ef0a47f05f792fd4693e1d57e212665102e3cae3e9e90e7"
+    },
+    {
+      "path": "scripts/design_review_gate.py",
+      "sha256": "55ac216eebbb52ba6318c36bd912e262087e405e3bad6fe1450b41033dd2aa95"
+    },
+    {
+      "path": "scripts/design_takeover.py",
+      "sha256": "a6c468b4fb33dfd68a5ec02c7d6fd7c99ef6fefcecf8c1fd0db0e99c073286ac"
+    },
+    {
+      "path": "scripts/detect_scopes.py",
+      "sha256": "8c262dd5fdc7255d1ec524ba5bec44ee813b1746318ee2446ada119180e21adb"
+    },
+    {
+      "path": "scripts/evaluate_skill.py",
+      "sha256": "aacd5c9c8babdf4d9ff81e265711e93e4cb0f67104400503ab22c4e58eafe620"
+    },
+    {
+      "path": "scripts/extract_commands.py",
+      "sha256": "e08346e12a14eeb14666a684044626200a85df1980457687cf58cb007eb8fbec"
+    },
+    {
+      "path": "scripts/extract_context.py",
+      "sha256": "2964e5fc94b8ea45620b11894f185bcb553f98d426ace0d5874abff0e0f2b192"
+    },
+    {
+      "path": "scripts/inspect_project.py",
+      "sha256": "df356458f92bfdbe197f282610aac7be1f654e266ae21c05cd9a61ebff4ca156"
+    },
+    {
+      "path": "scripts/install_skill.py",
+      "sha256": "fff44ad1074b25ff6fa21fa2ab3ac1e63afcea5283aa37e3aba8ded50ff602e0"
+    },
+    {
+      "path": "scripts/manage_dirs.py",
+      "sha256": "96a02af2abd0844dd149071dce551df4c9867425bee0d9c7ca911adb088a3ce1"
+    },
+    {
+      "path": "scripts/manage_dirs_remote.py",
+      "sha256": "1fa17e38ca6a600b70e0c17fed2d93b1d305891c93dee1c56b4836c7f36c8184"
+    },
+    {
+      "path": "scripts/manage_docs.py",
+      "sha256": "ebc19a3353b8ffeacbff3163a487528bceaf7f40556dfaddc099372e15e4f055"
+    },
+    {
+      "path": "scripts/manage_docs_evolution.py",
+      "sha256": "a647d46eb15f68f08849c025d830f27dd592d2d41405ff3e85c4fc695f9448ae"
+    },
+    {
+      "path": "scripts/manage_docs_evolution_support.py",
+      "sha256": "1990f728b2c639edef4ed10b6ebf87fd4ae944efe15fa88665bcdb477c748488"
+    },
+    {
+      "path": "scripts/manage_docs_experience.py",
+      "sha256": "2eba846490dbc1b84e9f0da1140370bca29e5c6aae887909e21b723cc66aa214"
+    },
+    {
+      "path": "scripts/manage_docs_release.py",
+      "sha256": "0eddcb32f6df7f8e87252bf461b458b09f6e81679374eb94730f91f171d07356"
+    },
+    {
+      "path": "scripts/manage_docs_scaffold_session.py",
+      "sha256": "7dc66aa0e784f6aa44a597812cd61d9e2e220bbd2e53dcf3bc991ead762e888b"
+    },
+    {
+      "path": "scripts/manage_docs_shared.py",
+      "sha256": "51c3e3a7caa37389925fced1f24871648c879b8b9f39e5e848a2e4257079a50d"
+    },
+    {
+      "path": "scripts/manage_docs_sync_verify.py",
+      "sha256": "b40993b6fb3d62c5dd1208084226b9e7e215de17c9956647da1cbd1b9178bac4"
+    },
+    {
+      "path": "scripts/quick_validate.py",
+      "sha256": "71f6f0808f58eed35a63f3e6365409700c29bc89f5c4d2a843284498a9a61e10"
+    },
+    {
+      "path": "scripts/release_content_policy.py",
+      "sha256": "0cf7c6fc25f1989bc60fee618556c0b9e1be1a586899575909de5fbb164d6e94"
+    },
+    {
+      "path": "scripts/render_agents.py",
+      "sha256": "b385422dab6db2c45606d3d7a070e0e3f661782368601e3f0aa6895c4a0ca3ef"
+    },
+    {
+      "path": "scripts/review_governance.py",
+      "sha256": "b8b7be60d7ff004a107d268672ee0dbdbfe0ac21d5dcf0a886fc5ee96b416ed4"
+    },
+    {
+      "path": "scripts/run_confidence_gate.py",
+      "sha256": "ca4a13696ef8b7b86f45378b7910db0926025ce32ce40573d73a2d2667371990"
+    },
+    {
+      "path": "scripts/select_engineering_rules.py",
+      "sha256": "5eb29a65af609eb8ed0923b63ba4392055c9b5854d8053a1a9e077be29fa5b07"
+    },
+    {
+      "path": "scripts/source_governance.py",
+      "sha256": "cb4fc0d5fb9ef6be821a9cee818d8a8248ae5f8a47f26729a9a51a8af1a5d974"
+    },
+    {
+      "path": "scripts/source_governance_config.py",
+      "sha256": "551a9f3c87a70e5aa3b66e6cb162050eaa19f79d8713d4da264eb38333978b3c"
+    },
+    {
+      "path": "scripts/verify_agents.py",
+      "sha256": "ab9e20fc52ce1c2ae1c99dc1667270a843e75f4f571dd6b9d7f2a1ace603abf4"
+    },
+    {
+      "path": "scripts/workspace_settings_policy.py",
+      "sha256": "f54e1c61dd2e7f1e7d6dd64d97e227f57982c09289925a73faf50f95510dc711"
+    },
+    {
+      "path": "SECURITY.md",
+      "sha256": "d42203f69527c8a412e4bb0896c8bcc3a7830c3d69eed0d8ba989a67b8c83518"
+    },
+    {
+      "path": "SKILL.md",
+      "sha256": "3d71e24b2c1870f10b5911ca3810995a4476cff383ddc1c55a46f8d6cb836dd5"
+    },
+    {
+      "path": "VERSION",
+      "sha256": "09451fdacad9b9ad91bb5d59ba487b9ef9935b582312bc955086242917f7db8c"
+    }
+  ],
+  "other_version_artifacts": []
+}
