@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "detect_missing_root_agents",
+      "kind": "routing_regression",
+      "patterns": ["Pipeline", "Inversion"],
+      "handler": "detect_missing_root_agents",
+      "description": "A workspace that lacks root AGENTS.md should trigger rebuild-required routing instead of silently continuing."
+    },
+    {
+      "id": "generator_version_takeover",
+      "kind": "routing_regression",
+      "patterns": ["Pipeline", "Inversion"],
+      "handler": "generator_version_takeover",
+      "description": "A landed workspace with generator-version mismatch should route into takeover rather than the full default interview."
+    },
+    {
+      "id": "root_level_whitelist_gate",
+      "kind": "directory_governance_regression",
+      "patterns": ["Reviewer", "Pipeline"],
+      "handler": "root_level_whitelist_gate",
+      "description": "Unexpected root-level files should trip the structure gate and require explicit confirmation."
+    },
+    {
+      "id": "root_workspace_artifact_gate",
+      "kind": "directory_governance_regression",
+      "patterns": ["Reviewer", "Pipeline"],
+      "handler": "root_workspace_artifact_gate",
+      "description": "tests, smoke*, reports, and runs must stay at the work-folder root and be blocked when nested under the primary skill or engineering directory."
+    },
+    {
+      "id": "evolution_removed_contract",
+      "kind": "docs_governance_regression",
+      "patterns": ["Tool Wrapper", "Pipeline"],
+      "handler": "evolution_removed_contract",
+      "description": "v1.0.0 removes evolution commands and contracts; docs, eval harness, and manage_docs CLI must all agree that the feature is no longer supported."
+    },
+    {
+      "id": "generic_audit_split",
+      "kind": "generic_skill_regression",
+      "patterns": ["Tool Wrapper", "Reviewer"],
+      "handler": "generic_audit_split",
+      "description": "Generic target skills should pass core audit checks without inheriting agents-md-generator-only contracts."
+    },
+    {
+      "id": "evaluate_failure_classification",
+      "kind": "validation_regression",
+      "patterns": ["Reviewer", "Pipeline"],
+      "handler": "evaluate_failure_classification",
+      "description": "Generic evaluate failures should expose machine-readable target-repo behavior classification."
+    },
+    {
+      "id": "install_release_completeness",
+      "kind": "release_regression",
+      "patterns": ["Tool Wrapper", "Reviewer"],
+      "handler": "install_release_completeness",
+      "description": "Install validation must reject a release whose SKILL.md references missing formal content."
+    },
+    {
+      "id": "release_content_evals_install_contract",
+      "kind": "release_regression",
+      "patterns": ["Tool Wrapper", "Reviewer", "Pipeline"],
+      "handler": "release_content_evals_install_contract",
+      "description": "Installable skill releases must include skill-local evals while still rejecting tests, smoke*, reports, runs, and other work-folder artifacts."
+    },
+    {
+      "id": "review_governance_companion_checks",
+      "kind": "review_regression",
+      "patterns": ["Reviewer", "Pipeline"],
+      "handler": "review_governance_companion_checks",
+      "description": "Governance-sensitive script and version changes must require companion tests, docs, eval coverage, and release records, while non-release review dispatch stays optional."
+    },
+    {
+      "id": "design_review_gate",
+      "kind": "design_interview_regression",
+      "patterns": ["Generator", "Reviewer", "Pipeline"],
+      "handler": "design_review_gate",
+      "description": "Strong-control profile writes must block until final extra requirements are recorded and approved subagent design-review evidence with matching hashes is supplied, but read_only interviews must complete without reviewer dispatch until explicitly escalated."
+    },
+    {
+      "id": "source_governance_test_boundary",
+      "kind": "source_governance_regression",
+      "patterns": ["Tool Wrapper", "Pipeline"],
+      "handler": "source_governance_test_boundary",
+      "description": "Source-governance test helpers must live under tests/ and be removed from production script paths."
+    },
+    {
+      "id": "root_version_sync_contract",
+      "kind": "governance_runtime_regression",
+      "patterns": ["Tool Wrapper", "Pipeline"],
+      "handler": "root_version_sync_contract",
+      "description": "sync-root-agents must repair both root metadata and the managed Control Profile version line so verify/manage_docs guidance does not point users at a partial fix."
+    },
+    {
+      "id": "code_comment_policy_contract",
+      "kind": "render_verify_regression",
+      "patterns": ["Generator", "Reviewer", "Pipeline"],
+      "handler": "code_comment_policy_contract",
+      "description": "Generated root AGENTS.md must include a configurable Chinese Code Comment Policy, write code_comment_policy config, and verification must reject missing or weakened policy rules."
+    },
+    {
+      "id": "plan_mode_language_lock_contract",
+      "kind": "render_verify_regression",
+      "patterns": ["Generator", "Reviewer", "Pipeline"],
+      "handler": "plan_mode_language_lock_contract",
+      "description": "Default conversation language governance must also lock Plan Mode `<proposed_plan>` body text, and verification must reject managed roots that keep only the generic reply-language rule."
+    },
+    {
+      "id": "codex_token_usage_review_contract",
+      "kind": "tool_wrapper_regression",
+      "patterns": ["Tool Wrapper", "Pipeline"],
+      "handler": "codex_token_usage_review_contract",
+      "description": "Explicit Codex token usage requests must route to the internal codex_token_usage_review.py tool, and the tool must refuse to run when the active environment cannot resolve a Codex sessions directory."
+    },
+    {
+      "id": "governance_runtime_de_vendoring",
+      "kind": "governance_runtime_regression",
+      "patterns": ["Tool Wrapper", "Reviewer", "Pipeline"],
+      "handler": "governance_runtime_de_vendoring",
+      "description": "External workspaces must call installed agents-md-generator governance runtime commands and must reject project-local vendored governance script commands."
+    },
+    {
+      "id": "handoff_naming_gate",
+      "kind": "docs_governance_regression",
+      "patterns": ["Reviewer", "Pipeline"],
+      "handler": "handoff_naming_gate",
+      "description": "Governed handoff documents must keep strict current and history naming, block silent scaffold masking, and require explicit repair for renamed files."
+    },
+    {
+      "id": "workspace_settings_gate",
+      "kind": "directory_governance_regression",
+      "patterns": ["Reviewer", "Pipeline"],
+      "handler": "workspace_settings_gate",
+      "description": "Workspace engineering configs must live under .settings, remote review must block all .local.json files, and generated governance must state the local/remote naming contract."
+    }
+  ]
+}
