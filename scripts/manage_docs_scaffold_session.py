@@ -164,6 +164,7 @@ def scaffold(project: Path, refresh_existing_state: bool = True) -> dict[str, An
     state_missing = not (project / STATE_PATH).exists()
     state.setdefault("handoff_count", 0)
     state.setdefault("last_experience_at", 0)
+    cleanup = cleanup_legacy_evolution_artifacts(project, state)
     should_refresh_dir_manager = refresh_existing_state or any(
         not (project / rel).exists()
         for rel in [DIR_MANAGER_MD, CURRENT_STRUCTURE, PLANNED_STRUCTURE]
@@ -181,6 +182,7 @@ def scaffold(project: Path, refresh_existing_state: bool = True) -> dict[str, An
         "created": created,
         "migrated": migrated,
         "state": state,
+        "cleanup": cleanup,
         "handoff_naming": handoff_naming,
         "errors": list(handoff_naming["errors"]),
     }
@@ -277,6 +279,7 @@ def write_handoff(project: Path, input_path: str | None) -> dict[str, Any]:
         }
     archived = rotate_handoff(project)
     state = load_state(project)
+    cleanup_legacy_evolution_artifacts(project, state)
     count = int(state.get("handoff_count", 0)) + 1
     data = read_input(input_path)
     target = handoff_paths(project)["current"]
@@ -306,6 +309,7 @@ def write_active_session(project: Path, input_path: str | None) -> dict[str, Any
             "handoff_naming": scaffold_result.get("handoff_naming", {}),
         }
     data = read_input(input_path)
+    cleanup = cleanup_legacy_evolution_artifacts(project)
     handoff = handoff_paths(project)["current"]
     active = {
         "task": data.get("task", "not recorded"),
@@ -319,7 +323,7 @@ def write_active_session(project: Path, input_path: str | None) -> dict[str, Any
     agents_dir = project / ".agents"
     agents_dir.mkdir(exist_ok=True)
     active_session_file(project).write_text(json.dumps(active, indent=2, sort_keys=True), encoding="utf-8")
-    return {"project": str(project), "written": str(active_session_file(project)), "active_session": active}
+    return {"project": str(project), "written": str(active_session_file(project)), "active_session": active, "cleanup": cleanup}
 
 def read_active_session(project: Path) -> dict[str, Any]:
     active = read_json(active_session_file(project))

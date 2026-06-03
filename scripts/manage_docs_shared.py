@@ -16,8 +16,6 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents_common import (
     ensure_global_rule_overrides_file,
-    evolution_owner_status,
-    evolution_template_sink,
     GLOBAL_CODEX_AGENTS_PREAMBLE,
     GLOBAL_CODEX_AGENTS_BLOCK_END,
     GLOBAL_CODEX_AGENTS_BLOCK_START,
@@ -123,6 +121,7 @@ EXPERIENCE_REQUEST_PATH = ".agents/experience-update-request.json"
 EVOLUTION_REQUEST_PATH = ".agents/evolution-update-request.json"
 EVOLUTION_IMPORT_REQUEST_PATH = ".agents/evolution-import-request.json"
 EVOLUTION_EXPORT_ROOT = ".agents/evolution-export"
+EVOLUTION_REVIEW_REQUEST_PATH = ".agents/evolution-review-request.json"
 CONVERSATION_SNAPSHOT_DIR = ".agents/conversation-snapshots"
 HANDOFF_CURRENT_FILENAME = "HANDOFF.md"
 HANDOFF_HISTORY_DIRNAME = "history_handoff"
@@ -147,19 +146,19 @@ REQUIRED_EXPERIENCE_SECTIONS = [
 ]
 EXPERIENCE_MIN_LENGTH = 900
 WORKFLOW_EXPERIENCE_MIN_LENGTH = 1600
-REQUIRED_EVOLUTION_SECTIONS = [
-    "Evidence Sources",
-    "Applicable Scenario",
-    "Distilled Workflow",
-    "Key Decisions",
-    "Common Problems",
-    "Non-Reusable Content",
-    "Application Checklist",
-]
-EVOLUTION_SUMMARY_MIN_LENGTH = 450
 EXPERIENCE_CADENCE_HANDOFFS = 5
-EVOLUTION_CADENCE_HANDOFFS = 10
 SAFE_TEMPLATE_SEGMENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+LEGACY_EVOLUTION_STATE_KEYS = [
+    "last_evolution_at",
+    "last_evolution_target",
+    "last_evolution_summary",
+    "last_evolution_review_at",
+    "last_evolution_review_verdict",
+    "last_evolution_review_target",
+    "last_evolution_review_sources",
+    "last_evolution_sink",
+    "last_evolution_index",
+]
 REQUIRED_DEVELOPMENT_SECTIONS = [
     "Development Goal",
     "Full Development Plan",
@@ -251,182 +250,6 @@ TOPIC_DETAIL_RULES: dict[str, dict[str, Any]] = {
         "error": "content must include directory-governance-specific evidence",
     },
 }
-EVOLUTION_CATEGORY_SCHEMAS: dict[tuple[str, tuple[str, ...]], dict[str, Any]] = {
-    ("skill-template", ("agent-governance",)): {
-        "flow_requirements": [
-            "Workflow must show repository fact inspection or control-profile inspection before synthesis.",
-            "Workflow must cover rule/design alignment for AGENTS or agent-governance behavior.",
-            "Workflow must cover script/test/verify style execution before final docs governance output.",
-            "Workflow must mention release or install decision handling when summarizing reusable skill-governance flow.",
-        ],
-        "mixed_content_risks": [
-            "Do not copy FPGA/Vivado/HLS/XDC/bitstream engineering flows into an agent-governance skill template.",
-            "Do not turn the template into a hardware execution checklist when the target is a skill-governance workflow.",
-        ],
-        "workflow_required_groups": [
-            ("repository facts", "fact inspection", "control profile", "inspect facts"),
-            ("agents.md", "agent rule", "rule alignment", "design alignment", "docs governance"),
-            ("script", "scripts", "test", "verify", "validation"),
-            ("release", "install", "installation"),
-        ],
-        "workflow_forbidden_terms": (
-            "engineering tcl",
-            "hls",
-            "verilog",
-            "xdc",
-            "bitstream",
-            "timing closure",
-            "download validation",
-            "vivado",
-        ),
-    },
-    ("skill-template", ("docs-governance",)): {
-        "flow_requirements": [
-            "Workflow must cover handoff rotation, experience cadence, request/payload flow, and verification.",
-            "Workflow must keep current docs, history docs, and reusable outputs distinct.",
-        ],
-        "mixed_content_risks": [
-            "Do not replace docs-governance flow with product-engineering execution stages.",
-        ],
-        "workflow_required_groups": [
-            ("handoff", "docs governance", "experience cadence", "request", "payload"),
-            ("verify", "validation", "archive", "history"),
-        ],
-        "workflow_forbidden_terms": ("bitstream", "xdc", "hls", "vivado"),
-    },
-    ("engineering-template", ("docs-governance",)): {
-        "flow_requirements": [
-            "Workflow must cover handoff rotation, experience cadence, request/payload flow, and repository verification for an engineering workspace.",
-            "Workflow must keep current docs, history docs, and reusable outputs distinct while still treating the repository as an engineering project.",
-        ],
-        "mixed_content_risks": [
-            "Do not replace engineering docs-governance flow with FPGA/algorithm execution chains.",
-        ],
-        "workflow_required_groups": [
-            ("handoff", "docs governance", "experience cadence", "request", "payload"),
-            ("verify", "validation", "archive", "history"),
-        ],
-        "workflow_forbidden_terms": ("bitstream", "xdc", "hls", "vivado"),
-    },
-    ("engineering-template", ("FPGA",)): {
-        "flow_requirements": [
-            "Workflow must cover design/develop/simulate/synthesize/implement/validate FPGA stages.",
-            "Workflow must mention hardware-specific artifacts or closure steps such as XDC, bitstream, timing, or download validation.",
-        ],
-        "mixed_content_risks": [
-            "Do not replace engineering execution with AGENTS/control-profile/docs-governance skill steps.",
-        ],
-        "workflow_required_groups": [
-            ("design", "规划", "architecture"),
-            ("develop", "implementation", "开发", "hls", "verilog"),
-            ("simulation", "simulate", "仿真", "test"),
-            ("synthesis", "implement", "implementation", "综合"),
-            ("bitstream", "timing", "xdc", "download validation", "验证"),
-        ],
-        "workflow_forbidden_terms": (
-            "agents.md",
-            "control profile",
-            "docs governance",
-            "handoff cadence",
-            "install confirmation",
-        ),
-    },
-    ("engineering-template", ("algorithm",)): {
-        "flow_requirements": [
-            "Workflow must cover requirement/design/implementation/test or correctness validation.",
-            "Workflow must mention algorithm-oriented validation such as correctness, benchmark, performance, or complexity.",
-        ],
-        "mixed_content_risks": [
-            "Do not replace algorithm engineering flow with AGENTS/docs-governance skill operations.",
-        ],
-        "workflow_required_groups": [
-            ("requirement", "requirements", "需求"),
-            ("design", "设计", "plan"),
-            ("implement", "implementation", "develop", "开发"),
-            ("test", "testing", "验证", "correctness"),
-            ("performance", "benchmark", "complexity", "sort", "sorting", "性能"),
-        ],
-        "workflow_forbidden_terms": (
-            "agents.md",
-            "control profile",
-            "docs governance",
-            "handoff cadence",
-            "install confirmation",
-            "skill install",
-        ),
-    },
-    ("engineering-template", ("web", "frontend")): {
-        "flow_requirements": [
-            "Workflow must cover UI/frontend design, implementation, testing, and responsive or accessibility validation.",
-        ],
-        "mixed_content_risks": [
-            "Do not replace frontend flow with AGENTS/docs-governance maintenance steps.",
-        ],
-        "workflow_required_groups": [
-            ("design", "layout", "ui", "frontend"),
-            ("implement", "development", "develop", "开发"),
-            ("test", "validation", "responsive", "accessibility"),
-        ],
-        "workflow_forbidden_terms": ("agents.md", "control profile", "docs governance", "handoff cadence"),
-    },
-    ("engineering-template", ("backend", "api")): {
-        "flow_requirements": [
-            "Workflow must cover API/backend design, implementation, test, and runtime or integration validation.",
-        ],
-        "mixed_content_risks": [
-            "Do not replace backend execution flow with skill-governance maintenance steps.",
-        ],
-        "workflow_required_groups": [
-            ("api", "backend", "service", "interface"),
-            ("implement", "development", "develop", "开发"),
-            ("test", "validation", "integration", "runtime"),
-        ],
-        "workflow_forbidden_terms": ("agents.md", "control profile", "docs governance", "handoff cadence"),
-    },
-    ("engineering-template", ("data", "database")): {
-        "flow_requirements": [
-            "Workflow must cover schema/query/data implementation plus validation or migration/runtime checks.",
-        ],
-        "mixed_content_risks": [
-            "Do not replace data/database flow with skill-governance maintenance steps.",
-        ],
-        "workflow_required_groups": [
-            ("data", "database", "sql", "schema"),
-            ("implement", "development", "develop", "query"),
-            ("test", "validation", "migration", "runtime"),
-        ],
-        "workflow_forbidden_terms": ("agents.md", "control profile", "docs governance", "handoff cadence"),
-    },
-    ("skill-template", ("general",)): {
-        "flow_requirements": [
-            "Workflow must still reflect a skill/repository-governance style process rather than a product-engineering execution chain.",
-        ],
-        "mixed_content_risks": [
-            "Do not copy specialized engineering execution chains into a general skill template.",
-        ],
-        "workflow_required_groups": [
-            ("repository facts", "control profile", "facts", "inspect"),
-            ("script", "test", "verify", "docs"),
-        ],
-        "workflow_forbidden_terms": ("hls", "verilog", "xdc", "bitstream", "timing closure"),
-    },
-    ("engineering-template", ("general",)): {
-        "flow_requirements": [
-            "Workflow must reflect engineering execution stages rather than AGENTS/docs-governance repository maintenance.",
-        ],
-        "mixed_content_risks": [
-            "Do not copy AGENTS/control-profile/docs-governance flow into a general engineering template.",
-        ],
-        "workflow_required_groups": [
-            ("design", "implement", "develop", "test"),
-            ("validate", "verification", "runtime", "release"),
-        ],
-        "workflow_forbidden_terms": ("agents.md", "control profile", "docs governance", "handoff cadence"),
-    },
-}
-
-
-
 def stamp() -> str:
     return datetime.now().strftime("%Y%m%d-%H%M%S")
 
@@ -460,6 +283,9 @@ def evolution_import_request_file(project: Path) -> Path:
 def evolution_export_root(project: Path) -> Path:
     return project / EVOLUTION_EXPORT_ROOT
 
+def evolution_review_request_file(project: Path) -> Path:
+    return project / EVOLUTION_REVIEW_REQUEST_PATH
+
 def conversation_snapshot_dir(project: Path) -> Path:
     return project / CONVERSATION_SNAPSHOT_DIR
 
@@ -471,6 +297,58 @@ def save_state(project: Path, state: dict[str, Any]) -> None:
     agents_dir = project / ".agents"
     agents_dir.mkdir(exist_ok=True)
     state_file(project).write_text(json.dumps(state, indent=2, sort_keys=True, default=str), encoding="utf-8")
+
+def legacy_evolution_roots(project: Path) -> list[Path]:
+    roots = [project / "assets" / "templates" / "evolution"]
+    profile = project_profile(project)
+    if isinstance(profile, dict):
+        layout = profile.get("skill_layout") if isinstance(profile.get("skill_layout"), dict) else {}
+        raw_path = str(layout.get("path") or "").strip()
+        if raw_path:
+            roots.append(project / raw_path / "assets" / "templates" / "evolution")
+    skills_root = project / "skills"
+    if skills_root.is_dir():
+        roots.extend(path / "assets" / "templates" / "evolution" for path in skills_root.iterdir() if path.is_dir())
+    deduped: list[Path] = []
+    seen: set[str] = set()
+    for path in roots:
+        normalized = str(path.resolve()) if path.exists() else str(path)
+        if normalized not in seen:
+            seen.add(normalized)
+            deduped.append(path)
+    return deduped
+
+def cleanup_legacy_evolution_artifacts(project: Path, state: dict[str, Any] | None = None) -> dict[str, Any]:
+    removed_files: list[str] = []
+    removed_dirs: list[str] = []
+    for path in (
+        evolution_request_file(project),
+        evolution_review_request_file(project),
+        evolution_import_request_file(project),
+    ):
+        if path.exists():
+            path.unlink()
+            removed_files.append(display_path(path, project))
+    export_root = evolution_export_root(project)
+    if export_root.exists():
+        shutil.rmtree(export_root, ignore_errors=True)
+        removed_dirs.append(display_path(export_root, project))
+    for root in legacy_evolution_roots(project):
+        if root.exists():
+            shutil.rmtree(root, ignore_errors=True)
+            removed_dirs.append(display_path(root, project))
+    cleaned_keys: list[str] = []
+    if isinstance(state, dict):
+        for key in LEGACY_EVOLUTION_STATE_KEYS:
+            if key in state:
+                state.pop(key, None)
+                cleaned_keys.append(key)
+    return {
+        "removed_files": removed_files,
+        "removed_dirs": removed_dirs,
+        "cleaned_state_keys": cleaned_keys,
+        "changed": bool(removed_files or removed_dirs or cleaned_keys),
+    }
 
 def file_hash(path: Path) -> str:
     if not path.exists() or not path.is_file():
@@ -547,9 +425,6 @@ def cadence_checkpoint(count: int, interval: int) -> int:
 def latest_experience_due(count: int) -> int:
     return cadence_checkpoint(count, EXPERIENCE_CADENCE_HANDOFFS)
 
-def latest_evolution_due(count: int) -> int:
-    return cadence_checkpoint(count, EVOLUTION_CADENCE_HANDOFFS)
-
 def cadence_window_bounds(checkpoint: int, interval: int) -> tuple[int, int]:
     if checkpoint <= 0:
         return 0, 0
@@ -568,13 +443,7 @@ def handoff_paths(project: Path) -> dict[str, Path]:
     }
 
 def docs_governance_initialized(project: Path) -> bool:
-    governance_markers = [
-        *REQUIRED_DOC_FILES,
-        "docs/experience/1-workflow.md",
-        "docs/dir_manager/DIR_MANAGER.md",
-        STATE_PATH,
-    ]
-    for rel_path in governance_markers:
+    for rel_path in [*REQUIRED_DOC_FILES, "docs/experience/1-workflow.md", "docs/dir_manager/DIR_MANAGER.md", STATE_PATH]:
         if (project / rel_path).exists():
             return True
     return False
@@ -849,8 +718,7 @@ def install_configuration_doc() -> str:
         "## Skill Install Path",
         "- Install the skill folder into the target agent skill directory before use.",
         "- When replacing an installed skill, first move the old skill to the sibling `skill_backups/<skill-name>-YYYYMMDD-HHMMSS/` folder.",
-        "- Never delete installed `assets/templates/evolution/engineering-template` or `assets/templates/evolution/skill-template` content during installation.",
-        "- If evolved template content conflicts, preserve both versions and report the conflict for manual merge.",
+        "- `v1.0.0` and later do not support evolution templates; replacement installs should remove any legacy `assets/templates/evolution/` content from the destination skill.",
         "",
         "## Codex Adapter",
         "- Keep `SKILL.md`, `agents/openai.yaml`, `references/`, `scripts/`, and `assets/` together.",

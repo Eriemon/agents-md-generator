@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.9.7-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v1.0.0-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -48,12 +48,12 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 - Compatibility shim generation for `CLAUDE.md` and `GEMINI.md` when requested.
 - Verification, audit, automated review governance, skill-effectiveness evals, and aggregate confidence checks for release readiness.
 
-## What's New In v0.9.7
+## What's New In v1.0.0
 
-- Updates `scripts/design_remote_gate.py` so remote-ssh integration accepts both `assets/defaults.json` and legacy `config/defaults.json` settings layouts.
-- Hardens `scripts/source_governance.py` to report structured violations when Python parsing or tokenization fails instead of crashing the audit chain.
-- Extends `scripts/manage_docs_sync_verify.py` with Control Profile version alignment checks and automatic correction for mismatched version lines.
-- Adjusts `scripts/evaluate_skill.py` so `erie-remote-ssh` can run in the expected compatibility validation environment during release checks.
+- Breaking governance release: `v1.0.0` removes the evolution subsystem and reusable evolution templates. Experience refresh now updates only `docs/experience/` governance artifacts and rejects legacy evolution payload fields.
+- Adds an explicit read-only Codex token usage entrypoint through `scripts/codex_token_usage_review.py`, so direct token-usage requests no longer fall into the AGENTS design interview flow.
+- Splits directory-governance responsibilities with `scripts/manage_dirs_review.py` and `scripts/manage_dirs_state.py`, making review logic and persisted state handling easier to audit.
+- Tightens release evidence expectations for the owner repository: `v1.0.0` releases must be rebuilt from the current repo-root and `main` branch state instead of reusing stale receipt metadata such as `master` or `skills/agents-md-generator`.
 
 ## Skill Architecture
 
@@ -85,7 +85,7 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 | `SKILL.md` | Agent-facing routing, workflow, constraints, and verification rules. |
 | `agents/openai.yaml` | Skill metadata used by the host UI. |
 | `scripts/` | Deterministic inspection, interview, rendering, docs-governance, directory-governance, verification, audit, and evaluation helpers. |
-| `assets/templates/` | Bundled root and scoped `AGENTS.md` templates plus evolution material. |
+| `assets/templates/` | Bundled root and scoped `AGENTS.md` templates used by the current release flow. |
 | `evals/` | Repo-local skill-effectiveness cases and release-safe evaluation data used by the governance tooling. |
 | `references/` | Script guide, review checklist, question bank, capability notes, and AGENTS guidance. |
 | `docs/assets/` | Hero, workflow, and architecture diagrams used in this README pair. |
@@ -193,8 +193,8 @@ If this skill helps your research, teaching, or engineering workflow, please cit
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {0.9.7},
-  date         = {2026-05-30},
+  version      = {1.0.0},
+  date         = {2026-06-03},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}

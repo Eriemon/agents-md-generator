@@ -115,17 +115,6 @@ def normalize_line_endings(text: str) -> str:
     return text.replace("\r\n", "\n")
 
 
-EVOLUTION_MERGE_SECTIONS = [
-    "Evidence Sources",
-    "Applicable Scenario",
-    "Distilled Workflow",
-    "Key Decisions",
-    "Common Problems",
-    "Non-Reusable Content",
-    "Application Checklist",
-]
-
-
 SANITIZED_PLACEHOLDERS = {
     "api_key": "<REDACTED_API_KEY>",
     "password": "<REDACTED_PASSWORD>",
@@ -179,33 +168,6 @@ def sanitize_release_text(text: str) -> tuple[str, list[dict[str, str]]]:
             matches.append({"rule": rule_name, "placeholder": placeholder})
             redacted = updated
     return redacted, matches
-
-
-def sanitize_evolution_value(value: Any) -> Any:
-    if isinstance(value, str):
-        sanitized, _ = sanitize_release_text(value)
-        return normalize_line_endings(sanitized)
-    if isinstance(value, list):
-        return [sanitize_evolution_value(item) for item in value]
-    if isinstance(value, dict):
-        return {key: sanitize_evolution_value(item) for key, item in value.items()}
-    return value
-
-
-def sanitize_protected_evolution_text(path: Path, text: str) -> str:
-    if path.suffix == ".json":
-        try:
-            data = json.loads(text)
-        except Exception:
-            sanitized, _ = sanitize_release_text(text)
-            normalized = normalize_line_endings(sanitized)
-            return normalized if normalized.endswith("\n") else normalized + "\n"
-        sanitized_data = sanitize_evolution_value(data)
-        return json.dumps(sanitized_data, indent=2, sort_keys=True) + "\n"
-    sanitized, _ = sanitize_release_text(text)
-    normalized = normalize_line_endings(sanitized)
-    return normalized if normalized.endswith("\n") else normalized + "\n"
-
 
 def detect_binary_sensitive_matches(data: bytes) -> list[str]:
     hits: list[str] = []
@@ -540,159 +502,8 @@ def unique_backup_path(destination: Path) -> Path:
     return candidate
 
 
-def protected_evolution_files(root: Path) -> list[Path]:
-    evolution = root / "assets" / "templates" / "evolution"
-    candidates: list[Path] = []
-    for family in ("engineering-template", "skill-template"):
-        family_root = evolution / family
-        if family_root.is_dir():
-            candidates.extend(path for path in sorted(family_root.rglob("*")) if path.is_file())
-    return candidates
-
-
-def split_markdown_sections(text: str) -> tuple[list[str], dict[str, str]]:
-    normalized = normalize_line_endings(text)
-    lines = normalized.splitlines()
-    preamble: list[str] = []
-    sections: dict[str, list[str]] = {}
-    current: str | None = None
-    for line in lines:
-        if line.startswith("## "):
-            current = line[3:].strip()
-            sections.setdefault(current, [])
-            continue
-        if current is None:
-            preamble.append(line)
-        else:
-            sections[current].append(line)
-    return preamble, {name: "\n".join(content).strip() for name, content in sections.items()}
-
-
-def merge_markdown_blocks(old_body: str, new_body: str) -> str:
-    blocks: list[str] = []
-    seen: set[str] = set()
-    for body in (old_body, new_body):
-        for block in [item.strip() for item in re.split(r"\n\s*\n", body.strip()) if item.strip()]:
-            key = "\n".join(line.strip() for line in block.splitlines()).strip()
-            if key and key not in seen:
-                seen.add(key)
-                blocks.append(block)
-    return "\n\n".join(blocks).strip()
-
-
-def merge_evolution_markdown(old_text: str, new_text: str) -> str | None:
-    new_preamble, new_sections = split_markdown_sections(new_text)
-    _old_preamble, old_sections = split_markdown_sections(old_text)
-    if not all(section in new_sections for section in EVOLUTION_MERGE_SECTIONS):
-        return None
-    if not all(section in old_sections for section in EVOLUTION_MERGE_SECTIONS):
-        return None
-    rendered: list[str] = [line for line in new_preamble]
-    while rendered and not rendered[-1].strip():
-        rendered.pop()
-    if rendered:
-        rendered.append("")
-    for section in EVOLUTION_MERGE_SECTIONS:
-        rendered.append(f"## {section}")
-        rendered.append(merge_markdown_blocks(old_sections.get(section, ""), new_sections.get(section, "")))
-        rendered.append("")
-    return "\n".join(rendered).rstrip() + "\n"
-
-
-def merge_index_json(old_text: str, new_text: str) -> str | None:
-    try:
-        old_data = json.loads(old_text)
-        new_data = json.loads(new_text)
-    except Exception:
-        return None
-    if not isinstance(old_data, dict) or not isinstance(new_data, dict):
-        return None
-    old_data = sanitize_evolution_value(old_data)
-    new_data = sanitize_evolution_value(new_data)
-    merged = dict(new_data)
-    old_templates = old_data.get("templates", [])
-    new_templates = new_data.get("templates", [])
-    if isinstance(old_templates, list) and isinstance(new_templates, list):
-        rows: list[dict[str, Any]] = []
-        seen: set[tuple[str, str]] = set()
-        for row in [item for item in old_templates if isinstance(item, dict)] + [item for item in new_templates if isinstance(item, dict)]:
-            key = (str(row.get("output", "")).strip(), str(row.get("topic", "")).strip())
-            if key not in seen:
-                seen.add(key)
-                rows.append(row)
-        merged["templates"] = rows
-    merged["merged_at"] = datetime.now().isoformat(timespec="seconds")
-    merged["merge_mode"] = "sectional-preserve-installed"
-    return json.dumps(merged, indent=2, sort_keys=True) + "\n"
-
-
-def merge_protected_evolution_file(old_path: Path, target: Path) -> tuple[str, str | None]:
-    old_text = sanitize_protected_evolution_text(old_path, old_path.read_text(encoding="utf-8", errors="ignore"))
-    new_text = sanitize_protected_evolution_text(target, target.read_text(encoding="utf-8", errors="ignore"))
-    if old_path.name.endswith(".json"):
-        merged = merge_index_json(old_text, new_text)
-        return ("index", merged)
-    merged = merge_evolution_markdown(old_text, new_text)
-    return ("markdown", merged)
-
-
-def conflict_copy_path(target: Path) -> Path:
-    candidate = target.with_name(f"{target.stem}.installed-template-conflict{target.suffix}")
-    index = 2
-    while candidate.exists():
-        candidate = target.with_name(f"{target.stem}.installed-template-conflict-{index}{target.suffix}")
-        index += 1
-    return candidate
-
-
-def preserve_evolution_templates(backup: Path, destination: Path) -> tuple[list[str], list[dict[str, str]], list[str], list[dict[str, str]], list[str]]:
-    preserved: list[str] = []
-    conflicts: list[dict[str, str]] = []
-    merged: list[str] = []
-    fallback_conflicts: list[dict[str, str]] = []
-    merged_index_updates: list[str] = []
-    for old_path in protected_evolution_files(backup):
-        relative = old_path.relative_to(backup)
-        target = destination / relative
-        sanitized_old_text = sanitize_protected_evolution_text(old_path, old_path.read_text(encoding="utf-8", errors="ignore"))
-        if not target.exists():
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(sanitized_old_text, encoding="utf-8")
-            preserved.append(relative.as_posix())
-            continue
-        if target.read_bytes() == old_path.read_bytes():
-            current_text = target.read_text(encoding="utf-8", errors="ignore")
-            sanitized_current_text = sanitize_protected_evolution_text(target, current_text)
-            if sanitized_current_text != current_text:
-                target.write_text(sanitized_current_text, encoding="utf-8")
-            preserved.append(relative.as_posix())
-            continue
-        kind, merged_text = merge_protected_evolution_file(old_path, target)
-        if merged_text is not None:
-            target.write_text(sanitize_protected_evolution_text(target, merged_text), encoding="utf-8")
-            merged.append(relative.as_posix())
-            if kind == "index":
-                merged_index_updates.append(relative.as_posix())
-            continue
-        conflict_target = conflict_copy_path(target)
-        conflict_target.write_text(sanitized_old_text, encoding="utf-8")
-        conflict = {
-            "relative_path": relative.as_posix(),
-            "installed_version": str(conflict_target),
-            "new_version": str(target),
-        }
-        conflicts.append(conflict)
-        fallback_conflicts.append(conflict)
-    return preserved, conflicts, merged, fallback_conflicts, merged_index_updates
-
-
 def copy_skill(skill_dir: Path, destination: Path, replace: bool) -> dict[str, Any]:
     backup_path: Path | None = None
-    preserved: list[str] = []
-    conflicts: list[dict[str, str]] = []
-    merged: list[str] = []
-    fallback_conflicts: list[dict[str, str]] = []
-    merged_index_updates: list[str] = []
     if destination.exists():
         if not replace:
             raise FileExistsError(f"target already exists: {destination}")
@@ -702,15 +513,11 @@ def copy_skill(skill_dir: Path, destination: Path, replace: bool) -> dict[str, A
     destination.parent.mkdir(parents=True, exist_ok=True)
     ignore = shutil.ignore_patterns("__pycache__", "*.pyc", ".git")
     shutil.copytree(skill_dir, destination, ignore=ignore)
-    if backup_path is not None:
-        preserved, conflicts, merged, fallback_conflicts, merged_index_updates = preserve_evolution_templates(backup_path, destination)
+    legacy_evolution = destination / "assets" / "templates" / "evolution"
+    if legacy_evolution.exists():
+        shutil.rmtree(legacy_evolution, ignore_errors=True)
     return {
         "backup_path": str(backup_path) if backup_path else "",
-        "template_preserved": preserved,
-        "template_conflicts": conflicts,
-        "template_merged": merged,
-        "merge_fallback_conflicts": fallback_conflicts,
-        "merged_index_updates": merged_index_updates,
     }
 
 
@@ -740,11 +547,6 @@ def main() -> None:
         "installed": False,
         "skipped": args.target == "skip" or not args.write,
         "backup_path": "",
-        "template_preserved": [],
-        "template_conflicts": [],
-        "template_merged": [],
-        "merge_fallback_conflicts": [],
-        "merged_index_updates": [],
         "receipt_path": validation["receipt_path"],
         "provenance_mode": validation["provenance_mode"],
         "validation_level": validation["validation_level"],

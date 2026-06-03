@@ -31,8 +31,28 @@ def governed_allowed_paths(profile: dict[str, Any], skill_dir: Path, project: Pa
     if isinstance(configured, list) and configured:
         return [str(item).replace("\\", "/").strip().strip("/") for item in configured if str(item).strip()]
     if skill_dir.resolve() == project.resolve():
-        top_level = source_release_content_analysis(skill_dir)["included_top_level_entries"]
-        return sorted(set([*top_level, "docs", ".agents", "AGENTS.md", "dist"]))
+        return [
+            "README.md",
+            "README-CN.md",
+            "LICENSE",
+            "SECURITY.md",
+            "CONTRIBUTING.md",
+            "CITATION.cff",
+            "pyproject.toml",
+            "SKILL.md",
+            "VERSION",
+            "RELEASE_RECEIPT.json",
+            "agents",
+            "assets",
+            "config",
+            "evals",
+            "references",
+            "scripts",
+            "docs",
+            ".agents",
+            "AGENTS.md",
+            "dist",
+        ]
     rel_skill = skill_dir.relative_to(project).as_posix() if skill_dir.is_relative_to(project) else skill_dir.name
     return [rel_skill, "tests", "docs", ".agents", "AGENTS.md", "dist"]
 
@@ -463,9 +483,9 @@ def release_prepare(project: Path, version: str, skill_dir_raw: str) -> dict[str
     elif diff_cached.returncode not in {0, 1}:
         errors.append("release prepare could not inspect staged changes")
         return {"ok": False, "errors": errors, "checks": checks}
-    checkout_master = run_git(project, ["checkout", primary_branch])
-    if checkout_master.returncode != 0:
-        errors.append(f"release prepare failed to checkout {primary_branch}: {(checkout_master.stderr or checkout_master.stdout).strip()}")
+    checkout_primary = run_git(project, ["checkout", primary_branch])
+    if checkout_primary.returncode != 0:
+        errors.append(f"release prepare failed to checkout {primary_branch}: {(checkout_primary.stderr or checkout_primary.stdout).strip()}")
         return {"ok": False, "errors": errors, "checks": checks}
     merge_message = f"release-prepare: merge {current_branch} into {primary_branch} for {version}"
     merge = run_git(project, ["merge", "--no-ff", current_branch, "-m", merge_message])
@@ -628,7 +648,8 @@ def branch_gate(project: Path) -> dict[str, Any]:
         }
 
     policy = profile.get("git_branch_policy", {}) if isinstance(profile.get("git_branch_policy"), dict) else {}
-    protected = policy.get("protected_branches", ["master", "release"])
+    protected = policy.get("protected_branches", ["main", "release"])
+    primary_branch = protected[0] if protected else "main"
     branch_model = str(profile.get("branch_model", "")).strip()
     git_branch_result = run_git(project, ["branch", "--show-current"])
     git_list_result = run_git(project, ["branch", "--list"])
@@ -651,8 +672,8 @@ def branch_gate(project: Path) -> dict[str, Any]:
         checks["local_branches"] = local_branches
         checks["status_lines"] = status_lines
         if branch_model == "master-and-dist-release":
-            if current_branch != "master":
-                reasons.append(f"current branch must be master, found {current_branch or 'unknown'}")
+            if current_branch != primary_branch:
+                reasons.append(f"current branch must be {primary_branch}, found {current_branch or 'unknown'}")
             if sorted(local_branches) != sorted(protected):
                 reasons.append(f"local branches must match protected branch set {protected}, found {local_branches}")
         if status_lines:
@@ -662,9 +683,9 @@ def branch_gate(project: Path) -> dict[str, Any]:
     if not approved:
         cleanup_plan = [
             "commit or intentionally remove current worktree changes",
-            "switch back to master",
+            f"switch back to {primary_branch}",
             "merge or prepare any temporary development branch",
-            "delete local branches other than master and release after merge",
+            f"delete local branches other than {primary_branch} and release after merge",
             "rerun branch-gate",
         ]
     classified_reasons = [
@@ -771,6 +792,8 @@ def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str, in
     source_version = read_skill_version(skill_dir)
     git_branch = run_git(project, ["branch", "--show-current"]).stdout.strip()
     branches = sorted(normalize_branch_list_line(line) for line in run_git(project, ["branch", "--list"]).stdout.splitlines() if line.strip())
+    protected = sorted((profile.get("git_branch_policy", {}) or {}).get("protected_branches", ["main", "release"]))
+    primary_branch = protected[0] if protected else "main"
     status_lines = filter_runtime_status_lines(run_git(project, ["status", "--short"]).stdout.splitlines())
     errors: list[str] = []
     checks = {
@@ -803,8 +826,6 @@ def release_gate(project: Path, version: str, skill_dir_raw: str, phase: str, in
     other_release_exclusions = release_target_exclusions(skill_name, version)
     if source_version and source_version != version:
         errors.append(f"release gate version {version} does not match skill source version {source_version}")
-    protected = sorted((profile.get("git_branch_policy", {}) or {}).get("protected_branches", ["main", "release"]))
-    primary_branch = protected[0] if protected else "main"
     if git_branch != primary_branch:
         errors.append(f"release gate requires current branch {primary_branch}")
     if sorted(branches) != protected:

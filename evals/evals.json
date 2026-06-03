@@ -30,11 +30,11 @@
       "description": "tests, smoke*, reports, and runs must stay at the work-folder root and be blocked when nested under the primary skill or engineering directory."
     },
     {
-      "id": "exact_cwd_evolution_review",
+      "id": "evolution_removed_contract",
       "kind": "docs_governance_regression",
-      "patterns": ["Reviewer", "Pipeline"],
-      "handler": "exact_cwd_evolution_review",
-      "description": "Tenth-handoff evolution review must reject session evidence that is not an exact-cwd match."
+      "patterns": ["Tool Wrapper", "Pipeline"],
+      "handler": "evolution_removed_contract",
+      "description": "v1.0.0 removes evolution commands and contracts; docs, eval harness, and manage_docs CLI must all agree that the feature is no longer supported."
     },
     {
       "id": "generic_audit_split",

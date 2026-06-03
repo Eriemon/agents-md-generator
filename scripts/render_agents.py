@@ -14,7 +14,6 @@ from agents_common import (
     detect_scopes,
     ensure_global_rule_overrides_file,
     emit_json,
-    evolution_owner_status,
     extract_commands,
     extract_context,
     global_codex_agents_sync_command,
@@ -28,7 +27,7 @@ from agents_common import (
     script_command,
 )
 from manage_dirs import apply_structure_fix, structure_gate
-from manage_docs import bootstrap_experience, branch_gate, infer_evolution_target, preflight_docs, scaffold as scaffold_docs
+from manage_docs import bootstrap_experience, branch_gate, preflight_docs, scaffold as scaffold_docs
 
 
 GENERATED_START = "<!-- AGENTS-GENERATED:START"
@@ -229,60 +228,9 @@ def codebase_state(context: dict) -> str:
     return "\n".join(lines)
 
 
-def evolution_templates_root(template_dir: Path | None) -> Path:
-    return (template_dir or default_template_dir()) / "evolution"
-
-
-def extract_markdown_section(text: str, heading: str) -> list[str]:
-    pattern = rf"^##\s+{re.escape(heading)}\s*$"
-    lines = text.splitlines()
-    capture = False
-    collected: list[str] = []
-    for line in lines:
-        stripped = line.strip()
-        if re.match(pattern, stripped):
-            capture = True
-            continue
-        if capture and stripped.startswith("## "):
-            break
-        if capture and stripped:
-            collected.append(stripped)
-    return collected
-
-
 def evolution_template_guidance(project: Path, template_dir: Path | None = None) -> str:
-    root = evolution_templates_root(template_dir)
-    if not root.exists():
-        return ""
-    target = infer_evolution_target(project)
-    target_dir = root / target["family"]
-    for segment in target["category_path"]:
-        target_dir = target_dir / segment
-    target_dir = target_dir / target["type_slug"]
-    if not target_dir.exists() or not target_dir.is_dir():
-        category_root = target_dir.parent
-        if category_root.exists() and category_root.is_dir():
-            child_dirs = [path for path in sorted(category_root.iterdir()) if path.is_dir()]
-            if len(child_dirs) == 1:
-                target_dir = child_dirs[0]
-    if not target_dir.exists() or not target_dir.is_dir():
-        return ""
-    lines = [
-        f"- Matching evolution template target: family `{target['family']}`, category `{'/'.join(target['category_path'])}`, type `{target['type_slug']}`.",
-    ]
-    for filename in ["1-workflow.md", "2-scripts.md", "3-plan.md", "4-design-ui.md"]:
-        path = target_dir / filename
-        if not path.exists() or not path.is_file():
-            continue
-        text = path.read_text(encoding="utf-8", errors="ignore")
-        for heading in ("Applicable Scenario", "Key Decisions", "Application Checklist"):
-            section_lines = extract_markdown_section(text, heading)
-            if section_lines:
-                lines.extend(f"- {line.lstrip('- ').strip()}" for line in section_lines[:2])
-                break
-    if len(lines) == 1:
-        return ""
-    return "\n".join(lines)
+    del project, template_dir
+    return ""
 def hook_policy(context: dict) -> str:
     hooks = context.get("hook_configs", [])
     if not hooks:
@@ -602,8 +550,6 @@ def experience_log_contract(profile: dict | None, project: Path) -> str:
     ]
     required = ["1-workflow.md", "2-scripts.md", "3-plan.md", "4-design-ui.md"]
     conversation_limit = 10
-    evolution_every = 10
-    evolution_enabled = False
     if profile:
         contract = profile.get("experience_contract", {})
         folder = contract.get("folder", folder)
@@ -611,8 +557,6 @@ def experience_log_contract(profile: dict | None, project: Path) -> str:
         sections = contract.get("required_sections", sections)
         required = contract.get("required_files", required)
         conversation_limit = int(contract.get("conversation_context_limit", conversation_limit))
-        evolution_enabled = True
-        evolution_every = int(contract.get("evolution_every_handoffs", evolution_every))
     lines = [
         f"- Maintain 10 project-specific numbered experience files under `{folder}/`.",
         f"- Fixed files: {', '.join(f'`{folder}/{item}`' for item in required)}.",
@@ -623,15 +567,6 @@ def experience_log_contract(profile: dict | None, project: Path) -> str:
         f"- Required sections: {', '.join(sections)}.",
         "- Archive old current experience files under `docs/experience/history_experience/YYYYMMDD-HHMMSS/` before writing refreshed versions.",
     ]
-    if evolution_enabled:
-        lines.insert(
-            6,
-            f"- Evolution cadence: every {evolution_every} completed handoffs requires valid `evolution_summary` content in the same payload so evolution completes atomically before the checkpoint is considered current.",
-        )
-        lines.insert(
-            7,
-            "- Evolution summaries must satisfy both path-level family matching and content-level type isolation; accepted summaries write to the owner-local template root, the installed skill template library, or a pending export/import bundle depending on the resolved sink.",
-        )
     return "\n".join(lines)
 
 
@@ -649,7 +584,6 @@ def documentation_governance_contract(profile: dict | None, project: Path) -> st
     install = contract.get("install_configuration", {})
     git = contract.get("git_manager", {})
     dir_manager = contract.get("dir_manager", {})
-    evolution_enabled = True
     targets = install.get("targets", ["Codex", "Claude", "OpenClaw"])
     if isinstance(targets, list):
         targets_text = ", ".join(str(item) for item in targets)
@@ -668,19 +602,6 @@ def documentation_governance_contract(profile: dict | None, project: Path) -> st
         f"- Force-confirmed directory overrides must archive old dir manager content to `{dir_manager.get('history', 'docs/dir_manager/history_dir_manager')}/YYYYMMDD-HHMMSS/` before applying the folder change.",
         f"- Handoff history: archive the previous HANDOFF.md to `{handoff.get('history', 'docs/handoff/history_handoff')}` with `{handoff.get('archive_pattern', 'HANDOFF-YYYYMMDD-HHMMSS.md')}` before writing a new one; keep development records at `{development.get('current', 'docs/development/DEVELOPMENT.md')}` and install configuration for {targets_text} under `{install.get('folder', 'docs/install_configuration')}`.",
     ]
-    if evolution_enabled:
-        lines.insert(
-            5,
-            f"- Every {experience.get('evolution_every_handoffs', 10)} completed handoffs, accepted experience must also provide valid `evolution_summary` content so automatic evolution remains atomic before the checkpoint is considered current.",
-        )
-        lines.insert(
-            8,
-            "- AGENTS rendering must not scan the whole `assets/templates/` tree. Only the exact matching evolution target may be read as supplemental guidance, and unmatched sibling templates are ignored.",
-        )
-        lines.insert(
-            9,
-            "- Evolution template writing is isolated by both family and content schema: the exact family, category, and type must match the project kind, the workflow text must not carry the opposite kind's execution chain, and ordinary workspaces must publish reusable templates through the resolved installed-sink or export/import path instead of active local template folders.",
-        )
     return "\n".join(lines)
 
 
@@ -742,7 +663,6 @@ def template_values(project: Path, profile: dict | None = None, template_dir: Pa
         "GITHUB_SETTINGS": github_settings(context),
         "DIRECTORY_COVERAGE": directory_coverage(context),
         "KEY_DECISIONS": key_decisions(context),
-        "EVOLUTION_TEMPLATE_GUIDANCE": evolution_template_guidance(project, template_dir),
         "ALWAYS_RULES": bullet_lines([
             "Preserve user changes and hand-written guidance.",
             "Add tests or verification for changed behavior.",
@@ -858,8 +778,6 @@ def render_root(project: Path, template_dir: Path | None = None, profile: dict |
                 parts.append(compact_section("hook-policy", "Hook Policy", values["HOOK_POLICY"], 3))
             if "No GitHub settings or rulesets detected" not in values["GITHUB_SETTINGS"]:
                 parts.append(compact_section("github-settings", "GitHub Settings", values["GITHUB_SETTINGS"], 3))
-            if values["EVOLUTION_TEMPLATE_GUIDANCE"]:
-                parts.append(compact_section("evolution-template-guidance", "Evolution Template Guidance", values["EVOLUTION_TEMPLATE_GUIDANCE"], 2))
             parts.extend([
                 "\n".join([
                     "## Boundaries",

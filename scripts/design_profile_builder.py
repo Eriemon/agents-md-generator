@@ -8,7 +8,7 @@ from typing import Any
 
 from design_questions import *
 from design_remote_gate import *
-from agents_common import ensure_global_rule_overrides_file, evolution_owner_status, inspect_project, emit_json, resolve_project
+from agents_common import ensure_global_rule_overrides_file, inspect_project, emit_json, resolve_project
 from manage_docs import scaffold as scaffold_docs
 from workspace_settings_policy import workspace_settings_contract
 
@@ -359,7 +359,7 @@ def skill_design_contract(answers: dict[str, Any]) -> dict[str, Any]:
         "reference_material_policy": "temporary inputs only; distill durable constraints and remove local reference paths from generated AGENTS.md",
     }
 
-def docs_contract(name: str, evolution_enabled: bool = False) -> dict[str, Any]:
+def docs_contract(name: str) -> dict[str, Any]:
     branch_policy = git_branch_policy()
     contract = {
         "root": "docs",
@@ -421,9 +421,6 @@ def docs_contract(name: str, evolution_enabled: bool = False) -> dict[str, Any]:
         },
         "workspace_settings": workspace_settings_contract(),
     }
-    if evolution_enabled:
-        contract["experience"]["evolution_every_handoffs"] = 10
-        contract["experience"]["evolution_templates"] = "assets/templates/evolution/<matching-family>/<category>/<type>/"
     return contract
 
 def git_branch_policy() -> dict[str, Any]:
@@ -720,16 +717,12 @@ def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any
             "AGENTS.md",
             "dist",
         ]
-    evolution_enabled = evolution_owner_status(project)["enabled"]
-    if evolution_enabled:
-        profile["experience_contract"]["evolution_every_handoffs"] = 10
-        profile["experience_contract"]["evolution_templates"] = "assets/templates/evolution/<matching-family>/<category>/<type>/"
     if kind == "skill":
         profile["skill_layout"] = layout
         profile["skill_design_contract"] = skill_design_contract(answers)
     if isinstance(answers.get(DESIGN_REVIEW_KEY), dict):
         profile[DESIGN_REVIEW_KEY] = answers[DESIGN_REVIEW_KEY]
-    profile["docs_contract"] = docs_contract(name, evolution_enabled=evolution_enabled)
+    profile["docs_contract"] = docs_contract(name)
     return profile, []
 
 def write_profile(project: Path, profile: dict[str, Any]) -> Path:

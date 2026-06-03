@@ -283,8 +283,6 @@ def build_experience_request(project: Path, count: int) -> dict[str, Any]:
     filenames = [spec["filename"] for spec in specs]
     latest_handoff = project / "docs" / "handoff" / "HANDOFF.md"
     checkpoint = latest_experience_due(count) or count
-    sink = evolution_template_sink(project)
-    requires_atomic_evolution = checkpoint >= EVOLUTION_CADENCE_HANDOFFS and checkpoint % EVOLUTION_CADENCE_HANDOFFS == 0
     conversations = recent_conversation_context(project, limit=10)
     handoff_window_payload = handoff_window(project, checkpoint)
     conversation_window_payload = recent_conversation_window(project)
@@ -329,36 +327,6 @@ def build_experience_request(project: Path, count: int) -> dict[str, Any]:
             "experience_files": [{"filename": "1-workflow.md", "content": "# Workflow Experience\\n..."}],
         },
     }
-    if requires_atomic_evolution:
-        from manage_docs_evolution_support import (
-            evolution_review_contract,
-            evolution_schema_for,
-            infer_evolution_target,
-            release_alignment_evidence,
-            target_schema_label,
-        )
-
-        evolution_target = infer_evolution_target(project)
-        schema = evolution_schema_for(evolution_target)
-        request["requires_atomic_evolution"] = True
-        request["evolution_target"] = evolution_target
-        request["target_schema_label"] = target_schema_label(evolution_target)
-        request["flow_requirements"] = schema.get("flow_requirements", [])
-        request["mixed_content_risks"] = schema.get("mixed_content_risks", [])
-        request["requires_extra_evolution_review"] = True
-        request["review_scope"] = "evolution-only"
-        request["review_blocking"] = True
-        request["review_contract"] = evolution_review_contract(project, checkpoint, evolution_target)
-        request["release_alignment_evidence"] = release_alignment_evidence(project, checkpoint)
-        request["evolution_sink"] = sink
-        request["quality_rules"].append("Reusable evolution templates require AI-authored evolution_summary entries with synthesis sections; scripts must not copy Iterated Lessons directly into templates.")
-        request["payload_schema"]["evolution_target"] = {
-            "family": "skill-template",
-            "category_path": ["agent-governance"],
-            "type_slug": "agents-md-generator",
-            "rationale": "...",
-        }
-        request["payload_schema"]["evolution_summary"] = {"1-workflow.md": "# Workflow Evolution Template\\n\\n## Evidence Sources\\n..."}
     return request
 
 def write_experience_request(project: Path, count: int) -> dict[str, Any]:
@@ -370,8 +338,7 @@ def write_experience_request(project: Path, count: int) -> dict[str, Any]:
     state["experience_update_required"] = True
     state["experience_request_due_at"] = int(request.get("cadence_checkpoint", count))
     state["experience_request"] = target.relative_to(project).as_posix()
-    if isinstance(request.get("evolution_target"), dict):
-        state["last_evolution_target"] = request["evolution_target"]
+    cleanup_legacy_evolution_artifacts(project, state)
     save_state(project, state)
     return {
         "project": str(project),
@@ -398,20 +365,21 @@ def payload_entries(payload: dict[str, Any]) -> dict[str, str]:
                     entries[filename] = content
     return entries
 
-def payload_evolution_summary(payload: dict[str, Any]) -> dict[str, str]:
-    raw = payload.get("evolution_summary")
-    summaries: dict[str, str] = {}
-    if isinstance(raw, dict):
-        for filename, content in raw.items():
-            summaries[str(filename)] = str(content)
-    elif isinstance(raw, list):
-        for item in raw:
-            if isinstance(item, dict):
-                filename = str(item.get("filename", "")).strip()
-                content = str(item.get("content", ""))
-                if filename:
-                    summaries[filename] = content
-    return summaries
+def unsupported_evolution_payload_fields(payload: dict[str, Any]) -> list[str]:
+    return [
+        key
+        for key in (
+            "requires_atomic_evolution",
+            "evolution_target",
+            "evolution_summary",
+            "evolution_review",
+            "evolution_sink",
+            "requires_extra_evolution_review",
+            "review_scope",
+            "review_blocking",
+        )
+        if key in payload
+    ]
 
 def normalized_tokens(text: str) -> set[str]:
     return {

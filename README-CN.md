@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.9.7-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v1.0.0-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -48,12 +48,12 @@ AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的�
 - 在需要时生成 `CLAUDE.md` 与 `GEMINI.md` 兼容 shim。
 - 提供验证、审计、自动 review 治理、skill-effectiveness eval 和 aggregate confidence gate，用于发布前把关。
 
-## v0.9.7 重点更新
+## v1.0.0 重点更新
 
-- 更新 `scripts/design_remote_gate.py`，让 remote-ssh 相关检查同时兼容 `assets/defaults.json` 和旧版 `config/defaults.json` 配置布局。
-- 加固 `scripts/source_governance.py`，当 Python 语法解析或 tokenize 失败时返回结构化违规信息，而不是让审计链直接崩掉。
-- 扩展 `scripts/manage_docs_sync_verify.py`，新增 Control Profile 版本一致性检查，并可自动修正不匹配的版本行。
-- 调整 `scripts/evaluate_skill.py`，让 `erie-remote-ssh` 在 release 校验时能使用预期的兼容验证环境。
+- 这是一次 breaking governance release：`v1.0.0` 正式移除 evolution 子系统与 reusable evolution 模板。experience 刷新现在只更新 `docs/experience/` 治理产物，并拒绝旧版 evolution payload 字段。
+- 新增显式的只读 Codex token 用量入口 `scripts/codex_token_usage_review.py`，用户直接要求 token usage 时不再误入 AGENTS 设计访谈。
+- 将目录治理职责拆分为 `scripts/manage_dirs_review.py` 与 `scripts/manage_dirs_state.py`，让目录审查逻辑与持久化状态更容易审计和维护。
+- 收紧 owner 仓库的 release 证据要求：`v1.0.0` 必须基于当前 repo-root 与 `main` 分支真实状态重建发布物，不能复用带有 `master` 或 `skills/agents-md-generator` 旧来源信息的 receipt。
 
 ## Skill 架构
 
@@ -85,7 +85,7 @@ AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的�
 | `SKILL.md` | 面向 Agent 的触发、流程、约束和验证规则。 |
 | `agents/openai.yaml` | 宿主 UI 使用的 skill 元数据。 |
 | `scripts/` | 检查、访谈、渲染、文档治理、目录治理、验证、审计和评估脚本。 |
-| `assets/templates/` | root/scoped `AGENTS.md` 模板与 evolution 相关模板。 |
+| `assets/templates/` | 当前 release 流程使用的 root/scoped `AGENTS.md` 模板。 |
 | `evals/` | 供治理脚本使用的仓库内 skill-effectiveness 用例与可安全发布的评估数据。 |
 | `references/` | 脚本指南、审查清单、问题库、能力覆盖说明和 AGENTS 指南。 |
 | `docs/assets/` | 本对 README 使用的 hero、workflow 和 architecture 图。 |
@@ -193,8 +193,8 @@ Jiyuan Liu 和 He Li 隶属于东南大学电子科学与工程学院。
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {0.9.7},
-  date         = {2026-05-30},
+  version      = {1.0.0},
+  date         = {2026-06-03},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}
