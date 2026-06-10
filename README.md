@@ -194,7 +194,7 @@ If this skill helps your research, teaching, or engineering workflow, please cit
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
   version      = {1.0.4},
-  date         = {2026-06-03},
+  date         = {2026-06-10},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}
