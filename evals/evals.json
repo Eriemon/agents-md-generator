@@ -65,6 +65,13 @@
       "description": "Installable skill releases must include skill-local evals while still rejecting tests, smoke*, reports, runs, and other work-folder artifacts."
     },
     {
+      "id": "release_sanitizer_regex_constant",
+      "kind": "release_regression",
+      "patterns": ["Reviewer", "Pipeline"],
+      "handler": "release_sanitizer_regex_constant",
+      "description": "Release sanitization must preserve Python regex constants while still redacting real token assignments and leaving dist scripts compilable."
+    },
+    {
       "id": "review_governance_companion_checks",
       "kind": "review_regression",
       "patterns": ["Reviewer", "Pipeline"],
@@ -100,6 +107,13 @@
       "description": "Generated root AGENTS.md must include a configurable Chinese Code Comment Policy, write code_comment_policy config, and verification must reject missing or weakened policy rules."
     },
     {
+      "id": "script_output_policy_contract",
+      "kind": "render_verify_regression",
+      "patterns": ["Generator", "Reviewer", "Pipeline"],
+      "handler": "script_output_policy_contract",
+      "description": "Generated root AGENTS.md must include a configurable Script Output Policy, write script_output_policy config with extensible Kinds, and verification must reject missing or weakened output format rules."
+    },
+    {
       "id": "plan_mode_language_lock_contract",
       "kind": "render_verify_regression",
       "patterns": ["Generator", "Reviewer", "Pipeline"],
@@ -133,6 +147,20 @@
       "patterns": ["Reviewer", "Pipeline"],
       "handler": "workspace_settings_gate",
       "description": "Workspace engineering configs must live under .settings, remote review must block all .local.json files, and generated governance must state the local/remote naming contract."
+    },
+    {
+      "id": "task_rating_gate_contract",
+      "kind": "global_entry_regression",
+      "patterns": ["Tool Wrapper", "Generator", "Reviewer", "Inversion", "Pipeline"],
+      "handler": "task_rating_gate_contract",
+      "description": "Global task-entry governance must prefer reuse, avoid asking difficulty/scale for every task, preserve explicit or contextual user ratings, and trigger stricter planning/reuse research for hell or nightmare work."
+    },
+    {
+      "id": "memory_governance_gate",
+      "kind": "docs_governance_regression",
+      "patterns": ["Tool Wrapper", "Generator", "Reviewer", "Pipeline"],
+      "handler": "memory_governance_gate",
+      "description": "Strong-control memory governance must block missing or disabled memory, require authorized creation, bootstrap exact-cwd Codex sessions into timestamped summaries, and pass only after memory verification is complete."
     }
   ]
 }

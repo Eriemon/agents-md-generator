@@ -316,7 +316,7 @@ def control_profile(profile: dict | None, project: Path, project_version: str = 
         f"- Name: {profile.get('name', 'unknown')}.",
         f"- Version: {project_version or 'unknown'}.",
         f"- Default conversation language: {profile.get('default_conversation_language', '中文')}.",
-        f"- Local governance detail source: `{local_rule_config_path(project, profile)}`; render, verify, and docs-governance scripts read this JSON for long Python task automation, maintainability limits, and project-tool script rules.",
+        f"- Local governance detail source: `{local_rule_config_path(project, profile)}` for long-task, maintainability, and tool-layout rules.",
         f"- Purpose/reason: {profile.get('purpose', 'unknown')} / {profile.get('reason', 'unknown')}.",
     ]
     if profile.get("development_requirements"):
@@ -537,6 +537,35 @@ def conversation_completion_contract(profile: dict | None) -> str:
     ])
 
 
+def memory_contract(profile: dict | None, project: Path) -> str:
+    if not profile:
+        return "- Memory governance: not configured; decide whether to enable `docs/memory/` during AGENTS design."
+    contract = profile.get("memory_contract", {}) if isinstance(profile.get("memory_contract", {}), dict) else {}
+    enabled = bool(contract.get("enabled", profile.get("memory_enabled", False)))
+    if not enabled:
+        return "- Memory governance: disabled by `.agents/agents-control.json`; rely on `docs/handoff/` and `docs/experience/`."
+    guide = contract.get("guide", "docs/memory/MEMORY.md")
+    backend = contract.get("storage_backend", "sqlite-plus-jsonl")
+    read_policy = contract.get("read_policy", "read latest handoff plus relevant docs/memory summaries before implementation")
+    if read_policy == "read latest handoff plus relevant docs/memory summaries before implementation":
+        read_policy = "latest handoff + relevant memory summaries before work"
+    sensitivity = contract.get("sensitivity_policy", "do not store secrets, credentials, or raw local private paths")
+    if sensitivity == "do not store secrets, credentials, or raw local private paths":
+        sensitivity = "do not store secrets, credentials, or raw local private paths"
+    read_command = project_command(project, profile, "manage_docs.py", "memory-read", "<project>", "--query", "\"<task>\"", "--limit", "5")
+    gate_command = project_command(project, profile, "manage_docs.py", "memory-gate", "<project>")
+    init_command = project_command(project, profile, "manage_docs.py", "memory-init", "<project>", "--confirm-create")
+    bootstrap_command = project_command(project, profile, "manage_docs.py", "memory-bootstrap-sessions", "<project>")
+    return "\n".join([
+        f"- Root: `{contract.get('folder', 'docs/memory')}`; guide: `{guide}`; backend: `{backend}`.",
+        f"- Read {read_policy}.",
+        f"- Gate with `{gate_command}`; if missing, ask before `{init_command}`.",
+        f"- Historical work runs `{bootstrap_command}` for exact-cwd sessions in timestamp order.",
+        f"- Query with `{read_command}`; write/compress through memory CLI; handoff appends.",
+        f"- Sensitivity: {sensitivity}; no secrets, credentials, or raw private paths.",
+    ])
+
+
 def experience_log_contract(profile: dict | None, project: Path) -> str:
     folder = "docs/experience"
     pattern = "1-xxxxx.md through 10-xxxxx.md"
@@ -590,14 +619,14 @@ def documentation_governance_contract(profile: dict | None, project: Path) -> st
     else:
         targets_text = str(targets)
     lines = [
-        f"- Docs root: `{contract.get('root', 'docs')}`; latest handoff: `{handoff.get('current', 'docs/handoff/HANDOFF.md')}` is always the newest task handoff.",
-        f"- Before a new task, read `{handoff.get('current', 'docs/handoff/HANDOFF.md')}`, run `{project_command(project, profile, 'manage_docs.py', 'resume-check', '<project>')}`, and repair interrupted sessions with `{project_command(project, profile, 'manage_docs.py', 'resume-repair', '<project>', '--input', 'recovery.json')}` before new work continues.",
-        f"- After reading the prior handoff and before implementation, run `{project_command(project, profile, 'manage_docs.py', 'start-session', '<project>', '--input', 'session.json')}` to record the active session.",
+        f"- Docs root: `{contract.get('root', 'docs')}`; latest handoff is `{handoff.get('current', 'docs/handoff/HANDOFF.md')}`.",
+        f"- Before new work, read `{handoff.get('current', 'docs/handoff/HANDOFF.md')}`, run `{project_command(project, profile, 'manage_docs.py', 'resume-check', '<project>')}`, and use `{project_command(project, profile, 'manage_docs.py', 'resume-repair', '<project>', '--input', 'recovery.json')}` if interrupted.",
+        f"- Start work with `{project_command(project, profile, 'manage_docs.py', 'start-session', '<project>', '--input', 'session.json')}`.",
         f"- Every completed development conversation must write `{handoff.get('current', 'docs/handoff/HANDOFF.md')}`; use `{project_command(project, profile, 'manage_docs.py', 'handoff', '<project>', '--input', 'handoff.json')}` at task completion.",
-        f"- Experience folder: `{experience.get('folder', 'docs/experience')}` maintains 10 project-specific numbered experience files including `docs/experience/1-workflow.md`, `docs/experience/2-scripts.md`, `docs/experience/3-plan.md`, `docs/experience/4-design-ui.md`, plus `5-*.md` through `10-*.md`.",
-        f"- Experience cadence: every 5 completed handoffs create an AI update request plus the current evidence window using up to {experience.get('conversation_context_limit', 10)} recent conversation snapshots; the active agent should apply the accepted AI payload in the same conversation before the checkpoint is considered current.",
-        f"- Dir manager: keep strict local and remote deployment structure review rules under `{dir_manager.get('folder', 'docs/dir_manager')}/`; run `manage_dirs.py review`, preserve `history_dir_manager/` archives, and keep remote deployment structure governance in the same contract.",
-        f"- Git manager: keep the current change summary in `{git.get('folder', 'docs/git_manager')}/CHANGELOG.md`, archive older entries under `{git.get('folder', 'docs/git_manager')}/history_git_manager/YYYYMMDD-HHMMSS/`, and rotate with `manage_docs.py git-changelog`.",
+        f"- Experience folder: `{experience.get('folder', 'docs/experience')}` maintains 10 project-specific numbered experience files: `docs/experience/1-workflow.md`, `docs/experience/2-scripts.md`, `docs/experience/3-plan.md`, `docs/experience/4-design-ui.md`, plus `docs/experience/5-*.md` through `docs/experience/10-*.md`.",
+        f"- Experience cadence: every 5 completed handoffs create an AI update request using up to {experience.get('conversation_context_limit', 10)} recent conversation snapshots; apply the accepted payload in-session.",
+        f"- Dir manager: keep local and remote deployment structure review under `{dir_manager.get('folder', 'docs/dir_manager')}/`; run `manage_dirs.py review` and preserve `history_dir_manager/` archives.",
+        f"- Git manager: keep `{git.get('folder', 'docs/git_manager')}/CHANGELOG.md`, archive older entries under `history_git_manager/`, and rotate with `manage_docs.py git-changelog`.",
         f"- Directory changes require `{project_command(project, profile, 'manage_dirs.py', 'review', '<project>', '--input', 'change.json')}`; blocked reviews require explicit user force-confirmation and risk capture in handoff.",
         f"- Force-confirmed directory overrides must archive old dir manager content to `{dir_manager.get('history', 'docs/dir_manager/history_dir_manager')}/YYYYMMDD-HHMMSS/` before applying the folder change.",
         f"- Handoff history: archive the previous HANDOFF.md to `{handoff.get('history', 'docs/handoff/history_handoff')}` with `{handoff.get('archive_pattern', 'HANDOFF-YYYYMMDD-HHMMSS.md')}` before writing a new one; keep development records at `{development.get('current', 'docs/development/DEVELOPMENT.md')}` and install configuration for {targets_text} under `{install.get('folder', 'docs/install_configuration')}`.",
@@ -620,6 +649,17 @@ def code_comment_policy(project: Path, profile: dict | None) -> str:
         f"- Python：{python_policy}",
         f"- C/C++：{c_cpp_policy}",
         f"- Verilog/SystemVerilog：{rtl_policy}",
+    ])
+
+
+def script_output_policy(project: Path, profile: dict | None) -> str:
+    config_path = local_rule_config_path(project, profile)
+    policy = load_global_rule_overrides(project, profile)["data"].get("script_output_policy", {})
+    formats = policy.get("format", {}) if isinstance(policy.get("format", {}), dict) else {}
+    python_policy = policy.get("python", {}) if isinstance(policy.get("python", {}), dict) else {}
+    return "\n".join([
+        f"- 配置来源：`{config_path}`；`Kind` 列表只从该 JSON 读取，代码不得内置业务枚举。",
+        f"- 格式：`{formats.get('info', '> INFO: [{kind}]')}`、`{formats.get('warning', '> WARNING: [{kind}]')}`、`{formats.get('error', '> ERR: [{kind}]')}`；Python 过程性 INFO 默认打印，`{python_policy.get('quiet_flag', '--quiet')}` 关闭 INFO/progress，WARNING 和 ERR 继续可见；机器可读输出不套前缀。",
     ])
 
 
@@ -648,7 +688,9 @@ def template_values(project: Path, profile: dict | None = None, template_dir: Pa
         "SKILL_DESIGN_CONTRACT": skill_design_contract(profile, project),
         "CONVERSATION_COMPLETION_CONTRACT": conversation_completion_contract(profile),
         "CODE_COMMENT_POLICY": code_comment_policy(project, profile),
+        "SCRIPT_OUTPUT_POLICY": script_output_policy(project, profile),
         "EXPERIENCE_LOG_CONTRACT": experience_log_contract(profile, project),
+        "MEMORY_CONTRACT": memory_contract(profile, project),
         "DOCUMENTATION_GOVERNANCE_CONTRACT": documentation_governance_contract(profile, project),
         "VERIFICATION_STATUS": "unverified",
         "COMMAND_SOURCE": command_source,
@@ -756,7 +798,7 @@ def render_root(project: Path, template_dir: Path | None = None, profile: dict |
                 compact_section("control-profile", "Control Profile", values["CONTROL_PROFILE"], control_max),
                 compact_section("directory-contract", "Directory Contract", values["DIRECTORY_CONTRACT"], 18),
                 compact_section("remote-server-contract", "Remote Server Contract", values["REMOTE_SERVER_CONTRACT"], 18),
-                compact_section("release-contract", "Release Contract", values["RELEASE_CONTRACT"], 12),
+                compact_section("release-contract", "Release Contract", values["RELEASE_CONTRACT"], 11),
                 compact_section("engineering-rule-contract", "Engineering Rule Contract", values["ENGINEERING_RULE_CONTRACT"], engineering_max),
                 compact_section("skill-design-contract", "Skill Design Contract", values["SKILL_DESIGN_CONTRACT"], skill_max),
                 "\n".join([
@@ -768,8 +810,10 @@ def render_root(project: Path, template_dir: Path | None = None, profile: dict |
                     "<!-- AGENTS-GENERATED:END commands -->",
                 ]),
                 compact_section("code-comment-policy", "Code Comment Policy", values["CODE_COMMENT_POLICY"], 7),
+                compact_section("script-output-policy", "Script Output Policy", values["SCRIPT_OUTPUT_POLICY"], 6),
                 compact_section("conversation-completion-contract", "Conversation Completion Contract", values["CONVERSATION_COMPLETION_CONTRACT"], 3),
-                compact_section("documentation-governance-contract", "Documentation Governance Contract", values["DOCUMENTATION_GOVERNANCE_CONTRACT"], 10),
+                compact_section("memory-contract", "Memory Contract", values["MEMORY_CONTRACT"], 6),
+                compact_section("documentation-governance-contract", "Documentation Governance Contract", values["DOCUMENTATION_GOVERNANCE_CONTRACT"], 9),
                 compact_section("directory-coverage", "Directory Coverage", values["DIRECTORY_COVERAGE"], 2),
             ]
             if "Link ADRs or architecture docs here" not in values["KEY_DECISIONS"] or "Add migrations, tech debt" not in values["CODEBASE_STATE"] or "Existing utility" in values["UTILITY_ROWS"]:

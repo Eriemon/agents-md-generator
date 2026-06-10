@@ -20,8 +20,17 @@ def skill_source_governance_path(root: Path | None = None) -> Path:
     return (root or skill_root()) / "config" / "source-governance.json"
 
 
+def skill_script_output_policy_path(root: Path | None = None) -> Path:
+    return (root or skill_root()) / "config" / "script-output-policy-default.json"
+
+
 def default_source_governance() -> dict[str, Any]:
     data = read_json(skill_source_governance_path())
+    return data if isinstance(data, dict) else {}
+
+
+def default_script_output_policy() -> dict[str, Any]:
+    data = read_json(skill_script_output_policy_path())
     return data if isinstance(data, dict) else {}
 
 
@@ -81,6 +90,7 @@ def default_global_rule_overrides() -> dict[str, Any]:
                 "verilog_systemverilog.always_register_assignment": "right_side",
             },
         },
+        "script_output_policy": default_script_output_policy(),
         "long_python_tasks": {
             "enabled": True,
             "prompt_before_automation": True,
@@ -222,6 +232,62 @@ def validate_code_comment_policy_data(comment_policy: dict[str, Any], *, require
     return errors
 
 
+def validate_script_output_policy_data(policy: dict[str, Any], *, require_explicit: bool = False) -> list[str]:
+    errors: list[str] = []
+    if not policy:
+        return ["script_output_policy must be a non-empty object"]
+    if require_explicit and "enabled" not in policy:
+        errors.append("script_output_policy.enabled must be explicitly set")
+    if not isinstance(policy.get("enabled"), bool):
+        errors.append("script_output_policy.enabled must be boolean")
+    formats = policy.get("format")
+    if require_explicit and "format" not in policy:
+        errors.append("script_output_policy.format must be explicitly set")
+    if not isinstance(formats, dict):
+        errors.append("script_output_policy.format must be an object")
+    else:
+        required_formats = {
+            "info": "> INFO: [{kind}]",
+            "warning": "> WARNING: [{kind}]",
+            "error": "> ERR: [{kind}]",
+        }
+        for key, expected in required_formats.items():
+            if require_explicit and key not in formats:
+                errors.append(f"script_output_policy.format.{key} must be explicitly set")
+            if formats.get(key) != expected:
+                errors.append(f"script_output_policy.format.{key} must be `{expected}`")
+    kinds = policy.get("kinds")
+    if require_explicit and "kinds" not in policy:
+        errors.append("script_output_policy.kinds must be explicitly set")
+    if not isinstance(kinds, list) or not kinds:
+        errors.append("script_output_policy.kinds must be a non-empty list")
+    else:
+        normalized = [str(item).strip() for item in kinds]
+        if any(not item for item in normalized):
+            errors.append("script_output_policy.kinds must not contain empty values")
+        if len(set(normalized)) != len(normalized):
+            errors.append("script_output_policy.kinds must not contain duplicates after trimming")
+    python_policy = policy.get("python")
+    if require_explicit and "python" not in policy:
+        errors.append("script_output_policy.python must be explicitly set")
+    if not isinstance(python_policy, dict):
+        errors.append("script_output_policy.python must be an object")
+    else:
+        if require_explicit and "info_default" not in python_policy:
+            errors.append("script_output_policy.python.info_default must be explicitly set")
+        if python_policy.get("info_default") != "on":
+            errors.append("script_output_policy.python.info_default must be on")
+        if require_explicit and "quiet_flag" not in python_policy:
+            errors.append("script_output_policy.python.quiet_flag must be explicitly set")
+        if python_policy.get("quiet_flag") != "--quiet":
+            errors.append("script_output_policy.python.quiet_flag must be --quiet")
+    if require_explicit and "machine_readable_exemption" not in policy:
+        errors.append("script_output_policy.machine_readable_exemption must be explicitly set")
+    if policy.get("machine_readable_exemption") is not True:
+        errors.append("script_output_policy.machine_readable_exemption must be true")
+    return errors
+
+
 def validate_source_governance_data(data: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     if not isinstance(data, dict) or not data:
@@ -256,11 +322,13 @@ def validate_source_governance_data(data: dict[str, Any]) -> list[str]:
 def validate_global_rule_overrides_data(data: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     comment_policy = data.get("code_comment_policy", {}) if isinstance(data.get("code_comment_policy", {}), dict) else {}
+    script_output_policy = data.get("script_output_policy", {}) if isinstance(data.get("script_output_policy", {}), dict) else {}
     long_tasks = data.get("long_python_tasks", {}) if isinstance(data.get("long_python_tasks", {}), dict) else {}
     source_governance = data.get("source_governance", {}) if isinstance(data.get("source_governance", {}), dict) else {}
     source_limits = data.get("source_file_limits", {}) if isinstance(data.get("source_file_limits", {}), dict) else {}
     script_layout = data.get("tool_script_layout", {}) if isinstance(data.get("tool_script_layout", {}), dict) else {}
     errors.extend(validate_code_comment_policy_data(comment_policy))
+    errors.extend(validate_script_output_policy_data(script_output_policy))
     errors.extend(validate_source_governance_data(source_governance))
     if long_tasks.get("automation_kind") != "heartbeat":
         errors.append("long_python_tasks.automation_kind must be heartbeat")
@@ -313,6 +381,14 @@ def load_global_rule_overrides(root: Path, profile: dict[str, Any] | None = None
                 errors.append("code_comment_policy must be a non-empty object")
             else:
                 errors.extend(validate_code_comment_policy_data(raw_policy, require_explicit=True))
+        if "script_output_policy" not in raw:
+            errors.append("script_output_policy must be present in local governance config")
+        else:
+            raw_script_output_policy = raw.get("script_output_policy")
+            if not isinstance(raw_script_output_policy, dict):
+                errors.append("script_output_policy must be a non-empty object")
+            else:
+                errors.extend(validate_script_output_policy_data(raw_script_output_policy, require_explicit=True))
         if "source_governance" not in raw:
             errors.append("source_governance must be present in local governance config")
         elif not isinstance(raw.get("source_governance"), dict):

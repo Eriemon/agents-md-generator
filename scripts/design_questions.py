@@ -119,6 +119,14 @@ DIRECTORY_QUESTIONS = [
     ("49", "remote_run_archive_trigger", "请明确远端运行产物何时必须从活动目录归档到 backups；推荐 `after required verification passes`。如果远端未配置，可保持 disabled。"),
 ]
 
+MEMORY_QUESTIONS = [
+    ("50", "memory_enabled", "是否启用 `docs/memory/` 记忆治理层？默认推荐启用；如关闭，AGENTS.md 只保留 handoff/experience 指针。"),
+    ("51", "memory_storage_backend", "记忆层使用什么存储后端？默认 `sqlite-plus-jsonl`：SQLite 负责查询索引，JSONL/Markdown 保留可审计原文和摘要。"),
+    ("52", "memory_capture_scope", "哪些内容可以进入长期记忆？默认保存 handoff 摘要、用户确认的项目偏好、长期决策、验证/发布教训。"),
+    ("53", "memory_read_policy", "任务开始和恢复时如何读取记忆？默认读取最新 handoff 和相关 `docs/memory` 摘要。"),
+    ("54", "memory_sensitivity_policy", "记忆层的敏感信息边界是什么？默认不保存 secrets、凭据、本地私密路径原文。"),
+]
+
 EXISTING_WORK_QUESTIONS = [
     ("20", "has_existing_work", "当前工作文件夹是否已经存在工程或者技能？"),
     ("21", "directory_contract_confirmed", "是否确认本地目录结构、远程目录结构和新增功能目录规则已经明确并固定为强控制契约？"),
@@ -163,7 +171,8 @@ ENGINEERING_RULE_SETS = {
 ENGINEERING_RULE_MODES = {"none", "mini", "nano"}
 ENGINEERING_RULE_SCOPES = {"project-baseline", "scoped", "on-demand"}
 
-COMMON_GROUPS = [["1", "32", "45"]]
+MEMORY_GROUPS = [["50", "51", "52", "53", "54"]]
+COMMON_GROUPS = [["1", "32", "45"], ["50", "51", "52", "53", "54"]]
 SKILL_GROUPS = [
     ["2", "3", "4"],
     ["5", "6", "7"],
@@ -185,7 +194,7 @@ ENGINEERING_GROUPS = [
     ["42", "43", "44", "46", "47", "48", "49"],
     ["20", "21"],
 ]
-TAKEOVER_COMMON_GROUPS = [["1", "32", "45"]]
+TAKEOVER_COMMON_GROUPS = [["1", "32", "45"], ["50", "51", "52", "53", "54"]]
 TAKEOVER_SKILL_GROUPS = [["6"], ["42", "43", "44", "46", "47", "48", "49"], ["21"]]
 TAKEOVER_ENGINEERING_GROUPS = [["16"], ["42", "43", "44", "46", "47", "48", "49"], ["21"]]
 
@@ -249,6 +258,43 @@ QUESTION_OPTIONS: dict[str, list[dict[str, Any]]] = {
         {"label": "不使用远程", "value": False, "description": "本次 AGENTS 生成不锁定远程服务器，未来如需远程验证必须先更新 AGENTS。", "recommended": True},
         {"label": "使用远程", "value": True, "description": "本次必须完成 erie-remote-ssh 依赖检查、服务器配置/选择、校验和锁定。", "recommended": False},
     ],
+    "memory_enabled": [
+        {"label": "启用记忆", "value": True, "description": "创建 `docs/memory/`，保存可审计摘要和可查询索引。", "recommended": True},
+        {"label": "关闭记忆", "value": False, "description": "仅保留 handoff、experience 和 AGENTS 指针，不写入记忆库。", "recommended": False},
+    ],
+    "memory_storage_backend": [
+        {"label": "sqlite-plus-jsonl", "value": "sqlite-plus-jsonl", "description": "SQLite 查询索引 + JSONL 追加事件 + Markdown 压缩摘要。", "recommended": True},
+    ],
+    "memory_capture_scope": [
+        {
+            "label": "默认长期范围",
+            "value": "handoff summaries, user-confirmed project preferences, durable decisions, validation lessons, and release lessons",
+            "description": "保存交接摘要、用户确认偏好、长期决策、验证和发布教训。",
+            "recommended": True,
+        },
+        {"label": "仅 handoff 摘要", "value": "handoff summaries only", "description": "降低长期记忆写入范围。", "recommended": False},
+        {"label": "用户自定义", "value": "__user_input__", "description": "由用户输入更具体的捕获范围。", "recommended": False},
+    ],
+    "memory_read_policy": [
+        {
+            "label": "handoff + 相关摘要",
+            "value": "read latest handoff plus relevant docs/memory summaries before implementation",
+            "description": "每次任务开始读取最新 handoff，并按任务查询相关记忆摘要。",
+            "recommended": True,
+        },
+        {"label": "仅恢复时读取", "value": "read memory during resume or takeover only", "description": "减少日常上下文加载。", "recommended": False},
+        {"label": "用户自定义", "value": "__user_input__", "description": "由用户输入读取策略。", "recommended": False},
+    ],
+    "memory_sensitivity_policy": [
+        {
+            "label": "不存敏感原文",
+            "value": "do not store secrets, credentials, or raw local private paths",
+            "description": "禁止保存 secrets、凭据、本地私密路径原文。",
+            "recommended": True,
+        },
+        {"label": "仅占位摘要", "value": "store only redacted placeholders for sensitive facts", "description": "敏感事实只允许以脱敏占位符描述。", "recommended": False},
+        {"label": "用户自定义", "value": "__user_input__", "description": "由用户输入敏感信息边界。", "recommended": False},
+    ],
     "skill_design_patterns": [
         {"label": "五模式组合", "value": ["Tool Wrapper", "Generator", "Reviewer", "Inversion", "Pipeline"], "description": "脚本、模板、审查、反问和流水线都启用。", "recommended": True},
         {"label": "生成器为主", "value": ["Tool Wrapper", "Generator"], "description": "强调稳定输出和可执行脚本。", "recommended": False},
@@ -284,7 +330,7 @@ QUESTION_OPTIONS: dict[str, list[dict[str, Any]]] = {
 QUESTION_MAP: dict[str, dict[str, Any]] = {}
 for item in COMMON_QUESTIONS:
     QUESTION_MAP[item["question_id"]] = item
-for qid, key, ask in SKILL_QUESTIONS + ENGINEERING_QUESTIONS + DIRECTORY_QUESTIONS + EXISTING_WORK_QUESTIONS:
+for qid, key, ask in SKILL_QUESTIONS + ENGINEERING_QUESTIONS + DIRECTORY_QUESTIONS + MEMORY_QUESTIONS + EXISTING_WORK_QUESTIONS:
     branch = "skill" if (qid, key, ask) in SKILL_QUESTIONS else "engineering" if (qid, key, ask) in ENGINEERING_QUESTIONS else "all"
     QUESTION_MAP[qid] = {
         "question_id": qid,

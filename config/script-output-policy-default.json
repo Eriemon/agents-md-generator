@@ -1,0 +1,46 @@
+{
+  "enabled": true,
+  "format": {
+    "info": "> INFO: [{kind}]",
+    "warning": "> WARNING: [{kind}]",
+    "error": "> ERR: [{kind}]"
+  },
+  "kinds": [
+    "Python",
+    "Shell",
+    "Bash",
+    "PowerShell",
+    "Bat",
+    "Cmd",
+    "TCL",
+    "MakeFile",
+    "CMake",
+    "Ninja",
+    "C",
+    "CPP",
+    "CUDA",
+    "OpenCL",
+    "Verilog",
+    "SystemVerilog",
+    "VHDL",
+    "Vivado",
+    "Vitis",
+    "HLS",
+    "XSim",
+    "Verilator",
+    "Node",
+    "JavaScript",
+    "TypeScript",
+    "Java",
+    "Go",
+    "Rust",
+    "Docker",
+    "Git",
+    "SQL"
+  ],
+  "python": {
+    "info_default": "on",
+    "quiet_flag": "--quiet"
+  },
+  "machine_readable_exemption": true
+}

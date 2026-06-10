@@ -54,6 +54,18 @@ CODE_COMMENT_POLICY_REQUIRED_SNIPPETS = (
     "Verilog/SystemVerilog：信号声明、参数定义、assign 和 always 块内寄存器赋值使用右侧注释",
     "module/task/function/generate/always 说明放在语句上方",
 )
+SCRIPT_OUTPUT_POLICY_REQUIRED_SNIPPETS = (
+    "配置来源：`.agents/global-rule-overrides.json`",
+    "`Kind` 列表只从该 JSON 读取",
+    "代码不得内置业务枚举",
+    "`> INFO: [{kind}]`",
+    "`> WARNING: [{kind}]`",
+    "`> ERR: [{kind}]`",
+    "Python 过程性 INFO 默认打印",
+    "`--quiet`",
+    "WARNING 和 ERR 继续可见",
+    "机器可读输出不套前缀",
+)
 PROJECT_LOCAL_GOVERNANCE_RUNTIME_RE = re.compile(
     r"`python\s+(?:scripts/|skills/[^/\s]+/scripts/)(?:manage_docs|manage_dirs|verify_agents|evaluate_skill|review_governance|run_confidence_gate|collect_design_profile|render_agents)\.py\b[^`]*`"
 )
@@ -97,6 +109,20 @@ def validate_strong_control(text: str, file: str, project: Path, errors: list[st
     profile = read_json(project / ".agents" / "agents-control.json")
     if not str(profile.get("default_conversation_language", "")).strip():
         errors.append(f"{file}: strong-control profile must explicitly set default_conversation_language")
+    memory_contract = profile.get("memory_contract", {}) if isinstance(profile.get("memory_contract", {}), dict) else {}
+    memory_enabled = bool(memory_contract.get("enabled", profile.get("memory_enabled", False)))
+    if memory_enabled:
+        if "## Memory Contract" not in text:
+            errors.append(f"{file}: missing strong-control section ## Memory Contract")
+        memory_body = section_body(text, "## Memory Contract") or ""
+        if "docs/memory/MEMORY.md" not in memory_body:
+            errors.append(f"{file}: Memory Contract must point to docs/memory/MEMORY.md")
+        if "memory-read" not in memory_body:
+            errors.append(f"{file}: Memory Contract must include memory-read guidance")
+        if "memory-gate" not in memory_body:
+            errors.append(f"{file}: Memory Contract must include memory-gate guidance")
+        if "memory-bootstrap-sessions" not in memory_body:
+            errors.append(f"{file}: Memory Contract must include exact-cwd session bootstrap guidance")
     extra_requirements = str(profile.get("extra_requirements", "")).strip()
     if extra_requirements and extra_requirements.casefold() != "none" and extra_requirements not in text:
         errors.append(f"{file}: Control Profile must render extra_requirements from .agents/agents-control.json")
@@ -287,6 +313,29 @@ def validate_code_comment_policy(text: str, file: str, project: Path, profile: d
         for item in config["errors"]:
             if "code_comment_policy" in item:
                 errors.append(f"{file}: invalid code comment policy config `{config_path}`: {item}")
+                ok = False
+    return ok
+
+
+def validate_script_output_policy(text: str, file: str, project: Path, profile: dict, errors: list[str]) -> bool:
+    body = section_body(text, "## Script Output Policy")
+    if body is None:
+        errors.append(f"{file}: missing Script Output Policy; refresh the managed root AGENTS.md")
+        return False
+    ok = True
+    for snippet in SCRIPT_OUTPUT_POLICY_REQUIRED_SNIPPETS:
+        if snippet not in body:
+            errors.append(f"{file}: Script Output Policy missing required rule `{snippet}`")
+            ok = False
+    config = load_global_rule_overrides(project, profile)
+    config_path = config["path"].relative_to(project).as_posix()
+    if config_path in body:
+        if not config["exists"]:
+            errors.append(f"{file}: missing local script output policy config `{config_path}`")
+            ok = False
+        for item in config["errors"]:
+            if "script_output_policy" in item:
+                errors.append(f"{file}: invalid script output policy config `{config_path}`: {item}")
                 ok = False
     return ok
 
@@ -488,6 +537,8 @@ def verify(project: Path, include_skipped: bool = False, installed_skill_dir_ove
                     root_metadata_repair_required = True
                 if not validate_code_comment_policy(text, checked[-1], project, profile, errors):
                     root_metadata_repair_required = True
+                if not validate_script_output_policy(text, checked[-1], project, profile, errors):
+                    root_metadata_repair_required = True
                 if root_metadata_repair_required:
                     errors.append(f"AGENTS.md: run `{root_repair_command}` to refresh root metadata before continuing")
         validate_governance_runtime_commands(text, checked[-1], project, installed_skill_dir_override, errors)
@@ -526,10 +577,8 @@ def verify(project: Path, include_skipped: bool = False, installed_skill_dir_ove
                 continue
     source_governance = source_governance_report(project, profile)
     errors.extend(format_source_governance_errors(source_governance))
-    local_governance = load_global_rule_overrides(project, profile)
-    if local_governance.get("exists"):
-        errors.extend(str(item) for item in facts.get("tool_script_layout_violations", []) or [])
-        errors.extend(str(item) for item in facts.get("script_triad_gaps", []) or [])
+    errors.extend(str(item) for item in facts.get("tool_script_layout_violations", []) or [])
+    errors.extend(str(item) for item in facts.get("script_triad_gaps", []) or [])
     global_status = global_codex_agents_status(project_root=project, profile=profile)
     if (project / "skills" / "agents-md-generator" / "SKILL.md").is_file() and not global_status["baseline_ok"]:
         reason_text = ", ".join(global_status["repair_reasons"]) or "unknown global Codex AGENTS baseline issue"

@@ -12,6 +12,18 @@
 ## Repair
 - When the current work folder needs AGENTS repair, use `agents-md-generator` to inspect the workspace and rebuild or update the root `AGENTS.md` before ordinary development continues.
 
+## Reuse First
+- Prefer existing tools, libraries, templates, repository-local patterns, and mature open-source project code before building from scratch.
+- When reuse is not selected, briefly record why the available tool, library, template, or open-source candidate is unsafe, incompatible, over-scoped, or unavailable.
+
+## Task Rating Gate
+- Agents do not ask the user for difficulty or scale on every task; first run or follow `task_rating_gate.py` to decide whether asking is worth the token cost.
+- Difficulty order: simple < normal < hard < hell < nightmare. Scale order: micro < small < medium < large < project.
+- If the gate says `ask_user_rating=false`, proceed with the inferred rating and keep the workflow lightweight.
+- If the gate says `ask_user_rating=true`, ask the user to confirm difficulty and scale before detailed planning.
+- For hell or nightmare difficulty, default to strict planning, granularity alignment, and reuse-first research through a subagent or a separate research step; record candidate tools, libraries, templates, open-source projects, fit, risks, and rejection reasons.
+- For nightmare difficulty or project-scale work, split work into multiple tasks and execution phases, and keep an adjustable project plan that changes when the user requirements change.
+
 ## Shared Governance
 - When a Python task is expected to run for a long time, ask the user before enabling automatic timed follow-up. If the user agrees, use thread-level timed check-ins, continue the workflow after the task completes, and remove the timed follow-up after completion.
 - Handwritten source files should stay within 1000 lines. If a file must exceed that limit, create and follow a decomposition plan before continuing.

@@ -145,6 +145,10 @@ SANITIZED_BINARY_PATTERNS = [
 RELEASE_REQUIRED_REFERENCE_PREFIXES = ("runtime/", "integration/", "config/", "scripts/", "references/", "agents/", "assets/")
 
 
+def should_skip_sanitized_assignment_value(value: str) -> bool:
+    return value.strip().startswith("re.compile(")
+
+
 def sanitize_release_text(text: str) -> tuple[str, list[dict[str, str]]]:
     redacted = text
     matches: list[dict[str, str]] = []
@@ -154,6 +158,8 @@ def sanitize_release_text(text: str) -> tuple[str, list[dict[str, str]]]:
 
         def replace_assignment(match: re.Match[str]) -> str:
             nonlocal hit
+            if should_skip_sanitized_assignment_value(match.group(2)):
+                return match.group(0)
             hit = True
             return f"{match.group(1)}{placeholder}"
 

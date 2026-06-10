@@ -423,6 +423,34 @@ def docs_contract(name: str) -> dict[str, Any]:
     }
     return contract
 
+
+def memory_contract(answers: dict[str, Any]) -> dict[str, Any]:
+    enabled = bool(answers.get("memory_enabled"))
+    backend = str(answers.get("memory_storage_backend", "sqlite-plus-jsonl")).strip() or "sqlite-plus-jsonl"
+    return {
+        "enabled": enabled,
+        "folder": "docs/memory",
+        "storage_backend": backend,
+        "database": "docs/memory/memory.sqlite3",
+        "events": "docs/memory/events.jsonl",
+        "summaries": "docs/memory/summaries.md",
+        "guide": "docs/memory/MEMORY.md",
+        "capture_scope": str(answers.get("memory_capture_scope", "")).strip(),
+        "read_policy": str(answers.get("memory_read_policy", "")).strip(),
+        "sensitivity_policy": str(answers.get("memory_sensitivity_policy", "")).strip(),
+        "compress_after_events": 20,
+    }
+
+
+def memory_policy_errors(answers: dict[str, Any]) -> list[str]:
+    if not bool(answers.get("memory_enabled")):
+        return []
+    backend = str(answers.get("memory_storage_backend", "")).strip()
+    if backend != "sqlite-plus-jsonl":
+        return ["memory_storage_backend must be sqlite-plus-jsonl when memory_enabled is true"]
+    return []
+
+
 def git_branch_policy() -> dict[str, Any]:
     return {
         "protected_branches": ["master", "release"],
@@ -605,6 +633,7 @@ def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any
     validation_errors.extend(remote_environment_errors)
     remote_runtime_contract, remote_runtime_errors = remote_runtime_archive_policy(answers)
     validation_errors.extend(remote_runtime_errors)
+    validation_errors.extend(memory_policy_errors(answers))
     if validation_errors:
         return None, validation_errors
     remote_contract, remote_errors = remote_server_contract(project, answers)
@@ -696,6 +725,12 @@ def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any
         "dir_manager_contract": dir_manager_contract(),
         "engineering_rule_contract": rule_contract,
         "remote_server_contract": remote_contract,
+        "memory_enabled": bool(answers.get("memory_enabled")),
+        "memory_storage_backend": str(answers.get("memory_storage_backend", "")).strip(),
+        "memory_capture_scope": str(answers.get("memory_capture_scope", "")).strip(),
+        "memory_read_policy": str(answers.get("memory_read_policy", "")).strip(),
+        "memory_sensitivity_policy": str(answers.get("memory_sensitivity_policy", "")).strip(),
+        "memory_contract": memory_contract(answers),
         "development_requirements": answers["development_requirements"],
         "extra_requirements": normalize_extra_requirements(answers.get(EXTRA_REQUIREMENTS_KEY, "none")),
         "expected_outcome": answers["expected_outcome"],
@@ -723,6 +758,8 @@ def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any
     if isinstance(answers.get(DESIGN_REVIEW_KEY), dict):
         profile[DESIGN_REVIEW_KEY] = answers[DESIGN_REVIEW_KEY]
     profile["docs_contract"] = docs_contract(name)
+    if isinstance(profile.get("docs_contract"), dict):
+        profile["docs_contract"]["memory"] = profile["memory_contract"]
     return profile, []
 
 def write_profile(project: Path, profile: dict[str, Any]) -> Path:

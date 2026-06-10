@@ -8,6 +8,11 @@ from source_governance import format_source_governance_errors, source_governance
 
 
 VERSION_RE = re.compile(r"\bv\d+\.\d+\.\d+\b")
+CONTROL_PROFILE_BLOCK_RE = re.compile(
+    r"(<!--\s*AGENTS-GENERATED:START\s+control-profile\s*-->)(.*?)(<!--\s*AGENTS-GENERATED:END\s+control-profile\s*-->)",
+    flags=re.DOTALL | re.IGNORECASE,
+)
+CONTROL_PROFILE_VERSION_RE = re.compile(r"^-\s+Version:\s*(v\d+\.\d+\.\d+)\.$", flags=re.MULTILINE)
 
 
 def inferred_skill_dir(project: Path, raw_skill_dir: str | Path | None = None) -> Path | None:
@@ -47,6 +52,22 @@ def current_version_section(text: str) -> str:
     rest = text[match.end() :]
     next_section = re.search(r"^##\s+", rest, flags=re.MULTILINE)
     return rest[: next_section.start()] if next_section else rest
+
+
+def managed_control_profile_version(text: str) -> str:
+    block_match = CONTROL_PROFILE_BLOCK_RE.search(text)
+    if not block_match:
+        return ""
+    version_match = CONTROL_PROFILE_VERSION_RE.search(block_match.group(2))
+    return version_match.group(1) if version_match else ""
+
+
+def replace_managed_control_profile_version(text: str, version: str) -> str:
+    def replace_block(match: re.Match[str]) -> str:
+        body = CONTROL_PROFILE_VERSION_RE.sub(f"- Version: {version}.", match.group(2), count=1)
+        return f"{match.group(1)}{body}{match.group(3)}"
+
+    return CONTROL_PROFILE_BLOCK_RE.sub(replace_block, text, count=1)
 
 
 def project_skill_version(project: Path, skill_dir_raw: str | Path | None = None) -> tuple[str, str, Path | None]:
@@ -144,13 +165,17 @@ def sync_root_agents(
             "repair_command": repair_command,
         }
 
-    expected_version, version_source = preferred_skill_version(override_dir=installed_skill_dir_override)
-    if not expected_version:
+    metadata_version, version_source = preferred_skill_version(override_dir=installed_skill_dir_override)
+    project_version, project_version_source, project_skill_dir = project_skill_version(project)
+    if not metadata_version:
         return {
             "project": str(project),
             "agents_path": str(agents_path),
             "expected_version": "",
             "version_source": version_source,
+            "project_skill_version": project_version,
+            "project_version_source": project_version_source,
+            "project_skill_dir": str(project_skill_dir) if project_skill_dir else "",
             "sync_required": False,
             "updated": False,
             "reasons": [],
@@ -172,16 +197,16 @@ def sync_root_agents(
         reasons.append("legacy_last_updated_format")
     if not metadata.get("agents_version"):
         reasons.append("missing_agents_version")
-    elif metadata.get("agents_version") != expected_version:
+    elif metadata.get("agents_version") != metadata_version:
         reasons.append("agents_version_mismatch")
     if not metadata.get("generator_version"):
         reasons.append("missing_generator_version")
-    elif metadata.get("generator_version") != expected_version:
+    elif metadata.get("generator_version") != metadata_version:
         reasons.append("generator_version_mismatch")
     if not metadata.get("default_language"):
         reasons.append("missing_default_language")
-    control_profile_match = re.search(r"^-\s+Version:\s*(v\d+\.\d+\.\d+)\.$", text, flags=re.MULTILINE)
-    if control_profile_match and control_profile_match.group(1) != expected_version:
+    control_profile_version = managed_control_profile_version(text)
+    if project_version and control_profile_version and control_profile_version != project_version:
         reasons.append("control_profile_version_mismatch")
     sync_required = bool(reasons)
     updated = False
@@ -193,17 +218,12 @@ def sync_root_agents(
         verified_raw = current_timestamp() if mark_verified else last_verified
         new_last_line = f"<!-- Last updated: {updated_raw} | Last verified: {verified_raw} -->"
         new_metadata_line = (
-            f"<!-- AGENTS-METADATA: agents_version={expected_version}; "
-            f"generator_version={expected_version}; default_language={default_language} -->"
+            f"<!-- AGENTS-METADATA: agents_version={metadata_version}; "
+            f"generator_version={metadata_version}; default_language={default_language} -->"
         )
-        if control_profile_match:
-            text = re.sub(
-                r"^-\s+Version:\s*v\d+\.\d+\.\d+\.$",
-                f"- Version: {expected_version}.",
-                text,
-                count=1,
-                flags=re.MULTILINE,
-            )
+        original_text = text
+        if project_version and control_profile_version and control_profile_version != project_version:
+            text = replace_managed_control_profile_version(text, project_version)
 
         lines = text.splitlines()
         rewritten: list[str] = []
@@ -233,7 +253,7 @@ def sync_root_agents(
                 missing_lines.append(new_metadata_line)
             rewritten[insert_at:insert_at] = missing_lines
         synced_text = "\n".join(rewritten).rstrip() + "\n"
-        if synced_text != text:
+        if synced_text != original_text:
             agents_path.write_text(synced_text, encoding="utf-8")
             updated = True
 
@@ -243,8 +263,11 @@ def sync_root_agents(
     return {
         "project": str(project),
         "agents_path": str(agents_path),
-        "expected_version": expected_version,
+        "expected_version": metadata_version,
         "version_source": version_source,
+        "project_skill_version": project_version,
+        "project_version_source": project_version_source,
+        "project_skill_dir": str(project_skill_dir) if project_skill_dir else "",
         "default_language": default_language,
         "last_updated_raw": refreshed_raw,
         "sync_required": sync_required,
@@ -312,6 +335,7 @@ def sync_global_codex_agents(project: Path, write: bool = False, codex_home: str
 
 def verify_docs(project: Path) -> dict[str, Any]:
     from manage_docs_evolution import validate_current_experience_quality
+    from manage_docs_memory import verify_memory
 
     errors: list[str] = []
     checked: list[str] = []
@@ -349,6 +373,9 @@ def verify_docs(project: Path) -> dict[str, Any]:
     dir_result = verify_dir_manager(project)
     checked.extend(dir_result["checked"])
     errors.extend(dir_result["errors"])
+    memory_result = verify_memory(project)
+    checked.extend(item for item in memory_result.get("checked", []) if item not in checked)
+    errors.extend(item for item in memory_result.get("errors", []) if item not in errors)
     version_result = version_alignment_gate(project)
     checked.extend(version_result["checked"])
     errors.extend(version_result["errors"])

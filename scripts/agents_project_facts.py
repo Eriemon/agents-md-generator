@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from fnmatch import fnmatch
 from pathlib import Path
@@ -124,30 +123,26 @@ def session_message_rows(path: Path, limit: int = 48) -> list[dict[str, str]]:
 
 def list_files(root: Path, max_depth: int = 3) -> list[str]:
     out: list[str] = []
-    root_resolved = root.resolve()
-    for current_root, dirnames, filenames in os.walk(root_resolved):
-        dirnames[:] = [name for name in dirnames if name not in SKIP_DIRS]
-        current_path = Path(current_root)
-        relative_parts = current_path.relative_to(root_resolved).parts
-        if len(relative_parts) > max_depth:
-            dirnames[:] = []
+    for path in root.rglob("*"):
+        parts = set(path.relative_to(root).parts)
+        if parts & SKIP_DIRS:
             continue
-        for filename in filenames:
-            path = current_path / filename
-            out.append(rel(path, root_resolved))
+        if len(path.relative_to(root).parts) > max_depth:
+            continue
+        if path.is_file():
+            out.append(rel(path, root))
     return sorted(out)
 
 def list_dirs(root: Path, max_depth: int = 2) -> list[str]:
     out: list[str] = []
-    root_resolved = root.resolve()
-    for current_root, dirnames, _ in os.walk(root_resolved):
-        dirnames[:] = [name for name in dirnames if name not in SKIP_DIRS]
-        current_path = Path(current_root)
-        relative = current_path.relative_to(root_resolved)
-        if relative.parts and len(relative.parts) <= max_depth:
+    for path in root.rglob("*"):
+        if not path.is_dir():
+            continue
+        relative = path.relative_to(root)
+        if set(relative.parts) & SKIP_DIRS:
+            continue
+        if len(relative.parts) <= max_depth:
             out.append(relative.as_posix())
-        if len(relative.parts) >= max_depth:
-            dirnames[:] = []
     return sorted(out)
 
 def has_any(root: Path, names: list[str]) -> bool:
@@ -642,47 +637,43 @@ def script_layout_facts(root: Path, profile: dict[str, Any] | None = None) -> di
     for scripts_root in roots:
         if scripts_root.name != required_root and scripts_root.relative_to(root).as_posix().endswith(f"/{required_root}") is False:
             continue
-        for current_root, dirnames, filenames in os.walk(scripts_root):
-            dirnames[:] = [name for name in dirnames if name not in SKIP_DIRS]
-            current_path = Path(current_root)
-            for filename in sorted(filenames):
-                path = current_path / filename
-                if not path.is_file():
-                    continue
-                rel_path = path.relative_to(root).as_posix()
-                if rel_path in gui_set:
-                    continue
-                relative = path.relative_to(scripts_root)
-                parts = relative.parts
-                if not parts:
-                    continue
-                family = parts[0]
-                suffix = path.suffix.lower()
-                if family not in families:
-                    expected_family = extension_to_family.get(suffix, "")
-                    if len(parts) == 1 and expected_family:
-                        layout_violations.append(
-                            f"script layout requires {required_root}/{expected_family}/<function>/<name>{suffix}: {rel_path}"
-                        )
-                    elif expected_family:
-                        layout_violations.append(
-                            f"unsupported script family under {required_root} (allowed: {', '.join(allowed_families)}): {rel_path}"
-                        )
-                    continue
-                expected_extension = str(families[family]).lower()
-                if suffix != expected_extension:
+        for path in sorted(scripts_root.rglob("*")):
+            if not path.is_file():
+                continue
+            rel_path = path.relative_to(root).as_posix()
+            if rel_path in gui_set:
+                continue
+            relative = path.relative_to(scripts_root)
+            parts = relative.parts
+            if not parts:
+                continue
+            family = parts[0]
+            suffix = path.suffix.lower()
+            if family not in families:
+                expected_family = extension_to_family.get(suffix, "")
+                if len(parts) == 1 and expected_family:
                     layout_violations.append(
-                        f"script extension {suffix or '<none>'} does not match family `{family}` (expected {expected_extension}): {rel_path}"
+                        f"script layout requires {required_root}/{expected_family}/<function>/<name>{suffix}: {rel_path}"
                     )
-                    continue
-                if len(parts) < 3:
+                elif expected_family:
                     layout_violations.append(
-                        f"script layout requires {required_root}/{family}/<function>/<name>{expected_extension}: {rel_path}"
+                        f"unsupported script family under {required_root} (allowed: {', '.join(allowed_families)}): {rel_path}"
                     )
-                    continue
-                function_path = "/".join(parts[1:-1])
-                stem = path.stem
-                triad_members.setdefault((function_path, stem), set()).add(family)
+                continue
+            expected_extension = str(families[family]).lower()
+            if suffix != expected_extension:
+                layout_violations.append(
+                    f"script extension {suffix or '<none>'} does not match family `{family}` (expected {expected_extension}): {rel_path}"
+                )
+                continue
+            if len(parts) < 3:
+                layout_violations.append(
+                    f"script layout requires {required_root}/{family}/<function>/<name>{expected_extension}: {rel_path}"
+                )
+                continue
+            function_path = "/".join(parts[1:-1])
+            stem = path.stem
+            triad_members.setdefault((function_path, stem), set()).add(family)
     triad_gaps: list[str] = []
     if layout.get("require_full_triad", True):
         required_families = set(families)

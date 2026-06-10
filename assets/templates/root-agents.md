@@ -55,6 +55,11 @@
 {{CODE_COMMENT_POLICY}}
 <!-- AGENTS-GENERATED:END code-comment-policy -->
 
+<!-- AGENTS-GENERATED:START script-output-policy -->
+## Script Output Policy
+{{SCRIPT_OUTPUT_POLICY}}
+<!-- AGENTS-GENERATED:END script-output-policy -->
+
 ## Agent Work Loop
 1. Read the nearest `AGENTS.md` before editing files.
 2. Inspect existing patterns and generated facts before adding code.

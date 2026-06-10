@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v1.0.0-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v1.0.4-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -48,12 +48,12 @@ AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的�
 - 在需要时生成 `CLAUDE.md` 与 `GEMINI.md` 兼容 shim。
 - 提供验证、审计、自动 review 治理、skill-effectiveness eval 和 aggregate confidence gate，用于发布前把关。
 
-## v1.0.0 重点更新
+## v1.0.4 重点更新
 
-- 这是一次 breaking governance release：`v1.0.0` 正式移除 evolution 子系统与 reusable evolution 模板。experience 刷新现在只更新 `docs/experience/` 治理产物，并拒绝旧版 evolution payload 字段。
-- 新增显式的只读 Codex token 用量入口 `scripts/codex_token_usage_review.py`，用户直接要求 token usage 时不再误入 AGENTS 设计访谈。
-- 将目录治理职责拆分为 `scripts/manage_dirs_review.py` 与 `scripts/manage_dirs_state.py`，让目录审查逻辑与持久化状态更容易审计和维护。
-- 收紧 owner 仓库的 release 证据要求：`v1.0.0` 必须基于当前 repo-root 与 `main` 分支真实状态重建发布物，不能复用带有 `master` 或 `skills/agents-md-generator` 旧来源信息的 receipt。
+- 新增 `scripts/task_rating_gate.py`，让 Agent 先判断是否值得询问任务难度与规模，而不是每个任务都默认追问。
+- 新增脚本输出治理：通过 `config/script-output-policy-default.json`、`references/script-output-policy.md` 和更新后的 AGENTS 模板统一人类可读脚本输出，同时豁免机器可读流。
+- 扩展 docs memory 治理：加入 `scripts/manage_docs_memory.py`、memory gate/init/bootstrap/read/verify 流程，并强化 managed workspace memory 的验证覆盖。
+- 刷新 AGENTS 模板、review guidance、evals 和 release evidence，使生成出的治理文件继续匹配当前 global baseline 与 strong-control 检查。
 
 ## Skill 架构
 
@@ -193,7 +193,7 @@ Jiyuan Liu 和 He Li 隶属于东南大学电子科学与工程学院。
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {1.0.0},
+  version      = {1.0.4},
   date         = {2026-06-03},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},

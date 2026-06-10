@@ -92,6 +92,12 @@ SANITIZED_BINARY_PATTERNS = [
     ("password", re.compile(br"password", flags=re.IGNORECASE)),
     ("email", re.compile(br"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")),
 ]
+
+
+def should_skip_sanitized_assignment_value(value: str) -> bool:
+    return value.strip().startswith("re.compile(")
+
+
 FIXED_EXPERIENCE_TOPICS = [
     ("1-workflow.md", "Workflow", "Workflow lessons for this specific project or skill."),
     ("2-scripts.md", "Scripts", "Code writing, script development, and automation lessons."),
@@ -443,7 +449,7 @@ def handoff_paths(project: Path) -> dict[str, Path]:
     }
 
 def docs_governance_initialized(project: Path) -> bool:
-    for rel_path in [*REQUIRED_DOC_FILES, "docs/experience/1-workflow.md", "docs/dir_manager/DIR_MANAGER.md", STATE_PATH]:
+    for rel_path in [*DOC_DIRS, *REQUIRED_DOC_FILES, STATE_PATH]:
         if (project / rel_path).exists():
             return True
     return False

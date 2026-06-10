@@ -11,6 +11,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agents_common import emit_json, resolve_project
 from agents_project_facts import decomposition_plan_path, load_global_rule_overrides
+from source_governance_config import validate_script_output_policy_data
 
 
 CORE_REQUIRED_FILES = [
@@ -34,6 +35,7 @@ SELF_REQUIRED_FILES = [
     "assets/templates/scoped-agents.md",
     "assets/templates/global-codex-agents.md",
     "config/source-governance.json",
+    "config/script-output-policy-default.json",
     "scripts/check_source_governance.py",
     "scripts/codex_token_usage_review.py",
     "scripts/inspect_project.py",
@@ -62,7 +64,7 @@ SELF_REQUIRED_FILES = [
     "scripts/evaluate_skill.py",
 ]
 
-SELF_DISALLOWED_ROOT_DOCS = {"CHANGELOG.md", "INSTALL.md", "INSTALLATION.md"}
+SELF_DISALLOWED_ROOT_DOCS = {"README.md", "CHANGELOG.md", "INSTALL.md", "INSTALLATION.md"}
 DISALLOWED_CACHE_SUFFIXES = {".pyc", ".pyo"}
 LOCAL_REFERENCE_RE = re.compile(
     r"G:[/\\]html|ref[/\\](agent-rules|html)|\b[A-Za-z]:[/\\][^\s`'\"<>)]*",
@@ -83,6 +85,7 @@ KNOWN_TEMPLATE_PLACEHOLDERS = {
         "SKILL_DESIGN_CONTRACT",
         "CONVERSATION_COMPLETION_CONTRACT",
         "CODE_COMMENT_POLICY",
+        "SCRIPT_OUTPUT_POLICY",
         "EXPERIENCE_LOG_CONTRACT",
         "DOCUMENTATION_GOVERNANCE_CONTRACT",
         "VERIFICATION_STATUS",
@@ -267,6 +270,8 @@ REQUIRED_EVAL_CASE_IDS = {
     "source_governance_test_boundary",
     "code_comment_policy_contract",
     "codex_token_usage_review_contract",
+    "task_rating_gate_contract",
+    "memory_governance_gate",
 }
 
 
@@ -527,6 +532,21 @@ def validate_evals_contract(path: Path, errors: list[str], *, self_skill: bool) 
         errors.append(f"evals/evals.json: missing required Skill design pattern coverage {missing_patterns}")
 
 
+def validate_script_output_default_config(path: Path, errors: list[str]) -> None:
+    if not path.is_file():
+        return
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        errors.append(f"config/script-output-policy-default.json: invalid JSON: {exc.msg}")
+        return
+    if not isinstance(data, dict):
+        errors.append("config/script-output-policy-default.json: root must be a JSON object")
+        return
+    for item in validate_script_output_policy_data(data, require_explicit=True):
+        errors.append(f"config/script-output-policy-default.json: {item}")
+
+
 def skill_project_root(skill_dir: Path) -> Path:
     if skill_dir.parent.name == "skills":
         return skill_dir.parents[1]
@@ -610,6 +630,7 @@ def audit(skill_dir: Path) -> dict:
         validate_reference_alignment(skill_dir, errors)
         validate_global_baseline_template(skill_dir / "assets" / "templates" / "global-codex-agents.md", errors)
         validate_evals_contract(skill_dir / "evals" / "evals.json", errors, self_skill=self_skill)
+        validate_script_output_default_config(skill_dir / "config" / "script-output-policy-default.json", errors)
 
     for script in sorted((skill_dir / "scripts").glob("*.py")):
         rel_path = script.relative_to(skill_dir).as_posix()

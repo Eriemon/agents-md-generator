@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v1.0.0-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v1.0.4-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -48,12 +48,12 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 - Compatibility shim generation for `CLAUDE.md` and `GEMINI.md` when requested.
 - Verification, audit, automated review governance, skill-effectiveness evals, and aggregate confidence checks for release readiness.
 
-## What's New In v1.0.0
+## What's New In v1.0.4
 
-- Breaking governance release: `v1.0.0` removes the evolution subsystem and reusable evolution templates. Experience refresh now updates only `docs/experience/` governance artifacts and rejects legacy evolution payload fields.
-- Adds an explicit read-only Codex token usage entrypoint through `scripts/codex_token_usage_review.py`, so direct token-usage requests no longer fall into the AGENTS design interview flow.
-- Splits directory-governance responsibilities with `scripts/manage_dirs_review.py` and `scripts/manage_dirs_state.py`, making review logic and persisted state handling easier to audit.
-- Tightens release evidence expectations for the owner repository: `v1.0.0` releases must be rebuilt from the current repo-root and `main` branch state instead of reusing stale receipt metadata such as `master` or `skills/agents-md-generator`.
+- Adds `scripts/task_rating_gate.py` so agents can decide when difficulty and scale questions are worth asking instead of prompting on every task.
+- Adds script-output governance through `config/script-output-policy-default.json`, `references/script-output-policy.md`, and updated AGENTS templates, keeping human-readable script output consistent while exempting machine-readable streams.
+- Expands docs memory governance with `scripts/manage_docs_memory.py`, memory gate/init/bootstrap/read/verify flows, and stronger verification coverage for managed workspace memory.
+- Refreshes AGENTS templates, review guidance, evals, and release evidence so generated governance stays aligned with the current global baseline and strong-control checks.
 
 ## Skill Architecture
 
@@ -193,7 +193,7 @@ If this skill helps your research, teaching, or engineering workflow, please cit
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {1.0.0},
+  version      = {1.0.4},
   date         = {2026-06-03},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},

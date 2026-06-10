@@ -12,6 +12,7 @@ from manage_docs_experience import *
 from manage_docs_release import *
 from manage_docs_scaffold_session import *
 from manage_docs_shared import *
+from manage_docs_memory import *
 from manage_docs_sync_verify import *
 
 
@@ -41,6 +42,31 @@ def main() -> None:
     resume_repair_parser = subparsers.add_parser("resume-repair")
     resume_repair_parser.add_argument("project", nargs="?", default=".")
     resume_repair_parser.add_argument("--input", default=None)
+
+    memory_init_parser = subparsers.add_parser("memory-init")
+    memory_init_parser.add_argument("project", nargs="?", default=".")
+    memory_init_parser.add_argument("--confirm-create", action="store_true")
+
+    memory_gate_parser = subparsers.add_parser("memory-gate")
+    memory_gate_parser.add_argument("project", nargs="?", default=".")
+
+    memory_bootstrap_parser = subparsers.add_parser("memory-bootstrap-sessions")
+    memory_bootstrap_parser.add_argument("project", nargs="?", default=".")
+
+    memory_write_parser = subparsers.add_parser("memory-write")
+    memory_write_parser.add_argument("project", nargs="?", default=".")
+    memory_write_parser.add_argument("--input", required=True)
+
+    memory_compress_parser = subparsers.add_parser("memory-compress")
+    memory_compress_parser.add_argument("project", nargs="?", default=".")
+
+    memory_read_parser = subparsers.add_parser("memory-read")
+    memory_read_parser.add_argument("project", nargs="?", default=".")
+    memory_read_parser.add_argument("--query", required=True)
+    memory_read_parser.add_argument("--limit", type=int, default=5)
+
+    memory_verify_parser = subparsers.add_parser("memory-verify")
+    memory_verify_parser.add_argument("project", nargs="?", default=".")
 
     repair_handoff_parser = subparsers.add_parser("repair-handoff-names")
     repair_handoff_parser.add_argument("project", nargs="?", default=".")
@@ -131,6 +157,41 @@ def main() -> None:
             raise SystemExit(1)
     elif args.command == "resume-repair":
         result = resume_repair(project, args.input)
+        emit_json(result)
+        if result.get("errors"):
+            raise SystemExit(1)
+    elif args.command == "memory-init":
+        result = init_memory(project, confirm_create=args.confirm_create, require_confirmation=True)
+        emit_json(result)
+        if result.get("errors"):
+            raise SystemExit(1)
+    elif args.command == "memory-gate":
+        result = memory_gate(project)
+        emit_json(result)
+        if result.get("errors") or result.get("requires_user_authorization"):
+            raise SystemExit(1)
+    elif args.command == "memory-bootstrap-sessions":
+        result = bootstrap_sessions(project)
+        emit_json(result)
+        if result.get("errors"):
+            raise SystemExit(1)
+    elif args.command == "memory-write":
+        result = write_memory(project, args.input)
+        emit_json(result)
+        if result.get("errors"):
+            raise SystemExit(1)
+    elif args.command == "memory-compress":
+        result = compress_memory(project)
+        emit_json(result)
+        if result.get("errors"):
+            raise SystemExit(1)
+    elif args.command == "memory-read":
+        result = read_memory(project, args.query, args.limit)
+        emit_json(result)
+        if result.get("errors"):
+            raise SystemExit(1)
+    elif args.command == "memory-verify":
+        result = verify_memory(project)
         emit_json(result)
         if result.get("errors"):
             raise SystemExit(1)

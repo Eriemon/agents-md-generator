@@ -137,6 +137,8 @@ def migrate_legacy_docs(project: Path) -> list[str]:
     return migrated
 
 def scaffold(project: Path, refresh_existing_state: bool = True) -> dict[str, Any]:
+    from manage_docs_memory import init_memory, memory_enabled
+
     created: list[str] = []
     profile = project_profile(project)
     for rel_path in DOC_DIRS:
@@ -177,14 +179,21 @@ def scaffold(project: Path, refresh_existing_state: bool = True) -> dict[str, An
     elif state_missing:
         save_state(project, state)
     created.extend(path for path in ensure_experience_files(project) if path not in created)
+    memory_result = None
+    errors = list(handoff_naming["errors"])
+    if memory_enabled(project):
+        memory_result = init_memory(project)
+        created.extend(path for path in memory_result.get("created", []) if path not in created)
+        errors.extend(f"memory: {item}" for item in memory_result.get("errors", []))
     return {
         "project": str(project),
         "created": created,
         "migrated": migrated,
         "state": state,
         "cleanup": cleanup,
+        "memory": memory_result,
         "handoff_naming": handoff_naming,
-        "errors": list(handoff_naming["errors"]),
+        "errors": errors,
     }
 
 def read_input(path: str | None) -> dict[str, Any]:
@@ -269,6 +278,7 @@ def maybe_write_conversation_snapshot(project: Path, data: dict[str, Any], count
 
 def write_handoff(project: Path, input_path: str | None) -> dict[str, Any]:
     from manage_docs_evolution import write_experience
+    from manage_docs_memory import write_handoff_memory
 
     scaffold_result = scaffold(project)
     if scaffold_result.get("errors"):
@@ -291,6 +301,11 @@ def write_handoff(project: Path, input_path: str | None) -> dict[str, Any]:
     if active.exists():
         active.unlink()
     result = {"project": str(project), "written": str(target), "archived": archived, "handoff_count": count}
+    memory_result = write_handoff_memory(project, data, count, target)
+    if memory_result is not None:
+        result["memory"] = memory_result
+        if memory_result.get("errors"):
+            result["errors"] = [f"memory: {item}" for item in memory_result["errors"]]
     if snapshot:
         result["conversation_snapshot"] = snapshot
     if count % 5 == 0:
@@ -298,6 +313,8 @@ def write_handoff(project: Path, input_path: str | None) -> dict[str, Any]:
     return result
 
 def write_active_session(project: Path, input_path: str | None) -> dict[str, Any]:
+    from manage_docs_memory import memory_read_recommendation
+
     # Starting a session in an already-governed repository should not rewrite
     # tracked dir-manager baselines or docs-governance timestamps.
     scaffold_result = scaffold(project, refresh_existing_state=False)
@@ -323,16 +340,22 @@ def write_active_session(project: Path, input_path: str | None) -> dict[str, Any
     agents_dir = project / ".agents"
     agents_dir.mkdir(exist_ok=True)
     active_session_file(project).write_text(json.dumps(active, indent=2, sort_keys=True), encoding="utf-8")
-    return {"project": str(project), "written": str(active_session_file(project)), "active_session": active, "cleanup": cleanup}
+    result = {"project": str(project), "written": str(active_session_file(project)), "active_session": active, "cleanup": cleanup}
+    recommendation = memory_read_recommendation(project, str(active.get("task", "current task")))
+    if recommendation:
+        result["memory_read_recommendation"] = recommendation
+    return result
 
 def read_active_session(project: Path) -> dict[str, Any]:
     active = read_json(active_session_file(project))
     return active if isinstance(active, dict) else {}
 
 def resume_check(project: Path, conversation_log: str | None = None) -> dict[str, Any]:
+    from manage_docs_memory import memory_read_recommendation
+
     naming = audit_handoff_naming(project)
     if naming["blocking"]:
-        return {
+        result = {
             "project": str(project),
             "status": "blocked",
             "interrupted": False,
@@ -340,15 +363,23 @@ def resume_check(project: Path, conversation_log: str | None = None) -> dict[str
             "reasons": naming["errors"],
             "handoff_naming": naming,
         }
+        recommendation = memory_read_recommendation(project, "resume current task")
+        if recommendation:
+            result["memory_read_recommendation"] = recommendation
+        return result
     active = read_active_session(project)
     if not active:
-        return {
+        result = {
             "project": str(project),
             "status": "clean",
             "interrupted": False,
             "blocking": False,
             "reasons": ["no active session found"],
         }
+        recommendation = memory_read_recommendation(project, "current task")
+        if recommendation:
+            result["memory_read_recommendation"] = recommendation
+        return result
     handoff = handoff_paths(project)["current"]
     current_hash = file_hash(handoff)
     reasons: list[str] = []
@@ -370,7 +401,7 @@ def resume_check(project: Path, conversation_log: str | None = None) -> dict[str
                 interrupted = True
                 reasons.append("conversation log contains interruption markers")
 
-    return {
+    result = {
         "project": str(project),
         "status": "interrupted" if interrupted else "clean",
         "interrupted": interrupted,
@@ -379,6 +410,10 @@ def resume_check(project: Path, conversation_log: str | None = None) -> dict[str
         "current_handoff_hash": current_hash,
         "reasons": reasons,
     }
+    recommendation = memory_read_recommendation(project, str(active.get("task", "resume current task")))
+    if recommendation:
+        result["memory_read_recommendation"] = recommendation
+    return result
 
 def resume_repair(project: Path, input_path: str | None) -> dict[str, Any]:
     check = resume_check(project)
