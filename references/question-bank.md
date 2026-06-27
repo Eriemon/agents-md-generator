@@ -14,7 +14,7 @@ Ask only when repository inspection cannot answer the question.
 
 ## Mandatory Design Interview
 
-Start grouped interviews with `python scripts/collect_design_profile.py <project> --start`. Resume unfinished chains with `--resume`, answer only the current group with `--answer-file partial.json`, and never silently skip an unfinished `.agents/design-interview-state.json` chain. After each group, show `review_summary` and ask the yes/no `confirmation_question`. If the user says no, keep the interview on that same group until it is re-confirmed. Save the final aligned answers to JSON only after the last `alignment_confirmed=true`, then use `collect_design_profile.py --answers <answers.json> --write`.
+Start grouped interviews with `python <codex-home>/skills/agents-md-generator/scripts/python/design/collect_design_profile.py <project> --start`. Resume unfinished chains with `--resume`, answer only the current group with `--answer-file partial.json`, and never silently skip an unfinished `.agents/design-interview-state.json` chain. After each group, show `review_summary` and ask the yes/no `confirmation_question`. If the user says no, keep the interview on that same group until it is re-confirmed. Save the final aligned answers to JSON only after the last `alignment_confirmed=true`, then use `collect_design_profile.py --answers <answers.json> --write`.
 
 | ID | Branch | Ask |
 |----|--------|-----|
@@ -74,7 +74,7 @@ Start grouped interviews with `python scripts/collect_design_profile.py <project
 |------|-----|
 | Root AGENTS.md missing | If this work folder already has landed content, do not launch the full design interview. Enter takeover mode, confirm the minimal identity fields first, then complete the full structured directory contract before forced local directory takeover and governance scaffolding. |
 | Root AGENTS.md version abnormal | If the current work folder root `AGENTS.md` is version-abnormal and the folder already has landed content, do not enter the full design interview. Enter takeover mode, keep identity questions minimal, but still require the full structured directory contract before continuing. |
-| Existing content but no AGENTS | This work folder already has landed content but no root `AGENTS.md`; should I first read the exact-cwd Codex sessions, generate history experience, and then write the latest current experience files before normal AGENTS generation continues? |
+| Existing content but no AGENTS | This work folder already has landed content but no root `AGENTS.md`; should I first read exact-cwd Codex sessions and bootstrap `docs/memory/` before normal AGENTS generation continues? |
 | User says 计划/规划/准备 | Because this is a current workspace/current repository/current work folder planning request, should I first inspect the root `AGENTS.md`, report pass-only when it is healthy, and ask before entering AGENTS design or restructuring when it is abnormal? |
 | Branch governance abnormal | The current work folder branch state does not match the configured branch model; should I enter branch cleanup or release governance before normal generation continues? |
 | Existing docs layout ambiguous | Existing `docs/` content may conflict with AGENTS.md governance. Is it acceptable to add governance subdirectories under the existing `docs/` folder? |

@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v1.0.4-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v1.4.1-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -43,17 +43,18 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 - Controlled takeover flow for older workspaces with version-mismatched root `AGENTS.md`.
 - Repository fact extraction for commands, docs, CI hints, scopes, and governance signals.
 - Strong-control profiles for skill and engineering projects.
-- Docs governance for handoff, experience, development, install, and git-manager records.
-- Directory-governance review and structure gates through `manage_dirs.py`.
+- Docs governance for handoff, memory, development, install, and git-manager records.
+- Directory-governance review and structure gates through `scripts/python/dirs/manage_dirs.py`.
 - Compatibility shim generation for `CLAUDE.md` and `GEMINI.md` when requested.
 - Verification, audit, automated review governance, skill-effectiveness evals, and aggregate confidence checks for release readiness.
 
-## What's New In v1.0.4
+## What's New In v1.4.1
 
-- Adds `scripts/task_rating_gate.py` so agents can decide when difficulty and scale questions are worth asking instead of prompting on every task.
-- Adds script-output governance through `config/script-output-policy-default.json`, `references/script-output-policy.md`, and updated AGENTS templates, keeping human-readable script output consistent while exempting machine-readable streams.
-- Expands docs memory governance with `scripts/manage_docs_memory.py`, memory gate/init/bootstrap/read/verify flows, and stronger verification coverage for managed workspace memory.
-- Refreshes AGENTS templates, review guidance, evals, and release evidence so generated governance stays aligned with the current global baseline and strong-control checks.
+- Moves the governance runtime from flat `scripts/*.py` files into `scripts/python/<domain>/...`, separating common, detect, design, docs, dirs, release, render, and verify entry points.
+- Retires evolution and `docs/experience` governance paths. Long-term project context now belongs in `docs/memory`, with memory gate, init, bootstrap, read, and verify flows.
+- Extends the default-language rule to Plan Mode so generated `<proposed_plan>` content follows the configured project language unless the user explicitly switches languages.
+- Strengthens lightweight task entry with `task_rating_gate.py`, reuse-first guidance, language-specific coding skill routing, script-output policy checks, and config-backed source governance.
+- Hardens release and directory governance: external workspaces must call the installed `agents-md-generator` runtime instead of vendoring these scripts, release packages reject local validation artifacts, and GitHub/package publishing requires sanitized package evidence.
 
 ## Skill Architecture
 
@@ -84,7 +85,7 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 | --- | --- |
 | `SKILL.md` | Agent-facing routing, workflow, constraints, and verification rules. |
 | `agents/openai.yaml` | Skill metadata used by the host UI. |
-| `scripts/` | Deterministic inspection, interview, rendering, docs-governance, directory-governance, verification, audit, and evaluation helpers. |
+| `scripts/python/` | Deterministic inspection, interview, rendering, docs-governance, directory-governance, verification, audit, and evaluation helpers. |
 | `assets/templates/` | Bundled root and scoped `AGENTS.md` templates used by the current release flow. |
 | `evals/` | Repo-local skill-effectiveness cases and release-safe evaluation data used by the governance tooling. |
 | `references/` | Script guide, review checklist, question bank, capability notes, and AGENTS guidance. |
@@ -109,42 +110,42 @@ If you use Codex or another skill-aware host, place this repository in the host'
 Read-only inspection and scoping:
 
 ```powershell
-python scripts/inspect_project.py <project>
-python scripts/detect_scopes.py <project>
-python scripts/extract_commands.py <project>
-python scripts/extract_context.py <project>
+python scripts/python/detect/inspect_project.py <project>
+python scripts/python/detect/detect_scopes.py <project>
+python scripts/python/detect/extract_commands.py <project>
+python scripts/python/detect/extract_context.py <project>
 ```
 
 Grouped design interview and profile write:
 
 ```powershell
-python scripts/collect_design_profile.py <project> --start
-python scripts/collect_design_profile.py <project> --answer-file partial.json
-python scripts/collect_design_profile.py <project> --answers answers.json --write
+python scripts/python/design/collect_design_profile.py <project> --start
+python scripts/python/design/collect_design_profile.py <project> --answer-file partial.json
+python scripts/python/design/collect_design_profile.py <project> --answers answers.json --write
 ```
 
 Render and verify:
 
 ```powershell
-python scripts/render_agents.py <project> --profile <project>/.agents/agents-control.json
-python scripts/verify_agents.py <project>
-python scripts/manage_docs.py verify <project>
+python scripts/python/render/render_agents.py <project> --profile <project>/.agents/agents-control.json
+python scripts/python/verify/verify_agents.py <project>
+python scripts/python/docs/manage_docs.py verify <project>
 ```
 
 Codex token usage review:
 
 ```powershell
-python scripts/codex_token_usage_review.py --hours 48
-python scripts/codex_token_usage_review.py --hours 48 --json
-python scripts/codex_token_usage_review.py --hours 48 --verbose
+python scripts/python/detect/codex_token_usage_review.py --hours 48
+python scripts/python/detect/codex_token_usage_review.py --hours 48 --json
+python scripts/python/detect/codex_token_usage_review.py --hours 48 --verbose
 ```
 
 Skill-release validation:
 
 ```powershell
-python scripts/quick_validate.py .
-python scripts/audit_skill.py .
-python scripts/evaluate_skill.py . <project>
+python scripts/python/verify/quick_validate.py .
+python scripts/python/verify/audit_skill.py .
+python scripts/python/verify/evaluate_skill.py . <project>
 ```
 
 Source-repository note:
@@ -155,14 +156,14 @@ Source-repository note:
 Advanced governance-sensitive release checks:
 
 ```powershell
-python scripts/review_governance.py <project> --base <sha> --head HEAD --skill-dir . --mode all
-python scripts/run_confidence_gate.py <project> --review-base <sha> --external-skill-dir <healthy-skill-dir>
+python scripts/python/verify/review_governance.py <project> --base <sha> --head HEAD --skill-dir . --mode all
+python scripts/python/verify/run_confidence_gate.py <project> --review-base <sha> --external-skill-dir <healthy-skill-dir>
 ```
 
 Compatibility shims stay opt-in:
 
 ```powershell
-python scripts/create_agent_shims.py <project>
+python scripts/python/render/create_agent_shims.py <project>
 ```
 
 ## Scope
@@ -173,6 +174,7 @@ AGENTS.md Generator is intentionally narrow:
 - It treats discovered commands as candidates until they are actually executed.
 - It preserves handwritten content outside managed generated blocks.
 - It keeps maintainability and script-governance detail in config-backed policy instead of repeating it everywhere in prose.
+- External projects should call the installed runtime, for example `python <codex-home>/skills/agents-md-generator/scripts/python/docs/manage_docs.py ...`, rather than copying this skill's scripts into project-local tool folders.
 - It should not emit secrets, private infrastructure details, generated caches, or machine-specific absolute paths.
 
 ## Affiliation
@@ -193,8 +195,8 @@ If this skill helps your research, teaching, or engineering workflow, please cit
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {1.0.4},
-  date         = {2026-06-10},
+  version      = {1.4.1},
+  date         = {2026-06-27},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}

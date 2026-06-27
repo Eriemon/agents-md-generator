@@ -2,7 +2,7 @@
 
 This skill does not copy whole book-derived rule sets into generated AGENTS.md files. It integrates the reusable mechanism: choose one primary rule set, select the smallest useful compression, keep full material reference-only, and render only decision-changing rules or policies.
 
-Use `scripts/select_engineering_rules.py` to list supported rule sets, recommend a primary rule set from task type, and detect known conflict or overlap before writing the design profile.
+Use `scripts/python/release/select_engineering_rules.py` to list supported rule sets, recommend a primary rule set from task type, and detect known conflict or overlap before writing the design profile.
 
 ## Coverage Policy
 

@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v1.0.4-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v1.4.1-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -43,17 +43,18 @@ AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的�
 - 为 root `AGENTS.md` 版本失配的旧工作区提供 takeover 流程。
 - 提取命令、文档、CI 线索、作用域和治理信号等仓库事实。
 - 为 skill 项目和 engineering 项目生成 strong-control profile。
-- 提供 handoff、experience、development、install、git-manager 等 docs 治理辅助。
-- 通过 `manage_dirs.py` 执行目录治理审查与结构门禁。
+- 提供 handoff、memory、development、install、git-manager 等 docs 治理辅助。
+- 通过 `scripts/python/dirs/manage_dirs.py` 执行目录治理审查与结构门禁。
 - 在需要时生成 `CLAUDE.md` 与 `GEMINI.md` 兼容 shim。
 - 提供验证、审计、自动 review 治理、skill-effectiveness eval 和 aggregate confidence gate，用于发布前把关。
 
-## v1.0.4 重点更新
+## v1.4.1 重点更新
 
-- 新增 `scripts/task_rating_gate.py`，让 Agent 先判断是否值得询问任务难度与规模，而不是每个任务都默认追问。
-- 新增脚本输出治理：通过 `config/script-output-policy-default.json`、`references/script-output-policy.md` 和更新后的 AGENTS 模板统一人类可读脚本输出，同时豁免机器可读流。
-- 扩展 docs memory 治理：加入 `scripts/manage_docs_memory.py`、memory gate/init/bootstrap/read/verify 流程，并强化 managed workspace memory 的验证覆盖。
-- 刷新 AGENTS 模板、review guidance、evals 和 release evidence，使生成出的治理文件继续匹配当前 global baseline 与 strong-control 检查。
+- 将 governance runtime 从扁平的 `scripts/*.py` 迁移到 `scripts/python/<domain>/...`，按 common、detect、design、docs、dirs、release、render、verify 等职责拆分入口。
+- 退役 evolution 与 `docs/experience` 治理路径。长期项目上下文现在进入 `docs/memory`，并由 memory gate/init/bootstrap/read/verify 流程维护。
+- 将默认语言规则扩展到 Plan Mode，使生成的 `<proposed_plan>` 正文也遵循项目配置语言，除非用户明确切换语言。
+- 强化轻量任务入口：加入 `task_rating_gate.py`、reuse-first 指引、语言专用 coding skill 路由、脚本输出策略检查和配置驱动的源码治理。
+- 加强 release 与目录治理：外部工作区必须调用已安装的 `agents-md-generator` runtime，不能把本 skill 脚本复制进项目本地；release 包会拒绝本地验证资产，GitHub/package 发布必须带 sanitization 与包内容证据。
 
 ## Skill 架构
 
@@ -84,7 +85,7 @@ AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的�
 | --- | --- |
 | `SKILL.md` | 面向 Agent 的触发、流程、约束和验证规则。 |
 | `agents/openai.yaml` | 宿主 UI 使用的 skill 元数据。 |
-| `scripts/` | 检查、访谈、渲染、文档治理、目录治理、验证、审计和评估脚本。 |
+| `scripts/python/` | 检查、访谈、渲染、文档治理、目录治理、验证、审计和评估脚本。 |
 | `assets/templates/` | 当前 release 流程使用的 root/scoped `AGENTS.md` 模板。 |
 | `evals/` | 供治理脚本使用的仓库内 skill-effectiveness 用例与可安全发布的评估数据。 |
 | `references/` | 脚本指南、审查清单、问题库、能力覆盖说明和 AGENTS 指南。 |
@@ -109,42 +110,42 @@ python -m pip install -e .
 只读检查与作用域发现：
 
 ```powershell
-python scripts/inspect_project.py <project>
-python scripts/detect_scopes.py <project>
-python scripts/extract_commands.py <project>
-python scripts/extract_context.py <project>
+python scripts/python/detect/inspect_project.py <project>
+python scripts/python/detect/detect_scopes.py <project>
+python scripts/python/detect/extract_commands.py <project>
+python scripts/python/detect/extract_context.py <project>
 ```
 
 分组式设计访谈与 profile 写入：
 
 ```powershell
-python scripts/collect_design_profile.py <project> --start
-python scripts/collect_design_profile.py <project> --answer-file partial.json
-python scripts/collect_design_profile.py <project> --answers answers.json --write
+python scripts/python/design/collect_design_profile.py <project> --start
+python scripts/python/design/collect_design_profile.py <project> --answer-file partial.json
+python scripts/python/design/collect_design_profile.py <project> --answers answers.json --write
 ```
 
 渲染与验证：
 
 ```powershell
-python scripts/render_agents.py <project> --profile <project>/.agents/agents-control.json
-python scripts/verify_agents.py <project>
-python scripts/manage_docs.py verify <project>
+python scripts/python/render/render_agents.py <project> --profile <project>/.agents/agents-control.json
+python scripts/python/verify/verify_agents.py <project>
+python scripts/python/docs/manage_docs.py verify <project>
 ```
 
 Codex token 用量审查：
 
 ```powershell
-python scripts/codex_token_usage_review.py --hours 48
-python scripts/codex_token_usage_review.py --hours 48 --json
-python scripts/codex_token_usage_review.py --hours 48 --verbose
+python scripts/python/detect/codex_token_usage_review.py --hours 48
+python scripts/python/detect/codex_token_usage_review.py --hours 48 --json
+python scripts/python/detect/codex_token_usage_review.py --hours 48 --verbose
 ```
 
 Skill 发布前验证：
 
 ```powershell
-python scripts/quick_validate.py .
-python scripts/audit_skill.py .
-python scripts/evaluate_skill.py . <project>
+python scripts/python/verify/quick_validate.py .
+python scripts/python/verify/audit_skill.py .
+python scripts/python/verify/evaluate_skill.py . <project>
 ```
 
 源码仓库说明：
@@ -155,14 +156,14 @@ python scripts/evaluate_skill.py . <project>
 治理敏感 release 的进阶检查：
 
 ```powershell
-python scripts/review_governance.py <project> --base <sha> --head HEAD --skill-dir . --mode all
-python scripts/run_confidence_gate.py <project> --review-base <sha> --external-skill-dir <healthy-skill-dir>
+python scripts/python/verify/review_governance.py <project> --base <sha> --head HEAD --skill-dir . --mode all
+python scripts/python/verify/run_confidence_gate.py <project> --review-base <sha> --external-skill-dir <healthy-skill-dir>
 ```
 
 兼容 shim 仍然是显式选择：
 
 ```powershell
-python scripts/create_agent_shims.py <project>
+python scripts/python/render/create_agent_shims.py <project>
 ```
 
 ## 边界
@@ -173,6 +174,7 @@ AGENTS.md Generator 的职责刻意收得很窄：
 - 从仓库中发现的命令只是候选命令，只有真正执行过才算已验证。
 - 它会保留 managed generated blocks 之外的手写内容。
 - 可维护性和脚本治理细节应尽量放在配置驱动的策略里，而不是在文案里重复堆叠。
+- 外部项目应调用已安装 runtime，例如 `python <codex-home>/skills/agents-md-generator/scripts/python/docs/manage_docs.py ...`，不要把本 skill 脚本复制到项目本地工具目录。
 - 它不应该把密钥、私有基础设施、生成缓存或机器专属绝对路径写进输出。
 
 ## 机构说明
@@ -193,8 +195,8 @@ Jiyuan Liu 和 He Li 隶属于东南大学电子科学与工程学院。
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {1.0.4},
-  date         = {2026-06-10},
+  version      = {1.4.1},
+  date         = {2026-06-27},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}

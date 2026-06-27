@@ -1,5 +1,5 @@
 {
-  "max_lines": 1000,
+  "max_bytes": 65536,
   "hard_fail_extensions": [
     ".py",
     ".js",
@@ -43,9 +43,7 @@
   "test_only_patterns": {
     "path_globs": [
       "**/smoke/**",
-      "**/eval_fixtures.py",
-      "**/run_skill_evals.py",
-      "**/*fixture*.py"
+      "**/eval_fixtures.py"
     ]
   },
   "comment_policy_gate": {
@@ -60,11 +58,18 @@
     },
     "python": {
       "require_public_api_docstring": false,
-      "forbid_trailing_comment": true
+      "forbid_trailing_comment": false,
+      "style_skill": "readable-python-generator"
     },
     "c_cpp": {
       "forbid_trailing_comment": true,
       "allow_macro_define_trailing_comment": true
     }
+  },
+  "readability_gate": {
+    "enabled": true,
+    "max_physical_line_bytes": 4096,
+    "single_line_min_bytes": 2048,
+    "minified_line_min_bytes": 1000
   }
 }

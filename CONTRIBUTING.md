@@ -6,7 +6,7 @@ Thank you for improving AGENTS.md Generator. This repository is an agent skill f
 
 - Keep `SKILL.md` concise and operational.
 - Move detailed background, command behavior, review policy, and long examples into `references/`.
-- Keep deterministic repository inspection, rendering, verification, audit, and shim logic in `scripts/`.
+- Keep deterministic repository inspection, rendering, verification, audit, and shim logic in `scripts/python/`.
 - Do not claim a command is verified unless it was actually run.
 - Preserve hand-written content outside managed generated blocks.
 - Keep generated outputs, temporary profiles, local credentials, and machine-specific paths out of commits.
@@ -23,14 +23,14 @@ Thank you for improving AGENTS.md Generator. This repository is an agent skill f
 Useful local commands:
 
 ```powershell
-python scripts/inspect_project.py .
-python scripts/detect_scopes.py .
-python scripts/render_agents.py .
-python scripts/verify_agents.py .
-python scripts/audit_skill.py .
+python scripts/python/detect/inspect_project.py .
+python scripts/python/detect/detect_scopes.py .
+python scripts/python/render/render_agents.py .
+python scripts/python/verify/verify_agents.py .
+python scripts/python/verify/audit_skill.py .
 ```
 
-For script changes, also run a Python syntax check over `scripts/*.py`.
+For script changes, also run a Python syntax check over `scripts/python/**/*.py`.
 
 ## Documentation Expectations
 

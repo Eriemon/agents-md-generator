@@ -37,6 +37,13 @@
       "description": "v1.0.0 removes evolution commands and contracts; docs, eval harness, and manage_docs CLI must all agree that the feature is no longer supported."
     },
     {
+      "id": "experience_removed_contract",
+      "kind": "docs_governance_regression",
+      "patterns": ["Tool Wrapper", "Reviewer", "Pipeline"],
+      "handler": "experience_removed_contract",
+      "description": "v1.1.0 removes governed experience updates; scaffold and fifth handoff must avoid docs/experience requests while verify passes and memory records handoffs."
+    },
+    {
       "id": "generic_audit_split",
       "kind": "generic_skill_regression",
       "patterns": ["Tool Wrapper", "Reviewer"],
@@ -90,7 +97,14 @@
       "kind": "source_governance_regression",
       "patterns": ["Tool Wrapper", "Pipeline"],
       "handler": "source_governance_test_boundary",
-      "description": "Source-governance test helpers must live under tests/ and be removed from production script paths."
+      "description": "The formal skill-effectiveness runner and runtime helper must live under scripts/python/verify/, tests/run_skill_evals.py must remain only a compatibility wrapper, and stale test-only fixtures must not be required for installed validation."
+    },
+    {
+      "id": "source_governance_size_readability_contract",
+      "kind": "source_governance_regression",
+      "patterns": ["Tool Wrapper", "Reviewer", "Pipeline"],
+      "handler": "source_governance_size_readability_contract",
+      "description": "Source governance must enforce the 64KB UTF-8 size limit, preserve decomposition-plan exceptions, skip excluded roots, and block one-line or minified unreadable source."
     },
     {
       "id": "root_version_sync_contract",
@@ -100,11 +114,18 @@
       "description": "sync-root-agents must repair both root metadata and the managed Control Profile version line so verify/manage_docs guidance does not point users at a partial fix."
     },
     {
-      "id": "code_comment_policy_contract",
+      "id": "source_repo_render_version_contract",
+      "kind": "governance_runtime_regression",
+      "patterns": ["Tool Wrapper", "Generator", "Pipeline"],
+      "handler": "source_repo_render_version_contract",
+      "description": "When the agents-md-generator source repository is preparing a new release, render_agents must use the source VERSION for root metadata even if the installed skill is still stale."
+    },
+    {
+      "id": "language_skill_routing_contract",
       "kind": "render_verify_regression",
       "patterns": ["Generator", "Reviewer", "Pipeline"],
-      "handler": "code_comment_policy_contract",
-      "description": "Generated root AGENTS.md must include a configurable Chinese Code Comment Policy, write code_comment_policy config, and verification must reject missing or weakened policy rules."
+      "handler": "language_skill_routing_contract",
+      "description": "Generated root AGENTS.md must include Coding Behavior Baseline language skill routing, route Python work to readable-python-generator, route bat/cmd, shell/bash, PowerShell, and Tcl script work to readable-script-generator, write coding_behavior.language_skill_routing config, and verification must reject missing or weakened routing rules."
     },
     {
       "id": "script_output_policy_contract",
@@ -135,6 +156,13 @@
       "description": "External workspaces must call installed agents-md-generator governance runtime commands and must reject project-local vendored governance script commands."
     },
     {
+      "id": "installed_runtime_owner_repo_local_commands",
+      "kind": "governance_runtime_regression",
+      "patterns": ["Tool Wrapper", "Reviewer", "Pipeline"],
+      "handler": "installed_runtime_owner_repo_local_commands",
+      "description": "Installed agents-md-generator runtime verification must still accept repo-local governance commands when the target is the agents-md-generator source owner repository."
+    },
+    {
       "id": "handoff_naming_gate",
       "kind": "docs_governance_regression",
       "patterns": ["Reviewer", "Pipeline"],
@@ -149,11 +177,18 @@
       "description": "Workspace engineering configs must live under .settings, remote review must block all .local.json files, and generated governance must state the local/remote naming contract."
     },
     {
+      "id": "governance_cli_entrypoint_smoke",
+      "kind": "governance_runtime_regression",
+      "patterns": ["Tool Wrapper", "Reviewer", "Pipeline"],
+      "handler": "governance_cli_entrypoint_smoke",
+      "description": "Governance CLI entrypoints must start cleanly, current-workspace planning triggers must remain documented, external workspaces must use installed runtime commands, and remote .local.json workspace settings must be blocked."
+    },
+    {
       "id": "task_rating_gate_contract",
       "kind": "global_entry_regression",
       "patterns": ["Tool Wrapper", "Generator", "Reviewer", "Inversion", "Pipeline"],
       "handler": "task_rating_gate_contract",
-      "description": "Global task-entry governance must prefer reuse, avoid asking difficulty/scale for every task, preserve explicit or contextual user ratings, and trigger stricter planning/reuse research for hell or nightmare work."
+      "description": "Global task-entry governance must prefer reuse, include v3 Coding Behavior Baseline, Comments And Documentation, Environment And Dependency Safety, Markdown documentation formulas, and installed skill protection, avoid asking difficulty/scale for every task, preserve explicit or contextual user ratings, and trigger stricter planning/reuse research for hell or nightmare work."
     },
     {
       "id": "memory_governance_gate",

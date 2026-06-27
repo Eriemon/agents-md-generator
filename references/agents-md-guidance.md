@@ -83,7 +83,7 @@ When a book-derived rule set is used, choose exactly one primary rule set. Use `
 | Codebase State | Verified migrations, tech debt, known risks |
 | Terminology | Domain terms agents may misunderstand |
 | Scoped Index | Links to scoped AGENTS.md files |
-| Documentation Governance Contract | Require `docs/handoff/HANDOFF.md`, handoff history rotation, 10 numbered `docs/experience/` summaries every five handoffs, stage records, install configuration, git manager records, local and remote deployment `docs/dir_manager/` folder-change review, and `history_dir_manager/` archival before force-confirmed blocked directory changes |
+| Documentation Governance Contract | Require `docs/handoff/HANDOFF.md`, handoff history rotation, `docs/memory/` long-term context, stage records, install configuration, git manager records, local and remote deployment `docs/dir_manager/` folder-change review, and `history_dir_manager/` archival before force-confirmed blocked directory changes |
 
 ## Scoped AGENTS.md Sections
 
