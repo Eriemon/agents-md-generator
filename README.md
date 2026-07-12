@@ -22,6 +22,10 @@
   A Codex-ready skill for generating, repairing, and verifying AGENTS.md governance from repository facts.
 </p>
 
+<p align="center">
+  Latest release: <strong>v1.4.6</strong> · Released on <strong>2026-07-12</strong>
+</p>
+
 AGENTS.md Generator helps coding agents produce instruction files that stay grounded in the real repository instead of drifting into guessed policy. It combines trigger metadata, grouped design interviews, deterministic Python scripts, docs-governance helpers, directory-governance gates, and verification checks so an agent can move from repository facts to trustworthy `AGENTS.md` output.
 
 This repository is primarily an **agent skill package**. The Python scripts are the deterministic execution layer; the main product is the skill workflow an agent can load and follow.
@@ -56,6 +60,7 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 - Strengthens versioned skill installation with separate release-manifest, sanitization, repository-validation, and rollback-copy helpers, including receipt-backed hashes, content-policy checks, and safe replacement behavior.
 - Expands runtime eval coverage for project, workspace, policy, release, language-routing, token-usage, source-governance, and release-content regressions while keeping governed `evals/` installable and local tests excluded.
 - Adds explicit remote conda-environment and runtime-archive policies, tightens command/path contracts, and keeps Plan Mode language, script-output, and global-baseline rules synchronized across templates and validators.
+- Adds a config-driven Script Output Policy (`> INFO/WARNING/ERR: [kind]`), Python `--quiet` support, and machine-readable stdout exemptions; verification now covers root, remote-server, memory, command, and release-content contracts.
 - Preserves the explicitly declared public author/contact email for open-source attribution while continuing to redact unapproved emails, credentials, and machine-local paths from release copies.
 
 ## Skill Architecture
@@ -198,7 +203,7 @@ If this skill helps your research, teaching, or engineering workflow, please cit
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
   version      = {1.4.6},
-  date         = {2026-06-27},
+  date         = {2026-07-12},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}

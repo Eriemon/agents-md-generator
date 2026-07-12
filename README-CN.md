@@ -22,6 +22,10 @@
   面向 Codex 的 AGENTS.md 生成、修复与验证 Skill。
 </p>
 
+<p align="center">
+  最新版本：<strong>v1.4.6</strong> · 发布日期：<strong>2026-07-12</strong>
+</p>
+
 AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的治理文件，而不是凭记忆拼接规则。它把触发元数据、分组式设计访谈、确定性 Python 脚本、文档治理辅助、目录治理门禁和验证链组合在一起，让 Agent 能从仓库事实稳定走到可信的 `AGENTS.md` 输出。
 
 这个仓库首先是一个 **Agent Skill Package**。Python 脚本是确定性执行层，但核心产品其实是 Agent 可加载、可遵循的 skill 工作流。
@@ -56,6 +60,7 @@ AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的�
 - 将版本化 skill 安装拆成 release manifest、脱敏、仓库验证和可回滚复制模块，增加收据哈希、内容策略和安全替换检查。
 - 扩充 project、workspace、policy、release、语言路由、token 用量、源码治理和 release 内容回归评估；允许受治理的 `evals/` 随包发布，同时继续排除本地 tests。
 - 增加远程 conda 环境与 runtime 归档策略，收紧命令/路径合同，并同步强化 Plan Mode 语言、脚本输出和 global baseline 规则。
+- 新增配置驱动的 Script Output Policy（`> INFO/WARNING/ERR: [kind]`）、Python 进度输出的 `--quiet` 支持及机器可读 stdout 例外；验证器同步覆盖 root、远程服务器、memory、命令和 release 内容合同。
 - 保留明确声明的公开作者/联系邮箱用于开源归属，同时继续对未授权邮箱、凭据和机器本地路径执行发布脱敏。
 
 ## Skill 架构
@@ -198,7 +203,7 @@ Jiyuan Liu 和 He Li 隶属于东南大学电子科学与工程学院。
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
   version      = {1.4.6},
-  date         = {2026-06-27},
+  date         = {2026-07-12},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}
