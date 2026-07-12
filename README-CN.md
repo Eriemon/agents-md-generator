@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v1.4.1-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v1.4.6-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -48,13 +48,14 @@ AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的�
 - 在需要时生成 `CLAUDE.md` 与 `GEMINI.md` 兼容 shim。
 - 提供验证、审计、自动 review 治理、skill-effectiveness eval 和 aggregate confidence gate，用于发布前把关。
 
-## v1.4.1 重点更新
+## v1.4.6 重点更新
 
-- 将 governance runtime 从扁平的 `scripts/*.py` 迁移到 `scripts/python/<domain>/...`，按 common、detect、design、docs、dirs、release、render、verify 等职责拆分入口。
-- 退役 evolution 与 `docs/experience` 治理路径。长期项目上下文现在进入 `docs/memory`，并由 memory gate/init/bootstrap/read/verify 流程维护。
-- 将默认语言规则扩展到 Plan Mode，使生成的 `<proposed_plan>` 正文也遵循项目配置语言，除非用户明确切换语言。
-- 强化轻量任务入口：加入 `task_rating_gate.py`、reuse-first 指引、语言专用 coding skill 路由、脚本输出策略检查和配置驱动的源码治理。
-- 加强 release 与目录治理：外部工作区必须调用已安装的 `agents-md-generator` runtime，不能把本 skill 脚本复制进项目本地；release 包会拒绝本地验证资产，GitHub/package 发布必须带 sanitization 与包内容证据。
+- 在 v1.4.1 的 runtime 拆分基础上，新增 worktree、远程策略、release 安装、命令合同、root 合同、扫描和 runtime eval 专用模块。
+- Python 与脚本类工作现在必须先通过两个 readable skill 的联合前置门禁，再按目标语言保留最终归属；生成的 root 和验证器都会拒绝被弱化的路由合同。
+- 禁止额外 Git worktree、`git config core.worktree` 重定向及 `.worktrees` 等污染目录，治理变更统一留在当前目录并使用本地分支隔离。
+- 将版本化 skill 安装拆成 release manifest、脱敏、仓库验证和可回滚复制模块，增加收据哈希、内容策略和安全替换检查。
+- 扩充 project、workspace、policy、release、语言路由、token 用量、源码治理和 release 内容回归评估；允许受治理的 `evals/` 随包发布，同时继续排除本地 tests。
+- 增加远程 conda 环境与 runtime 归档策略，收紧命令/路径合同，并同步强化 Plan Mode 语言、脚本输出和 global baseline 规则。
 
 ## Skill 架构
 
@@ -85,7 +86,7 @@ AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的�
 | --- | --- |
 | `SKILL.md` | 面向 Agent 的触发、流程、约束和验证规则。 |
 | `agents/openai.yaml` | 宿主 UI 使用的 skill 元数据。 |
-| `scripts/python/` | 检查、访谈、渲染、文档治理、目录治理、验证、审计和评估脚本。 |
+| `scripts/python/` | 检查、访谈、渲染、文档治理、目录治理、release 安装、验证、审计和评估脚本。 |
 | `assets/templates/` | 当前 release 流程使用的 root/scoped `AGENTS.md` 模板。 |
 | `evals/` | 供治理脚本使用的仓库内 skill-effectiveness 用例与可安全发布的评估数据。 |
 | `references/` | 脚本指南、审查清单、问题库、能力覆盖说明和 AGENTS 指南。 |
@@ -184,7 +185,7 @@ Jiyuan Liu 和 He Li 隶属于东南大学电子科学与工程学院。
 
 ## 联系方式
 
-问题、合作或学术使用，请联系：[erie@seu.edu.cn](mailto:erie@seu.edu.cn)。
+问题、合作或学术使用，请联系：`<REDACTED_EMAIL>`。
 
 ## 引用
 
@@ -195,7 +196,7 @@ Jiyuan Liu 和 He Li 隶属于东南大学电子科学与工程学院。
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {1.4.1},
+  version      = {1.4.6},
   date         = {2026-06-27},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},

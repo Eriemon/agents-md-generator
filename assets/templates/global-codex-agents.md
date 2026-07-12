@@ -35,7 +35,8 @@ Prefer caution over speed, but use judgment for trivial tasks.
 ### 1. Think Before Coding
 Before implementation:
 - Ground decisions in repository evidence before guessing.
-- Use specialized coding skills when the target language clearly matches: `readable-python-generator` for Python code, and `readable-script-generator` for bat/cmd, shell/bash, PowerShell, and Tcl scripts.
+- If work creates or modifies Python code or bat/cmd, shell/bash, PowerShell, and Tcl scripts, think first, load both `readable-python-generator` and `readable-script-generator`, and continue only after both skills' gates pass.
+- Keep final ownership with the target language: Python stays with `readable-python-generator`; bat/cmd, shell/bash, PowerShell, and Tcl stay with `readable-script-generator`.
 - State assumptions explicitly when they affect behavior, risk, or verification.
 - Surface meaningful ambiguities, alternatives, and tradeoffs before choosing.
 - Resolve low-risk local ambiguity with reasonable defaults and mention them when relevant.

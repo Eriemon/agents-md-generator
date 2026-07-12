@@ -5,7 +5,7 @@ type: software
 authors:
   - family-names: "Liu"
     given-names: "Jiyuan"
-    email: "erie@seu.edu.cn"
+    email: "<REDACTED_EMAIL>"
     affiliation: "Southeast University"
   - family-names: "Li"
     given-names: "He"
@@ -20,7 +20,7 @@ keywords:
   - documentation
 repository-code: "https://github.com/Eriemon/agents-md-generator"
 url: "https://github.com/Eriemon/agents-md-generator"
-version: "1.4.1"
-date-released: "2026-06-27"
+version: "1.4.6"
+date-released: "2026-07-12"
 year: 2026
 license: "Apache-2.0"

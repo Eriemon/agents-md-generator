@@ -23,6 +23,13 @@
       "description": "Unexpected root-level files should trip the structure gate and require explicit confirmation."
     },
     {
+      "id": "additional_worktree_prohibition_contract",
+      "kind": "git_governance_regression",
+      "patterns": ["Reviewer", "Pipeline"],
+      "handler": "additional_worktree_prohibition_contract",
+      "description": "Git governance must reject linked or additional worktrees and reserved worktree directories without confirmation or profile bypasses."
+    },
+    {
       "id": "root_workspace_artifact_gate",
       "kind": "directory_governance_regression",
       "patterns": ["Reviewer", "Pipeline"],
@@ -125,7 +132,7 @@
       "kind": "render_verify_regression",
       "patterns": ["Generator", "Reviewer", "Pipeline"],
       "handler": "language_skill_routing_contract",
-      "description": "Generated root AGENTS.md must include Coding Behavior Baseline language skill routing, route Python work to readable-python-generator, route bat/cmd, shell/bash, PowerShell, and Tcl script work to readable-script-generator, write coding_behavior.language_skill_routing config, and verification must reject missing or weakened routing rules."
+      "description": "Generated root AGENTS.md must include Coding Behavior Baseline language skill routing, route Python work to readable-python-generator, route bat/cmd, shell/bash, PowerShell, and Tcl script work to readable-script-generator, keep legacy installed versions on compatibility wording while strict versions enforce the dual-skill wording, write coding_behavior.language_skill_routing config, and verification must reject missing or weakened routing rules."
     },
     {
       "id": "script_output_policy_contract",

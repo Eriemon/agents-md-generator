@@ -1,69 +1,141 @@
+"""实现项目 memory 检索、校验、会话引导和 handoff 写入。"""
+
+# 关键词检索按 FTS、词项索引和 LIKE 回退顺序执行。
+def search_memory_items(
+    connection: Any,
+    list_terms: list[str],
+    limit: int,
+) -> tuple[list[dict[str, Any]], str, bool]:
+    """按稳定优先级检索 memory 条目。
+
+    Args:
+        connection: 已打开的 memory SQLite 连接。
+        list_terms: 规范化查询词列表。
+        limit: 最大返回条目数。
+
+    Returns:
+        命中条目、检索后端名称和 LIKE 回退命中标志。
+    """
+
+    # FTS5 提供首选的相关性检索结果。
+    list_selected = search_memory_fts(connection, list_terms, limit)  # FTS5 命中条目
+
+    # 首选后端命中时无需执行更宽松的检索。
+    if list_selected:
+
+        # False 表示没有进入 LIKE 模糊回退。
+        return list_selected, "fts5", False
+
+    # 词项索引在 FTS 无结果时提供确定性回退。
+    list_selected = search_memory_terms(connection, list_terms, limit)  # 词项索引命中条目
+
+    # 词项索引命中仍属于结构化检索。
+    if list_selected:
+
+        # 返回实际命中的后端供调用方生成证据。
+        return list_selected, "term-index", False
+
+    # LIKE 是最后一级兼容检索，可能得到更宽松的匹配。
+    list_selected = search_memory_like(connection, list_terms, limit)  # LIKE 模糊命中条目
+
+    # 后端名称区分模糊命中与全部无结果。
+    str_backend = "like" if list_selected else "none"  # 最终检索后端名称
+
+    # 回退标志只在 LIKE 实际命中时为真。
+    return list_selected, str_backend, bool(list_selected)
+
+# 空查询按更新时间返回最新 memory 条目。
+def latest_memory_items(connection: Any, limit: int) -> list[dict[str, Any]]:
+    """读取最近更新的 memory 条目。
+
+    Args:
+        connection: 已打开的 memory SQLite 连接。
+        limit: 最大返回条目数。
+
+    Returns:
+        按更新时间倒序排列的 memory 条目。
+    """
+
+    # 参数化 LIMIT 避免把调用方数值拼入 SQL。
+    rows = connection.execute(  # 执行更新时间倒序查询并保留原始数据库行
+        f"SELECT {MEMORY_ITEM_SELECT_COLUMNS} FROM memory_items "
+        "ORDER BY updated_at DESC LIMIT ?",
+        (limit,),  # 参数化查询的最大返回数量
+    ).fetchall()  # 最近更新的数据库行集合
+
+    # 数据库行统一转换为公开 memory 字段结构。
+    return [row_to_memory_item(row) for row in rows]
+
+# Memory 读取入口保证初始化完成后再选择查询后端。
 def read_memory(project: Path, query: str, limit: int = 5) -> dict[str, Any]:
+    """查询项目 memory 并报告实际检索后端。
 
-    # 保存 init result 映射，维持 read_memory 的字段关系。
-    dict_init_result = init_memory(project)  # 记忆库记录检索流程输入值
+    Args:
+        project: 项目根目录。
+        query: 用户查询文本；空文本表示读取最近条目。
+        limit: 最大返回条目数。
 
-    # 校验 read_memory 的 memory 分支条件。
+    Returns:
+        包含条目、后端、回退状态和错误的查询报告。
+    """
+
+    # 初始化确保数据库和索引结构可供查询。
+    dict_init_result = init_memory(project)  # 摘要压缩前的存储初始化结果
+
+    # 初始化错误阻止继续连接不完整的数据库。
     if dict_init_result.get("errors"):
 
-        # 返回 read_memory 的 memory 载荷。
-        return {"project": str(project), "query": query, "limit": limit, "count": 0, "items": [], "errors": list(dict_init_result["errors"])}
+        # 保留查询上下文，便于 CLI 直接呈现失败报告。
+        return {
+            "project": str(project),
+            "query": query,
+            "limit": limit,
+            "count": 0,
+            "items": [],
+            "errors": list(dict_init_result["errors"]),
+        }
 
-    # 汇总 terms，作为记忆库读写和压缩候选清单。
-    list_terms = query_terms(query)  # 记忆库记录检索流程输入值
+    # 查询词决定使用相关性检索还是最新条目读取。
+    list_terms = query_terms(query)  # 规范化查询词
 
-    # 标记 fallback used 判断，控制 read_memory 的分支走向。
-    bool_fallback_used = False  # 记忆库记录检索流程输入值
+    # 数据库路径来自统一 memory 目录合同。
+    dict_paths = memory_paths(project)  # 摘要压缩输出路径集合
 
-    # 整理 read_memory 需要的 search backend 记忆信息。
-    str_search_backend = "latest"  # 记忆库记录检索流程输入值
+    # 连接在查询结束后立即关闭，避免 Windows 文件锁残留。
+    with closing(connect_memory_db(dict_paths["database"])) as connection:
 
-    # 汇总 paths，作为记忆库读写和压缩候选清单。
-    dict_paths = memory_paths(project)  # 记忆库记录检索流程输入值
-
-    # 进入上下文并在退出时回收资源。
-    with closing(connect_memory_db(dict_paths["database"])) as conn:
-
-        # 校验 read_memory 的 memory 分支条件。
+        # 非空查询按逐级回退策略检索。
         if list_terms:
 
-            # 汇总 selected，作为记忆库读写和压缩候选清单。
-            list_selected = search_memory_fts(conn, list_terms, limit)  # 记忆库记录检索流程输入值
+            # 三元组同时携带命中条目和后端证据。
+            tuple_search_result = search_memory_items(  # 分级检索结果及其后端证据
+                connection,  # 当前 memory 数据库连接
+                list_terms,  # 已规范化的查询词
+                limit,  # 调用方要求的最大命中数
+            )  # 关键词检索返回的三元结果
 
-            # 校验 read_memory 的 memory 分支条件。
-            if list_selected:
+            # 第一项是供调用方展示的命中记录。
+            list_selected = tuple_search_result[0]  # 相关性检索命中条目
 
-                # 整理 read_memory 需要的 search backend 记忆信息。
-                str_search_backend = "fts5"  # 记忆库记录检索流程输入值
-            else:
+            # 第二项用于解释本次查询选择了哪种索引。
+            str_search_backend = tuple_search_result[1]  # 实际采用的检索后端
 
-                # 汇总 selected，作为记忆库读写和压缩候选清单。
-                list_selected = search_memory_terms(conn, list_terms, limit)  # 记忆库记录检索流程输入值
+            # 第三项区分结构化索引与模糊 LIKE 回退。
+            bool_fallback_used = tuple_search_result[2]  # LIKE 回退命中状态
 
-                # 校验 read_memory 的 memory 分支条件。
-                if list_selected:
-
-                    # 整理 read_memory 需要的 search backend 记忆信息。
-                    str_search_backend = "term-index"  # 记忆库记录检索流程输入值
-                else:
-
-                    # 汇总 selected，作为记忆库读写和压缩候选清单。
-                    list_selected = search_memory_like(conn, list_terms, limit)  # 记忆库记录检索流程输入值
-
-                    # 标记 fallback used 判断，控制 read_memory 的分支走向。
-                    bool_fallback_used = bool(list_selected)  # 记忆库记录检索流程输入值
-
-                    # 整理 read_memory 需要的 search backend 记忆信息。
-                    str_search_backend = "like" if list_selected else "none"  # 记忆库记录检索流程输入值
+        # 空查询直接读取最近更新的条目。
         else:
 
-            # 汇总 rows，作为记忆库读写和压缩候选清单。
-            rows = conn.execute(f"SELECT {MEMORY_ITEM_SELECT_COLUMNS} FROM memory_items ORDER BY updated_at DESC LIMIT ?", (limit,)).fetchall()  # 记忆库记录检索流程输入值
+            # latest 后端不属于模糊回退。
+            list_selected = latest_memory_items(connection, limit)  # 最新 memory 条目
 
-            # 汇总 selected，作为记忆库读写和压缩候选清单。
-            list_selected = [row_to_memory_item(row) for row in rows]  # 记忆库记录检索流程输入值
+            # 空查询的后端证据明确标记为最新记录读取。
+            str_search_backend = "latest"  # 最新条目读取后端
 
-    # 返回 read_memory 的 memory 载荷。
+            # 未执行模糊查询时回退标志固定为假。
+            bool_fallback_used = False  # 空查询没有 LIKE 回退
+
+    # 查询成功报告保持 CLI 和内部调用的稳定字段。
     return {
         "project": str(project),
         "query": query,
@@ -76,408 +148,766 @@ def read_memory(project: Path, query: str, limit: int = 5) -> dict[str, Any]:
         "errors": [],
     }
 
-# 定义 compress_memory 的memory 管理处理入口。
-def compress_memory(project: Path) -> dict[str, Any]:
+# 单个 memory 条目渲染为摘要文档中的固定 Markdown 分块。
+def memory_summary_lines(item: dict[str, Any]) -> list[str]:
+    """把 memory 条目渲染为摘要 Markdown 行。
 
-    # 保存 init result 映射，维持 compress_memory 的字段关系。
-    dict_init_result = init_memory(project)  # 记忆库记录检索流程输入值
+    Args:
+        item: 数据库中的结构化 memory 条目。
 
-    # 校验 compress_memory 的 memory 分支条件。
-    if dict_init_result.get("errors"):
+    Returns:
+        包含元数据和摘要正文的 Markdown 行。
+    """
 
-        # 返回 compress_memory 的 memory 载荷。
-        return {"project": str(project), "written": False, "items": 0, "errors": list(dict_init_result["errors"])}
+    # 标签 JSON 转换为便于人工阅读的逗号分隔文本。
+    str_tags = ", ".join(json.loads(item.get("tags_json") or "[]"))  # memory 标签文本
 
-    # 汇总 items，作为记忆库读写和压缩候选清单。
-    list_items = db_items(project)  # 记忆库记录检索流程输入值
-
-    # 汇总 paths，作为记忆库读写和压缩候选清单。
-    dict_paths = memory_paths(project)  # 记忆库记录检索流程输入值
-
-    # 汇总 lines，作为记忆库读写和压缩候选清单。
-    list_lines = ["# Memory Summaries", "", f"- Updated at: {now_iso()}", ""]  # memory 摘要文档头部行
-
-    # 校验 compress_memory 的 memory 分支条件。
-    if not list_items:
-
-        # 追加 compress_memory 的 memory 诊断。
-        list_lines.append("No memory items recorded yet.")
-
-    # 逐项检查 compress_memory 记忆候选。
-    for item in sorted(list_items, key=lambda row: (int(row.get("sequence") or 0), str(row.get("updated_at", "")))):
-
-        # 汇总 tags，作为记忆库读写和压缩候选清单。
-        tags = ", ".join(json.loads(item.get("tags_json") or "[]"))  # 记忆库记录检索流程输入值
-
-        # 调用 extend 处理 compress_memory。
-        list_lines.extend(
-            [
-                f"## {item.get('title', 'Untitled memory')}",
-                f"- Kind: {item.get('kind', 'note')}",
-                f"- Sequence: {item.get('sequence') or 0}",
-                f"- Updated: {item.get('updated_at', '')}",
-                f"- Source ref: {item.get('source_ref') or 'not recorded'}",
-                f"- Source timestamp: {item.get('source_timestamp') or 'not recorded'}",
-                f"- Source: {item.get('source_path') or 'not recorded'}",
-                f"- Tags: {tags or 'none'}",
-                "",
-                str(item.get("summary", "")).strip(),
-                "",
-            ]
-        )
-
-    # 调用 write_text 处理 compress_memory。
-    dict_paths["summaries"].write_text("\n".join(list_lines).rstrip() + "\n", encoding="utf-8")
-
-    # 返回 compress_memory 的 memory 载荷。
-    return {"project": str(project), "written": rel(project, dict_paths["summaries"]), "items": len(list_items), "errors": []}
-
-# 定义 unsafe_summary_text 的memory 管理处理入口。
-def unsafe_summary_text(text: str) -> list[str]:
-
-    # 汇总 errors，作为记忆库读写和压缩候选清单。
-    list_errors: list[str] = []  # 记忆库记录检索流程输入值
-
-    # 校验 unsafe_summary_text 的 memory 分支条件。
-    if SECRET_RE.search(text) or PRIVATE_KEY_RE.search(text):
-
-        # 追加 unsafe_summary_text 的 memory 诊断。
-        list_errors.append("memory summary contains an unredacted secret-like assignment")
-
-    # 校验 unsafe_summary_text 的 memory 分支条件。
-    if LOCAL_PRIVATE_PATH_RE.search(text):
-
-        # 追加 unsafe_summary_text 的 memory 诊断。
-        list_errors.append("memory summary contains a raw local private path")
-
-    # 返回 unsafe_summary_text 的 memory 载荷。
-    return list_errors
-
-# 定义 strong_control_profile 的memory 管理处理入口。
-def strong_control_profile(project: Path) -> bool:
-
-    # 整理 strong_control_profile 需要的 profile 记忆信息。
-    profile = project_profile(project)  # 记忆库记录检索流程输入值
-
-    # 校验 strong_control_profile 的 memory 分支条件。
-    if not profile:
-
-        # 返回 strong_control_profile 的 memory 载荷。
-        return False
-
-    # 返回 strong_control_profile 的 memory 载荷。
-    return bool(
-        profile.get("alignment_confirmed")
-        or profile.get("directory_contract")
-        or profile.get("docs_contract")
-        or profile.get("kind")
-    )
-
-# 定义 matched_session_ids 的memory 管理处理入口。
-def matched_session_ids(project: Path) -> list[str]:
-
-    # 返回 matched_session_ids 的 memory 载荷。
-    return [str(item.get("id", "")).strip() for item in matched_codex_sessions(project) if str(item.get("id", "")).strip()]
-
-# 定义 bootstrap_state 的memory 管理处理入口。
-def bootstrap_state(project: Path) -> dict[str, Any]:
-
-    # 整理 bootstrap_state 需要的 path 记忆信息。
-    path = memory_paths(project)["bootstrap_state"]  # 记忆库记录检索流程输入值
-
-    # 整理 bootstrap_state 需要的 data 记忆信息。
-    dict_data = read_json(path) if path.is_file() else {}  # 记忆库记录检索流程输入值
-
-    # 返回 bootstrap_state 的 memory 载荷。
-    return dict_data if isinstance(dict_data, dict) else {}
-
-# 定义 bootstrap_errors 的memory 管理处理入口。
-def bootstrap_errors(project: Path) -> list[str]:
-
-    # 汇总 sessions，作为记忆库读写和压缩候选清单。
-    list_sessions = matched_session_ids(project)  # 记忆库记录检索流程输入值
-
-    # 校验 bootstrap_errors 的 memory 分支条件。
-    if not list_sessions:
-
-        # 返回 bootstrap_errors 的 memory 载荷。
-        return []
-
-    # 保存 state 映射，维持 bootstrap_errors 的字段关系。
-    dict_state = bootstrap_state(project)  # 记忆库记录检索流程输入值
-
-    # 整理 bootstrap_errors 需要的 processed 记忆信息。
-    processed = [  # 记忆库记录检索流程输入值
-        str(item.get("id", "")).strip()  # 记忆库记录检索流程输入值
-        for item in dict_state.get("processed_sessions", [])  # 记忆库记录检索流程输入值
-        if isinstance(item, dict) and str(item.get("id", "")).strip()  # 记忆库记录检索流程输入值
+    # 固定字段顺序保证摘要文件 diff 稳定。
+    return [
+        f"## {item.get('title', 'Untitled memory')}",
+        f"- Kind: {item.get('kind', 'note')}",
+        f"- Sequence: {item.get('sequence') or 0}",
+        f"- Updated: {item.get('updated_at', '')}",
+        f"- Source ref: {item.get('source_ref') or 'not recorded'}",
+        f"- Source timestamp: {item.get('source_timestamp') or 'not recorded'}",
+        f"- Source: {item.get('source_path') or 'not recorded'}",
+        f"- Tags: {str_tags or 'none'}",
+        "",
+        str(item.get("summary", "")).strip(),
+        "",
     ]
 
-    # 整理 bootstrap_errors 需要的 missing 记忆信息。
-    missing = [session_id for session_id in list_sessions if session_id not in processed]  # 记忆库记录检索流程输入值
+# Memory 压缩把数据库事实重新生成到人类可读摘要文件。
+def compress_memory(project: Path) -> dict[str, Any]:
+    """重建项目 memory 摘要 Markdown。
 
-    # 校验 bootstrap_errors 的 memory 分支条件。
-    if missing:
+    Args:
+        project: 项目根目录。
+
+    Returns:
+        写入路径、条目数量和错误列表组成的压缩报告。
+    """
 
-        # 返回 bootstrap_errors 的 memory 载荷。
-        return [
-            "docs/memory/bootstrap-state.json missing exact-cwd Codex session bootstrap entries: "
-            + ", ".join(missing)
-        ]
+    # 初始化错误会使数据库内容不足以生成权威摘要。
+    dict_init_result = init_memory(project)  # memory 初始化报告
+
+    # 初始化失败时不覆盖既有摘要文件。
+    if dict_init_result.get("errors"):
 
-    # 返回 bootstrap_errors 的 memory 载荷。
-    return []
+        # 报告明确标记本次没有写入文件。
+        return {
+            "project": str(project),
+            "written": False,
+            "items": 0,
+            "errors": list(dict_init_result["errors"]),
+        }
 
-# 定义 verify_memory 的memory 管理处理入口。
-def verify_memory(project: Path) -> dict[str, Any]:
+    # 数据库条目是摘要文件的唯一内容来源。
+    list_items = db_items(project)  # 全部 memory 条目
 
-    # 保存 contract 映射，维持 verify_memory 的字段关系。
-    dict_contract = memory_contract(project)  # 记忆库记录检索流程输入值
+    # summaries 路径来自统一 memory 目录合同。
+    dict_paths = memory_paths(project)  # memory 路径映射
+
+    # 文档头记录本次重建时间。
+    list_lines = [  # 摘要标题、更新时间和正文行的累计容器
+        "# Memory Summaries",  # 摘要文档标题
+        "",  # 标题与元数据之间的空行
+        f"- Updated at: {now_iso()}",  # 本次压缩更新时间
+        "",  # 元数据与条目正文之间的空行
+    ]
 
-    # 校验 verify_memory 的 memory 分支条件。
-    if not dict_contract["enabled"]:
+    # 空数据库仍生成可解释的摘要文件。
+    if not list_items:
+
+        # 占位文本区分空库与压缩失败。
+        list_lines.append("No memory items recorded yet.")
 
-        # 汇总 errors，作为记忆库读写和压缩候选清单。
-        list_errors = ["memory governance must be enabled for strong-control work folders"] if strong_control_profile(project) else []  # 记忆库记录检索流程输入值
+    # 序号优先、更新时间次优先，保持摘要顺序稳定。
+    list_sorted_items = sorted(  # 依据序号和更新时间生成稳定展示顺序
+        list_items,  # 数据库中的全部 memory 条目
+        key=lambda row: (  # 先按历史序号、再按更新时间排列
+            int(row.get("sequence") or 0),  # 首要历史顺序键
+            str(row.get("updated_at", "")),  # 次要更新时间键
+        ),
+    )
+
+    # 每个条目渲染为独立 Markdown 分块。
+    for item in list_sorted_items:
 
-        # 返回 verify_memory 的 memory 载荷。
-        return {"project": str(project), "enabled": False, "checked": [], "errors": list_errors}
+        # extend 保留渲染函数提供的行边界。
+        list_lines.extend(memory_summary_lines(item))
+
+    # 尾部统一保留一个换行，便于版本控制 diff。
+    str_summary = "\n".join(list_lines).rstrip() + "\n"  # 完整摘要 Markdown
+
+    # 写入受管 summaries 文件并覆盖旧压缩结果。
+    dict_paths["summaries"].write_text(str_summary, encoding="utf-8")
+
+    # 返回项目相对路径作为可移植写入证据。
+    return {
+        "project": str(project),
+        "written": rel(project, dict_paths["summaries"]),
+        "items": len(list_items),
+        "errors": [],
+    }
 
-    # 汇总 contract errors，作为记忆库读写和压缩候选清单。
-    contract_errors = [item for item in memory_contract_errors(dict_contract) if "disabled" not in item]  # 记忆库记录检索流程输入值
+# 摘要安全检查拒绝密钥材料和本地私有路径。
+def unsafe_summary_text(text: str) -> list[str]:
+    """检查 memory 摘要是否泄露敏感文本。
 
-    # 校验 verify_memory 的 memory 分支条件。
-    if contract_errors:
+    Args:
+        text: 待检查的摘要文本。
 
-        # 返回 verify_memory 的 memory 载荷。
-        return {"project": str(project), "enabled": True, "checked": [], "errors": contract_errors}
+    Returns:
+        检测到的敏感内容错误列表。
+    """
 
-    # 汇总 paths，作为记忆库读写和压缩候选清单。
-    dict_paths = memory_paths(project)  # 记忆库记录检索流程输入值
+    # 两类密钥模式共享同一阻断诊断。
+    list_errors: list[str] = []  # 摘要安全错误
 
-    # 汇总 errors，作为记忆库读写和压缩候选清单。
-    list_errors: list[str] = []  # 记忆库记录检索流程输入值
+    # 凭据赋值和私钥正文都禁止进入长期 memory。
+    if SECRET_RE.search(text) or PRIVATE_KEY_RE.search(text):
 
-    # 汇总 checked，作为记忆库读写和压缩候选清单。
-    list_checked: list[str] = []  # 记忆库记录检索流程输入值
+        # 诊断不回显实际敏感内容。
+        list_errors.append("memory summary contains an unredacted secret-like assignment")
 
-    # 逐项检查 verify_memory 记忆候选。
-    for key in ["folder", "database", "events", "summaries", "guide"]:
+    # 用户目录绝对路径会泄露本地身份和目录布局。
+    if LOCAL_PRIVATE_PATH_RE.search(text):
 
-        # 整理 verify_memory 需要的 path 记忆信息。
-        path = dict_paths[key]  # 记忆库记录检索流程输入值
+        # 仅报告类别，不复制原始路径。
+        list_errors.append("memory summary contains a raw local private path")
 
-        # 追加 verify_memory 的 memory 诊断。
-        list_checked.append(rel(project, path))
+    # 返回全部安全错误，支持一次修复多个类别。
+    return list_errors
 
-        # 校验 verify_memory 的 memory 分支条件。
-        if key == "folder" and not path.is_dir():
+# 强控制项目必须启用完整 memory 治理合同。
+def strong_control_profile(project: Path) -> bool:
+    """判断项目档案是否启用了强控制特征。
 
-            # 追加 verify_memory 的 memory 诊断。
-            list_errors.append(f"missing memory directory: {rel(project, path)}")
+    Args:
+        project: 项目根目录。
 
-        # 校验 verify_memory 的 memory 分支条件。
-        elif key != "folder" and not path.is_file():
+    Returns:
+        任一强控制字段存在时为 True。
+    """
 
-            # 追加 verify_memory 的 memory 诊断。
-            list_errors.append(f"missing memory file: {rel(project, path)}")
+    # 项目档案承载对齐、目录、文档和项目类型合同。
+    dict_profile = project_profile(project)  # 项目治理档案
 
-    # 校验 verify_memory 的 memory 分支条件。
-    if dict_paths["database"].exists():
+    # 缺失档案按非强控制项目处理。
+    if not dict_profile:
 
-        # 保护 verify_memory 中允许失败的外部访问。
-        try:
+        # False 允许未受管项目跳过强制 memory 初始化。
+        return False
 
-            # 进入上下文并在退出时回收资源。
-            with closing(sqlite3.connect(dict_paths["database"])) as conn:
+    # 任一强控制信号都要求 memory 治理启用。
+    return bool(
+        dict_profile.get("alignment_confirmed")
+        or dict_profile.get("directory_contract")
+        or dict_profile.get("docs_contract")
+        or dict_profile.get("kind")
+    )
 
-                # 整理 verify_memory 需要的 row 记忆信息。
-                row = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='memory_items'").fetchone()  # 记忆库记录检索流程输入值
+# 精确工作目录匹配的 Codex 会话用于历史 memory 引导。
+def matched_session_ids(project: Path) -> list[str]:
+    """读取与项目工作目录精确匹配的会话 ID。
 
-                # 校验 verify_memory 的 memory 分支条件。
-                if not row:
+    Args:
+        project: 项目根目录。
 
-                    # 追加 verify_memory 的 memory 诊断。
-                    list_errors.append(f"{rel(project, dict_paths['database'])}: missing memory_items table")
-                else:
+    Returns:
+        非空 Codex 会话 ID 列表。
+    """
 
-                    # 汇总 columns，作为记忆库读写和压缩候选清单。
-                    columns = {str(item[1]) for item in conn.execute("PRAGMA table_info(memory_items)").fetchall()}  # 记忆库记录检索流程输入值
+    # 空 ID 不构成可追踪的引导证据。
+    return [
+        str(item.get("id", "")).strip()  # 已处理状态中的非空会话标识
+        for item in matched_codex_sessions(project)
+        if str(item.get("id", "")).strip()
+    ]
 
-                    # 汇总 required columns，作为记忆库读写和压缩候选清单。
-                    required_columns = MEMORY_REQUIRED_COLUMNS  # 记忆库记录检索流程输入值
+# Bootstrap 状态记录已经导入的精确工作目录会话。
+def bootstrap_state(project: Path) -> dict[str, Any]:
+    """读取 memory 会话引导状态。
 
-                    # 汇总 missing columns，作为记忆库读写和压缩候选清单。
-                    missing_columns = sorted(required_columns - columns)  # 记忆库记录检索流程输入值
+    Args:
+        project: 项目根目录。
 
-                    # 校验 verify_memory 的 memory 分支条件。
-                    if missing_columns:
+    Returns:
+        可用的引导状态对象；缺失或类型错误时为空字典。
+    """
 
-                        # 追加 verify_memory 的 memory 诊断。
-                        list_errors.append(f"{rel(project, dict_paths['database'])}: schema missing columns: {', '.join(missing_columns)}")
+    # 状态路径来自统一 memory 目录合同。
+    path_state = memory_paths(project)["bootstrap_state"]  # bootstrap 状态路径
 
-                    # 汇总 objects，作为记忆库读写和压缩候选清单。
-                    objects = {  # 记忆库记录检索流程输入值
-                        str(item[0])  # 记忆库记录检索流程输入值
-                        for item in conn.execute(  # 记忆库记录检索流程输入值
-                            "SELECT name FROM sqlite_master WHERE type IN ('table', 'index')"  # 记忆库记录检索流程输入值
-                        ).fetchall()  # 记忆库记录检索流程输入值
-                    }
+    # 缺失状态文件按尚未引导处理。
+    dict_data = read_json(path_state) if path_state.is_file() else {}  # bootstrap 状态内容
 
-                    # 汇总 required search objects，作为记忆库读写和压缩候选清单。
-                    set_required_search_objects = {  # 记忆库记录检索流程输入值
-                        "memory_items_fts",  # 记忆库记录检索流程输入值
-                        "memory_item_terms",  # 记忆库记录检索流程输入值
-                        "idx_memory_items_updated_at",  # 记忆库记录检索流程输入值
-                        "idx_memory_items_sequence",  # 记忆库记录检索流程输入值
-                        "idx_memory_items_kind",  # 记忆库记录检索流程输入值
-                        "idx_memory_item_terms_term",  # 记忆库记录检索流程输入值
-                    }
+    # 非对象 JSON 不能提供 processed_sessions 字段。
+    return dict_data if isinstance(dict_data, dict) else {}
 
-                    # 汇总 missing search objects，作为记忆库读写和压缩候选清单。
-                    missing_search_objects = sorted(set_required_search_objects - objects)  # 记忆库记录检索流程输入值
+# Bootstrap 完整性要求每个精确工作目录会话都有处理记录。
+def bootstrap_errors(project: Path) -> list[str]:
+    """检查历史 Codex 会话是否全部写入 bootstrap 状态。
 
-                    # 校验 verify_memory 的 memory 分支条件。
-                    if missing_search_objects:
+    Args:
+        project: 项目根目录。
 
-                        # 追加 verify_memory 的 memory 诊断。
-                        list_errors.append(f"{rel(project, dict_paths['database'])}: search schema missing objects: {', '.join(missing_search_objects)}")
+    Returns:
+        缺失会话引导记录的治理错误列表。
+    """
 
-                    # 校验 verify_memory 的 memory 分支条件。
-                    if not missing_columns and not missing_search_objects:
+    # 当前可发现会话构成引导完整性的权威输入。
+    list_sessions = matched_session_ids(project)  # 精确工作目录会话 ID
 
-                        # 整理 verify_memory 需要的 item count 记忆信息。
-                        item_count = conn.execute("SELECT COUNT(*) FROM memory_items").fetchone()[0]  # 记忆库记录检索流程输入值
+    # 没有历史会话时无需引导。
+    if not list_sessions:
 
-                        # 整理 verify_memory 需要的 fts count 记忆信息。
-                        fts_count = conn.execute("SELECT COUNT(*) FROM memory_items_fts").fetchone()[0]  # 记忆库记录检索流程输入值
+        # 空错误列表表示 bootstrap 完整。
+        return []
 
-                        # 整理 verify_memory 需要的 term item count 记忆信息。
-                        term_item_count = conn.execute("SELECT COUNT(DISTINCT item_id) FROM memory_item_terms").fetchone()[0]  # 记忆库记录检索流程输入值
+    # 状态中的 processed_sessions 记录已导入会话。
+    dict_state = bootstrap_state(project)  # bootstrap 状态对象
 
-                        # 校验 verify_memory 的 memory 分支条件。
-                        if item_count != fts_count:
+    # 仅接受结构化且具有非空 ID 的处理条目。
+    list_processed = [
+        str(item.get("id", "")).strip()  # Bootstrap 状态中的会话标识
+        for item in dict_state.get("processed_sessions", [])  # Bootstrap 状态记录来源
+        if isinstance(item, dict) and str(item.get("id", "")).strip()  # 过滤无标识或非对象状态项
+    ]  # 已处理会话 ID
 
-                            # 追加 verify_memory 的 memory 诊断。
-                            list_errors.append((
-                                f"{rel(project, dict_paths['database'])}: FTS index row count mismatch: "  # AGENTS 长文本片段
-                                f"memory_items={item_count}, memory_items_fts={fts_count}"  # AGENTS 长文本片段
-                            ))
+    # 差集保持当前会话发现顺序，便于稳定诊断。
+    list_missing = [
+        str_session_id  # 当前发现顺序中的会话标识
+        for str_session_id in list_sessions  # 保留会话发现的稳定顺序
+        if str_session_id not in list_processed  # 排除已经完成引导的会话
+    ]  # 尚未引导的会话 ID
 
-                        # 校验 verify_memory 的 memory 分支条件。
-                        if item_count and term_item_count != item_count:
-
-                            # 追加 verify_memory 的 memory 诊断。
-                            list_errors.append((
-                                f"{rel(project, dict_paths['database'])}: short-term index coverage mismatch: "  # AGENTS 长文本片段
-                                f"memory_items={item_count}, indexed_items={term_item_count}"  # AGENTS 长文本片段
-                            ))
-        except sqlite3.DatabaseError as exc:
-
-            # 追加 verify_memory 的 memory 诊断。
-            list_errors.append(f"{rel(project, dict_paths['database'])}: SQLite open failed: {exc}")
-
-    # 校验 verify_memory 的 memory 分支条件。
-    if dict_paths["events"].exists():
-
-        # 逐项检查 verify_memory 记忆候选。
-        for index, line in enumerate(dict_paths["events"].read_text(encoding="utf-8", errors="ignore").splitlines(), start=1):
-
-            # 校验 verify_memory 的 memory 分支条件。
-            if not line.strip():
-
-                # 分隔 verify_memory 的控制流边界。
-                continue
-
-            # 保护 verify_memory 中允许失败的外部访问。
-            try:
-
-                # 整理 verify_memory 需要的 event 记忆信息。
-                event = json.loads(line)  # 记忆库记录检索流程输入值
-            except json.JSONDecodeError as exc:
-
-                # 追加 verify_memory 的 memory 诊断。
-                list_errors.append(f"{rel(project, dict_paths['events'])}:{index}: invalid JSONL event: {exc}")
-
-                # 分隔 verify_memory 的控制流边界。
-                continue
-
-            # 逐项检查 verify_memory 记忆候选。
-            for issue in unsafe_summary_text(" ".join(str(event.get(key, "")) for key in ["title", "summary"])):
-
-                # 追加 verify_memory 的 memory 诊断。
-                list_errors.append(f"{rel(project, dict_paths['events'])}:{index}: {issue}")
-
-    # 校验 verify_memory 的 memory 分支条件。
-    if dict_paths["summaries"].exists():
-
-        # 逐项检查 verify_memory 记忆候选。
-        for issue in unsafe_summary_text(dict_paths["summaries"].read_text(encoding="utf-8", errors="ignore")):
-
-            # 追加 verify_memory 的 memory 诊断。
-            list_errors.append(f"{rel(project, dict_paths['summaries'])}: {issue}")
-
-    # 追加 verify_memory 的 memory 诊断。
-    list_checked.append(rel(project, dict_paths["bootstrap_state"]))
-
-    # 调用 extend 处理 verify_memory。
-    list_errors.extend(bootstrap_errors(project))
-
-    # 返回 verify_memory 的 memory 载荷。
-    return {"project": str(project), "enabled": True, "checked": list_checked, "errors": list_errors}
-
-# 定义 memory_gate 的memory 管理处理入口。
-def memory_gate(project: Path) -> dict[str, Any]:
-
-    # 保存 contract 映射，维持 memory_gate 的字段关系。
-    dict_contract = memory_contract(project)  # 记忆库记录检索流程输入值
-
-    # 汇总 paths，作为记忆库读写和压缩候选清单。
-    dict_paths = memory_paths(project)  # 记忆库记录检索流程输入值
-
-    # 汇总 missing，作为记忆库读写和压缩候选清单。
-    list_missing: list[str] = []  # 记忆库记录检索流程输入值
-
-    # 逐项检查 memory_gate 记忆候选。
-    for key in ["folder", "database", "events", "summaries", "guide"]:
-
-        # 整理 memory_gate 需要的 path 记忆信息。
-        path = dict_paths[key]  # 记忆库记录检索流程输入值
-
-        # 校验 memory_gate 的 memory 分支条件。
-        if key == "folder" and not path.is_dir():
-
-            # 追加 memory_gate 的 memory 诊断。
-            list_missing.append(rel(project, path))
-
-        # 校验 memory_gate 的 memory 分支条件。
-        elif key != "folder" and not path.is_file():
-
-            # 追加 memory_gate 的 memory 诊断。
-            list_missing.append(rel(project, path))
-
-    # 保存 verify 映射，维持 memory_gate 的字段关系。
-    dict_verify = verify_memory(project)  # 记忆库记录检索流程输入值
-
-    # 汇总 errors，作为记忆库读写和压缩候选清单。
-    list_errors = list(dict_verify.get("errors", []))  # 记忆库记录检索流程输入值
-
-    # 校验 memory_gate 的 memory 分支条件。
+    # 任一缺失会话都会阻断强控制 memory 门禁。
     if list_missing:
 
-        # 调用 extend 处理 memory_gate。
-        list_errors.extend(f"missing memory path: {item}" for item in list_missing if f"missing memory path: {item}" not in list_errors)
+        # 单条诊断列出全部缺失 ID，避免重复命令建议。
+        return [
+            "docs/memory/bootstrap-state.json missing exact-cwd Codex session "
+            "bootstrap entries: " + ", ".join(list_missing)
+        ]
 
-    # 整理 memory_gate 需要的 disabled 记忆信息。
-    disabled = not dict_contract.get("enabled")  # 记忆库记录检索流程输入值
+    # 所有匹配会话均已进入 bootstrap 状态。
+    return []
 
-    # 标记 requires authorization 判断，控制 memory_gate 的分支走向。
-    bool_requires_authorization = bool(disabled or list_missing)  # 记忆库记录检索流程输入值
+# Memory 必需路径检查同时生成覆盖证据和缺失诊断。
+def memory_path_findings(
+    project: Path,
+    dict_paths: dict[str, Path],
+) -> tuple[list[str], list[str]]:
+    """检查 memory 根目录和必需文件是否存在。
 
-    # 整理 memory_gate 需要的 command 记忆信息。
-    str_command = "python skills/agents-md-generator/scripts/python/docs/manage_docs.py memory-init <project> --confirm-create"  # 记忆库记录检索流程输入值
+    Args:
+        project: 项目根目录。
+        dict_paths: memory 路径映射。
 
-    # 返回 memory_gate 的 memory 载荷。
+    Returns:
+        已检查项目相对路径和缺失错误列表。
+    """
+
+    # 已检查路径与缺失诊断分别累计。
+    list_checked: list[str] = []  # 已检查 memory 路径
+
+    # 路径错误与覆盖证据分开累计。
+    list_errors: list[str] = []  # memory 路径缺失错误
+
+    # 固定遍历次序保证检查证据和错误输出稳定。
+    for str_key in [
+        "folder",  # Memory 根目录
+        "database",  # SQLite 数据库
+        "events",  # 追加事件日志
+        "summaries",  # 人类可读摘要
+        "guide",  # Memory 使用指南
+    ]:
+
+        # 映射值是当前必需资产的绝对路径。
+        path_required = dict_paths[str_key]  # 当前 memory 必需路径
+
+        # 报告使用项目相对路径保持跨机器可移植。
+        str_relative_path = rel(project, path_required)  # 当前资产相对路径
+
+        # checked 证明门禁实际覆盖该路径。
+        list_checked.append(str_relative_path)
+
+        # folder 是唯一要求目录类型的资产。
+        if str_key == "folder" and not path_required.is_dir():
+
+            # 缺失根目录使用目录专用诊断。
+            list_errors.append(f"missing memory directory: {str_relative_path}")
+
+        # 其余资产都必须是普通文件。
+        elif str_key != "folder" and not path_required.is_file():
+
+            # 文件缺失诊断保留精确相对路径。
+            list_errors.append(f"missing memory file: {str_relative_path}")
+
+    # 返回覆盖证据和路径级错误。
+    return list_checked, list_errors
+
+# 数据库基础 schema 必须包含 memory_items 表及全部公开列。
+def memory_database_schema_findings(
+    project: Path,
+    path_database: Path,
+    connection: Any,
+) -> tuple[list[str], bool]:
+    """检查 memory 数据表和必需列。
+
+    Args:
+        project: 项目根目录。
+        path_database: memory SQLite 文件路径。
+        connection: 已打开的 SQLite 连接。
+
+    Returns:
+        schema 错误列表和基础 schema 完整标志。
+    """
+
+    # 数据库相对路径作为所有 schema 诊断前缀。
+    str_database = rel(project, path_database)  # 主表 schema 诊断路径前缀
+
+    # sqlite_master 提供 memory_items 表存在性证据。
+    row_table = connection.execute(  # 查询主表是否已经建立
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='memory_items'"  # 主表存在性查询
+    ).fetchone()  # memory_items 表记录
+
+    # 主表缺失时无法继续执行列和索引覆盖检查。
+    if not row_table:
+
+        # False 阻止调用方执行依赖主表的计数查询。
+        return [f"{str_database}: missing memory_items table"], False
+
+    # PRAGMA 列表用于核对公开 memory 字段合同。
+    set_columns = {
+        str(item[1])  # PRAGMA 行中的列名字段
+        for item in connection.execute("PRAGMA table_info(memory_items)").fetchall()  # 主表列元数据
+    }  # memory_items 实际列名
+
+    # 差集按名称排序以产生稳定诊断。
+    list_missing_columns = sorted(MEMORY_REQUIRED_COLUMNS - set_columns)  # 缺失必需列
+
+    # 任一列缺失都会阻断后续索引一致性证明。
+    if list_missing_columns:
+
+        # 单条诊断列出全部缺失列。
+        return [
+            f"{str_database}: schema missing columns: {', '.join(list_missing_columns)}"
+        ], False
+
+    # 空错误和 True 表示主表合同完整。
+    return [], True
+
+# 搜索 schema 必须覆盖全文、短词项和常用排序索引。
+def memory_search_schema_findings(
+    project: Path,
+    path_database: Path,
+    connection: Any,
+) -> tuple[list[str], bool]:
+    """检查 memory 搜索表和索引对象。
+
+    Args:
+        project: 项目根目录。
+        path_database: memory SQLite 文件路径。
+        connection: 已打开的 SQLite 连接。
+
+    Returns:
+        搜索 schema 错误列表和完整标志。
+    """
+
+    # 数据库相对路径作为搜索 schema 诊断前缀。
+    str_database = rel(project, path_database)  # 索引覆盖诊断路径前缀
+
+    # sqlite_master 同时枚举搜索表和索引对象。
+    set_objects = {
+        str(item[0])  # sqlite_master 行中的对象名称
+        for item in connection.execute(  # 表与索引对象元数据
+            "SELECT name FROM sqlite_master WHERE type IN ('table', 'index')"  # 搜索对象枚举查询
+        ).fetchall()
+    }  # 数据库表与索引名称
+
+    # 必需集合对应 FTS、词项索引和常用过滤排序路径。
+    set_required_objects = {
+        "memory_items_fts",  # 全文搜索虚拟表
+        "memory_item_terms",  # 短词项倒排表
+        "idx_memory_items_updated_at",  # 更新时间排序索引
+        "idx_memory_items_sequence",  # 历史顺序索引
+        "idx_memory_items_kind",  # 条目类型过滤索引
+        "idx_memory_item_terms_term",  # 词项匹配索引
+    }  # memory 搜索必需对象
+
+    # 排序差集使错误消息在不同 SQLite 版本间稳定。
+    list_missing_objects = sorted(set_required_objects - set_objects)  # 缺失搜索对象
+
+    # 缺失对象阻止索引覆盖计数验证。
+    if list_missing_objects:
+
+        # 诊断列出每个缺失表或索引。
+        return [
+            f"{str_database}: search schema missing objects: "
+            + ", ".join(list_missing_objects)
+        ], False
+
+    # 空错误和 True 表示搜索 schema 完整。
+    return [], True
+
+# 索引计数必须覆盖主表中的每个 memory 条目。
+def memory_index_coverage_errors(
+    project: Path,
+    path_database: Path,
+    connection: Any,
+) -> list[str]:
+    """检查 FTS 和短词项索引的条目覆盖率。
+
+    Args:
+        project: 项目根目录。
+        path_database: memory SQLite 文件路径。
+        connection: 已打开的 SQLite 连接。
+
+    Returns:
+        索引计数不一致错误列表。
+    """
+
+    # 三类计数分别代表主表、FTS 和词项索引覆盖。
+    int_item_count = connection.execute(  # 统计权威主表条目数量
+        "SELECT COUNT(*) FROM memory_items"  # 权威条目总数查询
+    ).fetchone()[0]  # 主表条目数
+
+    # FTS 计数用于证明全文索引覆盖全部主表条目。
+    int_fts_count = connection.execute(  # 统计全文索引条目数量
+        "SELECT COUNT(*) FROM memory_items_fts"  # 全文索引总数查询
+    ).fetchone()[0]  # FTS 索引条目数
+
+    # 去重 item_id 计数用于证明短词项索引覆盖。
+    int_term_item_count = connection.execute(  # 统计词项索引覆盖数量
+        "SELECT COUNT(DISTINCT item_id) FROM memory_item_terms"  # 词项索引覆盖查询
+    ).fetchone()[0]  # 词项索引覆盖条目数
+
+    # 数据库相对路径作为计数诊断前缀。
+    str_database = rel(project, path_database)  # 数据库相对路径
+
+    # 两类索引错误允许同时报告。
+    list_errors: list[str] = []  # 索引覆盖错误
+
+    # FTS 行数必须与主表严格一致。
+    if int_item_count != int_fts_count:
+
+        # 诊断同时展示两侧计数以支持重建判断。
+        list_errors.append(
+            f"{str_database}: FTS index row count mismatch: "
+            f"memory_items={int_item_count}, memory_items_fts={int_fts_count}"
+        )
+
+    # 非空主表要求每个条目至少拥有一条词项索引记录。
+    if int_item_count and int_term_item_count != int_item_count:
+
+        # 空主表不要求词项索引存在条目。
+        list_errors.append(
+            f"{str_database}: short-term index coverage mismatch: "
+            f"memory_items={int_item_count}, indexed_items={int_term_item_count}"
+        )
+
+    # 返回全部索引覆盖错误。
+    return list_errors
+
+# 数据库验证编排基础 schema、搜索 schema 和索引覆盖检查。
+def memory_database_errors(project: Path, path_database: Path) -> list[str]:
+    """验证 memory SQLite 数据库结构和索引一致性。
+
+    Args:
+        project: 项目根目录。
+        path_database: memory SQLite 文件路径。
+
+    Returns:
+        数据库打开、schema 和索引覆盖错误列表。
+    """
+
+    # 缺失数据库由路径检查负责报告，当前层无需重复。
+    if not path_database.exists():
+
+        # 空列表避免重复 missing memory file 诊断。
+        return []
+
+    # SQLite 损坏或锁定错误转换为治理诊断。
+    try:
+
+        # 只读验证结束后立即释放数据库连接。
+        with closing(sqlite3.connect(path_database)) as connection:
+
+            # 基础表和列合同是所有后续检查的前提。
+            tuple_list_schema_errors, tuple_bool_schema_ok = memory_database_schema_findings(  # 主表合同检查结果
+                project,  # 项目根目录
+                path_database,  # 当前 SQLite 文件
+                connection,  # 已打开的数据库连接
+            )
+
+            # 主表 schema 不完整时直接返回精确错误。
+            if not tuple_bool_schema_ok:
+
+                # 不执行可能因缺表缺列失败的搜索检查。
+                return tuple_list_schema_errors
+
+            # 搜索表与索引对象必须完整。
+            tuple_list_search_errors, tuple_bool_search_ok = memory_search_schema_findings(  # 搜索对象检查结果
+                project,  # 搜索诊断相对路径基准
+                path_database,  # 待核对搜索对象的数据库
+                connection,  # 执行 sqlite_master 查询的连接
+            )
+
+            # 搜索 schema 不完整时跳过覆盖计数查询。
+            if not tuple_bool_search_ok:
+
+                # 基础 schema 已通过，只返回搜索对象错误。
+                return tuple_list_search_errors
+
+            # 完整 schema 下执行 FTS 与词项索引覆盖检查。
+            return memory_index_coverage_errors(project, path_database, connection)
+
+    # SQLite 数据库错误保留异常摘要但不泄露内容。
+    except sqlite3.DatabaseError as exc:
+
+        # 统一相对路径前缀便于定位受损数据库。
+        return [f"{rel(project, path_database)}: SQLite open failed: {exc}"]
+
+# Events JSONL 每行都必须可解析且不包含敏感摘要文本。
+def memory_event_errors(project: Path, path_events: Path) -> list[str]:
+    """验证 memory events JSONL 的语法和摘要安全性。
+
+    Args:
+        project: 项目根目录。
+        path_events: memory events.jsonl 路径。
+
+    Returns:
+        JSONL 解析和敏感文本错误列表。
+    """
+
+    # 缺失 events 文件由路径检查负责报告。
+    if not path_events.exists():
+
+        # 摘要缺失已由统一路径检查报告，此处不重复。
+        return []
+
+    # 每行错误保留原始行号，便于精确修复。
+    list_errors: list[str] = []  # events 验证错误
+
+    # 忽略无效字节以继续检查剩余事件行。
+    list_lines = path_events.read_text(  # 读取全部事件行以保留原始行号
+        encoding="utf-8",  # 事件日志文本编码
+        errors="ignore",  # 摘要扫描忽略不可解码字节
+    ).splitlines()  # events JSONL 行
+
+    # 行号从一开始，与编辑器和诊断格式一致。
+    for int_index, str_line in enumerate(list_lines, start=1):
+
+        # 空行不构成事件，也不产生错误。
+        if not str_line.strip():
+
+            # 跳过空白分隔行并继续检查后续事件。
+            continue
+
+        # 单行 JSON 解析失败不阻断后续行验证。
+        try:
+
+            # 事件对象用于提取 title 和 summary 安全文本。
+            dict_event = json.loads(str_line)  # 当前 memory 事件
+
+        # JSONDecodeError 提供精确列位置和原因。
+        except json.JSONDecodeError as exc:
+
+            # 诊断附加项目相对文件路径和事件行号。
+            list_errors.append(
+                f"{rel(project, path_events)}:{int_index}: invalid JSONL event: {exc}"
+            )
+
+            # 无效 JSON 不能继续执行字段级安全检查。
+            continue
+
+        # 标题与摘要共同构成事件的人类可读长期文本。
+        str_summary = " ".join(  # 合并需执行安全检查的长期文本字段
+            str(dict_event.get(str_key, ""))  # 当前标题或摘要字段文本
+            for str_key in ("title", "summary")  # 需要安全扫描的长期文本字段
+        )  # 当前事件可读摘要文本
+
+        # 每个敏感文本错误附加事件行号。
+        for str_issue in unsafe_summary_text(str_summary):
+
+            # 诊断不回显实际事件内容。
+            list_errors.append(
+                f"{rel(project, path_events)}:{int_index}: {str_issue}"
+            )
+
+    # 返回全部事件语法和安全错误。
+    return list_errors
+
+# Summaries Markdown 只执行长期文本安全检查。
+def memory_summary_errors(project: Path, path_summaries: Path) -> list[str]:
+    """检查 memory summaries Markdown 是否包含敏感文本。
+
+    Args:
+        project: 项目根目录。
+        path_summaries: memory summaries Markdown 路径。
+
+    Returns:
+        带项目相对路径的摘要安全错误列表。
+    """
+
+    # 缺失摘要文件由路径检查负责报告。
+    if not path_summaries.exists():
+
+        # 当前层避免重复文件缺失诊断。
+        return []
+
+    # 忽略无效字节以仍能发现可读敏感片段。
+    str_text = path_summaries.read_text(  # 读取压缩摘要以执行敏感信息扫描
+        encoding="utf-8",  # 摘要文档文本编码
+        errors="ignore",  # 损坏字节容错策略
+    )  # summaries Markdown 文本
+
+    # 每个安全错误附加稳定的项目相对路径。
+    return [
+        f"{rel(project, path_summaries)}: {str_issue}"
+        for str_issue in unsafe_summary_text(str_text)
+    ]
+
+# Memory 总验证汇总合同、路径、数据库、事件、摘要和 bootstrap 证据。
+def verify_memory(project: Path) -> dict[str, Any]:
+    """验证项目 memory 治理资产和索引完整性。
+
+    Args:
+        project: 项目根目录。
+
+    Returns:
+        启用状态、检查路径和完整错误列表组成的验证报告。
+    """
+
+    # Memory 合同决定是否启用后续资产检查。
+    dict_contract = memory_contract(project)  # 项目 memory 合同
+
+    # 禁用状态对强控制项目构成阻断错误。
+    if not dict_contract["enabled"]:
+
+        # 非强控制项目允许显式禁用 memory。
+        list_errors = (
+            ["memory governance must be enabled for strong-control work folders"]  # 强控制禁用诊断
+            if strong_control_profile(project)  # 强控制工作目录判定
+            else []  # 普通项目允许显式禁用 memory
+        )  # memory 禁用错误
+
+        # 禁用报告不声明任何已检查资产。
+        return {
+            "project": str(project),
+            "enabled": False,
+            "checked": [],
+            "errors": list_errors,
+        }
+
+    # 启用合同只保留非 disabled 类配置错误。
+    list_contract_errors = [
+        str_item  # 合同校验返回的单项诊断
+        for str_item in memory_contract_errors(dict_contract)  # 合同诊断迭代来源
+        if "disabled" not in str_item  # 禁用状态已由上方分支处理
+    ]  # memory 合同配置错误
+
+    # 合同错误会使路径映射不再可靠。
+    if list_contract_errors:
+
+        # 直接返回配置错误，避免派生误导性文件诊断。
+        return {
+            "project": str(project),
+            "enabled": True,
+            "checked": [],
+            "errors": list_contract_errors,
+        }
+
+    # 验证阶段统一定位数据库、日志、摘要和引导状态。
+    dict_paths = memory_paths(project)  # 验证职责使用的 memory 路径
+
+    # 基础路径检查同时生成 checked 证据。
+    tuple_list_checked, tuple_list_errors = memory_path_findings(project, dict_paths)  # 路径覆盖与错误结果
+
+    # 数据库结构与索引覆盖错误追加到总报告。
+    tuple_list_errors.extend(memory_database_errors(project, dict_paths["database"]))
+
+    # Events JSONL 语法和安全错误追加到总报告。
+    tuple_list_errors.extend(memory_event_errors(project, dict_paths["events"]))
+
+    # Summaries Markdown 安全错误追加到总报告。
+    tuple_list_errors.extend(memory_summary_errors(project, dict_paths["summaries"]))
+
+    # Bootstrap 状态也属于验证覆盖证据。
+    tuple_list_checked.append(rel(project, dict_paths["bootstrap_state"]))
+
+    # 历史精确工作目录会话必须全部完成引导。
+    tuple_list_errors.extend(bootstrap_errors(project))
+
+    # 返回所有验证职责汇总后的稳定报告字段。
+    return {
+        "project": str(project),
+        "enabled": True,
+        "checked": tuple_list_checked,
+        "errors": tuple_list_errors,
+    }
+
+# Memory 初始化门禁区分现有资产错误和需要授权创建的缺失资产。
+def memory_gate(project: Path) -> dict[str, Any]:
+    """检查 memory 是否可用并给出授权初始化建议。
+
+    Args:
+        project: 项目根目录。
+
+    Returns:
+        门禁状态、缺失路径、验证错误和建议命令组成的报告。
+    """
+
+    # 门禁合同决定启用状态和初始化授权策略。
+    dict_contract = memory_contract(project)  # Memory 门禁合同
+
+    # 缺失资产发现需要完整的受管路径集合。
+    dict_paths = memory_paths(project)  # 初始化门禁使用的 memory 路径
+
+    # 复用基础路径检查并只保留缺失资产路径。
+    tuple_ignored_checked, tuple_list_path_errors = memory_path_findings(project, dict_paths)  # 门禁路径发现结果
+
+    # 从结构化缺失诊断提取项目相对路径。
+    list_missing = [
+        str_error.split(": ", 1)[1]  # 从缺失诊断中提取项目相对路径
+        for str_error in tuple_list_path_errors  # 缺失路径诊断迭代来源
+        if ": " in str_error  # 仅解析标准路径缺失诊断
+    ]  # 需要初始化创建的 memory 路径
+
+    # 完整验证提供 schema、安全和 bootstrap 错误。
+    dict_verify = verify_memory(project)  # memory 完整验证报告
+
+    # 复制错误列表避免修改验证报告对象。
+    list_errors = list(dict_verify.get("errors", []))  # 门禁累计错误
+
+    # 缺失路径补充统一的授权型诊断。
+    for str_missing in list_missing:
+
+        # 统一消息用于 UI 判断创建授权需求。
+        str_error = f"missing memory path: {str_missing}"  # 缺失路径授权诊断
+
+        # 避免与已有完全相同诊断重复。
+        if str_error not in list_errors:
+
+            # 保留路径发现顺序追加错误。
+            list_errors.append(str_error)
+
+    # 禁用合同和缺失资产都需要用户授权初始化。
+    bool_disabled = not bool(dict_contract.get("enabled"))  # memory 合同禁用标志
+
+    # 任一条件成立都禁止无授权地初始化项目资产。
+    bool_requires_authorization = bool(bool_disabled or list_missing)  # 初始化授权需求
+
+    # 建议命令包含明确的 confirm-create 安全开关。
+    str_command = (
+        "python skills/agents-md-generator/scripts/python/docs/manage_docs.py "
+        "memory-init <project> --confirm-create"
+    )  # memory 初始化授权命令
+
+    # 返回 UI 和 CLI 共同消费的稳定门禁字段。
     return {
         "project": str(project),
         "ok": not list_errors and not bool_requires_authorization,
@@ -485,198 +915,298 @@ def memory_gate(project: Path) -> dict[str, Any]:
         "missing": list_missing,
         "checked": dict_verify.get("checked", []),
         "requires_user_authorization": bool_requires_authorization,
-        "recommended_authorization_command": str_command if bool_requires_authorization else "",
+        "recommended_authorization_command": (
+            str_command if bool_requires_authorization else ""
+        ),
         "errors": list_errors,
     }
 
-# 定义 sanitize_memory_text 的memory 管理处理入口。
+# Memory 长期文本在写入前统一替换三类敏感内容。
 def sanitize_memory_text(text: str) -> str:
+    """清理 memory 文本中的凭据、私钥和本地路径。
 
-    # 整理 sanitize_memory_text 需要的 sanitized 记忆信息。
-    sanitized = SECRET_RE.sub(lambda match: f"{match.group(1)}=<REDACTED_SECRET>", text)  # 记忆库记录检索流程输入值
+    Args:
+        text: 待清理的原始文本。
 
-    # 整理 sanitize_memory_text 需要的 sanitized 记忆信息。
-    sanitized = PRIVATE_KEY_RE.sub("<REDACTED_PRIVATE_KEY>", sanitized)  # 记忆库记录检索流程输入值
+    Returns:
+        使用类型化占位符替换敏感内容后的文本。
+    """
 
-    # 整理 sanitize_memory_text 需要的 sanitized 记忆信息。
-    sanitized = LOCAL_PRIVATE_PATH_RE.sub("<REDACTED_LOCAL_PATH>", sanitized)  # 记忆库记录检索流程输入值
+    # 凭据赋值保留键名前缀，便于理解原始语义。
+    str_sanitized = SECRET_RE.sub(  # 替换疑似凭据赋值内容
+        lambda match: f"{match.group(1)}=<REDACTED_SECRET>",  # 保留凭据键名但隐藏值
+        text,  # 原始 memory 文本
+    )  # 已清理凭据赋值的文本
 
-    # 返回 sanitize_memory_text 的 memory 载荷。
-    return sanitized
+    # 私钥正文整体替换，禁止保留任何密钥片段。
+    str_sanitized = PRIVATE_KEY_RE.sub(  # 移除完整私钥文本块
+        "<REDACTED_PRIVATE_KEY>",  # 私钥正文替换标记
+        str_sanitized,  # 已移除凭据的文本
+    )  # 已清理私钥材料的文本
 
-# 定义 compact_session_summary 的memory 管理处理入口。
-def compact_session_summary(messages: list[dict[str, str]], limit: int = 700) -> str:
+    # 本地用户路径替换为类型化占位符。
+    str_sanitized = LOCAL_PRIVATE_PATH_RE.sub(  # 隐去本地用户目录路径
+        "<REDACTED_LOCAL_PATH>",  # 本地路径替换标记
+        str_sanitized,  # 已移除私钥的文本
+    )  # 已清理本地路径的文本
 
-    # 校验 compact_session_summary 的 memory 分支条件。
+    # 返回可安全写入长期 memory 的文本。
+    return str_sanitized
+
+# 会话摘要只保留前十条可读消息并限制总长度。
+def compact_session_summary(
+    messages: list[dict[str, str]],
+    limit: int = 700,
+) -> str:
+    """把 Codex 会话消息压缩为安全的单行摘要。
+
+    Args:
+        messages: 按时间排序的用户和助手消息。
+        limit: 摘要最大字符数。
+
+    Returns:
+        已清理敏感文本并截断的单行摘要。
+    """
+
+    # 无可读消息时写入明确占位说明。
     if not messages:
 
-        # 返回 compact_session_summary 的 memory 载荷。
+        # 占位内容区分空会话与读取失败。
         return "No user or assistant message content was available in this Codex session."
 
-    # 汇总 parts，作为记忆库读写和压缩候选清单。
-    list_parts: list[str] = []  # 记忆库记录检索流程输入值
+    # 每条消息转换为角色前缀的单行片段。
+    list_parts: list[str] = []  # 会话摘要消息片段
 
-    # 逐项检查 compact_session_summary 记忆候选。
-    for row in messages[:10]:
+    # 最多处理前十条消息以限制摘要成本和长度。
+    for dict_row in messages[:10]:
 
-        # 整理 compact_session_summary 需要的 role 记忆信息。
-        role = "User" if row.get("role") == "user" else "Assistant"  # 记忆库记录检索流程输入值
+        # 非用户角色统一按助手消息显示。
+        str_role = "User" if dict_row.get("role") == "user" else "Assistant"  # 消息角色标签
 
-        # 整理 compact_session_summary 需要的 message 记忆信息。
-        message = " ".join(str(row.get("message", "")).split())  # 记忆库记录检索流程输入值
+        # 折叠原始消息中的换行和连续空白。
+        str_message = " ".join(  # 折叠当前消息中的空白字符
+            str(dict_row.get("message", "")).split()  # 当前消息的空白分词
+        )  # 单行消息文本
 
-        # 校验 compact_session_summary 的 memory 分支条件。
-        if not message:
+        # 空消息不占用摘要配额。
+        if not str_message:
 
-            # 分隔 compact_session_summary 的控制流边界。
+            # 继续扫描后续可读消息。
             continue
 
-        # 追加 compact_session_summary 的 memory 诊断。
-        list_parts.append(f"{role}: {message}")
+        # 角色标签保留对话归属信息。
+        list_parts.append(f"{str_role}: {str_message}")
 
-    # 整理 compact_session_summary 需要的 summary 记忆信息。
-    str_summary = sanitize_memory_text(" | ".join(list_parts))  # 记忆库记录检索流程输入值
+    # 拼接后统一执行敏感信息清理。
+    str_summary = sanitize_memory_text(" | ".join(list_parts))  # 安全会话摘要
 
-    # 返回 compact_session_summary 的 memory 载荷。
+    # 字符上限在清理后应用，避免截断占位符。
     return str_summary[:limit].rstrip()
 
-# 定义 bootstrap_sessions 的memory 管理处理入口。
+# 单个历史会话先转换为临时输入，再通过统一写入入口持久化。
+def write_bootstrap_session(
+    project: Path,
+    dict_session: dict[str, Any],
+    int_sequence: int,
+) -> dict[str, Any]:
+    """把一个匹配会话写入项目 memory。
+
+    Args:
+        project: 项目根目录。
+        dict_session: 匹配到的 Codex 会话元数据。
+        int_sequence: 本次写入使用的全局顺序号。
+
+    Returns:
+        Memory 写入结果以及用于更新引导状态的会话记录。
+    """
+
+    # 会话标识同时用于来源引用和临时文件隔离。
+    str_session_id = str(dict_session.get("id", "")).strip()  # Codex 会话标识
+
+    # 会话文件只读取有限消息，防止历史引导生成过大的摘要。
+    path_session = Path(str(dict_session.get("path", "")))  # Codex 会话文件
+
+    # 消息提取上限约束单次引导的输入规模。
+    list_messages = session_message_rows(path_session, limit=24)  # 会话消息记录
+
+    # 摘要在进入数据库前完成敏感信息清理和长度限制。
+    str_summary = compact_session_summary(list_messages)  # 可持久化会话摘要
+
+    # 临时输入沿用 write_memory 的公开数据合同。
+    dict_input_data = {  # Memory 写入载荷
+        "kind": "codex-session",  # 会话历史条目类型
+        "title": f"Codex session {str_session_id}",  # 可检索会话标题
+        "summary": str_summary,  # 已清理敏感信息的会话摘要
+        "source_path": "",  # 会话来源使用匿名 source_ref 而非本地路径
+        "source_ref": f"codex-session:{str_session_id}",  # 匿名会话来源引用
+        "source_timestamp": str(dict_session.get("timestamp", "")),  # 会话来源时间戳
+        "sequence": int_sequence,  # 当前会话的全局历史序号
+        "tags": ["codex-session", "history", "memory-bootstrap"],  # 历史引导检索标签
+        "sensitivity": "normal",  # 历史会话默认敏感级别
+        "created_at": str(dict_session.get("timestamp", "")) or now_iso(),  # 原会话创建时间
+        "updated_at": now_iso(),  # 本次历史引导写入时间
+    }  # 符合通用 write_memory 合同的会话载荷
+
+    # 每个会话使用独立临时文件，避免覆盖其他未完成写入。
+    path_temp = project / ".agents" / f"memory-session-{str_session_id}.json"  # 临时输入文件
+
+    # 临时目录可能尚未由其他治理命令创建。
+    path_temp.parent.mkdir(exist_ok=True)
+
+    # JSON 文件作为通用写入入口的稳定交换格式。
+    path_temp.write_text(
+        json.dumps(dict_input_data, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+    # 数据库和事件日志由统一写入入口保持一致。
+    dict_result = write_memory(project, path_temp)  # Memory 写入结果
+
+    # 临时载荷不属于仓库事实，写入完成后尽力删除。
+    try:
+
+        # 写入完成后移除仅供桥接使用的 JSON 文件。
+        path_temp.unlink()
+
+    # Windows 文件占用不应覆盖已经成功的 memory 写入结果。
+    except OSError:
+
+        # 清理失败留给后续会话治理统一处理。
+        pass
+
+    # 状态记录使用哈希而不暴露工作站上的绝对会话路径。
+    dict_session_record = {  # 已处理会话状态
+        "id": str_session_id,  # 已完成引导的会话标识
+        "timestamp": str(dict_session.get("timestamp", "")),  # 原始会话时间
+        "path_hash": hashlib.sha256(str(dict_session.get("path", "")).encode("utf-8")).hexdigest(),  # 隐去绝对路径的指纹
+        "source_hash": file_hash(path_session),  # 会话文件内容完整性指纹
+        "sequence": int_sequence,  # Bootstrap 状态中的全局历史序号
+    }  # 不含绝对路径的已处理会话证据
+
+    # 调用方同时需要写入结果和状态记录来决定是否继续。
+    return {"result": dict_result, "session_record": dict_session_record}
+
+# 历史引导只处理当前项目精确工作目录匹配且尚未记录的会话。
 def bootstrap_sessions(project: Path) -> dict[str, Any]:
+    """按时间顺序把当前项目的 Codex 历史会话引导进 memory。
 
-    # 保存 init result 映射，维持 bootstrap_sessions 的字段关系。
-    dict_init_result = init_memory(project)  # 记忆库记录检索流程输入值
+    Args:
+        project: 项目根目录。
 
-    # 校验 bootstrap_sessions 的 memory 分支条件。
+    Returns:
+        匹配数量、成功写入会话和压缩结果组成的报告。
+    """
+
+    # 引导前先保证 memory 存储结构可用。
+    dict_init_result = init_memory(project)  # 历史会话引导前的初始化结果
+
+    # 初始化失败时不得创建部分引导状态。
     if dict_init_result.get("errors"):
 
-        # 返回 bootstrap_sessions 的 memory 载荷。
-        return {"project": str(project), "processed": 0, "processed_session_ids": [], "errors": list(dict_init_result["errors"])}
-
-    # 汇总 sessions，作为记忆库读写和压缩候选清单。
-    sessions = sorted(matched_codex_sessions(project), key=lambda item: (str(item.get("timestamp", "")), str(item.get("id", ""))))  # 记忆库记录检索流程输入值
-
-    # 保存 state 映射，维持 bootstrap_sessions 的字段关系。
-    dict_state = bootstrap_state(project)  # 记忆库记录检索流程输入值
-
-    # 整理 bootstrap_sessions 需要的 processed existing 记忆信息。
-    processed_existing = {  # 记忆库记录检索流程输入值
-        str(item.get("id", "")).strip()  # 记忆库记录检索流程输入值
-        for item in dict_state.get("processed_sessions", [])  # 记忆库记录检索流程输入值
-        if isinstance(item, dict) and str(item.get("id", "")).strip()  # 记忆库记录检索流程输入值
-    }
-
-    # 汇总 processed sessions，作为记忆库读写和压缩候选清单。
-    processed_sessions = list(dict_state.get("processed_sessions", [])) if isinstance(dict_state.get("processed_sessions"), list) else []  # 记忆库记录检索流程输入值
-
-    # 汇总 written ids，作为记忆库读写和压缩候选清单。
-    list_written_ids: list[str] = []  # 记忆库记录检索流程输入值
-
-    # 整理 bootstrap_sessions 需要的 sequence 记忆信息。
-    sequence = max([int(item.get("sequence") or 0) for item in processed_sessions if isinstance(item, dict)] or [0])  # 记忆库记录检索流程输入值
-
-    # 逐项检查 bootstrap_sessions 记忆候选。
-    for session in sessions:
-
-        # 整理 bootstrap_sessions 需要的 session id 记忆信息。
-        session_id = str(session.get("id", "")).strip()  # 记忆库记录检索流程输入值
-
-        # 校验 bootstrap_sessions 的 memory 分支条件。
-        if not session_id or session_id in processed_existing:
-
-            # 分隔 bootstrap_sessions 的控制流边界。
-            continue
-
-        # 整理 bootstrap_sessions 需要的 sequence 记忆信息。
-        sequence += 1  # 记忆库记录检索流程输入值
-
-        # 定位 path 的文件边界，供 bootstrap_sessions 后续读写校验使用。
-        path_path = Path(str(session.get("path", "")))  # 记忆库记录检索流程输入值
-
-        # 汇总 messages，作为记忆库读写和压缩候选清单。
-        messages = session_message_rows(path_path, limit=24)  # 记忆库记录检索流程输入值
-
-        # 整理 bootstrap_sessions 需要的 summary 记忆信息。
-        str_summary = compact_session_summary(messages)  # 记忆库记录检索流程输入值
-
-        # 保存 input data 映射，维持 bootstrap_sessions 的字段关系。
-        dict_input_data = {  # 记忆库记录检索流程输入值
-            "kind": "codex-session",  # 记忆库记录检索流程输入值
-            "title": f"Codex session {session_id}",  # 记忆库记录检索流程输入值
-            "summary": str_summary,  # 记忆库记录检索流程输入值
-            "source_path": "",  # 记忆库记录检索流程输入值
-            "source_ref": f"codex-session:{session_id}",  # 记忆库记录检索流程输入值
-            "source_timestamp": str(session.get("timestamp", "")),  # 记忆库记录检索流程输入值
-            "sequence": sequence,  # 记忆库记录检索流程输入值
-            "tags": ["codex-session", "history", "memory-bootstrap"],  # 记忆库记录检索流程输入值
-            "sensitivity": "normal",  # 记忆库记录检索流程输入值
-            "created_at": str(session.get("timestamp", "")) or now_iso(),  # 记忆库记录检索流程输入值
-            "updated_at": now_iso(),  # 记忆库记录检索流程输入值
+        # 失败报告保留稳定字段，便于 CLI 消费。
+        return {
+            "project": str(project),
+            "processed": 0,
+            "processed_session_ids": [],
+            "errors": list(dict_init_result["errors"]),
         }
 
-        # 定位 temp path 的文件边界，供 bootstrap_sessions 后续读写校验使用。
-        temp_path = project / ".agents" / f"memory-session-{session_id}.json"  # 记忆库记录检索流程输入值
+    # 稳定排序确保相同输入每次得到相同序号。
+    list_sessions = sorted(  # 按时间和会话标识固定历史处理顺序
+        matched_codex_sessions(project),  # 精确工作目录匹配会话
+        key=lambda item: (str(item.get("timestamp", "")), str(item.get("id", ""))),  # 稳定排序键
+    )
 
-        # 调用 mkdir 处理 bootstrap_sessions。
-        temp_path.parent.mkdir(exist_ok=True)
+    # 已持久化状态用于实现可重复执行。
+    dict_state = bootstrap_state(project)  # 历史引导状态
 
-        # 调用 write_text 处理 bootstrap_sessions。
-        temp_path.write_text(json.dumps(dict_input_data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    # 非列表旧状态按空集合处理，避免传播损坏结构。
+    list_processed_sessions = (
+        list(dict_state.get("processed_sessions", []))  # 复制既有状态记录
+        if isinstance(dict_state.get("processed_sessions"), list)  # 只接受列表状态
+        else []  # 损坏或旧格式状态按空记录处理
+    )  # 已处理会话状态列表
 
-        # 保存 result 映射，维持 bootstrap_sessions 的字段关系。
-        dict_result = write_memory(project, temp_path)  # 记忆库记录检索流程输入值
+    # 标识集合用于常量时间判断会话是否已经导入。
+    set_processed_ids = {
+        str(item.get("id", "")).strip()  # 状态条目中的会话标识
+        for item in list_processed_sessions  # 已处理状态中的结构化条目
+        if isinstance(item, dict) and str(item.get("id", "")).strip()  # 过滤无效状态项
+    }  # 已处理会话标识集合
 
-        # 保护 bootstrap_sessions 中允许失败的外部访问。
-        try:
+    # 本轮列表只记录新成功写入的会话。
+    list_written_ids: list[str] = []  # 本次成功写入的会话标识
 
-            # 调用 unlink 处理 bootstrap_sessions。
-            temp_path.unlink()
-        except OSError:
-            pass
+    # 新序号从既有状态中的最大值继续递增。
+    int_sequence = max(  # 从历史最大序号继续分配
+        [int(item.get("sequence") or 0) for item in list_processed_sessions if isinstance(item, dict)] or [0]  # 已用序号
+    )  # 当前最大顺序号
 
-        # 校验 bootstrap_sessions 的 memory 分支条件。
+    # 新会话逐个写入，任一失败都保留已成功结果并立即停止。
+    for dict_session in list_sessions:
+
+        # 当前标识决定跳过与写入状态更新。
+        str_session_id = str(dict_session.get("id", "")).strip()  # 当前会话标识
+
+        # 缺失标识或已处理会话不应重复写入。
+        if not str_session_id or str_session_id in set_processed_ids:
+
+            # 跳过不会推进顺序号或改变状态文件。
+            continue
+
+        # 每个待写入会话占用一个连续顺序号。
+        int_sequence += 1  # 当前新会话占用下一序号
+
+        # 单会话 helper 隔离临时文件生命周期和写入载荷构造。
+        dict_written = write_bootstrap_session(project, dict_session, int_sequence)  # 单会话写入报告
+
+        # 内层结果用于判断当前会话是否真正写入成功。
+        dict_result = dict_written["result"]  # 当前历史会话的写入状态
+
+        # 写入失败时不把当前会话登记为已处理。
         if dict_result.get("errors"):
 
-            # 返回 bootstrap_sessions 的 memory 载荷。
-            return {"project": str(project), "processed": len(list_written_ids), "processed_session_ids": list_written_ids, "errors": dict_result["errors"]}
-
-        # 追加 bootstrap_sessions 的 memory 诊断。
-        processed_sessions.append(
-            {
-                "id": session_id,
-                "timestamp": str(session.get("timestamp", "")),
-                "path_hash": hashlib.sha256(str(session.get("path", "")).encode("utf-8")).hexdigest(),
-                "source_hash": file_hash(path_path),
-                "sequence": sequence,
+            # 返回本次已经完成的会话，支持后续安全续跑。
+            return {
+                "project": str(project),
+                "processed": len(list_written_ids),
+                "processed_session_ids": list_written_ids,
+                "errors": dict_result["errors"],
             }
-        )
 
-        # 追加 bootstrap_sessions 的 memory 诊断。
-        list_written_ids.append(session_id)
+        # 成功记录进入持久化 bootstrap 状态。
+        list_processed_sessions.append(dict_written["session_record"])
 
-    # 保存 state 映射，维持 bootstrap_sessions 的字段关系。
-    dict_state = {  # 记忆库记录检索流程输入值
-        "generated_at": now_iso(),  # 记忆库记录检索流程输入值
-        "match_scope": "exact-cwd",  # 记忆库记录检索流程输入值
-        "matched_session_count": len(sessions),  # 记忆库记录检索流程输入值
-        "processed_sessions": processed_sessions,  # 记忆库记录检索流程输入值
-    }
+        # 本轮结果单独保留，供 CLI 报告增量。
+        list_written_ids.append(str_session_id)
 
-    # 汇总 paths，作为记忆库读写和压缩候选清单。
-    dict_paths = memory_paths(project)  # 记忆库记录检索流程输入值
+    # 完整状态在本轮写入结束后一次性落盘。
+    dict_new_state = {  # 新历史引导状态
+        "generated_at": now_iso(),  # Bootstrap 状态生成时间
+        "match_scope": "exact-cwd",  # 会话匹配边界
+        "matched_session_count": len(list_sessions),  # 本次发现的精确目录会话数
+        "processed_sessions": list_processed_sessions,  # 历史与本轮已处理会话记录
+    }  # 覆盖全部历史与本轮会话的引导状态
 
-    # 调用 mkdir 处理 bootstrap_sessions。
+    # 路径映射定位 bootstrap 状态与压缩摘要输出。
+    dict_paths = memory_paths(project)  # Bootstrap 状态持久化路径集合
+
+    # 状态父目录在首次引导时可能尚不存在。
     dict_paths["bootstrap_state"].parent.mkdir(parents=True, exist_ok=True)
 
-    # 调用 write_text 处理 bootstrap_sessions。
-    dict_paths["bootstrap_state"].write_text(json.dumps(dict_state, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    # 状态文件采用稳定键排序以减少无意义 diff。
+    dict_paths["bootstrap_state"].write_text(
+        json.dumps(dict_new_state, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
 
-    # 汇总 compress，作为记忆库读写和压缩候选清单。
-    dict_compress = compress_memory(project)  # 记忆库记录检索流程输入值
+    # 引导完成后同步重建人类可读摘要。
+    dict_compress = compress_memory(project)  # Memory 压缩报告
 
-    # 返回 bootstrap_sessions 的 memory 载荷。
+    # 成功报告同时给出状态文件证据和压缩错误。
     return {
         "project": str(project),
-        "matched_session_count": len(sessions),
+        "matched_session_count": len(list_sessions),
         "processed": len(list_written_ids),
         "processed_session_ids": list_written_ids,
         "bootstrap_state": rel(project, dict_paths["bootstrap_state"]),
@@ -684,103 +1214,156 @@ def bootstrap_sessions(project: Path) -> dict[str, Any]:
         "errors": dict_compress.get("errors", []),
     }
 
-# 定义 memory_read_recommendation 的memory 管理处理入口。
+# 推荐信息只在项目声明了有效 memory 合同时出现。
 def memory_read_recommendation(project: Path, query: str = "current task") -> dict[str, Any] | None:
+    """生成当前项目的 memory 读取建议。
 
-    # 保存 contract 映射，维持 memory_read_recommendation 的字段关系。
-    dict_contract = memory_contract(project)  # 记忆库记录检索流程输入值
+    Args:
+        project: 项目根目录。
+        query: 建议命令使用的默认查询。
 
-    # 校验 memory_read_recommendation 的 memory 分支条件。
+    Returns:
+        有效合同时返回读取建议，否则返回 ``None``。
+    """
+
+    # 合同同时提供读取策略和指南路径。
+    dict_contract = memory_contract(project)  # 读取建议所依据的 memory 合同
+
+    # 无效合同不能生成看似可执行的建议。
     if memory_contract_errors(dict_contract):
 
-        # 返回 memory_read_recommendation 的 memory 载荷。
+        # 缺失有效策略时调用方不应展示 memory 命令。
         return None
 
-    # 返回 memory_read_recommendation 的 memory 载荷。
+    # 命令保持公开 CLI 的稳定参数格式。
     return {
         "enabled": True,
         "policy": dict_contract["read_policy"],
         "guide": dict_contract["guide"],
-        "command": f"python skills/agents-md-generator/scripts/python/docs/manage_docs.py memory-read <project> --query \"{query}\" --limit 5",
+        "command": (
+            "python skills/agents-md-generator/scripts/python/docs/manage_docs.py "
+            f'memory-read <project> --query "{query}" --limit 5'
+        ),
     }
 
-# 定义 handoff_summary 的memory 管理处理入口。
+# Handoff 摘要兼容当前字段名和历史别名，避免旧会话丢失语义。
 def handoff_summary(data: dict[str, Any], count: int) -> str:
+    """把 handoff 结构压缩为可检索的单行摘要。
 
-    # 汇总 parts，作为记忆库读写和压缩候选清单。
-    list_parts = [  # 记忆库记录检索流程输入值
-        f"Handoff #{count}.",  # handoff 记忆摘要标题句
-        "Plan: " + list_lines(data.get("original_plan") or data.get("plan")).replace("\n", " "),  # 记忆库记录检索流程输入值
-        "Current step: " + list_lines(data.get("current_step")).replace("\n", " "),  # 记忆库记录检索流程输入值
-        "Resolved: " + list_lines(data.get("resolved") or data.get("resolved_problems")).replace("\n", " "),  # 记忆库记录检索流程输入值
-        "Remaining: " + list_lines(data.get("remaining") or data.get("remaining_problems")).replace("\n", " "),  # 记忆库记录检索流程输入值
-        "Next: " + list_lines(data.get("next") or data.get("next_work")).replace("\n", " "),  # 记忆库记录检索流程输入值
-        "Verification: " + list_lines(data.get("verification") or data.get("verification_evidence")).replace("\n", " "),  # 记忆库记录检索流程输入值
-    ]
+    Args:
+        data: Handoff 输入数据。
+        count: Handoff 顺序号。
 
-    # 返回 handoff_summary 的 memory 载荷。
-    return " ".join(part for part in list_parts if part.strip()).strip()
+    Returns:
+        保留计划、进度、问题和验证证据的单行文本。
+    """
 
-# 定义 write_handoff_memory 的memory 管理处理入口。
-def write_handoff_memory(project: Path, data: dict[str, Any], count: int, handoff_path: Path) -> dict[str, Any] | None:
+    # 每个分段优先读取当前字段，再兼容历史字段别名。
+    list_parts = [  # Handoff 摘要分段
+        f"Handoff #{count}.",  # Handoff 顺序标题
+        "Plan: "  # 原始计划分段前缀
+        + list_lines(data.get("original_plan_and_steps") or data.get("original_plan") or data.get("plan")).replace(  # 兼容计划字段别名
+            "\n",  # 原计划中的换行符
+            " ",  # 单行摘要使用的空格替换值
+        ),
+        "Current step: " + list_lines(data.get("current_step")).replace("\n", " "),  # 当前执行位置
+        "Resolved: " + list_lines(data.get("resolved") or data.get("resolved_problems")).replace("\n", " "),  # 已解决事项
+        "Remaining: " + list_lines(data.get("remaining") or data.get("remaining_problems")).replace("\n", " "),  # 未解决事项
+        "Next: " + list_lines(data.get("next") or data.get("next_work")).replace("\n", " "),  # 后续工作
+        "Verification: "  # 验证证据分段前缀
+        + list_lines(data.get("verification") or data.get("verification_evidence")).replace("\n", " "),  # 验证证据
+    ]  # 兼容新旧 handoff 字段的可检索文本分段
 
-    # 校验 write_handoff_memory 的 memory 分支条件。
+    # 空分段不应在最终摘要中产生多余空格。
+    return " ".join(str_part for str_part in list_parts if str_part.strip()).strip()
+
+# Handoff 写入复用通用 memory 入口，并按事件阈值触发摘要压缩。
+def write_handoff_memory(
+    project: Path,
+    data: dict[str, Any],
+    count: int,
+    handoff_path: Path,
+) -> dict[str, Any] | None:
+    """把已生成的 handoff 记录写入项目 memory。
+
+    Args:
+        project: 项目根目录。
+        data: Handoff 输入数据。
+        count: Handoff 顺序号。
+        handoff_path: 已生成的 handoff 文件路径。
+
+    Returns:
+        写入报告；项目未启用 memory 时返回 ``None``。
+    """
+
+    # 未启用 memory 的项目保持 handoff 流程无副作用。
     if not memory_enabled(project):
 
-        # 返回 write_handoff_memory 的 memory 载荷。
+        # None 明确表示项目策略选择不写入 memory。
         return None
 
-    # 调用 init_memory 处理 write_handoff_memory。
+    # 初始化确保统一写入入口所需的数据库和日志存在。
     init_memory(project)
 
-    # 保存 temp input 映射，维持 write_handoff_memory 的字段关系。
-    dict_temp_input = {  # 记忆库记录检索流程输入值
-        "kind": "handoff",  # 记忆库记录检索流程输入值
-        "title": f"Handoff #{count}",  # handoff 记忆条目标题
-        "summary": handoff_summary(data, count),  # 记忆库记录检索流程输入值
-        "source_path": rel(project, handoff_path),  # 记忆库记录检索流程输入值
-        "source_hash": file_hash(handoff_path),  # 记忆库记录检索流程输入值
-        "tags": ["handoff", "session"],  # 记忆库记录检索流程输入值
-        "sensitivity": "normal",  # 记忆库记录检索流程输入值
-    }
+    # 临时载荷引用真实 handoff 文件及其内容哈希。
+    dict_temp_input = {  # 引用 handoff 文件与哈希的 memory 载荷
+        "kind": "handoff",  # Handoff memory 条目类型
+        "title": f"Handoff #{count}",  # 可检索 handoff 标题
+        "summary": handoff_summary(data, count),  # 单行可检索 handoff 摘要
+        "source_path": rel(project, handoff_path),  # 项目相对 handoff 路径
+        "source_hash": file_hash(handoff_path),  # Handoff 文件内容完整性指纹
+        "tags": ["handoff", "session"],  # Handoff 会话检索标签
+        "sensitivity": "normal",  # Handoff 默认敏感级别
+    }  # 指向真实 handoff 文件及哈希的写入载荷
 
-    # 定位 temp path 的文件边界，供 write_handoff_memory 后续读写校验使用。
-    temp_path = project / ".agents" / "memory-handoff-input.json"  # 记忆库记录检索流程输入值
+    # 固定临时路径只在当前同步调用范围内使用。
+    path_temp = project / ".agents" / "memory-handoff-input.json"  # Handoff 专用交换文件
 
-    # 调用 mkdir 处理 write_handoff_memory。
-    temp_path.parent.mkdir(exist_ok=True)
+    # 首次 handoff 前确保治理临时目录存在。
+    path_temp.parent.mkdir(exist_ok=True)
 
-    # 调用 write_text 处理 write_handoff_memory。
-    temp_path.write_text(json.dumps(dict_temp_input, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    # 通用入口从 UTF-8 JSON 读取 handoff memory 条目。
+    path_temp.write_text(
+        json.dumps(dict_temp_input, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
 
-    # 保存 result 映射，维持 write_handoff_memory 的字段关系。
-    dict_result = write_memory(project, temp_path)  # 记忆库记录检索流程输入值
+    # 通用入口负责同步数据库、搜索索引和事件日志。
+    dict_result = write_memory(project, path_temp)  # Handoff memory 写入报告
 
-    # 保护 write_handoff_memory 中允许失败的外部访问。
+    # 临时输入不是项目交付物，写入后尽力删除。
     try:
 
-        # 调用 unlink 处理 write_handoff_memory。
-        temp_path.unlink()
+        # 成功写入后移除一次性交换文件。
+        path_temp.unlink()
+
+    # 文件锁等清理异常不应伪装成数据库写入失败。
     except OSError:
+
+        # 残留文件由后续治理清理流程识别。
         pass
 
-    # 汇总 paths，作为记忆库读写和压缩候选清单。
-    dict_paths = memory_paths(project)  # 记忆库记录检索流程输入值
+    # 事件数决定是否达到合同声明的压缩周期。
+    dict_paths = memory_paths(project)  # 事件计数所需日志路径集合
 
-    # 整理 write_handoff_memory 需要的 event count 记忆信息。
-    event_count = sum(1 for line in dict_paths["events"].read_text(encoding="utf-8", errors="ignore").splitlines() if line.strip())  # 记忆库记录检索流程输入值
+    # 非空 JSONL 行数就是当前压缩阈值计数基准。
+    int_event_count = sum(  # 统计事件日志中的非空记录
+        1  # 每个非空事件贡献一次计数
+        for str_line in dict_paths["events"].read_text(encoding="utf-8", errors="ignore").splitlines()  # 事件日志行
+        if str_line.strip()  # 空白行不计入事件数量
+    )  # 当前事件总数
 
-    # 整理 write_handoff_memory 需要的 中间载荷 记忆信息。
-    dict_result["event_count"] = event_count  # 记忆库记录检索流程输入值
+    # 写入报告附带事件计数，支持调用方展示压缩边界。
+    dict_result["event_count"] = int_event_count  # 暴露压缩周期计数证据
 
-    # 整理 write_handoff_memory 需要的 threshold 记忆信息。
-    int_threshold = int(memory_contract(project).get("compress_after_events", 20) or 20)  # 记忆库记录检索流程输入值
+    # 合同缺省值保持与 memory 初始化配置一致。
+    int_threshold = int(memory_contract(project).get("compress_after_events", 20) or 20)  # 压缩事件阈值
 
-    # 校验 write_handoff_memory 的 memory 分支条件。
-    if int_threshold > 0 and event_count % int_threshold == 0:
+    # 只在正阈值的整数倍触发压缩，避免每次 handoff 重写摘要。
+    if int_threshold > 0 and int_event_count % int_threshold == 0:
 
-        # 整理 write_handoff_memory 需要的 中间载荷 记忆信息。
-        dict_result["compression"] = compress_memory(project)  # 记忆库记录检索流程输入值
+        # 压缩证据与本次 handoff 写入结果一并返回。
+        dict_result["compression"] = compress_memory(project)  # 达阈值后的压缩报告
 
-    # 返回 write_handoff_memory 的 memory 载荷。
+    # 返回写入证据以及可选的压缩报告。
     return dict_result

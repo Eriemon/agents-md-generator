@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v1.4.1-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v1.4.6-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -48,13 +48,14 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 - Compatibility shim generation for `CLAUDE.md` and `GEMINI.md` when requested.
 - Verification, audit, automated review governance, skill-effectiveness evals, and aggregate confidence checks for release readiness.
 
-## What's New In v1.4.1
+## What's New In v1.4.6
 
-- Moves the governance runtime from flat `scripts/*.py` files into `scripts/python/<domain>/...`, separating common, detect, design, docs, dirs, release, render, and verify entry points.
-- Retires evolution and `docs/experience` governance paths. Long-term project context now belongs in `docs/memory`, with memory gate, init, bootstrap, read, and verify flows.
-- Extends the default-language rule to Plan Mode so generated `<proposed_plan>` content follows the configured project language unless the user explicitly switches languages.
-- Strengthens lightweight task entry with `task_rating_gate.py`, reuse-first guidance, language-specific coding skill routing, script-output policy checks, and config-backed source governance.
-- Hardens release and directory governance: external workspaces must call the installed `agents-md-generator` runtime instead of vendoring these scripts, release packages reject local validation artifacts, and GitHub/package publishing requires sanitized package evidence.
+- Keeps the v1.4.1 runtime split and extends it with dedicated worktree, remote-policy, release-installation, command-contract, root-contract, scanning, and runtime-evaluation modules.
+- Makes Python and script-family work pass a dual readable-skill preflight, then preserves final ownership by target language; generated roots and verification reject weakened routing contracts.
+- Blocks additional Git worktrees, `git config core.worktree` redirection, and polluted `.worktrees`-style containers so governance changes stay in the current folder and local branches.
+- Strengthens versioned skill installation with separate release-manifest, sanitization, repository-validation, and rollback-copy helpers, including receipt-backed hashes, content-policy checks, and safe replacement behavior.
+- Expands runtime eval coverage for project, workspace, policy, release, language-routing, token-usage, source-governance, and release-content regressions while keeping governed `evals/` installable and local tests excluded.
+- Adds explicit remote conda-environment and runtime-archive policies, tightens command/path contracts, and keeps Plan Mode language, script-output, and global-baseline rules synchronized across templates and validators.
 
 ## Skill Architecture
 
@@ -85,7 +86,7 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 | --- | --- |
 | `SKILL.md` | Agent-facing routing, workflow, constraints, and verification rules. |
 | `agents/openai.yaml` | Skill metadata used by the host UI. |
-| `scripts/python/` | Deterministic inspection, interview, rendering, docs-governance, directory-governance, verification, audit, and evaluation helpers. |
+| `scripts/python/` | Deterministic inspection, interview, rendering, docs-governance, directory-governance, release-installation, verification, audit, and evaluation helpers. |
 | `assets/templates/` | Bundled root and scoped `AGENTS.md` templates used by the current release flow. |
 | `evals/` | Repo-local skill-effectiveness cases and release-safe evaluation data used by the governance tooling. |
 | `references/` | Script guide, review checklist, question bank, capability notes, and AGENTS guidance. |
@@ -184,7 +185,7 @@ They are affiliated with the Heterogeneous Intelligence and Quantum Computing La
 
 ## Contact
 
-For questions, collaboration, or academic use, contact: [erie@seu.edu.cn](mailto:erie@seu.edu.cn).
+For questions, collaboration, or academic use, contact: `<REDACTED_EMAIL>`.
 
 ## Citation
 
@@ -195,7 +196,7 @@ If this skill helps your research, teaching, or engineering workflow, please cit
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {1.4.1},
+  version      = {1.4.6},
   date         = {2026-06-27},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},

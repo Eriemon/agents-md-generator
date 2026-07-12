@@ -9,7 +9,7 @@ Use external AGENTS.md generator projects as capability references, not as code 
 | Project detection | `inspect_project.py` detects languages, framework, package manager, CI, AI configs, files, and directories |
 | Scope detection | `detect_scopes.py` proposes scoped AGENTS.md targets |
 | Command extraction | `extract_commands.py` reads Makefile, package.json, pyproject.toml, composer.json, go.mod, and workflow run lines |
-| Documentation extraction | `extract_context.py` collects README, docs, ADRs, architecture, ownership, utilities, and golden samples |
+| Documentation extraction | `extract_context.py` collects docs, ADRs, architecture, ownership, utilities, and golden samples |
 | Platform and IDE extraction | `extract_context.py` collects platform files, dev-environment files, editor settings, and quality configs |
 | Hook detection | `extract_context.py` collects Lefthook, Husky, CaptainHook, pre-commit, and repo hook files |
 | GitHub settings | `extract_context.py` collects CODEOWNERS, Copilot instructions, dependency configs, and rulesets |

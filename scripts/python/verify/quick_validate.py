@@ -1,147 +1,282 @@
+"""运行 agents-md-generator 自检与已安装 skill-creator 快速验证器。"""
+
+# 延迟注解解析，保持直接脚本执行兼容。
 from __future__ import annotations
 
-# 分类脚本可从任意任务目录直接执行，这里补齐兄弟任务模块路径。
-import sys
-from pathlib import Path
-
-_scripts_python_root = Path(__file__).resolve().parents[1]
-for _task_dir in _scripts_python_root.iterdir():
-    if _task_dir.is_dir():
-        _task_path = str(_task_dir)
-        if _task_path not in sys.path:
-            sys.path.insert(0, _task_path)
-
-# 导入 脚本治理 所需的依赖模块。
+# 标准库负责命令行、模块加载、环境、正则、子进程和路径处理。
 import argparse
+import importlib
 import os
+from pathlib import Path
 import re
 import subprocess
 import sys
-from pathlib import Path
+from typing import Any
 
-# 保留 dont write bytecode 中间值，支撑 模块入口 的当前计算步骤。
-sys.dont_write_bytecode = True  # dont write bytecode 用于本步治理判断
-from agents_common import SCRIPT_TASK_BY_NAME, resolve_project
+# 旧 numbered shard 名称表示源码拆分迁移未完成。
+STALE_NUMBERED_SHARD_RE = re.compile(  # 已退役分片名称匹配器。
+    r"(?:^|[_./\\])part\d+\.py\b|eval_runtime_cases_part\d|_version_policy_part\d",  # 历史编号分片模式。
+)
 
+# 公共模块延迟加载，导入本验证器不会修改 sys.path。
+def load_common_module() -> Any:
+    """加载 agents_common 公共模块。
 
-STALE_NUMBERED_SHARD_RE = re.compile(r"(?:^|[_./\\])part\d+\.py\b|eval_runtime_cases_part\d|_version_policy_part\d")
+    参数：无。
+    返回：提供脚本登记表和项目路径校验的模块对象。
+    """
 
+    # verify 的父目录包含 common 等兄弟任务模块目录。
+    path_python_root = Path(__file__).resolve().parents[1]  # Python 任务模块共同根目录。
 
-def stale_numbered_shard_errors(skill_dir: Path) -> list[str]:
-    """检查运行时 Python 入口是否仍引用旧的 numbered shard 名称。"""
+    # 直接执行前登记所有兄弟任务目录。
+    for path_task_dir in path_python_root.iterdir():
 
-    scripts_python_root = skill_dir / "scripts" / "python"  # Python 运行时根目录
+        # 非目录成员不能参与模块搜索。
+        if not path_task_dir.is_dir():
 
-    if not scripts_python_root.is_dir():
+            # 跳过任务根中的普通文件。
+            continue
+
+        # sys.path 以字符串形式保存搜索位置。
+        str_task_dir = str(path_task_dir)  # 当前任务模块目录绝对路径。
+
+        # 已登记目录保持现有优先级。
+        if str_task_dir in sys.path:
+
+            # 继续检查其余兄弟目录。
+            continue
+
+        # 源码目录优先于环境中的同名模块。
+        sys.path.insert(0, str_task_dir)
+
+    # 路径就绪后加载共享治理事实。
+    return importlib.import_module("agents_common")
+
+# 源码扫描拒绝仍指向已退役编号分片的运行时入口。
+def stale_numbered_shard_errors(path_skill_dir: Path) -> list[str]:
+    """查找 Python 源码中的旧 numbered shard 引用。
+
+    参数：path_skill_dir 为待验证技能目录。
+    返回：每个陈旧引用对应一条相对路径诊断。
+    """
+
+    # 本门禁只检查技能包内标准 Python 运行时目录。
+    path_python_root = path_skill_dir / "scripts" / "python"  # Python 运行时根目录。
+
+    # 外部技能没有该布局时不适用本项自检。
+    if not path_python_root.is_dir():
+
+        # 空列表表示没有可检查的运行时源码。
         return []
 
-    errors: list[str] = []  # 轻量预检错误
+    # 诊断按文件排序追加，确保重复运行输出稳定。
+    list_errors: list[str] = []  # 陈旧分片引用诊断。
 
-    for path in sorted(scripts_python_root.rglob("*.py")):
-        relative_path = path.relative_to(skill_dir).as_posix()  # 技能内相对路径
-        text = path.read_text(encoding="utf-8", errors="ignore")  # Python 源码文本
+    # 所有 Python 文件都可能通过字符串或动态加载器引用旧分片。
+    for path_source in sorted(path_python_root.rglob("*.py")):
 
-        if STALE_NUMBERED_SHARD_RE.search(text):
-            errors.append(f"{relative_path}: stale numbered shard reference")
+        # 相对路径用于生成可移植诊断。
+        str_relative_path = path_source.relative_to(path_skill_dir).as_posix()  # 技能内源码路径。
 
-    return errors
+        # 容错读取允许诊断包含非标准字符的历史源码。
+        str_source_text = path_source.read_text(encoding="utf-8", errors="ignore")  # Python 源码文本。
 
+        # 仅命中明确退役命名模式时报告。
+        if STALE_NUMBERED_SHARD_RE.search(str_source_text):
 
-def registered_script_errors(skill_dir: Path) -> list[str]:
-    """确认脚本登记表中的任务分类入口都真实存在。"""
+            # 消息保留旧测试和调用方依赖的稳定正文。
+            list_errors.append(f"{str_relative_path}: stale numbered shard reference")
 
-    scripts_python_root = skill_dir / "scripts" / "python"  # Python 运行时根目录
+    # 调用方统一输出全部自检诊断。
+    return list_errors
 
-    if not scripts_python_root.is_dir():
+# 脚本登记表必须与版本包中的真实任务目录保持一致。
+def registered_script_errors(
+    path_skill_dir: Path,
+    dict_script_tasks: dict[str, str],
+) -> list[str]:
+    """检查脚本登记表中的每个入口是否存在。
+
+    参数：path_skill_dir 为技能目录；dict_script_tasks 映射脚本名到任务目录。
+    返回：缺失入口对应的稳定诊断列表。
+    """
+
+    # 发布登记项只能解析到技能包约定的 scripts/python 分类布局。
+    path_python_root = path_skill_dir / "scripts" / "python"  # 登记入口查找基准目录。
+
+    # 不采用标准运行时布局的外部技能无需执行本项检查。
+    if not path_python_root.is_dir():
+
+        # 缺少适用目录不等同于登记入口缺失。
         return []
 
-    errors: list[str] = []  # 登记一致性错误
+    # 按脚本名排序保证缺失诊断顺序稳定。
+    list_errors: list[str] = []  # 登记表与文件系统不一致项。
 
-    for script_name, task_name in sorted(SCRIPT_TASK_BY_NAME.items()):
-        script_path = scripts_python_root / task_name / script_name  # 登记脚本路径
+    # 每个登记项声明脚本应位于哪个任务子目录。
+    for str_script_name, str_task_name in sorted(dict_script_tasks.items()):
 
-        if not script_path.is_file():
-            errors.append(f"missing registered task-classified script: scripts/python/{task_name}/{script_name}")
+        # 真实文件位置由运行时根、任务名和脚本名组成。
+        path_script = path_python_root / str_task_name / str_script_name  # 登记入口预期路径。
 
-    return errors
+        # 缺失或目录对象都不能充当可执行 Python 入口。
+        if not path_script.is_file():
 
+            # 相对路径正文保持历史 quick_validate 合同。
+            list_errors.append(
+                f"missing registered task-classified script: scripts/python/{str_task_name}/{str_script_name}"
+            )
 
-def self_governance_preflight_errors(skill_dir: Path) -> list[str]:
-    """执行 skill-creator quick_validate 之前的 agents-md-generator 自检。"""
+    # 完整列表供主入口一次报告所有缺失项。
+    return list_errors
 
-    skill_path = skill_dir / "SKILL.md"  # 技能说明文件
+# agents-md-generator 自检先于通用 skill-creator 验证运行。
+def self_governance_preflight_errors(
+    path_skill_dir: Path,
+    dict_script_tasks: dict[str, str],
+) -> list[str]:
+    """执行本技能专用的轻量入口一致性检查。
 
-    if skill_dir.name != "agents-md-generator" or not skill_path.is_file():
+    参数：path_skill_dir 为技能目录；dict_script_tasks 为运行时脚本登记表。
+    返回：陈旧分片与缺失登记入口的合并诊断。
+    """
+
+    # 仅名称和 SKILL.md 同时匹配时确认目标是本技能源码或发布包。
+    path_skill_manifest = path_skill_dir / "SKILL.md"  # 技能说明文件路径。
+
+    # 外部技能只使用通用 quick_validate，不应用本仓库登记表。
+    if path_skill_dir.name != "agents-md-generator" or not path_skill_manifest.is_file():
+
+        # 非本技能目标没有专用预检错误。
         return []
 
-    return stale_numbered_shard_errors(skill_dir) + registered_script_errors(skill_dir)
-
-
-# 定义 quick_validate_path 的脚本治理处理入口。
-def quick_validate_path() -> Path:
-
-    # 返回 quick_validate_path 已整理完成的调用载荷。
-    return Path.home() / ".codex" / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py"
-
-
-# 定义 main 的脚本治理处理入口。
-def main() -> None:
-
-    # 保留 parser 中间值，支撑 main 的当前计算步骤。
-    parser = argparse.ArgumentParser(description="Run the installed skill-creator quick_validate helper.")  # parser 用于本步治理判断
-
-    # 调用 add_argument 完成 main 的当前动作。
-    parser.add_argument("skill_dir", nargs="?", default=".")
-
-    # 收集 args 条目，保持 main 的处理顺序稳定。
-    args = parser.parse_args()  # args 用于本步治理判断
-
-    # 保留 skill dir 中间值，支撑 main 的当前计算步骤。
-    skill_dir = resolve_project(args.skill_dir)  # skill dir 用于本步治理判断
-
-    # 先运行本技能自己的轻量入口治理检查，避免外部 quick_validate 漏过运行时分片退化。
-    list_preflight_errors = self_governance_preflight_errors(skill_dir)  # 预检错误列表
-
-    if list_preflight_errors:
-        for item in list_preflight_errors:
-            sys.stderr.write(f"{item}\n")
-
-        raise SystemExit(1)
-
-    # 保留 validator 中间值，支撑 main 的当前计算步骤。
-    path_validator = quick_validate_path()  # validator 用于本步治理判断
-
-    # 检查 main 的当前条件是否需要进入专门分支。
-    if not path_validator.exists():
-
-        # 抛出 main 已确认的阻断原因。
-        raise SystemExit(f"quick_validate helper not found: {path_validator}")
-
-    # 保留 result 中间值，支撑 main 的当前计算步骤。
-    command_result = subprocess.run(  # result 用于本步治理判断
-        [sys.executable, str(path_validator), str(skill_dir)],  # result 用于本步治理判断
-        cwd=skill_dir.parent,  # result 用于本步治理判断
-        text=True,  # result 用于本步治理判断
-        capture_output=True,  # result 用于本步治理判断
-        check=False,  # result 用于本步治理判断
-        env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONUTF8="1"),  # result 用于本步治理判断
+    # 两类入口退化均应在调用外部验证器之前阻断。
+    return stale_numbered_shard_errors(path_skill_dir) + registered_script_errors(
+        path_skill_dir,
+        dict_script_tasks,
     )
 
-    # 检查 main 的当前条件是否需要进入专门分支。
-    if command_result.stdout:
+# 系统 skill-creator 是通用技能结构规则的来源。
+def quick_validate_path() -> Path:
+    """定位已安装 skill-creator 的 quick_validate.py。
 
-        # 调用 write 完成 main 的当前动作。
-        sys.stdout.write(command_result.stdout)
+    参数：无。
+    返回：当前用户 Codex 主目录下的验证器路径。
+    """
 
-    # 检查 main 的当前条件是否需要进入专门分支。
-    if command_result.stderr:
+    # 系统技能使用 Codex 固定的 .system/skill-creator 安装位置。
+    return Path.home() / ".codex" / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py"
 
-        # 调用 write 完成 main 的当前动作。
-        sys.stderr.write(command_result.stderr)
+# 外部验证器输出逐行添加项目固定级别和 Kind 前缀。
+def write_prefixed_lines(str_text: str, *, bool_error: bool) -> None:
+    """把外部工具文本按行写入对应标准流。
 
-    # 抛出 main 已确认的阻断原因。
-    raise SystemExit(command_result.returncode)
+    参数：str_text 为外部输出；bool_error 决定使用 ERR 或 INFO 前缀及目标流。
+    返回：无。
+    """
 
+    # 空文本不产生额外终端行。
+    if not str_text:
 
+        # 调用方可继续处理另一个输出流。
+        return
+
+    # 错误流使用 ERR，普通流使用 INFO。
+    str_level = "ERR" if bool_error else "INFO"  # 当前输出严重级别。
+
+    # 目标流与严重级别保持一致。
+    file_stream = sys.stderr if bool_error else sys.stdout  # 当前输出目标流。
+
+    # 每个外部输出行都成为独立、可分类的项目日志。
+    for str_line in str_text.splitlines():
+
+        # 空行不携带信息，避免生成只有前缀的日志。
+        if not str_line:
+
+            # 继续处理下一条非空外部消息。
+            continue
+
+        # 固定 Python Kind 便于仓库日志分类器识别。
+        file_stream.write(f"> {str_level}: [Python] {str_line}\n")
+
+# 主入口组合专用预检、通用验证器和退出码转发。
+def main() -> None:
+    """执行 quick_validate 治理链。
+
+    参数：无；命令行可指定待验证技能目录。
+    返回：无；验证失败通过 SystemExit 返回非零状态。
+    异常：预检失败、验证器缺失或外部验证失败时抛出 SystemExit。
+    """
+
+    # 公共模块提供登记表和项目路径校验能力。
+    module_agents_common_context = load_common_module()  # AGENTS 公共治理上下文。
+
+    # 解析器只接收一个可选技能目录。
+    argument_parser = argparse.ArgumentParser(  # 快速验证命令解析器。
+        description="Run the installed skill-creator quick_validate helper.",  # CLI 帮助摘要。
+    )
+
+    # 缺省目标是当前工作目录。
+    argument_parser.add_argument("skill_dir", nargs="?", default=".")
+
+    # Namespace 保存调用者提供的技能位置。
+    namespace_args: argparse.Namespace = argument_parser.parse_args()  # 当前命令行解析结果。
+
+    # 公共路径规则拒绝不存在或非目录目标。
+    path_skill_dir: Path = module_agents_common_context.resolve_project(namespace_args.skill_dir)  # 已验证技能目录。
+
+    # 专用预检防止通用工具漏过本技能运行时退化。
+    list_preflight_errors = self_governance_preflight_errors(  # 本技能入口治理诊断。
+        path_skill_dir,  # 当前 agents-md-generator 源码或发布目录。
+        module_agents_common_context.SCRIPT_TASK_BY_NAME,  # 公共脚本任务登记表。
+    )
+
+    # 任一专用诊断都必须在调用外部验证器前阻断。
+    if list_preflight_errors:
+
+        # 所有诊断逐行写入错误流并保持稳定正文。
+        for str_error in list_preflight_errors:
+
+            # 复用外部输出写入器，为每条预检诊断添加 ERR 前缀。
+            write_prefixed_lines(str_error, bool_error=True)
+
+        # 预检失败使用通用非零状态。
+        raise SystemExit(1)
+
+    # 系统验证器路径在执行期解析，支持不同用户主目录。
+    path_validator = quick_validate_path()  # 已安装通用技能验证器路径。
+
+    # 缺少系统工具时给出可定位的阻断消息。
+    if not path_validator.exists():
+
+        # 错误正文包含期望路径，便于修复安装。
+        raise SystemExit(f"> ERR: [Python] quick_validate helper not found: {path_validator}")
+
+    # 子进程环境禁止字节码并强制 UTF-8，避免污染技能包或误解码输出。
+    dict_environment = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONUTF8="1")  # 外部验证器环境。
+
+    # 外部工具在技能父目录运行，保持其相对路径假设。
+    completed_process_validation = subprocess.run(  # 通用 quick_validate 执行结果。
+        [sys.executable, str(path_validator), str(path_skill_dir)],  # Python、验证器和技能目录参数。
+        cwd=path_skill_dir.parent,  # 通用验证器的工作目录。
+        text=True,  # 以文本方式捕获两个输出流。
+        capture_output=True,  # 先捕获再统一添加项目日志前缀。
+        check=False,  # 退出码由本入口原样转发。
+        env=dict_environment,  # 禁止缓存并启用 UTF-8 的子进程环境。
+    )
+
+    # 普通输出逐行映射为 Python INFO 日志。
+    write_prefixed_lines(completed_process_validation.stdout, bool_error=False)
+
+    # 错误输出逐行映射为 Python ERR 日志。
+    write_prefixed_lines(completed_process_validation.stderr, bool_error=True)
+
+    # 保留外部验证器退出码供自动化门禁判断。
+    raise SystemExit(completed_process_validation.returncode)
+
+# 直接执行脚本时启动验证链，模块导入保持无副作用。
 if __name__ == "__main__":
+
+    # main 负责完整预检、外部调用和退出码转发。
     main()

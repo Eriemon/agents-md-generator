@@ -1,50 +1,97 @@
 """执行 release 准备、打包、内容策略校验和发布治理检查。"""
 
-# 导入 release 管理 所需的依赖模块。
+# 延迟解析类型注解，避免运行期依赖顺序影响 shard 装载。
 from __future__ import annotations
 
-# 分类脚本可从任意任务目录直接执行，这里补齐兄弟任务模块路径。
-import sys
+# 标准库路径模型和共享基础设施共同支撑发布策略计算。
 from pathlib import Path
 
-_scripts_python_root = Path(__file__).resolve().parents[1]
-for _task_dir in _scripts_python_root.iterdir():
-    if _task_dir.is_dir():
-        _task_path = str(_task_dir)
-        if _task_path not in sys.path:
-            sys.path.insert(0, _task_path)
+# 兄弟任务模块由入口脚本预先加入搜索路径，本模块只声明 release 依赖。
+from manage_docs_shared import (
+    Any,
+    IGNORED_RUNTIME_GIT_PATHS,
+    datetime,
+    display_path,
+    docs_governance_initialized,
+)
 
-# release 治理复用文档脚本的共享 I/O、JSON、路径和输出工具，当前保持原有导入边界。
-from manage_docs_shared import *
+# 摘要、JSON 与正则能力用于构建可复核的发布证据。
+from manage_docs_shared import (
+    hashlib,
+    json,
+    re,
+)
+
+# 文件复制、进程调用和归档能力继续由共享治理模块统一导出。
+from manage_docs_shared import (
+    read_json,
+    read_skill_version,
+    resolve_project,
+    shutil,
+    subprocess,
+    zipfile,
+)
+
+# 会话与同步模块提供发布后文档治理更新能力。
 from manage_docs_scaffold_session import write_development, write_git_changelog
 from manage_docs_sync_verify import sync_root_agents, verify_docs
+
+# 源码治理报告阻止不合规 Python 进入正式发布包。
 from source_governance import (
     format_source_governance_errors,
     release_source_governance_report,
     source_governance_report,
-
-    # 分隔当前密集代码块，保留原有执行顺序。
 )
 from agents_decisions import decision_request
+
+# 内容策略同时用于生成收据和复核安装包边界。
 from release_content_policy import (
     POLICY_VERSION,
     analyze_release_content_root,
     release_content_policy_receipt,
     validate_recorded_release_content_policy,
 )
-from version_policy import parse_historical_version_tuple, parse_version_tuple, version_policy_error
 
-# 定义 run_git 的release 管理处理入口。
+# 版本策略拒绝回退、重复或格式无效的发布编号。
+from version_policy import parse_historical_version_tuple, parse_version_tuple, version_policy_error
+from git_worktree_policy import inspect_worktree_policy
+
+# 安装侧清理原语确保发布生成与安装验证使用同一算法。
+from install_release_sanitization import (
+    detect_binary_sensitive_matches,
+    is_probably_text_bytes,
+    normalize_line_endings,
+    sanitize_release_text,
+    parse_sanitization_declarations,
+    validate_against_source,
+)
+
+# Git 命令保留原始输出，供上层规则形成可解释诊断。
 def run_git(project: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
-    """在指定工作区执行 git 命令并返回完整进程结果。"""
+    """在指定工作区执行 Git 命令。
+
+    Args:
+        project: Git 仓库根目录。
+        args: 不含可执行文件名的 Git 参数。
+
+    Returns:
+        含退出码和标准输出的进程结果。
+    """
 
     # release gate 需要自行解释 stdout/stderr，因此这里不抛出异常。
     return subprocess.run(["git", *args], cwd=project, text=True, capture_output=True, check=False)
 
-
-# 定义 git_ok 的release 管理处理入口。
+# 简单探测只暴露成功标志和首选诊断文本。
 def git_ok(project: Path, args: list[str]) -> tuple[bool, str]:
-    """执行 git 命令并压缩为布尔状态和可展示消息。"""
+    """执行 Git 命令并压缩结果。
+
+    Args:
+        project: Git 仓库根目录。
+        args: 不含可执行文件名的 Git 参数。
+
+    Returns:
+        命令是否成功以及首选输出文本。
+    """
 
     # 保留完整进程结果，便于同时读取退出码和输出文本。
     completed_process_result = run_git(project, args)  # git 命令执行结果
@@ -54,10 +101,18 @@ def git_ok(project: Path, args: list[str]) -> tuple[bool, str]:
         completed_process_result.stdout or completed_process_result.stderr
     ).strip()
 
-
-# 定义 governed_allowed_paths 的release 管理处理入口。
+# release prepare 白名单约束脏工作区中可随版本推进的路径。
 def governed_allowed_paths(profile: dict[str, Any], skill_dir: Path, project: Path) -> list[str]:
-    """计算 release prepare 阶段允许存在变更的路径前缀。"""
+    """计算 release prepare 允许变更的路径前缀。
+
+    Args:
+        profile: 项目治理配置。
+        skill_dir: skill 源目录。
+        project: 仓库根目录。
+
+    Returns:
+        POSIX 风格的允许路径前缀。
+    """
 
     # git 分支策略可能缺失或来自旧配置，读取前先做对象类型保护。
     dict_policy = profile.get("git_branch_policy", {}) if isinstance(profile.get("git_branch_policy"), dict) else {}  # release 打包校验输入值
@@ -72,18 +127,24 @@ def governed_allowed_paths(profile: dict[str, Any], skill_dir: Path, project: Pa
         return [str(item).replace("\\", "/").strip().strip("/") for item in list_configured if str(item).strip()]
 
     # 默认允许当前 skill、测试、文档、治理状态和 dist 历史参与 release 准备。
-    str_rel_skill = skill_dir.relative_to(project).as_posix() if skill_dir.is_relative_to(project) else skill_dir.name  # release 打包校验输入值
+    str_rel_skill = skill_dir.relative_to(project).as_posix() if skill_dir.is_relative_to(project) else skill_dir.name  # 默认白名单中的 skill 路径
 
     # 返回路径前缀而不是 glob，后续 status 检查按前缀快速判断。
     return [str_rel_skill, "tests", "docs", ".agents", "AGENTS.md", "dist"]
 
-
-# 定义 receipt_filename 的release 管理处理入口。
+# 收据文件名同时约束打包端和安装端的发现行为。
 def receipt_filename(profile: dict[str, Any]) -> str:
-    """读取 release 收据文件名，缺省保持历史 RELEASE_RECEIPT.json。"""
+    """读取发布收据文件名。
+
+    Args:
+        profile: 项目治理配置。
+
+    Returns:
+        配置值或兼容历史版本的默认文件名。
+    """
 
     # release_contract 可能来自用户配置，先限制为字典再取字段。
-    dict_release = profile.get("release_contract", {}) if isinstance(profile.get("release_contract"), dict) else {}  # release 打包校验输入值
+    dict_release = profile.get("release_contract", {}) if isinstance(profile.get("release_contract"), dict) else {}  # 收据命名契约
 
     # 空字符串配置视为未配置，避免创建无名文件。
     str_receipt_file = str(dict_release.get("receipt_file", "RELEASE_RECEIPT.json")).strip()  # 收据文件名
@@ -91,13 +152,20 @@ def receipt_filename(profile: dict[str, Any]) -> str:
     # 收据文件名是 release gate 与安装验证的契约字段。
     return str_receipt_file or "RELEASE_RECEIPT.json"
 
-
-# 定义 release_sanitization_settings 的release 管理处理入口。
+# 清理契约仅在 skill 发布流程启用，避免误套普通项目。
 def release_sanitization_settings(profile: dict[str, Any], project_kind: str) -> dict[str, Any]:
-    """汇总 release sanitization 策略，并限定只对 skill 项目强制生效。"""
+    """汇总发布包敏感信息清理策略。
+
+    Args:
+        profile: 项目治理配置。
+        project_kind: 当前项目类型。
+
+    Returns:
+        归一化后的清理开关、范围、模式和收据要求。
+    """
 
     # sanitization 规则位于 release_contract，旧配置缺失时使用安全默认值。
-    dict_release = profile.get("release_contract", {}) if isinstance(profile.get("release_contract"), dict) else {}  # release 打包校验输入值
+    dict_release = profile.get("release_contract", {}) if isinstance(profile.get("release_contract"), dict) else {}  # 敏感信息清理契约
 
     # 只有 skill release 才要求安装包敏感信息清理。
     bool_required = bool(dict_release.get("sanitization_required", False)) and project_kind == "skill"  # 是否强制清理
@@ -110,9 +178,17 @@ def release_sanitization_settings(profile: dict[str, Any], project_kind: str) ->
         "receipt_required": bool(dict_release.get("sanitization_receipt_required", False)) and project_kind == "skill",
     }
 
-# 定义 matches_governed_path 的release 管理处理入口。
+# 路径白名单同时接受目录自身和目录内后代。
 def matches_governed_path(path: str, allowed: list[str]) -> bool:
-    """判断一个 git status 路径是否落在 release 允许路径内。"""
+    """判断状态路径是否落在发布白名单内。
+
+    Args:
+        path: Git 状态中的相对路径。
+        allowed: 允许的路径前缀。
+
+    Returns:
+        路径是否受白名单覆盖。
+    """
 
     # git 输出可能使用反斜杠或前导 ./，先归一化再做前缀匹配。
     str_normalized = path.replace("\\", "/").strip()  # 归一化后的相对路径
@@ -120,8 +196,8 @@ def matches_governed_path(path: str, allowed: list[str]) -> bool:
     # 前导 ./ 不应影响 release 白名单判断。
     if str_normalized.startswith("./"):
 
-        # 整理 matches_governed_path 需要的 normalized 发布信息。
-        str_normalized = str_normalized[2:]  # release 打包校验输入值
+        # 去除 Git 偶尔附带的当前目录前缀。
+        str_normalized = str_normalized[2:]  # 去前缀后的仓库相对路径
 
     # 逐个前缀检查，允许目录自身及其子路径。
     for prefix in allowed:
@@ -129,27 +205,35 @@ def matches_governed_path(path: str, allowed: list[str]) -> bool:
         # 校验 matches_governed_path 的 release 分支条件。
         if str_normalized == prefix or str_normalized.startswith(prefix + "/"):
 
-            # 返回 matches_governed_path 的 release 载荷。
+            # 任一白名单前缀命中即可允许该路径。
             return True
 
     # 没有命中任何治理前缀时视为 release 准备阻塞项。
     return False
 
-
-# 定义 normalize_branch_list_line 的release 管理处理入口。
+# branch --list 的装饰标志不属于真实分支名。
 def normalize_branch_list_line(line: str) -> str:
-    """清理 git branch 输出中的当前分支标记。"""
+    """清理 Git 分支列表中的装饰标志。
+
+    Args:
+        line: Git 输出的一行。
+
+    Returns:
+        可用于集合比较的分支名。
+    """
 
     # git branch 可能在当前分支前添加 *，worktree 分支前添加 +。
     return line.strip().lstrip("*+ ").strip()
 
-
-# 定义 parse_status_paths 的release 管理处理入口。
+# rename 状态保留源和目标两端，防止路径治理出现盲区。
 def parse_status_paths(line: str) -> list[str]:
     """从 git status --short 单行中解析受影响路径。
 
-    # 补充release 管理代码段的职责说明。
-    rename 行会返回旧路径和新路径，确保 release gate 同时检查两端。
+    Args:
+        line: ``git status --short`` 的单行输出。
+
+    Returns:
+        普通状态的单路径，或重命名状态的双路径。
     """
 
     # status 前两列是状态码，后续部分才是路径主体。
@@ -161,24 +245,36 @@ def parse_status_paths(line: str) -> list[str]:
         # 定位 old path、new path 的文件边界，供 parse_status_paths 后续读写校验使用。
         str_old_path, str_new_path = str_body.split(" -> ", 1)  # rename 两端路径
 
-        # 返回 parse_status_paths 的 release 载荷。
+        # rename 两端都必须接受白名单和敏感路径检查。
         return [str_old_path.strip().replace("\\", "/"), str_new_path.strip().replace("\\", "/")]
 
     # 普通变更只包含一个路径。
     return [str_body.replace("\\", "/")]
 
-
-# 定义 filter_runtime_paths 的release 管理处理入口。
+# 仅排除治理工具自身产生且已明确登记的临时文件。
 def filter_runtime_paths(paths: list[str]) -> list[str]:
-    """移除 release 检查中忽略的运行期临时路径。"""
+    """移除发布检查忽略的运行期路径。
+
+    Args:
+        paths: 从状态行解析出的路径。
+
+    Returns:
+        仍需接受发布治理检查的路径。
+    """
 
     # 运行期 git 噪音不应阻塞 release prepare。
     return [path for path in paths if path and path not in IGNORED_RUNTIME_GIT_PATHS]
 
-
-# 定义 filter_runtime_status_lines 的release 管理处理入口。
+# 状态行至少含一个有效路径时才参与 dirty 检查。
 def filter_runtime_status_lines(lines: list[str]) -> list[str]:
-    """过滤掉只包含运行期临时路径的 git status 行。"""
+    """过滤只包含运行期临时路径的状态行。
+
+    Args:
+        lines: Git 状态输出行。
+
+    Returns:
+        至少包含一个受治理路径的原始状态行。
+    """
 
     # 保留原始 status 行文本，便于错误消息展示具体 git 状态。
     list_filtered: list[str] = []  # 过滤后的 status 行
@@ -186,28 +282,34 @@ def filter_runtime_status_lines(lines: list[str]) -> list[str]:
     # 每一行可能包含 rename 的双路径，需要先解析再过滤。
     for line in lines:
 
-        # 校验 filter_runtime_status_lines 的 release 分支条件。
+        # 空行不携带路径信息，直接跳过。
         if not line.strip():
 
-            # 分隔 filter_runtime_status_lines 的控制流边界。
+            # 跳过空行后继续解析下一条 Git 状态。
             continue
 
         # 只有存在非忽略路径时，才保留这条 status 行。
         list_paths = filter_runtime_paths(parse_status_paths(line))  # 当前 status 行的有效路径
 
-        # 校验 filter_runtime_status_lines 的 release 分支条件。
+        # 过滤后仍有路径才保留原始状态码供诊断展示。
         if list_paths:
 
-            # 追加 filter_runtime_status_lines 的 release 诊断。
+            # 原始文本保留状态码和 rename 展示信息。
             list_filtered.append(line)
 
     # 返回仍需 release gate 处理的 status 行。
     return list_filtered
 
-
-# 定义 changed_paths 的release 管理处理入口。
+# 变更路径和 Git 查询错误作为两类独立发布证据返回。
 def changed_paths(project: Path) -> tuple[list[str], list[str]]:
-    """读取当前工作区中 release gate 需要关注的变更路径。"""
+    """读取发布门禁关注的工作区变更。
+
+    Args:
+        project: Git 仓库根目录。
+
+    Returns:
+        去重路径列表和 Git 查询错误列表。
+    """
 
     # git status 是 release prepare 判断 dirty worktree 的输入。
     completed_process_status = run_git(project, ["status", "--short"])  # release dirty 检查结果
@@ -215,7 +317,7 @@ def changed_paths(project: Path) -> tuple[list[str], list[str]]:
     # git 命令失败时返回错误列表，让调用方统一阻塞 release。
     if completed_process_status.returncode != 0:
 
-        # 返回 changed_paths 的 release 载荷。
+        # 没有可信状态输出时不返回任何推测路径。
         return [], ["git status --short failed"]
 
     # 路径列表用于与 release 白名单做集合比较。
@@ -224,25 +326,31 @@ def changed_paths(project: Path) -> tuple[list[str], list[str]]:
     # 逐行解析 status，兼容 rename 行携带两个路径。
     for line in completed_process_status.stdout.splitlines():
 
-        # 校验 changed_paths 的 release 分支条件。
+        # 空状态行不应产生空路径记录。
         if not line.strip():
 
-            # 分隔 changed_paths 的控制流边界。
+            # 后续行仍可能包含有效工作区变更。
             continue
 
-        # 调用 extend 处理 changed_paths。
+        # 普通和 rename 路径统一汇入待治理集合。
         list_paths.extend(parse_status_paths(line))
 
     # 去重排序后返回，保证错误消息稳定。
     return sorted(set(filter_runtime_paths(list_paths))), []
 
-
-# 定义 sha256_file 的release 管理处理入口。
+# 文件摘要写入收据，用于安装前后的逐文件完整性验证。
 def sha256_file(path: Path) -> str:
-    """计算文件内容的 SHA-256 摘要。"""
+    """计算文件内容的 SHA-256 摘要。
+
+    Args:
+        path: 待读取的文件路径。
+
+    Returns:
+        小写十六进制摘要。
+    """
 
     # 摘要用于 release 收据、清单和不可变历史校验。
-    digest = hashlib.sha256()  # 增量哈希器
+    digest_state = hashlib.sha256()  # 增量哈希器
 
     # 分块读取避免大文件一次性进入内存。
     with path.open("rb") as handle:
@@ -251,14 +359,22 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(65536), b""):
 
             # 调用 update 处理 sha256_file。
-            digest.update(chunk)
+            digest_state.update(chunk)
 
     # 十六进制摘要是收据 JSON 中的稳定表示。
-    return digest.hexdigest()
+    return digest_state.hexdigest()
 
-# 定义 build_release_file_manifest 的release 管理处理入口。
+# 排序后的摘要清单保证收据可复现并支持直接结构比较。
 def build_release_file_manifest(root: Path, *, exclude: set[str] | None = None) -> list[dict[str, str]]:
-    """构建 release 目录的文件路径和摘要清单。"""
+    """构建发布目录的文件路径和摘要清单。
+
+    Args:
+        root: 版本化发布目录。
+        exclude: 不计入清单的相对路径。
+
+    Returns:
+        按路径排序的文件摘要记录。
+    """
 
     # 排除集用于跳过收据自身或调用方明确忽略的文件。
     set_excluded = exclude or set()  # release 清单排除路径
@@ -269,10 +385,10 @@ def build_release_file_manifest(root: Path, *, exclude: set[str] | None = None) 
     # 排序遍历保证跨平台收据顺序稳定。
     for path in sorted(root.rglob("*")):
 
-        # 校验 build_release_file_manifest 的 release 分支条件。
+        # 目录自身没有内容摘要，清单只记录普通文件。
         if not path.is_file():
 
-            # 分隔 build_release_file_manifest 的控制流边界。
+            # 继续遍历目录中的实际文件成员。
             continue
 
         # 清单路径以 release 根目录为基准。
@@ -281,19 +397,26 @@ def build_release_file_manifest(root: Path, *, exclude: set[str] | None = None) 
         # 调用方排除的文件不参与内容校验。
         if str_relative in set_excluded:
 
-            # 分隔 build_release_file_manifest 的控制流边界。
+            # 排除收据自身等已声明的非清单成员。
             continue
 
-        # 追加 build_release_file_manifest 的 release 诊断。
+        # 每条清单记录绑定规范路径和实时内容摘要。
         list_manifest.append({"path": str_relative, "sha256": sha256_file(path)})
 
     # 返回按路径排序的稳定清单。
     return list_manifest
 
-
-# 定义 write_release_zip 的release 管理处理入口。
+# ZIP 成员统一带版本目录前缀，解压不会污染目标父目录。
 def write_release_zip(release_dir: Path, zip_path: Path) -> None:
-    """把 release 目录写成对应的 zip 包。"""
+    """把版本目录写成对应的 ZIP 包。
+
+    Args:
+        release_dir: 已验证的版本目录。
+        zip_path: 目标压缩包路径。
+
+    Returns:
+        无；成功时压缩包完整落盘。
+    """
 
     # zip 目录可能是首次创建的 dist 输出目录。
     zip_path.parent.mkdir(parents=True, exist_ok=True)
@@ -304,16 +427,23 @@ def write_release_zip(release_dir: Path, zip_path: Path) -> None:
         # 包内路径保留 dist/<release-name>/ 前缀，匹配安装包布局。
         for path in sorted(release_dir.rglob("*")):
 
-            # 校验 write_release_zip 的 release 分支条件。
+            # 仅文件成为 ZIP 成员，空目录无需单独记录。
             if path.is_file():
 
-                # 调用 write 处理 write_release_zip。
+                # 成员名保留版本目录作为安全解压边界。
                 archive.write(path, path.relative_to(release_dir.parent).as_posix())
 
-
-# 定义 release_target_exclusions 的release 管理处理入口。
+# 当前版本产物由本次命令重建，不纳入历史不可变快照。
 def release_target_exclusions(skill_name: str, version: str) -> set[str]:
-    """返回当前 release 产物在 dirty worktree 检查中的排除项。"""
+    """返回当前发布目标的预期产物路径。
+
+    Args:
+        skill_name: skill 名称。
+        version: 目标版本号。
+
+    Returns:
+        版本目录和同名 ZIP 路径集合。
+    """
 
     # 当前版本的 release 目录和 zip 是本次命令的预期输出。
     return {
@@ -321,10 +451,17 @@ def release_target_exclusions(skill_name: str, version: str) -> set[str]:
         f"dist/{skill_name}-{version}.zip",
     }
 
-
-# 定义 is_excluded_dist_artifact 的release 管理处理入口。
+# 排除判断兼容目录前缀和单文件两种产物形态。
 def is_excluded_dist_artifact(relative_path: str, excluded: set[str]) -> bool:
-    """判断 dist 文件是否属于当前 release 命令预期生成的产物。"""
+    """判断 dist 文件是否属于当前发布目标。
+
+    Args:
+        relative_path: 相对于项目根的产物路径。
+        excluded: 本次构建允许变化的路径集合。
+
+    Returns:
+        文件是否应从历史快照排除。
+    """
 
     # dist 快照使用 POSIX 路径，便于和 release 排除项比较。
     str_normalized = relative_path.replace("\\", "/")  # dist 相对路径
@@ -332,31 +469,38 @@ def is_excluded_dist_artifact(relative_path: str, excluded: set[str]) -> bool:
     # 排除项可以是目录前缀，也可以是单个 zip 文件。
     for item in excluded:
 
-        # 整理 is_excluded_dist_artifact 需要的 entry 发布信息。
+        # 比较前统一路径分隔符，避免 Windows 输出差异。
         str_entry = item.replace("\\", "/")  # 排除项路径
 
-        # 校验 is_excluded_dist_artifact 的 release 分支条件。
+        # 目录产物通过前缀覆盖其全部成员。
         if str_entry.endswith("/"):
 
-            # 校验 is_excluded_dist_artifact 的 release 分支条件。
+            # 当前版本目录内的所有文件都属于预期输出。
             if str_normalized.startswith(str_entry):
 
-                # 返回 is_excluded_dist_artifact 的 release 载荷。
+                # 命中目录排除项后无需继续扫描其他规则。
                 return True
 
-        # 校验 is_excluded_dist_artifact 的 release 分支条件。
+        # ZIP 等单文件产物要求路径完全一致。
         elif str_normalized == str_entry:
 
-            # 返回 is_excluded_dist_artifact 的 release 载荷。
+            # 同名版本压缩包也是本次构建的预期输出。
             return True
 
     # 未命中当前 release 产物时，需要纳入历史 dist 快照。
     return False
 
-
-# 定义 dist_artifact_snapshot 的release 管理处理入口。
+# 发布前后快照用于证明旧版本目录和 ZIP 未被改写。
 def dist_artifact_snapshot(project: Path, excluded: set[str] | None = None) -> list[dict[str, str]]:
-    """记录 dist 目录中非当前 release 产物的文件摘要。"""
+    """记录历史发布产物的文件摘要。
+
+    Args:
+        project: 仓库根目录。
+        excluded: 当前构建允许变化的产物路径。
+
+    Returns:
+        按路径排序的历史文件摘要记录。
+    """
 
     # dist 历史用于判断 package-release 是否意外改写旧产物。
     path_dist_root = project / "dist"  # release 历史产物根目录
@@ -364,7 +508,7 @@ def dist_artifact_snapshot(project: Path, excluded: set[str] | None = None) -> l
     # 没有 dist 目录时表示当前没有历史发布产物。
     if not path_dist_root.exists():
 
-        # 返回 dist_artifact_snapshot 的 release 载荷。
+        # 首次发布不存在需要保护的旧版本快照。
         return []
 
     # 当前 release 的预期输出需要从历史快照中排除。
@@ -376,10 +520,10 @@ def dist_artifact_snapshot(project: Path, excluded: set[str] | None = None) -> l
     # 排序遍历保证快照顺序稳定。
     for path in sorted(path_dist_root.rglob("*")):
 
-        # 校验 dist_artifact_snapshot 的 release 分支条件。
+        # 快照只覆盖实际文件，目录结构由文件路径隐式表达。
         if not path.is_file():
 
-            # 分隔 dist_artifact_snapshot 的控制流边界。
+            # 目录节点不参与文件级不可变摘要比较。
             continue
 
         # 快照路径以项目根为基准，与 git status 输出保持一致。
@@ -388,260 +532,238 @@ def dist_artifact_snapshot(project: Path, excluded: set[str] | None = None) -> l
         # 当前 release 产物不参与历史不可变性检查。
         if is_excluded_dist_artifact(str_relative, set_blocked):
 
-            # 分隔 dist_artifact_snapshot 的控制流边界。
+            # 本次目标稍后由独立收据和 ZIP 校验覆盖。
             continue
 
-        # 追加 dist_artifact_snapshot 的 release 诊断。
+        # 历史文件路径与摘要共同构成发布前基线。
         list_snapshot.append({"path": str_relative, "sha256": sha256_file(path)})
 
     # 返回历史 dist 产物快照。
     return list_snapshot
 
-# 定义 read_release_receipt 的release 管理处理入口。
+# 收据解析失败统一映射为空字典，由验证器生成稳定诊断。
 def read_release_receipt(path: Path) -> dict[str, Any]:
+    """读取并验证发布收据的顶层结构。
 
-    # 保护 read_release_receipt 中允许失败的外部访问。
+    Args:
+        path: JSON 收据路径。
+
+    Returns:
+        有效对象映射；读取失败或非对象内容返回空字典。
+    """
+
+    # 文件缺失、编码损坏和 JSON 损坏统一视为无效收据。
     try:
 
-        # 整理 read_release_receipt 需要的 data 发布信息。
-        dict_data = json.loads(path.read_text(encoding="utf-8"))  # release 打包校验输入值
+        # 仅接受 UTF-8 JSON，保持发布包跨平台可复核。
+        dict_data = json.loads(path.read_text(encoding="utf-8"))  # 收据顶层 JSON 值
+
+    # 解析异常由调用方转换为带路径的稳定发布诊断。
     except Exception:
 
-        # 返回 read_release_receipt 的 release 载荷。
+        # 空映射明确表示收据不可用。
         return {}
 
-    # 返回 read_release_receipt 的 release 载荷。
+    # 数组或标量 JSON 不满足收据字段契约。
     return dict_data if isinstance(dict_data, dict) else {}
 
-# 定义 is_probably_text_bytes 的release 管理处理入口。
-def is_probably_text_bytes(data: bytes) -> bool:
-
-    # 校验 is_probably_text_bytes 的 release 分支条件。
-    if b"\x00" in data:
-
-        # 返回 is_probably_text_bytes 的 release 载荷。
-        return False
-
-    # 保护 is_probably_text_bytes 中允许失败的外部访问。
-    try:
-
-        # 调用 decode 处理 is_probably_text_bytes。
-        data.decode("utf-8")
-    except UnicodeDecodeError:
-
-        # 返回 is_probably_text_bytes 的 release 载荷。
-        return False
-
-    # 返回 is_probably_text_bytes 的 release 载荷。
-    return True
-
-# 定义 normalize_line_endings 的release 管理处理入口。
-def normalize_line_endings(text: str) -> str:
-
-    # 返回 normalize_line_endings 的 release 载荷。
-    return text.replace("\r\n", "\n")
-
-# 定义 source_release_content_analysis 的release 管理处理入口。
+# 文本和二进制清洗原语复用安装验证模块，保持发布与安装判定一致。
+# 源码分析允许仓库内 evals 等仅源码成员进入打包清单。
 def source_release_content_analysis(skill_dir: Path) -> dict[str, Any]:
+    """分析待发布技能源码目录。
 
-    # 返回 source_release_content_analysis 的 release 载荷。
+    参数：skill_dir 为技能源码根。
+    返回：允许仓库本地源码成员的内容策略报告。
+    """
+
+    # 源码模式允许发布器随后清洗的仓库本地成员。
     return analyze_release_content_root(skill_dir, allow_source_only_repo_local=True)
 
-# 定义 release_tree_content_analysis 的release 管理处理入口。
+# 发布树分析使用安装包的严格顶层内容策略。
 def release_tree_content_analysis(release_dir: Path) -> dict[str, Any]:
+    """分析已生成的版本化发布目录。
 
-    # 返回 release_tree_content_analysis 的 release 载荷。
+    参数：release_dir 为待验证发布树。
+    返回：安装包严格内容策略报告。
+    """
+
+    # 最终发布目录不得启用源码专用例外。
     return analyze_release_content_root(release_dir)
 
-# 定义 sanitize_release_text 的release 管理处理入口。
-def sanitize_release_text(text: str) -> tuple[str, list[dict[str, str]]]:
+# 单文件清洗器返回可选收据记录和可选二进制错误。
+def sanitize_release_member(
+    path_release_file: Path,
+    str_relative_path: str,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """清洗一个发布成员并生成收据条目。
 
-    # 整理 sanitize_release_text 需要的 redacted 发布信息。
-    redacted = text  # release 打包校验输入值
+    参数：path_release_file 为发布副本文件。
+    参数：str_relative_path 为相对技能根的位置。
+    返回：可选清洗记录与可选阻断错误。
+    """
 
-    # 汇总 matches，作为 release 打包和清理候选清单。
-    list_matches: list[dict[str, str]] = []  # release 打包校验输入值
+    # 发布副本字节决定文本清洗或二进制保守检测路径。
+    bytes_release = path_release_file.read_bytes()  # 当前发布成员字节。
 
-    # 逐项检查 sanitize_release_text 发布候选。
-    for rule_name, pattern in SANITIZED_ASSIGNMENT_RULES:
+    # 非文本成员不得自动改写，只检测明确敏感模式。
+    if not is_probably_text_bytes(bytes_release):
 
-        # 整理 sanitize_release_text 需要的 placeholder 发布信息。
-        placeholder = SANITIZED_PLACEHOLDERS[rule_name]  # release 打包校验输入值
+        # 二进制扫描返回命中的敏感类别。
+        list_hits = detect_binary_sensitive_matches(bytes_release)  # 二进制敏感规则命中。
 
-        # 标记 hit 判断，控制 sanitize_release_text 的分支走向。
-        bool_hit = False  # release 打包校验输入值
+        # 无敏感模式时保持文件原样且不生成收据记录。
+        if not list_hits:
 
-        # 定义 replace_assignment 的release 管理处理入口。
-        def replace_assignment(match: re.Match[str]) -> str:
-            nonlocal bool_hit
+            # 两个空状态表示成员无需清洗。
+            return None, None
 
-            # 校验 replace_assignment 的 release 分支条件。
-            if should_skip_sanitized_assignment_value(match.group(2)):
+        # 二进制敏感内容必须由源码维护者处理。
+        str_error = (
+            "binary file contains sensitive content and cannot be sanitized safely: "
+            f"{str_relative_path}"
+        )  # 当前二进制阻断诊断。
 
-                # 返回 replace_assignment 的 release 载荷。
-                return match.group(0)
+        # 错误状态不产生虚假的清洗记录。
+        return None, str_error
 
-            # 标记 hit 判断，控制 replace_assignment 的分支走向。
-            bool_hit = True  # release 打包校验输入值
+    # UTF-8 文本交给共享确定性清洗器处理。
+    str_text = bytes_release.decode("utf-8")  # 当前发布文本。
 
-            # 返回 replace_assignment 的 release 载荷。
-            return f"{match.group(1)}{placeholder}"
+    # 清洗器同时返回替换后文本和实际命中规则。
+    tuple_sanitization = sanitize_release_text(str_text)  # 文本清洗二元结果。
 
-        # 整理 sanitize_release_text 需要的 updated 发布信息。
-        updated = pattern.sub(replace_assignment, redacted)  # release 打包校验输入值
+    # 首项是确定性替换后的文本。
+    str_sanitized_text = tuple_sanitization[0]  # 待写回发布副本的文本。
 
-        # 校验 sanitize_release_text 的 release 分支条件。
-        if bool_hit:
+    # 次项记录实际发生替换的规则和占位符。
+    list_matches = tuple_sanitization[1]  # 当前成员清洗命中。
 
-            # 追加 sanitize_release_text 的 release 诊断。
-            list_matches.append({"rule": rule_name, "placeholder": placeholder})
+    # 没有替换时不重写换行风格或生成收据条目。
+    if not list_matches:
 
-            # 整理 sanitize_release_text 需要的 redacted 发布信息。
-            redacted = updated  # release 打包校验输入值
+        # 文件保持原字节。
+        return None, None
 
-    # 逐项检查 sanitize_release_text 发布候选。
-    for rule_name, pattern in SANITIZED_INLINE_RULES:
+    # 清洗文本使用 LF 写回，确保摘要跨平台稳定。
+    path_release_file.write_text(
+        normalize_line_endings(str_sanitized_text),
+        encoding="utf-8",
+    )
 
-        # 整理 sanitize_release_text 需要的 placeholder 发布信息。
-        placeholder = SANITIZED_PLACEHOLDERS[rule_name]  # release 打包校验输入值
-
-        # 整理 sanitize_release_text 需要的 updated、count 发布信息。
-        updated, count = pattern.subn(placeholder, redacted)  # release 打包校验输入值
-
-        # 校验 sanitize_release_text 的 release 分支条件。
-        if count:
-
-            # 追加 sanitize_release_text 的 release 诊断。
-            list_matches.append({"rule": rule_name, "placeholder": placeholder})
-
-            # 整理 sanitize_release_text 需要的 redacted 发布信息。
-            redacted = updated  # release 打包校验输入值
-
-    # 返回 sanitize_release_text 的 release 载荷。
-    return redacted, list_matches
-
-# 定义 detect_binary_sensitive_matches 的release 管理处理入口。
-def detect_binary_sensitive_matches(data: bytes) -> list[str]:
-
-    # 汇总 hits，作为 release 打包和清理候选清单。
-    list_hits: list[str] = []  # release 打包校验输入值
-
-    # 逐项检查 detect_binary_sensitive_matches 发布候选。
-    for rule_name, pattern in SANITIZED_BINARY_PATTERNS:
-
-        # 校验 detect_binary_sensitive_matches 的 release 分支条件。
-        if pattern.search(data):
-
-            # 追加 detect_binary_sensitive_matches 的 release 诊断。
-            list_hits.append(rule_name)
-
-    # 返回 detect_binary_sensitive_matches 的 release 载荷。
-    return sorted(set(list_hits))
-
-# 定义 sanitize_release_tree 的release 管理处理入口。
-def sanitize_release_tree(profile: dict[str, Any], project_kind: str, skill_dir: Path, release_dir: Path) -> tuple[dict[str, Any], list[str]]:
-
-    # 汇总 settings，作为 release 打包和清理候选清单。
-    dict_settings = release_sanitization_settings(profile, project_kind)  # release 打包校验输入值
-
-    # 保存 result 映射，维持 sanitize_release_tree 的字段关系。
-    dict_result: dict[str, Any] = {  # release 打包校验输入值
-        "enabled": dict_settings["required"],  # release 打包校验输入值
-        "scope": dict_settings["scope"],  # release 打包校验输入值
-        "mode": dict_settings["mode"],  # release 打包校验输入值
-        "files": [],  # release 打包校验输入值
+    # 收据条目聚合规则、占位符和最终文件摘要。
+    dict_record = {
+        "path": str_relative_path,  # 清洗成员相对位置。
+        "rules": sorted({dict_item["rule"] for dict_item in list_matches}),  # 命中规则集合。
+        "placeholders": sorted(  # 实际写入发布副本的占位符集合
+            {dict_item["placeholder"] for dict_item in list_matches}  # 去重后的占位符来源
+        ),  # 实际写入占位符集合。
+        "sha256": sha256_file(path_release_file),  # 清洗后文件摘要。
     }
 
-    # 校验 sanitize_release_tree 的 release 分支条件。
+    # 文本清洗成功不产生阻断错误。
+    return dict_record, None
+
+# 发布树清洗器遍历源码成员，确保只处理对应发布副本。
+def sanitize_release_tree(
+    profile: dict[str, Any],
+    project_kind: str,
+    skill_dir: Path,
+    release_dir: Path,
+) -> tuple[dict[str, Any], list[str]]:
+    """按项目发布合同清洗版本化发布树。
+
+    参数：profile 和 project_kind 决定清洗策略。
+    参数：skill_dir 与 release_dir 定位源码和发布副本。
+    返回：清洗收据块与阻断错误列表。
+    """
+
+    # 策略映射决定是否启用清洗及收据字段。
+    dict_settings = release_sanitization_settings(profile, project_kind)  # 当前清洗策略。
+
+    # 基础收据字段即使禁用清洗也保持稳定。
+    dict_result: dict[str, Any] = {
+        "enabled": dict_settings["required"],  # 是否启用自动清洗。
+        "scope": dict_settings["scope"],  # 策略覆盖范围。
+        "mode": dict_settings["mode"],  # 确定性清洗模式。
+        "files": [],  # 实际清洗成员记录。
+    }
+
+    # 强制逐文件记录时显式写入收据合同。
     if dict_settings["receipt_required"]:
 
-        # 整理 sanitize_release_tree 需要的 中间载荷 发布信息。
-        dict_result["receipt_required"] = True  # release 打包校验输入值
+        # 安装验证器据此要求 files 证据。
+        dict_result["receipt_required"] = True  # 声明安装端必须验证逐文件记录
 
-    # 校验 sanitize_release_tree 的 release 分支条件。
+    # 非 skill 或未启用策略时不扫描文件树。
     if not dict_settings["required"]:
 
-        # 返回 sanitize_release_tree 的 release 载荷。
+        # 空错误列表表示无需清洗即通过。
         return dict_result, []
 
-    # 汇总 errors，作为 release 打包和清理候选清单。
-    list_errors: list[str] = []  # release 打包校验输入值
+    # 文本清洗记录按源码成员排序稳定累积。
+    list_records: list[dict[str, Any]] = []  # 实际清洗收据条目。
 
-    # 汇总 files，作为 release 打包和清理候选清单。
-    list_files: list[dict[str, Any]] = []  # release 打包校验输入值
+    # 二进制阻断诊断独立累积，允许一次报告全部文件。
+    list_errors: list[str] = []  # 当前清洗错误。
 
-    # 逐项检查 sanitize_release_tree 发布候选。
-    for source_path in sorted(skill_dir.rglob("*")):
+    # 源码树限制发布成员范围，并保证遍历顺序稳定。
+    for path_source_file in sorted(skill_dir.rglob("*")):
 
-        # 校验 sanitize_release_tree 的 release 分支条件。
-        if not source_path.is_file():
+        # 目录不对应可清洗发布成员。
+        if not path_source_file.is_file():
 
-            # 分隔 sanitize_release_tree 的控制流边界。
+            # 继续检查下一个源码成员。
             continue
 
-        # 定位 rel path 的文件边界，供 sanitize_release_tree 后续读写校验使用。
-        rel_path = source_path.relative_to(skill_dir).as_posix()  # release 打包校验输入值
+        # 源码与发布副本共享同一 POSIX 相对位置。
+        str_relative_path = path_source_file.relative_to(skill_dir).as_posix()  # 当前成员位置。
 
-        # 校验 sanitize_release_tree 的 release 分支条件。
-        if rel_path == "AGENTS.md":
+        # 根 AGENTS.md 由发布清洗策略排除。
+        if str_relative_path == "AGENTS.md":
 
-            # 分隔 sanitize_release_tree 的控制流边界。
+            # 生成规则文件不参与敏感值替换。
             continue
 
-        # 定位 release path 的文件边界，供 sanitize_release_tree 后续读写校验使用。
-        release_path = release_dir / rel_path  # release 打包校验输入值
+        # 缺失发布副本由其他内容策略门禁负责诊断。
+        path_release_file = release_dir / str_relative_path  # 对应发布成员。
 
-        # 校验 sanitize_release_tree 的 release 分支条件。
-        if not release_path.is_file():
+        # 只处理实际复制到发布树的文件。
+        if not path_release_file.is_file():
 
-            # 分隔 sanitize_release_tree 的控制流边界。
+            # 源码专用成员可能被发布策略排除。
             continue
 
-        # 整理 sanitize_release_tree 需要的 data 发布信息。
-        dict_data = release_path.read_bytes()  # release 打包校验输入值
+        # 单文件 helper 返回互斥的记录和错误状态。
+        tuple_member_result = sanitize_release_member(  # 当前源码成员的清洗结果
+            path_release_file,  # 待清洗的发布副本
+            str_relative_path,  # 发布副本相对 skill 根的位置
+        )  # 当前成员清洗结果。
 
-        # 校验 sanitize_release_tree 的 release 分支条件。
-        if is_probably_text_bytes(dict_data):
+        # 首项为实际发生文本替换时的收据记录。
+        dict_record = tuple_member_result[0]  # 可选清洗条目。
 
-            # 整理 sanitize_release_tree 需要的 text 发布信息。
-            text = dict_data.decode("utf-8")  # release 打包校验输入值
+        # 次项为敏感二进制阻断诊断。
+        str_error = tuple_member_result[1]  # 可选清洗错误。
 
-            # 汇总 sanitized text、matches，作为 release 打包和清理候选清单。
-            tuple_sanitized_text, tuple_matches = sanitize_release_text(text)  # release 打包校验输入值
+        # 非空记录进入最终 files 列表。
+        if dict_record is not None:
 
-            # 校验 sanitize_release_tree 的 release 分支条件。
-            if tuple_matches:
+            # 文件遍历顺序保持收据稳定。
+            list_records.append(dict_record)
 
-                # 调用 write_text 处理 sanitize_release_tree。
-                release_path.write_text(normalize_line_endings(tuple_sanitized_text), encoding="utf-8")
+        # 二进制错误与其他成员诊断共同返回。
+        if str_error is not None:
 
-                # 追加 sanitize_release_tree 的 release 诊断。
-                list_files.append(
-                    {
-                        "path": rel_path,
-                        "rules": sorted({item["rule"] for item in tuple_matches}),
-                        "placeholders": sorted({item["placeholder"] for item in tuple_matches}),
-                        "sha256": sha256_file(release_path),
-                    }
-                )
-        else:
+            # 不安全成员不会生成清洗记录。
+            list_errors.append(str_error)
 
-            # 汇总 hits，作为 release 打包和清理候选清单。
-            list_hits = detect_binary_sensitive_matches(dict_data)  # release 打包校验输入值
+    # 收据 files 字段在遍历完成后一次写入。
+    dict_result["files"] = list_records  # 排序稳定的逐文件清洗证据
 
-            # 校验 sanitize_release_tree 的 release 分支条件。
-            if list_hits:
-
-                # 追加 sanitize_release_tree 的 release 诊断。
-                list_errors.append(f"binary file contains sensitive content and cannot be sanitized safely: {rel_path}")
-
-    # 整理 sanitize_release_tree 需要的 中间载荷 发布信息。
-    dict_result["files"] = list_files  # release 打包校验输入值
-
-    # 返回 sanitize_release_tree 的 release 载荷。
+    # 调用方决定是否因错误停止发布。
     return dict_result, list_errors
 
-# 定义 verify_release_sanitization 的release 管理处理入口。
+# 清洗验证器复用安装侧的声明解析和源码逐文件对照。
 def verify_release_sanitization(
     profile: dict[str, Any],
     project_kind: str,
@@ -649,231 +771,88 @@ def verify_release_sanitization(
     release_dir: Path,
     receipt: dict[str, Any],
 ) -> list[str]:
+    """验证发布收据的清洗声明与源码确定性差异。
 
-    # 汇总 settings，作为 release 打包和清理候选清单。
-    dict_settings = release_sanitization_settings(profile, project_kind)  # release 打包校验输入值
+    参数：profile 和 project_kind 决定清洗策略。
+    参数：skill_dir 与 release_dir 定位源码和发布副本。
+    参数：receipt 为待验证发布收据。
+    返回：稳定排序语义的清洗诊断列表。
+    """
 
-    # 校验 verify_release_sanitization 的 release 分支条件。
+    # 非强制清洗项目不要求 sanitization 收据块。
+    dict_settings = release_sanitization_settings(profile, project_kind)  # 本项目发布清洗策略
+
+    # 没有强制策略时保持历史空诊断合同。
     if not dict_settings["required"]:
 
-        # 返回 verify_release_sanitization 的 release 载荷。
+        # 调用方可继续其他发布收据检查。
         return []
 
-    # 整理 verify_release_sanitization 需要的 sanitization 发布信息。
-    sanitization = receipt.get("sanitization")  # release 打包校验输入值
+    # 所有顶层策略和逐文件诊断汇总到同一列表。
+    list_errors: list[str] = []  # 当前清洗验证诊断。
 
-    # 汇总 errors，作为 release 打包和清理候选清单。
-    list_errors: list[str] = []  # release 打包校验输入值
+    # sanitization 必须是映射，缺失时无法继续解析。
+    dict_sanitization = receipt.get("sanitization")  # 收据原始清洗块。
 
-    # 校验 verify_release_sanitization 的 release 分支条件。
-    if not isinstance(sanitization, dict):
+    # 缺少映射时返回与历史合同一致的单条错误。
+    if not isinstance(dict_sanitization, dict):
 
-        # 返回 verify_release_sanitization 的 release 载荷。
+        # 文件声明不存在，后续对照没有可信输入。
         return ["release receipt sanitization block is missing"]
 
-    # 校验 verify_release_sanitization 的 release 分支条件。
-    if bool(sanitization.get("enabled")) is not True:
+    # enabled 明确证明发布器执行过自动清洗。
+    if not bool(dict_sanitization.get("enabled")):
 
-        # 追加 verify_release_sanitization 的 release 诊断。
+        # false 与缺失均不能构成清洗证据。
         list_errors.append("release receipt sanitization enabled flag is missing or false")
 
-    # 校验 verify_release_sanitization 的 release 分支条件。
-    if str(sanitization.get("scope", "")).strip() != dict_settings["scope"]:
+    # 收据作用域必须与项目发布策略完全一致。
+    if str(dict_sanitization.get("scope", "")).strip() != dict_settings["scope"]:
 
-        # 追加 verify_release_sanitization 的 release 诊断。
+        # 不同作用域无法证明预期文件集合已经覆盖。
         list_errors.append("release receipt sanitization scope does not match the release policy")
 
-    # 校验 verify_release_sanitization 的 release 分支条件。
-    if str(sanitization.get("mode", "")).strip() != dict_settings["mode"]:
+    # 清洗模式必须与发布器配置一致。
+    if str(dict_sanitization.get("mode", "")).strip() != dict_settings["mode"]:
 
-        # 追加 verify_release_sanitization 的 release 诊断。
+        # 未知模式不能用当前确定性算法复核。
         list_errors.append("release receipt sanitization mode does not match the release policy")
 
-    # 校验 verify_release_sanitization 的 release 分支条件。
-    if dict_settings["receipt_required"] and bool(sanitization.get("receipt_required")) is not True:
+    # 要求逐文件收据时必须显式记录该标志。
+    if dict_settings["receipt_required"] and not bool(dict_sanitization.get("receipt_required")):
 
-        # 追加 verify_release_sanitization 的 release 诊断。
+        # 缺失标志表示逐文件证据合同不完整。
         list_errors.append("release receipt sanitization receipt_required flag is missing or false")
 
-    # 汇总 files，作为 release 打包和清理候选清单。
-    files = sanitization.get("files")  # release 打包校验输入值
+    # files 字段承载规则、占位符和摘要。
+    object_files = dict_sanitization.get("files")  # 原始清洗文件声明。
 
-    # 校验 verify_release_sanitization 的 release 分支条件。
-    if not isinstance(files, list):
+    # 非列表声明无法进行路径安全解析。
+    if not isinstance(object_files, list):
 
-        # 返回 verify_release_sanitization 的 release 载荷。
+        # 与历史实现保持立即返回语义。
         return ["release receipt sanitization files list is missing"]
 
-    # 保存 declared 映射，维持 verify_release_sanitization 的字段关系。
-    dict_declared: dict[str, dict[str, Any]] = {}  # release 打包校验输入值
+    # 安装侧解析器统一验证成员路径、规则、占位符和摘要字段。
+    dict_declared = parse_sanitization_declarations(  # 按安全相对路径索引的清洗声明
+        release_dir,  # 已生成的版本目录
+        object_files,  # 收据原始逐文件清理声明
+        list_errors,  # 追加解析阶段发现的声明错误
+    )  # 通过路径边界检查的清洗声明。
 
-    # 逐项检查 verify_release_sanitization 发布候选。
-    for row in files:
+    # 源码对照器验证确定性文本清洗、二进制原样性和声明完整性。
+    validate_against_source(
+        skill_dir,
+        release_dir,
+        receipt_filename(profile),
+        dict_declared,
+        list_errors,
+    )
 
-        # 校验 verify_release_sanitization 的 release 分支条件。
-        if not isinstance(row, dict):
-
-            # 追加 verify_release_sanitization 的 release 诊断。
-            list_errors.append("release receipt sanitization files list contains invalid entries")
-
-            # 分隔 verify_release_sanitization 的控制流边界。
-            continue
-
-        # 定位 rel path 的文件边界，供 verify_release_sanitization 后续读写校验使用。
-        rel_path = str(row.get("path", "")).strip()  # release 打包校验输入值
-
-        # 校验 verify_release_sanitization 的 release 分支条件。
-        if not rel_path:
-
-            # 追加 verify_release_sanitization 的 release 诊断。
-            list_errors.append("release receipt sanitization file entry is missing path")
-
-            # 分隔 verify_release_sanitization 的控制流边界。
-            continue
-
-        # 汇总 rules，作为 release 打包和清理候选清单。
-        rules = row.get("rules")  # release 打包校验输入值
-
-        # 校验 verify_release_sanitization 的 release 分支条件。
-        if not isinstance(rules, list) or not all(str(item).strip() for item in rules):
-
-            # 追加 verify_release_sanitization 的 release 诊断。
-            list_errors.append(f"release receipt sanitization rules are missing for {rel_path}")
-
-        # 汇总 placeholders，作为 release 打包和清理候选清单。
-        placeholders = row.get("placeholders")  # release 打包校验输入值
-
-        # 校验 verify_release_sanitization 的 release 分支条件。
-        if not isinstance(placeholders, list) or not all(str(item).strip() for item in placeholders):
-
-            # 追加 verify_release_sanitization 的 release 诊断。
-            list_errors.append(f"release receipt sanitization placeholders are missing for {rel_path}")
-
-        # 整理 verify_release_sanitization 需要的 中间载荷 发布信息。
-        dict_declared[rel_path] = row  # release 打包校验输入值
-
-    # 整理 verify_release_sanitization 需要的 expected declared 发布信息。
-    set_expected_declared: set[str] = set()  # release 打包校验输入值
-
-    # 逐项检查 verify_release_sanitization 发布候选。
-    for source_path in sorted(skill_dir.rglob("*")):
-
-        # 校验 verify_release_sanitization 的 release 分支条件。
-        if not source_path.is_file():
-
-            # 分隔 verify_release_sanitization 的控制流边界。
-            continue
-
-        # 定位 rel path 的文件边界，供 verify_release_sanitization 后续读写校验使用。
-        rel_path = source_path.relative_to(skill_dir).as_posix()  # release 打包校验输入值
-
-        # 校验 verify_release_sanitization 的 release 分支条件。
-        if rel_path == "AGENTS.md":
-
-            # 分隔 verify_release_sanitization 的控制流边界。
-            continue
-
-        # 定位 release path 的文件边界，供 verify_release_sanitization 后续读写校验使用。
-        release_path = release_dir / rel_path  # release 打包校验输入值
-
-        # 校验 verify_release_sanitization 的 release 分支条件。
-        if not release_path.is_file():
-
-            # 分隔 verify_release_sanitization 的控制流边界。
-            continue
-
-        # 汇总 source bytes，作为 release 打包和清理候选清单。
-        source_bytes = source_path.read_bytes()  # release 打包校验输入值
-
-        # 汇总 release bytes，作为 release 打包和清理候选清单。
-        release_bytes = release_path.read_bytes()  # release 打包校验输入值
-
-        # 校验 verify_release_sanitization 的 release 分支条件。
-        if is_probably_text_bytes(source_bytes):
-
-            # 整理 verify_release_sanitization 需要的 source text 发布信息。
-            source_text = source_bytes.decode("utf-8")  # release 打包校验输入值
-
-            # 汇总 expected text、matches，作为 release 打包和清理候选清单。
-            tuple_expected_text, tuple_matches = sanitize_release_text(source_text)  # release 打包校验输入值
-
-            # 校验 verify_release_sanitization 的 release 分支条件。
-            if tuple_matches:
-
-                # 调用 add 处理 verify_release_sanitization。
-                set_expected_declared.add(rel_path)
-
-                # 校验 verify_release_sanitization 的 release 分支条件。
-                if rel_path not in dict_declared:
-
-                    # 追加 verify_release_sanitization 的 release 诊断。
-                    list_errors.append(f"release receipt is missing sanitization record for {rel_path}")
-
-                # 校验 verify_release_sanitization 的 release 分支条件。
-                if not is_probably_text_bytes(release_bytes):
-
-                    # 追加 verify_release_sanitization 的 release 诊断。
-                    list_errors.append(f"sanitized release file is not valid UTF-8 text: {rel_path}")
-
-                    # 分隔 verify_release_sanitization 的控制流边界。
-                    continue
-
-                # 整理 verify_release_sanitization 需要的 actual text 发布信息。
-                actual_text = release_bytes.decode("utf-8")  # release 打包校验输入值
-
-                # 校验 verify_release_sanitization 的 release 分支条件。
-                if normalize_line_endings(actual_text) != normalize_line_endings(tuple_expected_text):
-
-                    # 追加 verify_release_sanitization 的 release 诊断。
-                    list_errors.append(f"sanitized release content mismatch for {rel_path}")
-
-                # 整理 verify_release_sanitization 需要的 row 发布信息。
-                row = dict_declared.get(rel_path)  # release 打包校验输入值
-
-                # 校验 verify_release_sanitization 的 release 分支条件。
-                if isinstance(row, dict):
-
-                    # 校验 verify_release_sanitization 的 release 分支条件。
-                    if str(row.get("sha256", "")).strip() != sha256_file(release_path):
-
-                        # 追加 verify_release_sanitization 的 release 诊断。
-                        list_errors.append(f"release receipt sanitization hash mismatch for {rel_path}")
-
-            # 校验 verify_release_sanitization 的 release 分支条件。
-            elif release_bytes != source_bytes:
-
-                # 追加 verify_release_sanitization 的 release 诊断。
-                list_errors.append(f"undeclared release diff outside sanitization receipt: {rel_path}")
-        else:
-
-            # 汇总 hits，作为 release 打包和清理候选清单。
-            list_hits = detect_binary_sensitive_matches(source_bytes)  # release 打包校验输入值
-
-            # 校验 verify_release_sanitization 的 release 分支条件。
-            if list_hits:
-
-                # 追加 verify_release_sanitization 的 release 诊断。
-                list_errors.append(f"binary file contains sensitive content and cannot be sanitized safely: {rel_path}")
-
-            # 校验 verify_release_sanitization 的 release 分支条件。
-            elif release_bytes != source_bytes:
-
-                # 追加 verify_release_sanitization 的 release 诊断。
-                list_errors.append(f"undeclared binary release diff outside sanitization receipt: {rel_path}")
-
-    # 整理 verify_release_sanitization 需要的 unexpected 发布信息。
-    unexpected = sorted(set(dict_declared) - set_expected_declared)  # release 打包校验输入值
-
-    # 逐项检查 verify_release_sanitization 发布候选。
-    for rel_path in unexpected:
-
-        # 追加 verify_release_sanitization 的 release 诊断。
-        list_errors.append(f"release receipt declares unexpected sanitized file: {rel_path}")
-
-    # 返回 verify_release_sanitization 的 release 载荷。
+    # 诊断顺序沿用策略检查和源码遍历顺序。
     return list_errors
 
-# 定义 verify_release_content_policy 的release 管理处理入口。
+# 收据内容必须与版本目录身份和实时文件摘要完全一致。
 def verify_release_content_policy(
     receipt: dict[str, Any],
     *,
@@ -881,144 +860,198 @@ def verify_release_content_policy(
     release_analysis: dict[str, Any],
     require_source_paths: bool,
 ) -> list[str]:
+    """核对收据记录与发布目录的内容策略分析。
 
-    # 汇总 errors，作为 release 打包和清理候选清单。
-    errors = validate_recorded_release_content_policy(  # release 打包校验输入值
-        receipt.get("release_content_policy"),  # release 打包校验输入值
-        release_analysis,  # release 打包校验输入值
-        forbidden_source_paths=source_forbidden_paths,  # release 打包校验输入值
-        require_source_paths=require_source_paths,  # release 打包校验输入值
+    Args:
+        receipt: 已解析的发布收据。
+        source_forbidden_paths: 源目录中禁止进入发布包的路径。
+        release_analysis: 发布目录的实时内容分析。
+        require_source_paths: 是否要求收据记录源路径。
+
+    Returns:
+        阻止发布的策略错误列表。
+    """
+
+    # 先验证收据声明，确保记录值与当前发布树一致。
+    list_errors = validate_recorded_release_content_policy(  # 收据与实时发布树的差异
+        receipt.get("release_content_policy"),  # 收据中的内容策略声明
+        release_analysis,  # 当前发布树内容策略分析
+        forbidden_source_paths=source_forbidden_paths,  # 源码侧禁止进入包的路径
+        require_source_paths=require_source_paths,  # 是否强制记录源码路径证据
     )
 
-    # 校验 verify_release_content_policy 的 release 分支条件。
+    # 顶层白名单是安装时的结构边界，出现额外入口必须阻断。
     if release_analysis["unexpected_top_level_entries"]:
 
-        # 追加 verify_release_content_policy 的 release 诊断。
-        errors.append("release content policy rejected unexpected top-level release entries")
+        # 额外入口可能绕过安装端约定的 skill 布局。
+        list_errors.append("release content policy rejected unexpected top-level release entries")
 
-    # 校验 verify_release_content_policy 的 release 分支条件。
+    # 开发期文件不得随版本包进入用户的 skill 安装目录。
     if release_analysis["forbidden_paths"]:
 
-        # 追加 verify_release_content_policy 的 release 诊断。
-        errors.append("release content policy rejected forbidden development content in release")
+        # 命中开发内容说明复制或清理阶段存在泄漏。
+        list_errors.append("release content policy rejected forbidden development content in release")
 
-    # 返回 verify_release_content_policy 的 release 载荷。
-    return errors
+    # 调用方统一展示全部内容策略诊断。
+    return list_errors
 
-# 定义 verify_release_receipt 的release 管理处理入口。
+# 收据身份字段和文件清单共同构成安装端的信任边界。
 def verify_release_receipt(
     project: Path, receipt_path: Path, release_dir: Path,
     skill_name: str, version: str, source_rel: str,
     *, require_repo_dist: bool,
 ) -> list[str]:
+    """验证发布收据的身份字段和文件清单。
 
-    # 保存 receipt 映射，维持 verify_release_receipt 的字段关系。
-    dict_receipt = read_release_receipt(receipt_path)  # release 打包校验输入值
+    Args:
+        project: 仓库根目录。
+        receipt_path: 待验证的收据路径。
+        release_dir: 已生成的版本目录。
+        skill_name: 期望的 skill 名称。
+        version: 期望的版本号。
+        source_rel: skill 源目录相对路径。
+        require_repo_dist: 是否要求仓库级完整验证。
 
-    # 汇总 errors，作为 release 打包和清理候选清单。
-    list_errors: list[str] = []  # release 打包校验输入值
+    Returns:
+        收据不一致项列表。
+    """
 
-    # 校验 verify_release_receipt 的 release 分支条件。
+    # 解析失败由统一的 invalid receipt 诊断覆盖。
+    dict_receipt = read_release_receipt(receipt_path)  # 已解析的发布收据
+
+    # 错误按契约字段顺序累积，确保门禁输出稳定。
+    list_errors: list[str] = []  # 收据契约错误
+
+    # 空收据无法继续进行字段级比较。
     if not dict_receipt:
 
-        # 返回 verify_release_receipt 的 release 载荷。
+        # 路径加入诊断，便于定位缺失或损坏的收据。
         return [f"invalid release receipt: {display_path(receipt_path, project)}"]
 
-    # 校验 verify_release_receipt 的 release 分支条件。
+    # skill 名称必须与版本目录的命名主体一致。
     if str(dict_receipt.get("skill_name", "")).strip() != skill_name:
 
-        # 追加 verify_release_receipt 的 release 诊断。
+        # 身份不一致的收据不能证明当前 skill 包。
         list_errors.append("release receipt skill_name does not match release directory")
 
-    # 校验 verify_release_receipt 的 release 分支条件。
+    # 版本字段必须精确匹配本次请求，禁止跨版本复用收据。
     if str(dict_receipt.get("version", "")).strip() != version:
 
-        # 追加 verify_release_receipt 的 release 诊断。
+        # 跨版本收据会破坏发布历史的不可变关联。
         list_errors.append("release receipt version does not match requested release version")
 
-    # 校验 verify_release_receipt 的 release 分支条件。
+    # 源路径用于证明发布包来自预期的仓库子目录。
     if str(dict_receipt.get("source_path", "")).strip().replace("\\", "/") != source_rel:
 
-        # 追加 verify_release_receipt 的 release 诊断。
+        # 不同源码位置的收据不可为当前产物背书。
         list_errors.append("release receipt source_path does not match skill source path")
 
-    # 整理 verify_release_receipt 需要的 expected validation 发布信息。
-    expected_validation = "strong" if require_repo_dist else "reduced_assurance"  # release 打包校验输入值
+    # 验证级别区分仓库内正式包与外部目录的降级检查。
+    str_expected_validation = "strong" if require_repo_dist else "reduced_assurance"  # 收据应声明的验证等级
 
-    # 校验 verify_release_receipt 的 release 分支条件。
-    if str(dict_receipt.get("validation_level", "")).strip() != expected_validation:
+    # 仓库 dist 包必须声明强验证，外部包只能声明降级保证。
+    if str(dict_receipt.get("validation_level", "")).strip() != str_expected_validation:
 
-        # 追加 verify_release_receipt 的 release 诊断。
+        # 验证等级必须真实反映可用的仓库上下文。
         list_errors.append("release receipt validation_level is inconsistent with the release source")
 
-    # 汇总 expected files，作为 release 打包和清理候选清单。
-    list_expected_files = build_release_file_manifest(release_dir, exclude={receipt_path.name})  # release 打包校验输入值
+    # 实时摘要排除收据自身，避免循环依赖。
+    list_expected_files = build_release_file_manifest(  # 发布目录实时文件清单
+        release_dir,  # 重新遍历的发布目录
+        exclude={receipt_path.name},  # 收据自身不参与循环摘要
+    )
 
-    # 汇总 actual files，作为 release 打包和清理候选清单。
-    actual_files = dict_receipt.get("files")  # release 打包校验输入值
+    # 收据声明稍后与实时文件清单进行一一比较。
+    list_actual_files = dict_receipt.get("files")  # 收据声明的文件记录
 
-    # 校验 verify_release_receipt 的 release 分支条件。
-    if not isinstance(actual_files, list):
+    # 缺失清单时不能证明发布内容完整性。
+    if not isinstance(list_actual_files, list):
 
-        # 追加 verify_release_receipt 的 release 诊断。
+        # 非列表值无法表达稳定的逐文件摘要集合。
         list_errors.append("release receipt files list is missing")
+
+    # 合法列表逐项归一化后再与实时摘要进行稳定比较。
     else:
 
-        # 汇总 filtered，作为 release 打包和清理候选清单。
-        list_filtered = []  # release 打包校验输入值
+        # 归一化剥离无关 JSON 类型差异，只保留契约字段。
+        list_filtered: list[dict[str, str]] = []  # 归一化后的收据文件记录
 
-        # 逐项检查 verify_release_receipt 发布候选。
-        for item in actual_files:
+        # 每个成员必须同时提供相对路径和 SHA-256 摘要。
+        for dict_item in list_actual_files:
 
-            # 校验 verify_release_receipt 的 release 分支条件。
-            if not isinstance(item, dict):
+            # 非对象成员无法提供 path 和 sha256 契约字段。
+            if not isinstance(dict_item, dict):
 
-                # 追加 verify_release_receipt 的 release 诊断。
+                # 保留诊断后继续扫描，以一次报告全部无效成员。
                 list_errors.append("release receipt files list contains invalid entries")
 
-                # 分隔 verify_release_receipt 的控制流边界。
+                # 当前成员不能安全转换为清单记录。
                 continue
 
-            # 追加 verify_release_receipt 的 release 诊断。
-            list_filtered.append({"path": str(item.get("path", "")).strip(), "sha256": str(item.get("sha256", "")).strip()})
+            # 字段统一转为去空白字符串，匹配生成端序列化方式。
+            list_filtered.append(
+                {
+                    "path": str(dict_item.get("path", "")).strip(),
+                    "sha256": str(dict_item.get("sha256", "")).strip(),
+                }
+            )
 
-        # 校验 verify_release_receipt 的 release 分支条件。
+        # 顺序和摘要均须一致，防止遗漏、注入或内容漂移。
         if list_filtered != list_expected_files:
 
-            # 追加 verify_release_receipt 的 release 诊断。
+            # 任意路径或摘要差异都会阻止安装。
             list_errors.append("release receipt file manifest does not match packaged release contents")
 
-    # 返回 verify_release_receipt 的 release 载荷。
+    # 返回全部身份和完整性诊断，保持字段检查顺序。
     return list_errors
 
-# 定义 current_branch_and_locals 的release 管理处理入口。
+# 分支治理需要在同一时点读取分支集合和工作区状态。
 def current_branch_and_locals(project: Path) -> tuple[str, list[str], list[str]]:
+    """读取当前分支、本地分支集合和有效工作区状态。
 
-    # 整理 current_branch_and_locals 需要的 git branch result 发布信息。
-    completed_process_git_branch_result = run_git(project, ["branch", "--show-current"])  # release 打包校验输入值
+    Args:
+        project: Git 仓库根目录。
 
-    # 整理 current_branch_and_locals 需要的 git list result 发布信息。
-    completed_process_git_list_result = run_git(project, ["branch", "--list"])  # release 打包校验输入值
+    Returns:
+        当前分支名、本地分支名列表和过滤后的状态行。
+    """
 
-    # 整理 current_branch_and_locals 需要的 git status result 发布信息。
-    completed_process_git_status_result = run_git(project, ["status", "--short"])  # release 打包校验输入值
+    # 当前分支用于验证发布操作发生在允许的开发分支。
+    completed_process_git_branch_result = run_git(project, ["branch", "--show-current"])  # 当前分支查询结果
 
-    # 校验 current_branch_and_locals 的 release 分支条件。
-    if any(result.returncode != 0 for result in [completed_process_git_branch_result, completed_process_git_list_result, completed_process_git_status_result]):
+    # 本地分支集合用于检测未合并或污染发布流程的分支状态。
+    completed_process_git_list_result = run_git(project, ["branch", "--list"])  # 本地分支查询结果
 
-        # 返回 current_branch_and_locals 的 release 载荷。
+    # 工作区状态用于阻止未声明文件进入版本包。
+    completed_process_git_status_result = run_git(project, ["status", "--short"])  # 工作区状态查询结果
+
+    # 三个查询必须全部成功才能形成一致的分支治理快照。
+    tuple_git_results = (  # 分支、列表和状态命令结果
+        completed_process_git_branch_result,  # 当前分支查询
+        completed_process_git_list_result,  # 本地分支列表查询
+        completed_process_git_status_result,  # 工作区短状态查询
+    )
+
+    # 任一 Git 查询失败都无法形成可信分支证据。
+    if any(completed_process_result.returncode != 0 for completed_process_result in tuple_git_results):
+
+        # 空三元组明确告知调用方仓库事实不可读。
         return "", [], []
 
-    # 整理 current_branch_and_locals 需要的 current branch 发布信息。
-    current_branch = completed_process_git_branch_result.stdout.strip()  # release 打包校验输入值
+    # 当前分支名作为发布分支策略的主判据。
+    str_current_branch = completed_process_git_branch_result.stdout.strip()  # 当前检出分支
 
-    # 汇总 local branches，作为 release 打包和清理候选清单。
-    local_branches = sorted(normalize_branch_list_line(line) for line in completed_process_git_list_result.stdout.splitlines() if line.strip())  # release 打包校验输入值
+    # 去除 Git 装饰字符后排序，保证跨调用输出稳定。
+    list_local_branches = sorted(  # 归一化并排序的本地分支集合
+        normalize_branch_list_line(str_line)  # 去除当前分支装饰标志
+        for str_line in completed_process_git_list_result.stdout.splitlines()  # 遍历 Git 分支输出
+        if str_line.strip()  # 忽略 Git 输出中的空白行
+    )  # 仓库内全部本地分支
 
-    # 汇总 status lines，作为 release 打包和清理候选清单。
-    list_status_lines = filter_runtime_status_lines(completed_process_git_status_result.stdout.splitlines())  # release 打包校验输入值
+    # 运行期噪音不参与发布 dirty 判定。
+    list_status_lines = filter_runtime_status_lines(  # 排除已登记运行期噪音后的状态行
+        completed_process_git_status_result.stdout.splitlines()  # 原始短状态行
+    )  # 仍需治理的工作区状态行
 
-    # 返回 current_branch_and_locals 的 release 载荷。
-    return current_branch, local_branches, list_status_lines
-
-# 定义 release_prepare 的release 管理处理入口。
+    # 三项证据供 prepare gate 同步判断分支和 dirty 状态。
+    return str_current_branch, list_local_branches, list_status_lines
