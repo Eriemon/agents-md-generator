@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
 authors = [
-  { name = "Jiyuan Liu", email = "erie@seu.edu.cn" },
+  { name = "Jiyuan Liu", email = "redacted@example.invalid" },
   { name = "He Li" },
 ]
 keywords = ["codex-skill", "agent-skill", "agents-md", "ai-coding-agents", "repository-onboarding", "documentation"]
