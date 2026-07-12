@@ -56,6 +56,7 @@ AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的�
 - 将版本化 skill 安装拆成 release manifest、脱敏、仓库验证和可回滚复制模块，增加收据哈希、内容策略和安全替换检查。
 - 扩充 project、workspace、policy、release、语言路由、token 用量、源码治理和 release 内容回归评估；允许受治理的 `evals/` 随包发布，同时继续排除本地 tests。
 - 增加远程 conda 环境与 runtime 归档策略，收紧命令/路径合同，并同步强化 Plan Mode 语言、脚本输出和 global baseline 规则。
+- 保留明确声明的公开作者/联系邮箱用于开源归属，同时继续对未授权邮箱、凭据和机器本地路径执行发布脱敏。
 
 ## Skill 架构
 
@@ -185,7 +186,7 @@ Jiyuan Liu 和 He Li 隶属于东南大学电子科学与工程学院。
 
 ## 联系方式
 
-问题、合作或学术使用，请联系：`<REDACTED_EMAIL>`。
+问题、合作或学术使用，请联系：[erie@seu.edu.cn](mailto:erie@seu.edu.cn)。
 
 ## 引用
 

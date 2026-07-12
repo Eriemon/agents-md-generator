@@ -56,6 +56,7 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 - Strengthens versioned skill installation with separate release-manifest, sanitization, repository-validation, and rollback-copy helpers, including receipt-backed hashes, content-policy checks, and safe replacement behavior.
 - Expands runtime eval coverage for project, workspace, policy, release, language-routing, token-usage, source-governance, and release-content regressions while keeping governed `evals/` installable and local tests excluded.
 - Adds explicit remote conda-environment and runtime-archive policies, tightens command/path contracts, and keeps Plan Mode language, script-output, and global-baseline rules synchronized across templates and validators.
+- Preserves the explicitly declared public author/contact email for open-source attribution while continuing to redact unapproved emails, credentials, and machine-local paths from release copies.
 
 ## Skill Architecture
 
@@ -185,7 +186,7 @@ They are affiliated with the Heterogeneous Intelligence and Quantum Computing La
 
 ## Contact
 
-For questions, collaboration, or academic use, contact: `<REDACTED_EMAIL>`.
+For questions, collaboration, or academic use, contact: [erie@seu.edu.cn](mailto:erie@seu.edu.cn).
 
 ## Citation
 
