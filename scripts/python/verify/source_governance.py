@@ -223,20 +223,6 @@ def has_valid_decomposition_plan(project_root: Path, relative_file: str) -> bool
     # 计划位置与超限报告使用同一映射函数。
     path_plan_path = decomposition_plan_path(project_root, relative_file)  # 预期分解计划路径。
 
-    # 安装副本携带发布时核准的计划，使脱离仓库后仍能独立复核超限源码。
-    if not path_plan_path.is_file():
-
-        # Windows 相对路径先归一化，确保安装包内使用统一目录层级。
-        str_bundled_relative = relative_file.replace("\\", "/")  # bundled 计划相对路径。
-
-        # bundled 路径保留源码相对层级，避免文件名碰撞。
-        path_plan_path = (  # 安装副本内的计划候选。
-            project_root  # 安装技能根。
-            / "references"  # 发布参考资料目录。
-            / "decomposition-plans"  # bundled 分解计划根。
-            / f"{str_bundled_relative}.md"  # 当前源码对应计划。
-        )
-
     # 缺失计划不能豁免源码尺寸硬门禁。
     if not path_plan_path.is_file():
 
@@ -570,45 +556,183 @@ def numbered_python_module_reason(module_name: str) -> str:
 def functional_naming_violations(
     root: Path, config: dict[str, Any], *, prefix: str = ""
 ) -> list[dict[str, str]]:
-    """检查运行时 Python 文件是否使用功能名。
+    """兼容旧报告字段并委托统一文件命名门禁。
 
-    参数：root 为扫描根，config 为治理配置，prefix 为报告前缀。
-    返回：编号分片模块的路径和错误消息列表。
+    参数：
+        root: 需要扫描的工作文件夹根目录。
+        config: 已解析的源码治理配置。
+        prefix: 报告路径需要附加的显示前缀。
+    返回：统一文件命名门禁产生的稳定违规记录。
     """
 
-    # 收集 violations 条目，保持报告顺序稳定。
-    list_violations: list[dict[str, str]] = []  # 功能化命名违规。
+    # 旧调用入口与新门禁共享实现，避免两个规则集合发生漂移。
+    return file_naming_violations(root, config, prefix=prefix)
 
-    # 逐项检查候选文件，只约束 scripts/python runtime 下的 Python 模块名。
-    for path in iter_candidate_files(root, config):
+# 文件命名候选保留生产源码，并额外纳入根 tests 下的 Python 文件。
+def iter_naming_files(root: Path, config: dict[str, Any]) -> list[Path]:
+    """返回需要执行文件命名检查的源码与 Python 测试。
 
-        # 计算相对路径，让 source 和 release 报告都使用可读路径。
-        str_rel_path = relative_path(path, root)  # 当前候选相对路径。
+    参数：
+        root: 受管工作文件夹根目录。
+        config: 包含源码后缀和排除根目录的治理配置。
+    返回：按相对路径排序的文件命名检查候选。
+    """
 
-        # 非 runtime Python 脚本不进入功能化文件名门禁。
-        if not is_python_runtime_script(str_rel_path):
+    # 后缀集合沿用源码治理合同，保证不同语言接受同一命名规则。
+    set_extensions = {str(item).lower() for item in config.get("hard_fail_extensions", [])}  # 受管源码后缀
 
-            # 继续检查下一个候选文件。
+    # tests 必须纳入检查，其余治理排除根保持原有边界。
+    set_excluded = {  # 不参与功能源码文件名检查的治理根目录
+        str(item).strip("/\\")  # 统一排除根的相对路径表示
+        for item in config.get("excluded_roots", [])  # 读取项目声明的全部排除根
+        if str(item).strip("/\\") != "tests"  # 强制保留根级 tests 命名检查
+    }  # 去除 tests 后的有效命名扫描排除集合
+
+    # 候选列表在扫描结束后统一排序，消除文件系统遍历差异。
+    list_files: list[Path] = []  # 需要执行文件名门禁的实际文件
+
+    # 递归遍历工作文件夹，同时按后缀和 tests 特例筛选候选。
+    for path in root.rglob("*"):
+
+        # 目录和其他非文件条目不参与文件名规则。
+        if not path.is_file():
+
+            # 跳过非文件后继续检查下一个遍历结果。
             continue
 
-        # 分析模块 basename 是否仍在使用顺序编号分片名。
-        str_reason = numbered_python_module_reason(path.name)  # 当前模块命名诊断。
+        # 相对路径部分用于识别顶层排除根和根级 tests。
+        tuple_parts = path.relative_to(root).parts  # 当前文件的仓库相对路径部分
 
-        # 功能名通过时不写入报告。
-        if not str_reason:
+        # 受保护或生成目录保持治理排除，不混入功能源码命名结果。
+        if tuple_parts and tuple_parts[0] in set_excluded:
 
-            # 继续查找仍使用编号分片名的模块。
+            # 排除根内文件由其专用治理规则负责。
             continue
 
-        # 组合 release 前缀，保持发布包报告能指向 dist 内实际文件。
-        str_full_path = (  # 带扫描上下文的违规路径。
-            f"{prefix}/{str_rel_path}" if prefix else str_rel_path  # 选择展示上下文。
+        # tests 中只有 Python 文件属于当前测试命名合同。
+        bool_test_python = bool(  # 当前路径是否属于根级 tests 内的 Python 测试
+            tuple_parts  # 路径必须含有顶层目录
+            and tuple_parts[0] == "tests"  # 测试必须位于唯一根级 tests
+            and path.suffix.lower() == ".py"  # 当前规则只覆盖 Python 测试
+        )  # 当前候选是否为根级 tests 下的 Python 文件
+
+        # 测试 Python 或配置声明的源码后缀进入确定性命名检查。
+        if bool_test_python or path.suffix.lower() in set_extensions:
+
+            # 保存真实路径供后续统一生成相对诊断。
+            list_files.append(path)
+
+    # 稳定排序确保相同工作树产生相同违规顺序。
+    return sorted(list_files)
+
+# 单文件诊断采用稳定代码，便于 CLI、测试和 Agent 语义复核共享。
+def file_name_violation(path: Path, gate: dict[str, Any]) -> tuple[str, str]:
+    """返回文件名的首个确定性违规代码和说明。
+
+    参数：
+        path: 需要检查的源码或 Python 测试路径。
+        gate: 文件命名门禁的不可弱化配置。
+    返回：首个违规的稳定代码与英文机器诊断；通过时均为空字符串。
+    """
+
+    # 初始化文件等明确豁免项不承担功能摘要命名职责。
+    if path.name in gate.get("exemptions", []):
+
+        # 空代码和空消息表示确定性规则通过。
+        return "", ""
+
+    # 文件词干是数字、前导字符、长度和模式检查的共同输入。
+    str_stem = path.stem  # 不含扩展名的文件名称
+
+    # 任意数字都会形成版本号或顺序编号歧义。
+    if re.search(r"\d", str_stem):
+
+        # 稳定代码便于 CLI、评测和审查证据共同断言。
+        return "digit-forbidden", "file name stem must not contain digits"
+
+    # 前导下划线会把功能文件伪装成内部实现分片。
+    if str_stem.startswith("_"):
+
+        # 返回专门代码，避免与普通字符模式错误混淆。
+        return "leading-underscore", "file name stem must not start with underscore"
+
+    # 词干长度超过配置上限时不能保持简洁可识别。
+    if len(str_stem) > int(gate.get("max_stem_chars", 30)):
+
+        # 长度诊断保持用户要求的三十字符边界。
+        return "stem-too-long", "file name stem exceeds the 30 character limit"
+
+    # Python 与其他源码分别读取配置中的合法字符模式。
+    str_pattern = (
+        str(gate.get("python_pattern", ""))  # Python 文件允许测试前缀和功能单词
+        if path.suffix.lower() == ".py"  # 根据真实扩展名选择规则
+        else str(gate.get("source_pattern", ""))  # 其他源码只允许功能化小写单词
+    )  # 当前文件词干必须满足的完整正则表达式
+
+    # 不符合语言模式的词干缺少稳定的小写功能命名结构。
+    if not re.fullmatch(str_pattern, str_stem):
+
+        # 字符模式错误作为最后一个确定性语法诊断返回。
+        return "invalid-stem-chars", "file name stem must use lowercase functional words"
+
+    # 所有确定性语法规则通过时不产生违规。
+    return "", ""
+
+# 统一扫描源码和 Python 测试的确定性文件命名违规。
+def file_naming_violations(
+    root: Path, config: dict[str, Any], *, prefix: str = ""
+) -> list[dict[str, str]]:
+    """收集数字、前导下划线、超长和字符模式违规。
+
+    参数：
+        root: 需要扫描的工作文件夹根目录。
+        config: 包含文件命名门禁的源码治理配置。
+        prefix: 报告路径需要附加的显示前缀。
+    返回：按候选路径顺序排列的确定性文件命名违规。
+    """
+
+    # 配置对象决定门禁开关、豁免项、长度与字符模式。
+    dict_gate = config.get("file_naming_gate", {})  # 当前项目文件命名门禁配置
+
+    # 缺失、错误类型或显式关闭时保持向后兼容的空报告。
+    if not isinstance(dict_gate, dict) or not dict_gate.get("enabled"):
+
+        # 未启用门禁时不扫描文件系统。
+        return []
+
+    # 违规列表保留候选扫描顺序，便于稳定比较评测结果。
+    list_violations: list[dict[str, str]] = []  # 文件命名违规记录
+
+    # 每个候选文件只报告首个确定性命名错误。
+    for path in iter_naming_files(root, config):
+
+        # 元组结果同时携带稳定代码和机器诊断文本。
+        tuple_violation = file_name_violation(path, dict_gate)  # 当前文件的首个命名违规
+
+        # 分别提取代码和消息，避免解包变量被误判为元组类型。
+        str_code = tuple_violation[0]  # 当前文件的稳定违规代码
+
+        # 消息与代码保持同一规则来源，供 CLI 直接输出。
+        str_message = tuple_violation[1]  # 当前文件的机器可读诊断文本
+
+        # 空代码表示当前文件满足所有确定性命名规则。
+        if not str_code:
+
+            # 跳过通过项，报告只保留需要修复的文件。
+            continue
+
+        # 统一相对路径使报告不泄露本机工作目录。
+        str_relative = relative_path(path, root)  # 当前违规文件的根目录相对路径
+
+        # 发布副本扫描可附加前缀，本地扫描保持原始相对路径。
+        str_display = f"{prefix}/{str_relative}" if prefix else str_relative  # 最终展示路径
+
+        # 聚合稳定字段，供源码门禁、审查和评测共同消费。
+        list_violations.append(
+            {"path": str_display, "code": str_code, "message": str_message}
         )
 
-        # 记录违反功能化命名要求的 runtime Python 模块。
-        list_violations.append({"path": str_full_path, "message": str_reason})
-
-    # 返回所有功能化命名违规。
+    # 返回完成扫描后的全部确定性命名违规。
     return list_violations
 
 # 收集落在生产源码树中的测试专用文件。
@@ -692,6 +816,168 @@ def python_assignment_comment_lines(text: str) -> set[int]:
     # 返回词法扫描可直接执行成员判断的行号集合。
     return set_assignment_lines
 
+# 公共 API docstring 扫描独立处理语法错误，不影响后续词法注释诊断。
+def python_public_api_comment_violations(text: str) -> list[str]:
+    """返回公共 Python 定义缺失 docstring 或语法损坏的诊断。
+
+    参数：text 为待解析的 Python 源码文本。
+    返回：语法错误或公共定义 docstring 违规列表。
+    """
+
+    # 语法损坏时不能可靠遍历公共定义，必须转换为治理诊断。
+    try:
+
+        # 空源码使用换行占位，保持解析器输入有效。
+        tree = ast.parse(text or "\n")  # 用于定位公共定义的语法树。
+
+    # 语法错误行号随稳定消息返回，不让整仓扫描中断。
+    except SyntaxError as exc:
+
+        # 缺失行号时使用零值保持诊断 schema 稳定。
+        int_line_no = getattr(exc, "lineno", 0) or 0  # Python 语法错误行号。
+
+        # 单条语法诊断解释公共 API 扫描无法继续。
+        return [f"python syntax error prevents comment policy parsing (line {int_line_no})"]
+
+    # 公共定义按语法树遍历顺序生成确定性诊断。
+    list_violations: list[str] = []  # 公共 API docstring 违规列表。
+
+    # 嵌套函数和类同样属于公共定义检查范围。
+    for node in ast.walk(tree):
+
+        # 私有定义和非定义节点不得触发公共 API 合同。
+        bool_is_public_definition = isinstance(  # 当前节点是否为公共定义。
+            node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)  # 支持的定义节点类型。
+        ) and not node.name.startswith("_")  # 下划线前缀表示私有定义。
+
+        # 缺失原始 docstring 的公共定义登记名称和物理行号。
+        if bool_is_public_definition and ast.get_docstring(node, clean=False) is None:
+
+            # 诊断直接定位源码定义，便于调用方修复。
+            list_violations.append(
+                f"public API `{node.name}` is missing a docstring (line {node.lineno})"
+            )
+
+    # 返回按语法树顺序收集的公共 API 诊断。
+    return list_violations
+
+# 单个注释 token 可同时触发尾注释与生成标记两类独立诊断。
+def python_comment_token_violations(
+    token: tokenize.TokenInfo,
+    lines: list[str],
+    python_gate: dict[str, Any],
+    ai_markers: list[str],
+    assignment_lines: set[int],
+) -> list[str]:
+    """检查一个 Python 注释 token 并返回策略诊断。
+
+    参数：token 为注释 token，lines 为物理行，python_gate 为语言策略，
+    ai_markers 为禁止标记，assignment_lines 为允许尾注释的赋值行。
+    返回：当前注释 token 触发的有序诊断。
+    """
+
+    # 非空源码按 token 行号定位，空源码保留防御性回退。
+    str_line_text = lines[token.start[0] - 1] if lines else ""  # 注释所在完整物理行。
+
+    # 注释列之前存在非空源码时，该 token 属于尾注释候选。
+    str_code_before_comment = str_line_text[: token.start[1]].strip()  # 注释前代码片段。
+
+    # 尾注释和生成标记可在同一 token 上独立报告。
+    list_violations: list[str] = []  # 当前 token 的策略违规。
+
+    # 普通尾注释受禁止开关约束，同时尊重赋值用途例外。
+    if (
+        python_gate.get("forbid_trailing_comment", False)
+        and str_code_before_comment
+        and token.start[0] not in assignment_lines
+    ):
+
+        # token 起始行就是尾注释对应的物理行。
+        list_violations.append(
+            f"trailing Python comment is not allowed (line {token.start[0]})"
+        )
+
+    # 生成标记仅在注释 token 内容中执行不区分大小写匹配。
+    if ai_markers and any(marker in token.string.lower() for marker in ai_markers):
+
+        # 标记诊断与同一行可能存在的尾注释诊断并存。
+        list_violations.append(
+            f"AI-generated comment marker is not allowed (line {token.start[0]})"
+        )
+
+    # 返回当前 token 的零条、一条或两条诊断。
+    return list_violations
+
+# tokenize 扫描只处理真实注释 token，字符串内井号不参与策略匹配。
+def python_token_comment_violations(
+    text: str,
+    python_gate: dict[str, Any],
+    ai_markers: list[str],
+) -> list[str]:
+    """返回 Python 尾注释、生成标记和词法错误诊断。
+
+    参数：text 为源码，python_gate 为语言策略，ai_markers 为禁止标记。
+    返回：词法扫描产生的有序注释策略诊断。
+    """
+
+    # 赋值尾注释例外由 Python 策略显式控制。
+    bool_allow_assignment = bool(  # 是否允许赋值用途尾注释。
+        python_gate.get("allow_assignment_trailing_comment", False)  # 原始策略开关。
+    )
+
+    # 仅在例外启用时解析赋值覆盖行，避免不必要的 AST 遍历。
+    set_assignment_lines = (  # 可接受赋值尾注释的物理行号。
+        python_assignment_comment_lines(text)  # 从语法树提取赋值行。
+        if bool_allow_assignment  # 策略允许赋值尾注释。
+        else set()  # 禁用例外时不放行任何行。
+    )
+
+    # token 坐标通过物理行列表映射回完整源码行。
+    list_lines = text.splitlines()  # Python 源码物理行。
+
+    # 全部 token 诊断按词法顺序追加。
+    list_violations: list[str] = []  # 当前源码的词法注释违规。
+
+    # 未闭合结构等 TokenError 必须转换为治理诊断。
+    try:
+
+        # tokenize 能排除字符串中的井号并识别真正注释。
+        for token in tokenize.generate_tokens(io.StringIO(text).readline):
+
+            # 非注释 token 不参与本策略检查。
+            if token.type != tokenize.COMMENT:
+
+                # 继续读取后续词法 token。
+                continue
+
+            # 当前注释的独立诊断追加到文件级结果。
+            list_violations.extend(
+                python_comment_token_violations(
+                    token, list_lines, python_gate, ai_markers, set_assignment_lines
+                )
+            )
+
+    # 词法错误不应中断其他文件的聚合扫描。
+    except tokenize.TokenError as exc:
+
+        # TokenError 第二参数只有在非空元组时才可读取行号。
+        bool_has_coordinates = (  # 当前异常是否携带有效坐标。
+            len(exc.args) > 1  # 至少包含消息与坐标两个参数。
+            and isinstance(exc.args[1], tuple)  # 坐标必须为元组。
+            and bool(exc.args[1])  # 坐标元组不能为空。
+        )
+
+        # 缺失坐标时使用零值维持错误消息结构。
+        int_line_no = exc.args[1][0] if bool_has_coordinates else 0  # Python 词法错误行号。
+
+        # 说明词法失败阻止了完整注释策略扫描。
+        list_violations.append(
+            f"python tokenize error prevents comment policy parsing (line {int_line_no})"
+        )
+
+    # 返回尾注释、生成标记和词法错误三类诊断。
+    return list_violations
+
 # 提取 Python 公共 API、尾注释与生成标记违规。
 def extract_python_comment_violations(path: Path, config: dict[str, Any]) -> list[str]:
     """检查单个 Python 文件的项目注释策略。
@@ -703,15 +989,14 @@ def extract_python_comment_violations(path: Path, config: dict[str, Any]) -> lis
     # 容错读取让损坏源码仍能产生语法或词法诊断。
     text = path.read_text(encoding="utf-8", errors="ignore")  # 待扫描源码文本。
 
-    # 非映射门禁配置按空策略处理，避免配置损坏触发属性错误。
+    # 注释策略根分区提供语言策略与跨语言禁止标记。
     gate = config.get("comment_policy_gate", {})  # 聚合扫描启用配置。
 
-    # Python 分区只接受映射，隔离其他语言的策略字段。
-    python_gate = (  # Python 专用注释策略。
-        gate.get("python", {})  # 原始 Python 策略分区。
-        if isinstance(gate.get("python", {}), dict)  # Python 分区类型有效。
-        else {}  # 损坏的 Python 分区按空策略处理。
-    )
+    # Python 分区必须为映射，损坏配置按空策略处理。
+    raw_python_gate = gate.get("python", {})  # 原始 Python 策略分区。
+
+    # 类型收窄后辅助函数无需重复防御配置结构。
+    python_gate = raw_python_gate if isinstance(raw_python_gate, dict) else {}  # Python 专用策略。
 
     # 统一为小写后执行不区分大小写的生成标记匹配。
     list_ai_markers = [  # 禁止出现在源码注释中的生成标记。
@@ -725,131 +1010,16 @@ def extract_python_comment_violations(path: Path, config: dict[str, Any]) -> lis
     # 仅在配置明确启用时解析公共定义的 docstring。
     if python_gate.get("require_public_api_docstring", False):
 
-        # AST 语法失败需要转化为可操作的治理诊断。
-        try:
-
-            # 空文件使用换行占位，保持解析器输入有效。
-            tree = ast.parse(text or "\n")  # 用于定位公共定义的语法树。
-
-        # 语法损坏时记录行号并停止公共 API 遍历。
-        except SyntaxError as exc:
-
-            # 缺失行号回退为零，保持错误消息 schema 稳定。
-            int_line_no = getattr(exc, "lineno", 0) or 0  # Python 语法错误行号。
-
-            # 解释为何无法继续执行 docstring 门禁。
-            list_violations.append(
-                f"python syntax error prevents comment policy parsing (line {int_line_no})"
-            )
-
-            # None 明确阻止后续 ast.walk 使用无效语法树。
-            tree = None  # 语法失败后的公共定义扫描状态。
-
-        # 只有有效语法树才能可靠判断公共 API docstring。
-        if tree is not None:
-
-            # 遍历嵌套定义，覆盖模块、类和函数内部的公共声明。
-            for node in ast.walk(tree):
-
-                # 私有定义和非定义节点不进入公共 API 合同。
-                if not isinstance(
-                    node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-                ) or node.name.startswith("_"):
-
-                    # 继续检查其余语法树节点。
-                    continue
-
-                # 缺失原始 docstring 的公共定义需要登记具体名称和行号。
-                if ast.get_docstring(node, clean=False) is None:
-
-                    # 报告保留源码定义位置，便于直接修复。
-                    list_violations.append(
-                        f"public API `{node.name}` is missing a docstring (line {node.lineno})"
-                    )
+        # 公共定义诊断先写入结果，保持历史排序合同。
+        list_violations.extend(python_public_api_comment_violations(text))
 
     # 尾注释或生成标记任一启用时才运行 tokenize 扫描。
     if python_gate.get("forbid_trailing_comment", False) or list_ai_markers:
 
-        # TokenError 需要转换为治理诊断，而不是中断整仓扫描。
-        try:
-
-            # 赋值尾注释例外由 Python 分区单独控制。
-            bool_allow_assignment_trailing = bool(  # 是否放行赋值用途尾注释。
-                python_gate.get(  # 读取赋值尾注释例外开关。
-                    "allow_assignment_trailing_comment",  # 赋值尾注释例外键。
-                    False,  # 默认禁止赋值尾注释。
-                )  # 原始赋值尾注释开关。
-            )
-
-            # 预先计算例外行，避免为每个注释重复遍历语法树。
-            set_assignment_comment_lines = (  # 可接受赋值尾注释的物理行号。
-                python_assignment_comment_lines(text)  # 从 AST 提取例外行。
-                if bool_allow_assignment_trailing  # 配置允许 AST 例外。
-                else set()  # 禁用例外时不放行任何物理行。
-            )
-
-            # 词法 token 的行列坐标映射回原始物理行。
-            list_lines = text.splitlines()  # Python 源码物理行。
-
-            # tokenize 能区分真正注释与字符串中的井号。
-            for token in tokenize.generate_tokens(io.StringIO(text).readline):
-
-                # 非注释 token 不参与本策略检查。
-                if token.type != tokenize.COMMENT:
-
-                    # 继续读取后续 token。
-                    continue
-
-                # 文件为空时保留安全回退，正常 token 坐标始终命中源码行。
-                str_line_text = (  # 当前注释所在的完整物理行。
-                    list_lines[token.start[0] - 1]  # token 对应物理行。
-                    if list_lines  # 非空源码可映射 token 行。
-                    else ""  # 空源码的防御性回退。
-                )
-
-                # 注释列之前存在代码即为尾注释候选。
-                str_code_before_comment = (  # 注释前的非空代码片段。
-                    str_line_text[: token.start[1]].strip()  # 注释列之前的源码。
-                )
-
-                # 禁止普通尾注释，同时尊重显式启用的赋值例外。
-                if (
-                    python_gate.get("forbid_trailing_comment", False)
-                    and str_code_before_comment
-                    and token.start[0] not in set_assignment_comment_lines
-                ):
-
-                    # 物理行号直接来自 tokenize 坐标。
-                    list_violations.append(
-                        f"trailing Python comment is not allowed (line {token.start[0]})"
-                    )
-
-                # 生成标记只在注释 token 内匹配，避免扫描字符串内容。
-                if list_ai_markers and any(
-                    marker in token.string.lower() for marker in list_ai_markers
-                ):
-
-                    # 标记违规与尾注释违规可在同一行独立报告。
-                    list_violations.append(
-                        f"AI-generated comment marker is not allowed (line {token.start[0]})"
-                    )
-
-        # 未闭合多行结构等词法错误仍需以稳定消息返回。
-        except tokenize.TokenError as exc:
-
-            # TokenError 的第二参数通常携带行列坐标。
-            int_line_no = (  # Python 词法错误行号。
-                exc.args[1][0]  # TokenError 坐标中的行号。
-                if len(exc.args) > 1  # TokenError 携带坐标参数。
-                and isinstance(exc.args[1], tuple)  # 坐标值必须是元组。
-                and exc.args[1]  # 坐标元组不能为空。
-                else 0  # 缺失坐标时使用稳定的未知行号。
-            )
-
-            # 说明词法失败阻止了注释策略完整扫描。
-            list_violations.append(
-                f"python tokenize error prevents comment policy parsing (line {int_line_no})"
-            )
+        # 词法诊断追加在公共 API 诊断之后。
+        list_violations.extend(
+            python_token_comment_violations(text, python_gate, list_ai_markers)
+        )
 
     # 返回公共 API、尾注释和标记三类有序诊断。
     return list_violations
@@ -1060,8 +1230,8 @@ def source_governance_report(
         dict_config,  # 生效可读性配置。
     )
 
-    # 工作树 runtime Python 模块执行功能名约束。
-    list_naming = functional_naming_violations(  # 工作树模块命名违规。
+    # 工作树源码与 Python 测试执行统一功能命名约束。
+    list_naming = file_naming_violations(  # 工作树文件命名违规。
         project,  # 命名检查工作树根。
         dict_config,  # 生效命名配置。
     )
@@ -1080,6 +1250,7 @@ def source_governance_report(
         "comment_policy_violations": list_comments,
         "readability_violations": list_readability,
         "functional_naming_violations": list_naming,
+        "file_naming_violations": list_naming,
         "errors": list_errors,
         "ok": not (
             list_errors
@@ -1155,8 +1326,8 @@ def release_source_governance_report(
         prefix=str_prefix,  # 可读性报告包内前缀。
     )
 
-    # 发布包 runtime Python 文件继续执行功能化命名约束。
-    list_naming = functional_naming_violations(  # 发布模块命名违规。
+    # 发布包源码与 Python 测试继续执行功能化命名约束。
+    list_naming = file_naming_violations(  # 发布文件命名违规。
         release_dir,  # 命名检查发布根。
         dict_config,  # 发布命名配置。
         prefix=str_prefix,  # 命名报告包内前缀。
@@ -1174,6 +1345,7 @@ def release_source_governance_report(
         "comment_policy_violations": list_comments,
         "readability_violations": list_readability,
         "functional_naming_violations": list_naming,
+        "file_naming_violations": list_naming,
         "errors": list(dict_effective["errors"]),
         "ok": not (
             dict_effective["errors"]
@@ -1231,8 +1403,11 @@ def format_source_governance_errors(
         # 统一前缀使调用方无需理解报告分区。
         list_errors.append(f"{prefix}: `{item['path']}` {item['message']}")
 
-    # 功能命名消息说明编号分片应替换为职责名。
-    for item in report.get("functional_naming_violations", []):
+    # 文件命名消息说明确定性违规代码和对应职责名要求。
+    for item in report.get(
+        "file_naming_violations",
+        report.get("functional_naming_violations", []),
+    ):
 
         # 保持与其他文件级错误完全相同的展示结构。
         list_errors.append(f"{prefix}: `{item['path']}` {item['message']}")

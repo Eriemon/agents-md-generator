@@ -2,7 +2,10 @@
 
 # 标准库提供正则匹配、路径建模和通用配置载荷类型。
 import re
+import subprocess
+import importlib.util
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 # 共享运行时提供合同片段、配置规整和批量诊断助手。
@@ -23,7 +26,225 @@ from verify_agents_runtime_shared import (
     validate_language_skill_route_lines,
 )
 # 命令合同模块提供容错 JSON 配置读取能力。
-from verify_agents_command_contracts import read_json
+from command_contracts import read_json
+
+# 持久化验收使用固定清单文件名，不把路径片段散落在控制流中。
+ARTIFACT_MANIFEST_NAME = "artifact.json"  # 知识图谱持久化清单文件名
+
+# 压缩图数据库是 full 加 persistence 模式的第二项根级证据。
+ARTIFACT_GRAPH_NAME = "graph.db.zst"  # 知识图谱压缩数据库文件名
+
+# 知识图谱公共合同按文件位置加载，避免 CLI 入口在导入期修改 sys.path。
+def load_codebase_memory_contract_module() -> ModuleType:
+    """从 common 目录加载知识图谱单一事实源模块。
+
+    参数:
+        无。
+
+    返回:
+        已执行并可读取合同常量与构造器的模块对象。
+
+    异常:
+        RuntimeError: 无法创建模块规格或加载器时抛出。
+    """
+
+    # 公共合同文件位于 verify 同级的 common 目录。
+    path_contract = Path(__file__).resolve().parents[1] / "common" / "codebase_memory_mcp.py"  # 知识图谱合同路径
+
+    # 独立模块名避免覆盖调用进程中可能存在的安装副本。
+    module_spec = importlib.util.spec_from_file_location("agents_codebase_memory_contract", path_contract)  # 模块加载规格
+
+    # 缺失加载器表示仓库结构或 Python 导入机制已损坏。
+    if module_spec is None or module_spec.loader is None:
+
+        # 根合同无法读取单一事实源时必须明确阻断。
+        raise RuntimeError("> ERR: [Python] 无法加载知识图谱公共合同模块")
+
+    # 模块对象在执行前由标准导入工具创建。
+    module_contract = importlib.util.module_from_spec(module_spec)  # 知识图谱合同模块
+
+    # 执行源码后模块公开合同常量和构造函数。
+    module_spec.loader.exec_module(module_contract)
+
+    # 返回加载完成的单一事实源模块。
+    return module_contract
+
+# 画像与渲染文本校验先返回可信布尔选择，供文件系统合同继续使用。
+def validated_codebase_memory_choice(
+    text: str,
+    file: str,
+    profile: dict[str, Any],
+    errors: list[str],
+) -> bool | None:
+    """核验知识图谱显式选择、结构化合同和根规则文本。
+
+    参数:
+        text: 当前根 AGENTS 完整文本。
+        file: 错误信息使用的文件标识。
+        profile: 强控制结构化画像。
+        errors: 累积静态校验错误的可变列表。
+
+    返回:
+        合法显式选择返回布尔值；字段缺失或类型错误时返回 None。
+    """
+
+    # 强控制画像必须显式保存布尔选择，禁止用字段缺失推断默认值。
+    raw_enabled = profile.get("use_codebase_memory_mcp")  # 原始知识图谱启用选择
+
+    # 非布尔值无法安全决定后续持久化产物门禁。
+    if not isinstance(raw_enabled, bool):
+
+        # 精确错误说明画像缺少显式产品选择。
+        errors.append(f"{file}: strong-control profile must explicitly set use_codebase_memory_mcp")
+
+        # None 阻止调用方继续按真值解释损坏画像。
+        return None
+
+    # 结构化子合同必须与用户显式选择逐字段一致。
+    module_type_contract = load_codebase_memory_contract_module()  # 画像校验使用的知识图谱模块
+
+    # 画像子合同必须与公共构造器派生结果完全相同。
+    if profile.get("codebase_memory_mcp_contract") != module_type_contract.codebase_memory_contract(raw_enabled):
+
+        # 合同漂移必须在根文件验收中阻断。
+        errors.append(f"{file}: codebase_memory_mcp_contract does not match the explicit choice")
+
+    # 根规则必须向执行代理公开当前启用或禁用状态。
+    str_expected_rule = (  # 当前选择对应的根规则片段
+        "**Codebase memory MCP:** enabled"  # 启用态根规则
+        if raw_enabled  # 显式启用选择
+        else "**Codebase memory MCP:** disabled"  # 禁用态根规则
+    )
+
+    # 缺失根规则会让后续代理无法执行画像中的知识图谱边界。
+    if str_expected_rule not in text:
+
+        # 错误文本保留期望状态，便于精确修复渲染退化。
+        errors.append(f"{file}: missing rendered codebase-memory-mcp {'enabled' if raw_enabled else 'disabled'} rule")
+
+    # 返回经过类型核验的布尔选择供持久化产物校验。
+    return raw_enabled
+
+# 仓库边界校验确保知识图谱产物仅本地持久化且不进入 Git。
+def validate_codebase_memory_artifacts(
+    project: Path,
+    file: str,
+    bool_enabled: bool,
+    errors: list[str],
+) -> None:
+    """核验忽略规则、Git 跟踪状态与根级持久化产物。
+
+    参数:
+        project: 当前受管项目根目录。
+        file: 错误信息使用的文件标识。
+        bool_enabled: 已通过类型校验的知识图谱选择。
+        errors: 累积静态校验错误的可变列表。
+
+    返回:
+        无业务返回值；发现的仓库边界问题直接追加到 errors。
+    """
+
+    # 根忽略文件是本地知识图谱产物不得提交的第一层边界。
+    path_gitignore = project / ".gitignore"  # 项目根 Git 忽略文件
+
+    # 公共模块提供产物目录和根锚定忽略规则。
+    module_type_contract = load_codebase_memory_contract_module()  # 仓库边界使用的知识图谱模块
+
+    # 局部名称缩短后续 Git 和路径合同表达式。
+    str_artifact_directory = module_type_contract.ARTIFACT_DIRECTORY  # 根级知识图谱产物目录名
+
+    # 根锚定规则禁止同名嵌套目录意外放宽。
+    str_ignore_rule = module_type_contract.IGNORE_RULE  # 知识图谱根忽略规则
+
+    # 缺失忽略文件时使用空集合，统一进入精确缺规则诊断。
+    set_ignore_lines = (  # 规整后的根忽略规则集合
+        {str_line.strip() for str_line in path_gitignore.read_text(encoding="utf-8").splitlines()}  # 规整已有规则
+        if path_gitignore.is_file()  # 根忽略文件存在
+        else set()  # 缺失文件对应空规则集合
+    )
+
+    # 本地知识图谱目录必须由根级精确规则排除。
+    if str_ignore_rule not in set_ignore_lines:
+
+        # 缺失忽略规则会产生发布污染风险。
+        errors.append(f"{file}: root .gitignore must contain {str_ignore_rule}")
+
+    # Git 索引查询验证历史文件也没有继续被跟踪。
+    process_tracked = subprocess.run(  # 知识图谱目录 Git 跟踪查询
+        ["git", "ls-files", "--", str_artifact_directory],  # 精确查询本地产物目录
+        cwd=project,  # 在当前受管项目执行查询
+        capture_output=True,  # 捕获跟踪文件清单
+        text=True,  # 以文本形式解析 Git 输出
+        encoding="utf-8",  # 固定跨平台输出编码
+        errors="replace",  # 非法字节不应中断治理检查
+        check=False,  # 返回码由下方合同显式判断
+    )
+
+    # 成功查询且存在输出表示本地产物仍污染版本历史。
+    if process_tracked.returncode == 0 and process_tracked.stdout.strip():
+
+        # 跟踪污染必须先解除才能通过根合同验收。
+        errors.append(f"{file}: {str_artifact_directory} must not contain Git-tracked files")
+
+    # 禁用知识图谱时只要求仓库边界，不要求持久化产物存在。
+    if not bool_enabled:
+
+        # 禁用路径完成校验后直接结束。
+        return
+
+    # 启用态清单与图数据库只允许位于固定的根隐藏目录。
+    path_artifact = project / str_artifact_directory  # 启用态持久化证据查找目录
+
+    # 清单与压缩图数据库共同构成完整持久化证据。
+    if not (path_artifact / ARTIFACT_MANIFEST_NAME).is_file() or not (path_artifact / ARTIFACT_GRAPH_NAME).is_file():
+
+        # 任一关键产物缺失都不能声称 full persistence 已完成。
+        errors.append(f"{file}: enabled codebase-memory-mcp requires root persistence artifacts")
+
+    # 全仓扫描清单文件，阻止子目录形成第二个知识图谱根。
+    for path_nested in project.glob(f"**/{str_artifact_directory}/{ARTIFACT_MANIFEST_NAME}"):  # 候选知识图谱清单
+
+        # 只有项目根固定目录允许保存持久化清单。
+        if path_nested.parent != path_artifact:
+
+            # 嵌套产物会破坏单一项目根和发布边界。
+            errors.append(
+                f"{file}: nested codebase-memory artifact is forbidden: "
+                f"{path_nested.relative_to(project).as_posix()}"
+            )
+
+# 公开根合同入口组合画像、渲染文本与文件系统三层证据。
+def validate_codebase_memory_mcp_contract(
+    text: str,
+    file: str,
+    project: Path,
+    profile: dict[str, Any],
+    errors: list[str],
+) -> None:
+    """静态核验显式开关、根规则、忽略项和持久化产物位置。
+
+    参数:
+        text: 当前根 AGENTS 完整文本。
+        file: 错误信息使用的文件标识。
+        project: 当前受管项目根目录。
+        profile: 强控制结构化画像。
+        errors: 累积静态校验错误的可变列表。
+
+    返回:
+        无业务返回值；发现的问题直接追加到 errors。
+    """
+
+    # 首先核验显式选择、画像子合同和用户可见根规则。
+    bool_enabled = validated_codebase_memory_choice(text, file, profile, errors)  # 已校验知识图谱选择
+
+    # 损坏选择已产生精确诊断，不能继续推断文件系统要求。
+    if bool_enabled is None:
+
+        # 返回避免将缺失字段误判为禁用选择。
+        return
+
+    # 合法布尔选择进入忽略、Git 跟踪和持久化产物验收。
+    validate_codebase_memory_artifacts(project, file, bool_enabled, errors)
 
 # 远程路由助手核对服务器注册表及每条任务路由引用。
 def validate_remote_route_data(file: str, dict_remote_contract: dict[str, Any], errors: list[str]) -> None:
@@ -828,6 +1049,9 @@ def validate_strong_control(text: str, file: str, project: Path, errors: list[st
 
         # 直接回显缺少默认语言的根因，方便恢复强控制最小契约。
         errors.append(f"{file}: strong-control profile must explicitly set default_conversation_language")
+
+    # 知识图谱选择需同时核验画像、根规则和本地产物仓库边界。
+    validate_codebase_memory_mcp_contract(text, file, project, dict_profile, errors)
 
     # memory 启用时，正文必须同时保留 memory 段落入口和四条关键治理提示。
     validate_strong_control_memory_contract(text, file, dict_profile, errors)

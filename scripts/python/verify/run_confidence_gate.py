@@ -286,7 +286,7 @@ def repo_local_eval_runner_path() -> Path:
     """
 
     # tests wrapper 保持历史调用接口。
-    return TESTS_DIR / "run_skill_evals.py"
+    return TESTS_DIR / "evaluation" / "run_skill_evals.py"
 
 # runner 解析顺序确保显式配置不会被本地环境悄然覆盖。
 def resolve_eval_runner(eval_runner: Path | None, agents_generator_root: Path) -> tuple[Path, str, bool]:
@@ -526,7 +526,7 @@ ConfidenceGateContext = namedtuple(  # 全部门禁命令共享的规范化执�
     (
         "path_project path_skill path_evals path_agents_generator "
         "path_external_skill str_review_base str_eval_runner_policy "
-        "path_eval_runner str_version str_skill_argument"
+        "path_eval_runner path_semantic_review str_version str_skill_argument"
     ),
 )  # 项目路径、版本和 runner 策略的不可变载体
 
@@ -614,6 +614,20 @@ def confidence_context(
     # 显式 runner 路径仅在调用方提供时解析。
     path_eval_runner = Path(str(dict_options["eval_runner"])).resolve() if dict_options.get("eval_runner") else None  # 显式 runner 绝对路径
 
+    # 语义复核证据默认从项目治理目录读取，也允许调用方显式覆盖。
+    path_semantic_review = Path(  # 文件名功能摘要的 revision-bound 证据路径
+        str(  # 将配置值与默认路径统一为路径文本
+            dict_options.get("semantic_review")  # 调用方显式指定的证据位置
+            or (path_project / ".agents" / "file-naming-review.json")  # 项目默认治理证据
+        )  # 统一转换为 Path 可接受的文本
+    )  # 后续自动审查读取的语义复核证据
+
+    # 相对证据路径必须以项目根解析，避免受启动目录影响。
+    if not path_semantic_review.is_absolute():
+
+        # 合成仓库内证据的绝对位置供审查子命令使用。
+        path_semantic_review = path_project / path_semantic_review  # 项目根下的语义证据绝对路径
+
     # 直接返回不可变上下文，避免构造后发生局部重写。
     return ConfidenceGateContext(
         path_project=path_project,  # 受管项目根
@@ -625,6 +639,8 @@ def confidence_context(
         str_review_base=str_review_base,  # 自动审查使用的 Git 基线
         str_eval_runner_policy=str_runner_policy,  # required、optional 或 disabled 策略
         path_eval_runner=path_eval_runner,  # 可选显式评估入口
+        # 下列字段绑定文件名审查、发布版本和子命令路径语义。
+        path_semantic_review=path_semantic_review.resolve(),  # 文件名功能摘要证据
         str_version=current_version(path_skill),  # 待发布技能当前版本
         str_skill_argument=str_skill_argument,  # 治理子命令使用的技能路径参数
     ), None
@@ -681,12 +697,15 @@ def manage_docs_argv(str_action: str, path_project: Path) -> list[str]:
     """
 
     # 文档治理入口由公共脚本映射定位。
-    return [
-        sys.executable,
-        str(tool_script_path("manage_docs.py")),
-        str_action,
-        str(path_project),
-    ]
+    list_argv = [
+        sys.executable,  # 当前隔离环境的 Python 解释器
+        str(tool_script_path("manage_docs.py")),  # 文档治理 CLI 入口
+        str_action,  # 调用方请求的文档治理动作
+        str(path_project),  # 受管项目根目录
+    ]  # 可由发布阶段继续扩展的基础参数
+
+    # 返回完整基础参数供工作区和发布门禁继续扩展。
+    return list_argv
 
 # 发布前后阶段使用相同版本与安装意图参数。
 def release_gate_argv(context: ConfidenceGateContext, str_phase: str) -> list[str]:
@@ -725,19 +744,26 @@ def review_governance_argv(context: ConfidenceGateContext) -> list[str]:
     """
 
     # 审查范围同时覆盖代码、治理、文档和发布差异。
-    return [
-        sys.executable,
-        str(tool_script_path("review_governance.py")),
-        str(context.path_project),
-        "--base",
-        context.str_review_base,
-        "--head",
-        "HEAD",
-        "--skill-dir",
-        context.str_skill_argument,
-        "--mode",
-        "all",
+    list_argv = [  # 自动审查命令参数
+        sys.executable,  # 当前治理运行时解释器
+        str(tool_script_path("review_governance.py")),  # 自动审查 CLI 入口
+        str(context.path_project),  # 本次审查的项目根
+        "--base", context.str_review_base,  # 已确认的比较基线
+        "--head", "HEAD",  # 当前提交作为审查目标
+        "--skill-dir", context.str_skill_argument,  # 待发布技能路径
+        "--mode", "all",  # 覆盖代码、文档、治理和发布类别
     ]
+
+    # 已提供语义证据时让自动审查一并验证修订和路径哈希。
+    if context.path_semantic_review.is_file():
+
+        # 语义证据参数只在文件真实存在时追加。
+        list_argv.extend(
+            ["--semantic-review", str(context.path_semantic_review)]
+        )
+
+    # 返回完整自动审查命令参数。
+    return list_argv
 
 # 审计失败仅在全部诊断都属于缓存污染时允许恢复重试。
 def run_audit_with_cache_retry(
@@ -955,7 +981,7 @@ def append_optional_gate_commands(
 
 # 源码治理的多类发现统一映射为置信门禁错误文本。
 def source_governance_errors(dict_report: dict[str, Any]) -> list[str]:
-    """提取源码治理报告中的尺寸、边界、注释和可读性错误。
+    """提取源码治理报告中的尺寸、命名、边界、注释和可读性错误。
 
     Args:
         dict_report: source_governance 的结构化 JSON 报告。
@@ -964,11 +990,20 @@ def source_governance_errors(dict_report: dict[str, Any]) -> list[str]:
         带命令前缀的源码治理错误文本。
     """
 
-    # 四类治理发现使用稳定前缀映射到置信门禁错误列表。
+    # 各类治理发现使用稳定前缀映射到置信门禁错误列表。
     list_errors = [  # 超限源码文件错误
         f"source_governance: oversized file {dict_item.get('path', '')}"  # 超限文件诊断文本
         for dict_item in dict_report.get("oversized_source_files", [])  # 报告登记的超限文件
     ]
+
+    # 文件命名诊断保留路径、代码和消息，支持精确定位修复原因。
+    list_errors.extend(
+        (
+            f"source_governance: file naming violation {dict_item.get('path', '')} "
+            f"[{dict_item.get('code', 'invalid-name')}]: {dict_item.get('message', '')}"
+        )
+        for dict_item in dict_report.get("file_naming_violations", [])
+    )
 
     # 测试专用设计代码不得泄漏到生产目录。
     list_errors.extend(
@@ -1364,6 +1399,9 @@ def main() -> int:
     # 显式 runner 路径覆盖安装态和源码仓自动探测。
     parser.add_argument("--eval-runner", default=None)
 
+    # 文件名语义复核证据默认位于项目治理目录。
+    parser.add_argument("--semantic-review", default=None)
+
     # 旧 optional 开关继续解析但会产生弃用警告。
     parser.add_argument("--skip-missing-eval-runner", action="store_true")
 
@@ -1432,6 +1470,8 @@ def main() -> int:
         review_base=args.review_base,  # 自动审查比较起点
         eval_runner_policy=str_eval_runner_policy,  # 缺失 runner 的处理策略
         eval_runner=path_eval_runner,  # 调用方锁定的评估脚本路径
+        semantic_review=args.semantic_review,  # 文件名功能摘要证据路径
+        # 兼容开关和警告统一进入最终机器报告。
         require_eval_runner=args.require_eval_runner,  # 旧强制 runner 兼容标志
         deprecation_warnings=list_deprecation_warnings,  # 写入机器报告的兼容参数警告
     )

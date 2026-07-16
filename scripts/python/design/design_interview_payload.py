@@ -9,9 +9,27 @@ from typing import Any
 
 # 设计访谈依赖提供决策、预览、问题和远程门禁合同。
 from agents_decisions import decision_request
+
+# 知识图谱合同提供官方发布页，供人工安装指引复用。
+from codebase_memory_mcp import RELEASES_URL
+
+# 设计画像摘要用于每个访谈阶段的统一复核字段。
 from design_profile_builder import review_summary
+
+# 状态查询助手只读取持久化状态，载荷模块不会触发状态写入。
+from design_interview_state import (
+    confirmed_keys_for_state,
+    current_group_ids,
+    normalize_intent,
+    remaining_groups_for_state,
+    review_policy_for_state,
+    state_path,
+)
+
+# 问题合同提供状态键、远程依赖来源和用户可见文案。
 from design_questions import (
     ALIGNMENT_KEY,
+    CODEBASE_MEMORY_INSTALL_CONFIRM_KEY,
     DESIGN_REVIEW_KEY,
     EXTRA_REQUIREMENTS_KEY,
     REMOTE_CONFIGURATION_MODE_KEY,
@@ -53,10 +71,7 @@ def interactive_option(
     参数：str_label 为展示标签，value 为提交值，str_description 为选择影响，is_recommended 为推荐标志。
     返回：包含 label、value、description 和 recommended 的 JSON 兼容映射。
 
-    数组契约:
-        shape/维度: 本函数处理单个选项记录，不接收数值数组。
-        dtype/类型: 字段由 str、bool 和 JSON 兼容值约束，非 ndarray dtype。
-        unit/单位: 无物理量单位，字段语义遵循交互选项 schema。
+    数组契约：shape 为单条 JSON 记录，dtype 为 JSON 兼容类型，unit 不适用。
     """
 
     # 返回固定字段顺序的标准交互选项。
@@ -69,10 +84,7 @@ def first_question_option_value(list_questions: list[dict[str, Any]]) -> Any:
     参数：list_questions 为当前交互问题记录。
     返回：首个候选项的 value；问题或候选项缺失时返回 None。
 
-    数组契约:
-        shape/维度: 输入为一维问题记录列表，不处理数值数组。
-        dtype/类型: 元素为 JSON 兼容映射，返回值遵循候选项 value 类型。
-        unit/单位: 无物理量单位，元素语义遵循交互问题 schema。
+    数组契约：shape 为一维问题列表，dtype 为 JSON 兼容类型，unit 不适用。
     """
 
     # 无问题时不存在可用默认值。
@@ -105,10 +117,7 @@ def stage_review(
     参数：state 为访谈状态，kind 为项目类型，list_confirmed_keys 为已确认答案键，is_final 控制最终摘要语义。
     返回：符合设计访谈 review_summary schema 的复核映射。
 
-    数组契约:
-        shape/维度: 已确认键为一维业务列表，不处理数值数组。
-        dtype/类型: 元素为 str，输出为 JSON 兼容映射，非 ndarray dtype。
-        unit/单位: 无物理量单位，字段语义遵循复核摘要 schema。
+    数组契约：shape 为一维确认键列表，dtype 为 JSON 兼容类型，unit 不适用。
     """
 
     # 无当前问题键的阶段直接复用公共摘要生成器。
@@ -132,10 +141,7 @@ def remote_route_mapping_step(
     参数：state 为当前访谈状态，kind 为项目类型，list_confirmed_keys 为已确认答案键，remote_gate 为远程门禁载荷。
     返回：当前问题组、问题记录、复核摘要、确认提示和下一动作组成的五元组。
 
-    数组契约:
-        shape/维度: 本函数处理访谈状态和远程服务器候选映射，不接收数值数组，数组维度不适用。
-        dtype/类型: 输入输出由 dict、list、str 和 tuple 业务类型约束，非 ndarray dtype。
-        unit/单位: 无物理量单位，字段含义来自 remote_server_task_routes schema。
+    数组契约：shape 为问题列表和路由映射，dtype 为 JSON 兼容类型，unit 不适用。
     """
 
     # 第一项来源
@@ -205,6 +211,282 @@ def remote_route_mapping_step(
     # 第六步返回载荷。
     return list_current_group, list_questions, review, str_confirmation_question, str_next_action
 
+# 基础设施决策集中处理远程 SSH、知识图谱和服务器路由状态。
+def infrastructure_decision_request(
+    status: str,
+    list_questions: list[dict[str, Any]],
+    remote_gate: dict[str, Any],
+) -> dict[str, Any] | None:
+    """构造基础设施相关决策请求。
+
+    参数:
+        status: 当前状态机状态。
+        list_questions: 当前状态公开的问题集合。
+        remote_gate: 远程服务器依赖与发现证据。
+
+    返回:
+        基础设施状态对应的决策请求；非基础设施状态返回 None。
+
+    数组契约:
+        shape 为 JSON 映射与问题列表，dtype 为 JSON 兼容类型，unit 不适用。
+    """
+
+    # 远程技能缺失时必须先取得用户安装授权。
+    if status == "awaiting_remote_install_confirmation":
+
+        # 安装决策包含依赖来源、风险和禁用替代路径。
+        return decision_request(
+            "remote_dependency_install",
+            question="需要远程服务器能力，但 erie-remote-ssh 未安装。是否先安装该技能？",
+            options=list_questions[0].get("options", []) if list_questions else [],
+            default=True,
+            risk="medium",
+            next_action="install erie-remote-ssh or disable use_remote_server before continuing",
+            context={"dependency": REMOTE_SSH_SKILL_NAME, "url": REMOTE_SSH_GIT_URL},
+        )
+
+    # 知识图谱依赖缺失时只允许进入人工安装流程。
+    if status == "awaiting_codebase_memory_install_confirmation":
+
+        # 决策上下文明确自动安装始终关闭。
+        return decision_request(
+            "codebase_memory_install",
+            question="已选择使用 codebase-memory-mcp，但本地未安装或未完成 Codex MCP 配置。是否进入人工安装流程？",
+            options=list_questions[0].get("options", []) if list_questions else [],
+            default=True,
+            risk="medium",
+            next_action="follow the official release instructions, restart Codex, then resume",
+            context={"releases_url": RELEASES_URL, "automatic_install": False},
+        )
+
+    # 缺少服务器列表时让用户选择引导式配置流程。
+    if status == "awaiting_remote_configuration_confirmation":
+
+        # 发现结果随决策返回，支持用户判断配置成本。
+        return decision_request(
+            "remote_server_configuration",
+            question="当前没有可用的远程服务器列表。是否进入远程服务器配置流程？",
+            options=list_questions[0].get("options", []) if list_questions else [],
+            default="guided",
+            risk="high",
+            next_action="configure remote server access, then rerun collect_design_profile.py --resume",
+            context={"remote_discover": remote_gate.get("discover", {}) if isinstance(remote_gate, dict) else {}},
+        )
+
+    # 服务器存在后要求确认每类任务的主备路由。
+    if status == "awaiting_remote_server_route_mapping":
+
+        # 默认值来自首个公开选项，禁止凭空推断服务器标识。
+        return decision_request(
+            "remote_server_route_mapping",
+            question="请确认远程任务到服务器的主备路由后再写入 AGENTS.md。",
+            options=list_questions[0].get("options", []) if list_questions else [],
+            default=first_question_option_value(list_questions),
+            risk="high",
+            next_action="submit remote_server_task_routes with primary and optional fallback server IDs",
+            context={"server_count": len(list_questions[0].get("options", [])) if list_questions else 0},
+        )
+
+    # None 让上层继续检查审查和只读完成态决策。
+    return None
+
+# 决策请求构造与完成态快照分离，避免单函数同时承担状态分派和载荷扩展。
+def decision_request_for_status(
+    status: str,
+    state: dict[str, Any],
+    list_questions: list[dict[str, Any]],
+    remote_gate: dict[str, Any],
+) -> dict[str, Any]:
+    """按当前状态构造可选的用户决策请求。
+
+    参数:
+        status: 当前状态机状态。
+        state: 当前持久化访谈状态。
+        list_questions: 当前状态公开的问题集合。
+        remote_gate: 远程服务器依赖与发现证据。
+
+    返回:
+        当前状态对应的决策请求；无需专用决策时返回空映射。
+
+    数组契约:
+        shape 为 JSON 映射与问题列表，dtype 为 JSON 兼容类型，unit 不适用。
+    """
+
+    # 基础设施状态由独立构造器优先处理。
+    dict_infrastructure_request = infrastructure_decision_request(  # 可选基础设施决策请求
+        status,  # 当前状态机状态
+        list_questions,  # 当前公开问题集合
+        remote_gate,  # 远程依赖与发现证据
+    )
+
+    # 命中基础设施状态后无需继续检查审查或只读状态。
+    if dict_infrastructure_request is not None:
+
+        # 返回完整决策卡片给交互载荷。
+        return dict_infrastructure_request
+
+    # 审查拒绝或待确认事项必须通过显式返工决策闭环。
+    if status == "awaiting_review_rework":
+
+        # 待处理审查记录为返工决策提供发现项和确认项。
+        dict_pending = (  # 待返工审查记录
+            state.get("pending_design_review", {})  # 已持久化审查映射
+            if isinstance(state.get("pending_design_review"), dict)  # 有效映射分支
+            else {}  # 损坏或缺失记录回退为空映射
+        )
+
+        # 返工选项要求至少提交一个修正字段。
+        return decision_request(
+            "design_review_rework",
+            question="子智能体审查未批准或仍有待用户确认事项。请确认并提交修正字段后重新进入最终一致性与审查。",
+            options=[
+                interactive_option(
+                    "确认返工",
+                    True,
+                    "提交 review_rework_confirmed=true 和至少一个修正字段。",
+                    True,
+                ),
+                {"label": "暂不继续", "value": False, "description": "保持阻断状态，不写入控制档案。", "recommended": False},
+            ],
+            default=True,
+            risk="high",
+            next_action="submit correction fields, then repeat final alignment and subagent review",
+            context={
+                "findings": dict_pending.get("findings", []),
+                "required_user_confirmations": dict_pending.get("required_user_confirmations", []),
+            },
+        )
+
+    # 只读完成态必须由用户显式升格后才能进入写入审查。
+    if status == "completed_read_only":
+
+        # 默认选项继续保持只读，避免隐式扩大写入权限。
+        return decision_request(
+            "read_only_completed",
+            question="只读设计访谈已完成。若后续需要正式写入控制档案，请显式进入写入审查。",
+            options=[
+                {"label": "保持只读", "value": "stay_read_only", "description": "保留当前只读结果，不触发子智能体审查。", "recommended": True},
+                interactive_option(
+                    "申请写入审查",
+                    "enter_write_review",
+                    "显式切换到写入意图并生成 design_review_request。",
+                    False,
+                ),
+            ],
+            default="stay_read_only",
+            risk="medium",
+            next_action="use --enter-write-review only when the user explicitly requests a write path",
+        )
+
+    # 其他状态不需要专用用户决策卡片。
+    return {}
+
+# 接管模式和远程门禁字段由独立扩展器就地加入基础载荷。
+def enrich_remote_context(
+    dict_payload: dict[str, Any],
+    str_mode: str,
+    state: dict[str, Any],
+    remote_gate: dict[str, Any],
+) -> None:
+    """补充接管原因和远程依赖发现字段。
+
+    参数:
+        dict_payload: 待扩展的基础交互载荷。
+        str_mode: 当前执行模式。
+        state: 当前持久化访谈状态。
+        remote_gate: 远程依赖和服务器发现证据。
+
+    返回:
+        无业务返回值；函数就地更新 dict_payload。
+
+    数组契约:
+        shape 为 JSON 映射，dtype 为 JSON 兼容类型，unit 不适用。
+    """
+
+    # 接管模式公开触发原因，供用户理解自动推进依据。
+    if str_mode == "takeover":
+
+        # 原因列表复制后写入，避免调用方修改持久化状态。
+        dict_payload["takeover_trigger_reasons"] = list(state.get("takeover_trigger_reasons", []))  # 接管触发原因
+
+    # 未启用远程治理时不添加空依赖对象。
+    if not remote_gate:
+
+        # 基础载荷保持无远程字段的稳定合同。
+        return
+
+    # 远程依赖摘要公开安装状态、来源和安装规格。
+    dict_payload["remote_dependency"] = {  # 远程技能依赖摘要
+        "installed": bool(remote_gate.get("dependency_status") == "installed"),  # 远程技能安装判定
+        "status": remote_gate.get("dependency_status", ""),  # 原始依赖状态
+        "url": remote_gate.get("dependency_url", REMOTE_SSH_GIT_URL),  # 依赖来源地址
+        "install_specs": remote_gate.get("install_specs", REMOTE_SSH_INSTALL_SPECS),  # 平台安装规格
+    }
+
+    # 发现命令证据存在时原样加入交互载荷。
+    if remote_gate.get("discover"):
+
+        # 调用方可据此定位无服务器或配置错误原因。
+        dict_payload["remote_discover"] = remote_gate.get("discover")  # 远程发现证据
+
+    # 可选服务器存在时只公开规整后的服务器数组。
+    if remote_gate.get("choices"):
+
+        # 选择列表用于后续主备路由映射。
+        dict_payload["remote_server_choices"] = remote_gate.get("choices", {}).get("servers", [])  # 候选服务器列表
+
+# 完成、设计审查和返工状态由独立扩展器公开对应快照。
+def enrich_review_context(dict_payload: dict[str, Any], status: str, state: dict[str, Any]) -> None:
+    """补充完成态快照、审查请求和返工记录。
+
+    参数:
+        dict_payload: 待扩展的基础交互载荷。
+        status: 当前状态机状态。
+        state: 当前持久化访谈状态。
+
+    返回:
+        无业务返回值；函数就地更新 dict_payload。
+
+    数组契约:
+        shape 为 JSON 映射，dtype 为 JSON 兼容类型，unit 不适用。
+    """
+
+    # 完成态公开答案快照，供最终结果核对。
+    if status in {"completed", "completed_read_only"}:
+
+        # 映射副本避免调用方修改状态机内部答案。
+        dict_payload["answers_snapshot"] = dict(state.get("answers", {}))  # 完成态答案快照
+
+    # 只读完成态额外公开未写入的画像预览。
+    if status == "completed_read_only" and isinstance(state.get("profile_preview"), dict):
+
+        # 预览允许用户核对而不扩大写入权限。
+        dict_payload["profile_preview"] = state["profile_preview"]  # 只读画像预览
+
+    # 等待设计审查时公开审查合同及去除旧审查的输入。
+    if status == "awaiting_design_review":
+
+        # 结构化审查请求存在时交给 subagent 执行。
+        if isinstance(state.get("design_review_request"), dict):
+
+            # 请求字段定义 reviewer、结论和哈希合同。
+            dict_payload["design_review_request"] = state["design_review_request"]  # 设计审查请求
+
+        # 已生成画像预览时与审查请求一并公开。
+        if isinstance(state.get("profile_preview"), dict):
+
+            # 审查者使用预览核对最终生成合同。
+            dict_payload["profile_preview"] = state["profile_preview"]  # 待审查画像预览
+
+        # 审查输入排除上一轮 design_review，防止自引用哈希。
+        dict_payload["answers_for_review"] = answers_without_design_review(dict(state.get("answers", {})))  # 去审查字段答案
+
+    # 返工等待态公开待处理发现项和用户确认事项。
+    if status == "awaiting_review_rework" and isinstance(state.get("pending_design_review"), dict):
+
+        # 原始审查记录支持下一轮修正闭环。
+        dict_payload["pending_design_review"] = state["pending_design_review"]  # 待返工设计审查
+
 # 为基础交互载荷补齐状态专属字段。
 def enrich_interactive_payload(
     dict_payload: dict[str, Any],
@@ -225,167 +507,266 @@ def enrich_interactive_payload(
         unit/单位: 无物理量单位，字段含义来自 collect_design_profile 交互 JSON 契约。
     """
 
-    # 第七步判断状态。
-    if status == "awaiting_remote_install_confirmation":
+    # 专用构造器集中处理所有需要用户决策卡片的状态。
+    dict_payload["decision_request"] = decision_request_for_status(  # 当前状态的决策请求
+        status,  # 决策卡片选择依据
+        state,  # 返工决策上下文来源
+        list_questions,  # 决策卡片选项来源
+        remote_gate,  # 基础设施决策证据来源
+    )
 
-        # 第八项来源
-        dict_payload["decision_request"] = decision_request(  # 第八项载荷
-            "remote_dependency_install",  # 第二百二十一项结构字段
-            question="需要远程服务器能力，但 erie-remote-ssh 未安装。是否先安装该技能？",  # 第二百四十四项结构字段
-            options=list_questions[0].get("options", []) if list_questions else [],  # 第二百六十七项结构字段
-            default=True,  # 第二百八十八项载荷表达式
-            risk="medium",  # 第三百三项结构字段
-            next_action="install erie-remote-ssh or disable use_remote_server before continuing",  # 第三百十五项结构字段
-            context={"dependency": REMOTE_SSH_SKILL_NAME, "url": REMOTE_SSH_GIT_URL},  # 第三百二十六项结构字段
-        )
+    # 接管原因与远程依赖字段由远程上下文扩展器处理。
+    enrich_remote_context(dict_payload, str_mode, state, remote_gate)
 
-    # 第八步切换状态。
-    elif status == "awaiting_remote_configuration_confirmation":
+    # 完成态、设计审查和返工字段由审查上下文扩展器处理。
+    enrich_review_context(dict_payload, status, state)
 
-        # 第九项来源
-        dict_payload["decision_request"] = decision_request(  # 第九项载荷
-            "remote_server_configuration",  # 载荷片段阶段一
-            question="当前没有可用的远程服务器列表。是否进入远程服务器配置流程？",  # 第二百四十三项结构字段
-            options=list_questions[0].get("options", []) if list_questions else [],  # 第二百六十六项结构字段
-            default="guided",  # 第二百八十七项结构字段
-            risk="high",  # 第三百二项结构字段
-            next_action="configure remote server access, then rerun collect_design_profile.py --resume",  # 第三百十四项结构字段
-            context={"remote_discover": remote_gate.get("discover", {}) if isinstance(remote_gate, dict) else {}},  # 决策上下文阶段二
-        )
+# 知识图谱依赖步骤与远程 SSH 步骤分离，避免两个安装协议互相耦合。
+def codebase_memory_dependency_step(
+    state: dict[str, Any],
+    status: str,
+    kind: object,
+    list_confirmed_keys: list[str],
+) -> tuple[list[str], list[dict[str, Any]], dict[str, Any], str, str] | None:
+    """生成知识图谱人工安装确认与完成等待字段。
 
-    # 第九步切换状态。
-    elif status == "awaiting_remote_server_route_mapping":
+    参数:
+        state: 当前持久化设计访谈状态。
+        status: 当前状态机状态。
+        kind: 已确认或推断的项目类型。
+        list_confirmed_keys: 已完成确认的答案键集合。
 
-        # 第十项来源
-        dict_payload["decision_request"] = decision_request(  # 第十项载荷
-            "remote_server_route_mapping",  # 第二百十九项结构字段
-            question="请确认远程任务到服务器的主备路由后再写入 AGENTS.md。",  # 第二百四十二项结构字段
-            options=list_questions[0].get("options", []) if list_questions else [],  # 第二百六十五项结构字段
-            default=first_question_option_value(list_questions),  # 第二百八十六项结构字段
-            risk="high",  # 第三百一项结构字段
-            next_action="submit remote_server_task_routes with primary and optional fallback server IDs",  # 后续动作阶段三
-            context={"server_count": len(list_questions[0].get("options", [])) if list_questions else 0},  # 决策上下文阶段四
-        )
+    返回:
+        知识图谱安装状态对应的统一五元组；其他状态返回 None。
 
-    # 第十步切换状态。
-    elif status == "awaiting_review_rework":
+    数组契约:
+        shape 为问题列表和 JSON 映射，dtype 为 JSON 兼容类型，unit 不适用。
+    """
 
-        # 第十一项来源
-        pending = state.get("pending_design_review", {}) if isinstance(state.get("pending_design_review"), dict) else {}  # 第十一项载荷
+    # 非知识图谱安装状态继续交给远程或本地处理器。
+    if status not in {
+        "awaiting_codebase_memory_install_confirmation",
+        "awaiting_codebase_memory_install_completion",
+    }:
 
-        # 第十二项来源
-        dict_payload["decision_request"] = decision_request(  # 第十二项载荷
-            "design_review_rework",  # 第二百十八项结构字段
-            question="子智能体审查未批准或仍有待用户确认事项。请确认并提交修正字段后重新进入最终一致性与审查。",  # 第二百四十一项结构字段
-            options=[  # 第二百六十四项载荷表达式
-                interactive_option(  # 第二百八十五项结构字段
-                    "确认返工",  # 提供返工选项标签
-                    True,  # 提交返工确认值
-                    "提交 review_rework_confirmed=true 和至少一个修正字段。",  # 说明返工输入合同
-                    True,  # 默认建议继续修正
+        # None 表示当前处理器没有消费该状态。
+        return None
+
+    # 两种知识图谱状态都不属于普通问题组。
+    list_current_group: list[str] = []  # 知识图谱门禁的空问题组
+
+    # 阶段复核保留此前答案与确认键的完整摘要。
+    review = stage_review(state, kind, list_confirmed_keys, False)  # 知识图谱门禁阶段复核
+
+    # 首次缺依赖时询问是否按官方文档人工安装。
+    if status == "awaiting_codebase_memory_install_confirmation":
+
+        # 单一必答问题明确声明工具不会自动下载安装器。
+        list_questions = [  # 人工安装确认问题
+            {
+                "question_id": "codebase-memory-install",  # 稳定问题标识
+                "answer_key": CODEBASE_MEMORY_INSTALL_CONFIRM_KEY,  # 安装确认答案键
+                "required": True,  # 知识图谱启用态必须回答
+                "branch": "all",  # 所有项目类型共享依赖门禁
+                "ask": (  # 人工安装确认问题文本
+                    "检测到已启用 codebase-memory-mcp，但当前环境缺少可用依赖或 Codex MCP 配置。"
+                    "是否确认按官方 release 手工安装？本工具不会自动下载或执行安装器。"
                 ),
-                {"label": "暂不继续", "value": False, "description": "保持阻断状态，不写入控制档案。", "recommended": False},  # 暂不继续保持阻断状态阶段五
-            ],
-            default=True,  # 第三百十二项载荷表达式
-            risk="high",  # 载荷片段阶段六
-            next_action="submit correction fields, then repeat final alignment and subagent review",  # 后续动作阶段七
-            context={  # 第三百三十七项载荷表达式
-                "findings": pending.get("findings", []),  # 第三百四十项结构字段
-                "required_user_confirmations": pending.get("required_user_confirmations", []),  # 载荷片段阶段八
-            },
+                "options": [  # 安装或保持阻断的可选动作
+                    interactive_option("查看安装步骤", True, "手工安装后重启 Codex，再恢复当前访谈。", True),  # 推荐人工安装动作
+                    interactive_option(  # 保持知识图谱门禁阻断的替代动作
+                        "暂不安装",  # 拒绝人工安装的标签
+                        False,  # 拒绝安装的布尔答案
+                        "保持阻断，除非把 use_codebase_memory_mcp 改为 false。",  # 拒绝后的流程边界
+                        False,  # 非推荐选项标记
+                    ),
+                ],
+            }
+        ]
+
+        # 安装指引覆盖 Windows、Linux、校验和、重启与恢复步骤。
+        str_confirmation_question = (  # 官方人工安装操作说明
+            f"官方发布页：{RELEASES_URL}。Windows 下载 windows-amd64.zip 和 checksums，运行 "
+            "Unblock-File .\\install.ps1 后执行 .\\install.ps1；Linux 按架构下载 amd64/arm64 "
+            "文件并校验 checksum，再执行 ./install.sh。完成后重启 Codex 并 --resume。"
         )
 
-    # 第十一步切换状态。
-    elif status == "completed_read_only":
+        # 下一动作由状态机的确认答案入口处理。
+        str_next_action = "confirm_codebase_memory_mcp_install"  # 人工安装确认动作
 
-        # 第十三项来源
-        dict_payload["decision_request"] = decision_request(  # 第十三项载荷
-            "read_only_completed",  # 载荷片段阶段九
-            question="只读设计访谈已完成。若后续需要正式写入控制档案，请显式进入写入审查。",  # 只读设计访谈已完成若阶段十
-            options=[  # 第二百六十三项载荷表达式
-                {"label": "保持只读", "value": "stay_read_only", "description": "保留当前只读结果，不触发子智能体审查。", "recommended": True},  # 第二百八十四项结构字段
-                interactive_option(  # 申请写入审查显式切换阶段十一
-                    "申请写入审查",  # 提供写入升格标签
-                    "enter_write_review",  # 提交写入升格动作
-                    "显式切换到写入意图并生成 design_review_request。",  # 说明升格副作用
-                    False,  # 默认保持只读边界
-                ),
-            ],
-            default="stay_read_only",  # 载荷片段阶段十二
-            risk="medium",  # 第三百二十二项结构字段
-            next_action="use --enter-write-review only when the user explicitly requests a write path",  # 第三百三十二项结构字段
-        )
-
-    # 第十二步处理兜底。
+    # 已确认安装后保持阻断，直到重启后的依赖探测真实通过。
     else:
 
-        # 第十四项来源
-        dict_payload["decision_request"] = {}  # 第十四项载荷
+        # 完成等待态不重复询问确认问题。
+        list_questions = []  # 安装完成等待态问题集合
 
-    # 第十三步判断状态。
-    if str_mode == "takeover":
+        # 提示只陈述外部操作，不声称工具已经完成安装。
+        str_confirmation_question = (  # 安装完成与恢复说明
+            f"完成 {RELEASES_URL} 的人工安装与 Codex MCP 配置后，重启 Codex 并执行 --resume。"  # 外部完成提示
+        )
 
-        # 第十五项来源
-        dict_payload["takeover_trigger_reasons"] = list(state.get("takeover_trigger_reasons", []))  # 第十五项载荷
+        # 恢复动作会重新执行真实依赖探测。
+        str_next_action = "resume_after_codebase_memory_mcp_install"  # 安装后恢复动作
 
-    # 第十四步判断状态。
-    if remote_gate:
+    # 统一五元组与其他状态处理器保持相同协议。
+    return list_current_group, list_questions, review, str_confirmation_question, str_next_action
 
-        # 第十六项来源
-        dict_payload["remote_dependency"] = {  # 第十六项载荷
-            "installed": bool(remote_gate.get("dependency_status") == "installed"),  # 载荷片段阶段十三
-            "status": remote_gate.get("dependency_status", ""),  # 访谈状态阶段十四
-            "url": remote_gate.get("dependency_url", REMOTE_SSH_GIT_URL),  # 第二百六十二项结构字段
-            "install_specs": remote_gate.get("install_specs", REMOTE_SSH_INSTALL_SPECS),  # 第二百八十三项结构字段
-        }
+# 远程安装状态生成交互字段。
+def remote_installation_step(
+    state: dict[str, Any],
+    status: str,
+    kind: object,
+    list_confirmed_keys: list[str],
+    remote_gate: dict[str, Any],
+) -> tuple[list[str], list[dict[str, Any]], dict[str, Any], str, str]:
+    """构造远程技能安装阶段载荷。
 
-        # 第十五步判断状态。
-        if remote_gate.get("discover"):
+    参数：state 为状态，status 为阶段，kind 为类型，list_confirmed_keys 为确认键，remote_gate 为门禁。
+    返回：安装阶段五元组。
+    """
 
-            # 第十七项来源
-            dict_payload["remote_discover"] = remote_gate.get("discover")  # 第十七项载荷
+    # 安装阶段无普通问题。
+    list_current_group: list[str] = []  # 远程安装门禁的空问题组
 
-        # 第十六步判断状态。
-        if remote_gate.get("choices"):
+    # 安装状态共享复核。
+    dict_review = stage_review(state, kind, list_confirmed_keys, False)  # 远程安装阶段复核
 
-            # 第十八项来源
-            dict_payload["remote_server_choices"] = remote_gate.get("choices", {}).get("servers", [])  # 第十八项载荷
+    # 已知目录生成安装提示。
+    path_remote_skill_dir = Path(remote_gate["skill_dir"]) if remote_gate.get("skill_dir") else None  # 远程技能目录
 
-    # 第十七步判断状态。
-    if status in {"completed", "completed_read_only"}:
+    # 提示绑定当前副本。
+    str_confirmation_question = (  # 远程安装命令提示
+        remote_install_command_hint(path_remote_skill_dir)  # 当前副本命令
+        if path_remote_skill_dir  # 已探测目录
+        else remote_install_command_hint()  # 通用提示
+    )
 
-        # 第十九项来源
-        dict_payload["answers_snapshot"] = dict(state.get("answers", {}))  # 第十九项载荷
+    # 缺少依赖时确认安装。
+    if status == "awaiting_remote_install_confirmation":
 
-    # 第十八步判断状态。
-    if status == "completed_read_only" and isinstance(state.get("profile_preview"), dict):
+        # 问题决定安装或阻断。
+        list_questions = [  # erie 缺失时的安装决策问题
+            {
+                "question_id": "remote-install",  # erie 问询标识
+                "answer_key": REMOTE_INSTALL_CONFIRM_KEY,  # SSH 技能决策键
+                "required": True,  # 安装决策必答
+                "branch": "all",  # 全部项目类型
+                "ask": "检测到需要远程服务器，但当前环境缺少 erie-remote-ssh。是否确认先安装该技能？如果不安装，需要把 use_remote_server 改为 false 才能继续。",  # 安装问题
+                "options": [  # 依赖处置选项
+                    {  # 推荐安装选项
+                        "label": "安装技能",  # 安装动作标签
+                        "value": True,  # 接受安装的布尔值
+                        "description": "确认后先完成依赖安装，再继续远程服务器选择。",  # 安装后流程
+                        "recommended": True,  # 默认推荐安装依赖
+                    },
+                    interactive_option(  # 暂缓动作
+                        "暂不安装",  # 拒绝安装标签
+                        False,  # 拒绝安装值
+                        "保持阻断状态，除非把 use_remote_server 改为 false。",  # 阻断边界
+                        False,  # 暂不安装不作为默认建议
+                    ),
+                ],
+            }
+        ]
 
-        # 第二十项来源
-        dict_payload["profile_preview"] = state["profile_preview"]  # 第二十项载荷
+        # 确认答案由状态机安装入口处理。
+        str_next_action = "confirm_remote_ssh_install"  # 远程技能安装确认动作
 
-    # 第十九步判断状态。
-    if status == "awaiting_design_review":
+    # 确认后等待外部安装。
+    else:
 
-        # 第二十步判断状态。
-        if isinstance(state.get("design_review_request"), dict):
+        # 等待期不重复提问。
+        list_questions = []  # 等待远程技能可用时的空问题集合
 
-            # 第二十一项来源
-            dict_payload["design_review_request"] = state["design_review_request"]  # 第二十一项载荷
+        # 恢复时重查依赖。
+        str_next_action = "resume_after_remote_ssh_install"  # 远程技能安装后的探测动作
 
-        # 完成态附带已生成的档案预览，供调用方直接检查。
-        if isinstance(state.get("profile_preview"), dict):
+    # 返回安装五元组。
+    return list_current_group, list_questions, dict_review, str_confirmation_question, str_next_action
 
-            # 第二十二项来源
-            dict_payload["profile_preview"] = state["profile_preview"]  # 第二十二项载荷
+# 远程配置状态生成交互字段。
+def remote_configuration_step(
+    state: dict[str, Any],
+    status: str,
+    kind: object,
+    list_confirmed_keys: list[str],
+    remote_gate: dict[str, Any],
+) -> tuple[list[str], list[dict[str, Any]], dict[str, Any], str, str]:
+    """构造远程服务器配置阶段载荷。
 
-        # 第二十三项来源
-        dict_payload["answers_for_review"] = answers_without_design_review(dict(state.get("answers", {})))  # 第二十三项载荷
+    参数：state 为状态，status 为阶段，kind 为类型，list_confirmed_keys 为确认键，remote_gate 为门禁。
+    返回：配置阶段五元组。
+    """
 
-    # 返工等待态公开待处理的设计复核记录。
-    if status == "awaiting_review_rework" and isinstance(state.get("pending_design_review"), dict):
+    # 配置阶段无普通问题。
+    list_current_group: list[str] = []  # 远程配置门禁的空问题组
 
-        # 第二十四项来源
-        dict_payload["pending_design_review"] = state["pending_design_review"]  # 第二十四项载荷
+    # 配置状态共享复核。
+    dict_review = stage_review(state, kind, list_confirmed_keys, False)  # 远程配置阶段复核
+
+    # 缺少列表时选择配置模式。
+    if status == "awaiting_remote_configuration_confirmation":
+
+        # 选项顺序固定。
+        list_questions = [  # 无服务器列表时的配置模式问题
+            {
+                "question_id": "remote-config",  # 配置问询标识
+                "answer_key": REMOTE_CONFIGURATION_MODE_KEY,  # 配置模式键
+                "required": True,  # 配置模式必答
+                "branch": "all",  # 全部远程项目
+                "ask": "当前没有可用的远程服务器列表。是否进入远程服务器配置流程？",  # 配置问题
+                "options": [  # 三种配置动作
+                    interactive_option(  # 推荐引导式配置
+                        "guided",  # 引导模式标签
+                        "guided",  # 引导模式值
+                        "使用 erie-remote-ssh 的 configure --interactive 走引导式配置。",  # 引导说明
+                        True,  # 默认推荐引导模式
+                    ),
+                    interactive_option(  # 手动准备列表
+                        "manual",  # 手动模式标签
+                        "manual",  # 手动模式值
+                        "用户手动准备 server list 和 SSH 配置，然后回来继续。",  # 手动责任
+                        False,  # 非默认模式
+                    ),
+                    interactive_option(  # 取消并阻断
+                        "cancel",  # 取消动作标签
+                        "cancel",  # 取消动作值
+                        "保持阻断状态，除非把 use_remote_server 改为 false。",  # 取消边界
+                        False,  # 非推荐动作
+                    ),
+                ],
+            }
+        ]
+
+        # 提示说明恢复动作。
+        str_confirmation_question = "选择 guided 或 manual 后，完成服务器配置，再执行 --resume 继续。"  # 配置模式确认提示
+
+        # 模式由确认入口处理。
+        str_next_action = "confirm_remote_server_configuration"  # 远程配置确认动作
+
+    # 完成态重读服务器列表。
+    else:
+
+        # 等待态不重复提问。
+        list_questions = []  # 配置完成等待态问题集合
+
+        # guided 模式可展示命令。
+        str_command_hint = ""  # 可选引导式配置命令
+
+        # guided 模式生成命令。
+        if remote_gate.get("skill_dir") and remote_gate.get("configuration_mode") == "guided":
+
+            # 命令绑定当前技能副本。
+            str_command_hint = remote_configure_command_hint(Path(str(remote_gate["skill_dir"])))  # 引导式配置命令
+
+        # 缺少命令时用通用说明。
+        str_confirmation_question = str_command_hint or "完成远程服务器配置后，执行 --resume 继续远程服务器选择。"  # 配置完成提示
+
+        # 恢复时重查列表。
+        str_next_action = "resume_after_remote_server_configuration"  # 配置后恢复动作
+
+    # 返回配置五元组。
+    return list_current_group, list_questions, dict_review, str_confirmation_question, str_next_action
 
 # 生成远程依赖安装和服务器配置阶段的交互字段。
 def remote_dependency_step(
@@ -395,172 +776,40 @@ def remote_dependency_step(
     list_confirmed_keys: list[str],
     remote_gate: dict[str, Any],
 ) -> tuple[list[str], list[dict[str, Any]], dict[str, Any], str, str] | None:
-    """处理远程技能安装和服务器配置状态。
+    """处理远程依赖状态。
 
-    参数：state 为访谈状态，status 为当前状态，kind 为项目类型，list_confirmed_keys 为已确认答案键，remote_gate 为远程门禁载荷。
-    返回：当前问题组、问题记录、复核摘要、确认提示和下一动作；非远程依赖状态返回 None。
-
-    数组契约:
-        shape/维度: 本函数处理一维问题和确认键列表，不接收数值数组。
-        dtype/类型: 字段由 dict、list、str、Path 和 JSON 兼容值约束，非 ndarray dtype。
-        unit/单位: 无物理量单位，字段语义遵循远程门禁状态 schema。
+    参数：state、status、kind、list_confirmed_keys、remote_gate 为上下文；返回五元组或 None。
+    shape/维度：一维列表；dtype/类型：JSON；unit/单位：无。
     """
 
-    # 非远程依赖状态继续交由主状态机处理。
-    if status not in {
-        "awaiting_remote_install_confirmation",
-        "awaiting_remote_install_completion",
-        "awaiting_remote_configuration_confirmation",
-        "awaiting_remote_configuration_completion",
-    }:
+    # 先处理知识图谱依赖。
+    tuple_codebase_step = codebase_memory_dependency_step(  # 可选知识图谱依赖五元组
+        state,  # 当前访谈状态
+        status,  # 当前分派状态
+        kind,  # 项目类型事实
+        list_confirmed_keys,  # 已确认答案键
+    )
 
-        # 返回空值表示当前状态不属于远程依赖处理范围。
-        return None
+    # 命中时直接返回。
+    if tuple_codebase_step is not None:
 
-    # 远程依赖状态在本处理器内完成字段组装。
-    match status:
-        # 缺少远程依赖时先请求用户确认是否安装技能。
-        case "awaiting_remote_install_confirmation":
+        # 统一五元组可直接交给主状态分派器。
+        return tuple_codebase_step
 
-            # 第七十七项来源
-            list_current_group = []  # 第七十七项载荷
+    # 安装状态共享专用载荷构造器。
+    if status in {"awaiting_remote_install_confirmation", "awaiting_remote_install_completion"}:
 
-            # 第七十八项来源
-            list_questions = [  # 第七十八项载荷
-                {
-                    "question_id": "remote-install",  # 第二百七项结构字段
-                    "answer_key": REMOTE_INSTALL_CONFIRM_KEY,  # 远程安装确认答案键
-                    "required": True,  # 必答约束阶段二十七
-                    "branch": "all",  # 安装确认适用于全部项目类型
-                    "ask": "检测到需要远程服务器，但当前环境缺少 erie-remote-ssh。是否确认先安装该技能？如果不安装，需要把 use_remote_server 改为 false 才能继续。",  # 访谈问题阶段二十九
-                    "options": [  # 第三百七项结构字段
-                        {"label": "安装技能", "value": True, "description": "确认后先完成依赖安装，再继续远程服务器选择。", "recommended": True},  # 安装技能确认后先完成阶段三十
-                        interactive_option(  # 暂不安装保持阻断状态阶段三十一
-                            "暂不安装",  # 提供拒绝安装选项标签
-                            False,  # 提交拒绝安装值
-                            "保持阻断状态，除非把 use_remote_server 改为 false。",  # 说明拒绝安装后果
-                            False,  # 默认建议安装依赖
-                        ),
-                    ],
-                }
-            ]
+        # 安装构造器保持确认与恢复动作的原合同。
+        return remote_installation_step(state, status, kind, list_confirmed_keys, remote_gate)
 
-            # 第七十九项来源
-            review = stage_review(state, kind, list_confirmed_keys, False)  # 第七十九项载荷
+    # 配置状态共享专用载荷构造器。
+    if status in {"awaiting_remote_configuration_confirmation", "awaiting_remote_configuration_completion"}:
 
-            # 第八十项来源
-            path_remote_skill_dir = Path(remote_gate["skill_dir"]) if remote_gate.get("skill_dir") else None  # 第八十项载荷
+        # 配置构造器保持模式选择与恢复动作的原合同。
+        return remote_configuration_step(state, status, kind, list_confirmed_keys, remote_gate)
 
-            # 第八十一项来源
-            str_confirmation_question = (  # 第八十一项载荷
-                remote_install_command_hint(path_remote_skill_dir)  # 载荷片段阶段三十二
-                if path_remote_skill_dir  # 第二百二十九项载荷表达式
-                else remote_install_command_hint()  # 载荷片段阶段三十三
-            )
-
-            # 第八十二项来源
-            str_next_action = "confirm_remote_ssh_install"  # 第八十二项载荷
-
-        # 远程依赖安装完成态要求重新探测技能可用性。
-        case "awaiting_remote_install_completion":
-
-            # 第八十三项来源
-            list_current_group = []  # 第八十三项载荷
-
-            # 第八十四项来源
-            list_questions = []  # 第八十四项载荷
-
-            # 第八十五项来源
-            review = stage_review(state, kind, list_confirmed_keys, False)  # 第八十五项载荷
-
-            # 第八十六项来源
-            path_remote_skill_dir = Path(remote_gate["skill_dir"]) if remote_gate.get("skill_dir") else None  # 第八十六项载荷
-
-            # 第八十七项来源
-            str_confirmation_question = (  # 第八十七项载荷
-                remote_install_command_hint(path_remote_skill_dir)  # 第二百五项载荷表达式
-                if path_remote_skill_dir  # 第二百二十八项载荷表达式
-                else remote_install_command_hint()  # 第二百五十一项载荷表达式
-            )
-
-            # 第八十八项来源
-            str_next_action = "resume_after_remote_ssh_install"  # 第八十八项载荷
-
-        # 远程配置确认态展示待执行的服务器发现命令。
-        case "awaiting_remote_configuration_confirmation":
-
-            # 第八十九项来源
-            list_current_group = []  # 第八十九项载荷
-
-            # 第九十项来源
-            list_questions = [  # 第九十项载荷
-                {
-                    "question_id": "remote-config",  # 载荷片段阶段三十四
-                    "answer_key": REMOTE_CONFIGURATION_MODE_KEY,  # 第二百二十七项结构字段
-                    "required": True,  # 必答约束阶段三十五
-                    "branch": "all",  # 适用分支阶段三十六
-                    "ask": "当前没有可用的远程服务器列表。是否进入远程服务器配置流程？",  # 第二百九十二项结构字段
-                    "options": [  # 第三百六项结构字段
-                        interactive_option(  # 使用的走引导式配置阶段三十七
-                            "guided",  # 提供引导配置选项标签
-                            "guided",  # 提交引导配置模式
-                            "使用 erie-remote-ssh 的 configure --interactive 走引导式配置。",  # 说明配置命令
-                            True,  # 默认建议引导配置
-                        ),
-                        interactive_option(  # 用户手动准备和配置然阶段三十八
-                            "manual",  # 提供手动配置选项标签
-                            "manual",  # 提交手动配置模式
-                            "用户手动准备 server list 和 SSH 配置，然后回来继续。",  # 说明手动准备责任
-                            False,  # 不默认选择手动配置
-                        ),
-                        interactive_option(  # 第三百三十五项结构字段
-                            "cancel",  # 提供取消配置选项标签
-                            "cancel",  # 提交取消配置动作
-                            "保持阻断状态，除非把 use_remote_server 改为 false。",  # 说明取消后的阻断结果
-                            False,  # 不默认取消远程配置
-                        ),
-                    ],
-                }
-            ]
-
-            # 第九十一项来源
-            review = stage_review(state, kind, list_confirmed_keys, False)  # 第九十一项载荷
-
-            # 第九十二项来源
-            str_confirmation_question = "选择 guided 或 manual 后，完成服务器配置，再执行 --resume 继续。"  # 第九十二项载荷
-
-            # 第九十三项来源
-            str_next_action = "confirm_remote_server_configuration"  # 第九十三项载荷
-
-        # 配置完成态重新读取服务器清单并进入选择流程。
-        case "awaiting_remote_configuration_completion":
-
-            # 第九十四项来源
-            list_current_group = []  # 第九十四项载荷
-
-            # 第九十五项来源
-            list_questions = []  # 第九十五项载荷
-
-            # 第九十六项来源
-            review = stage_review(state, kind, list_confirmed_keys, False)  # 第九十六项载荷
-
-            # 第九十七项来源
-            str_command_hint = ""  # 第九十七项载荷
-
-            # 第三十八步判断状态。
-            if remote_gate.get("skill_dir") and remote_gate.get("configuration_mode") == "guided":
-
-                # 第九十八项来源
-                str_command_hint = remote_configure_command_hint(Path(str(remote_gate["skill_dir"])))  # 第九十八项载荷
-
-            # 第九十九项来源
-            str_confirmation_question = str_command_hint or "完成远程服务器配置后，执行 --resume 继续远程服务器选择。"  # 第九十九项载荷
-
-            # 第一百项来源
-            str_next_action = "resume_after_remote_server_configuration"  # 第一百项载荷
-
-    # 返回远程依赖阶段统一的交互字段。
-    return list_current_group, list_questions, review, str_confirmation_question, str_next_action
+    # 其他状态继续交给后续状态处理器。
+    return None
 
 # 生成写入完成态和只读完成态的交互字段。
 def completion_step(
@@ -838,15 +1087,10 @@ def local_interview_step(
     list_group_ids: list[str],
     list_confirmed_keys: list[str],
 ) -> tuple[list[str], list[dict[str, Any]], Any, str, str] | None:
-    """处理设计访谈的本地收集与对齐状态。
+    """处理本地收集与对齐状态。
 
-    参数：state 为访谈状态，status 为当前状态，kind 为项目类型，list_group_ids 为当前问题编号，list_confirmed_keys 为已确认答案键。
-    返回：当前问题组、问题记录、复核摘要、确认提示和下一动作；非本地访谈状态返回 None。
-
-    数组契约:
-        shape/维度: 问题和确认键为一维业务列表，不处理数值数组。
-        dtype/类型: 元素由 str 和 JSON 兼容映射约束，非 ndarray dtype。
-        unit/单位: 无物理量单位，字段语义遵循设计访谈状态 schema。
+    参数：state、status、kind、list_group_ids、list_confirmed_keys 为上下文；返回五元组或 None。
+    shape/维度：一维列表；dtype/类型：JSON；unit/单位：无。
     """
 
     # 非本地访谈状态继续交由其他处理器解析。
@@ -860,10 +1104,10 @@ def local_interview_step(
         # 返回空值表示当前状态不属于本地访谈处理范围。
         return None
 
-    # 收集与分组确认默认沿用当前问题组，后续阶段按协议清空。
+    # 默认沿用当前组。
     list_current_group = list_group_ids  # 保留原状态机的当前分组语义
 
-    # 本地访谈状态在本处理器内生成问题和确认动作。
+    # 生成本地交互字段。
     match status:
         # 收集阶段展示当前问题组并等待用户回答。
         case "collecting_group":
@@ -1002,6 +1246,83 @@ def local_interview_step(
     # 返回本地访谈阶段统一的交互字段。
     return list_current_group, list_questions, review, str_confirmation_question, str_next_action
 
+# 状态处理器解析集中返回统一五元组，避免主载荷构造器重复解包分支。
+def resolve_interactive_step(
+    state: dict[str, Any],
+    status: str,
+    kind: object,
+    str_mode: str,
+    list_group_ids: list[str],
+
+    # 确认键和远程证据共同决定状态处理器输出。
+    list_confirmed_keys: list[str],
+    remote_gate: dict[str, Any],
+) -> tuple[list[str], list[dict[str, Any]], dict[str, Any], str, str]:
+    """按处理器优先级解析当前状态对应的统一交互五元组。
+
+    参数:
+        state: 当前持久化设计访谈状态。
+        status: 当前状态机状态。
+        kind: 已确认或推断的项目类型。
+        str_mode: interactive、takeover 或 read-only 模式。
+        list_group_ids: 当前本地问题组标识。
+        list_confirmed_keys: 已确认答案键集合。
+        remote_gate: 远程依赖和服务器发现证据。
+
+    返回:
+        当前问题组、问题、复核摘要、确认提示和下一动作组成的五元组。
+
+    数组契约:
+        shape 为问题列表和 JSON 映射，dtype 为 JSON 兼容类型，unit 不适用。
+    """
+
+    # 四类独立处理器只返回统一五元组或 None。
+    tuple_remote_step = remote_dependency_step(state, status, kind, list_confirmed_keys, remote_gate)  # 远程依赖结果
+
+    # 完成态处理器负责只读和写入完成状态。
+    tuple_completion = completion_step(state, status, kind, str_mode)  # 完成态结果
+
+    # 设计审查处理器负责等待审查与返工状态。
+    tuple_review = design_review_step(state, status, kind, list_confirmed_keys)  # 审查状态结果
+
+    # 本地处理器负责普通问题组、额外要求和最终对齐。
+    tuple_local = local_interview_step(state, status, kind, list_group_ids, list_confirmed_keys)  # 本地访谈结果
+
+    # 公共解析器按稳定优先级选择首个已消费状态。
+    str_dispatch = resolved_dispatch_status(  # 实际消费当前状态的处理器标识
+        status,  # 处理器优先级解析状态
+        tuple_remote_step,  # 远程依赖候选结果
+        tuple_completion,  # 完成态候选结果
+        tuple_review,  # 设计审查候选结果
+        tuple_local,  # 本地访谈候选结果
+    )
+
+    # 已处理状态名映射回对应五元组，避免重复字段解包。
+    dict_handled_steps = {  # 分派标识到处理器结果
+        "remote_dependency_handled": tuple_remote_step,  # 远程依赖分派结果
+        "completion_handled": tuple_completion,  # 完成态分派结果
+        "design_review_handled": tuple_review,  # 审查态分派结果
+        "local_interview_handled": tuple_local,  # 本地访谈分派结果
+    }
+
+    # 正常处理器命中时结果必为统一五元组。
+    tuple_handled = dict_handled_steps.get(str_dispatch)  # 已命中处理器结果
+
+    # 非空结果可直接返回给主载荷构造器。
+    if tuple_handled is not None:
+
+        # 类型与统一处理器协议一致。
+        return tuple_handled
+
+    # 路由映射状态由需要完整远程门禁上下文的专用步骤处理。
+    if str_dispatch == "awaiting_remote_server_route_mapping":
+
+        # 专用步骤同样返回统一五元组。
+        return remote_route_mapping_step(state, kind, list_confirmed_keys, remote_gate)
+
+    # 未知或损坏状态进入可恢复的继续/重置交互步骤。
+    return fallback_interview_step(state, kind, list_group_ids, list_confirmed_keys)
+
 # 根据完整访谈状态构建 CLI 返回载荷。
 def build_interactive_payload(
     project: Path,
@@ -1019,15 +1340,6 @@ def build_interactive_payload(
         dtype/类型: 输入输出由 dict、list、str、Path 等 Python 业务类型约束，非 ndarray dtype。
         unit/单位: 无物理量单位，字段含义以 AGENTS 治理配置和状态文件 schema 为准。
     """
-
-    from design_interview_state import (
-        confirmed_keys_for_state,
-        current_group_ids,
-        normalize_intent,
-        remaining_groups_for_state,
-        review_policy_for_state,
-        state_path,
-    )
 
     # 第二十五项来源
     status = status_override or str(state.get("status", "collecting_group"))  # 第二十五项载荷
@@ -1047,129 +1359,36 @@ def build_interactive_payload(
     # 第三十项来源
     list_confirmed_keys = confirmed_keys_for_state(state)  # 第三十项载荷
 
-    # 第三十一项来源
-    review = review_summary(state.get("answers", {}), str(kind) if kind else None)  # 第三十一项载荷
-
-    # 第三十二项来源
-    str_confirmation_question = ""  # 第三十二项载荷
-
-    # 第三十三项来源
-    str_next_action = ""  # 第三十三项载荷
-
-    # 第三十五项来源
-    list_current_group = list_group_ids  # 第三十五项载荷
-
     # 第三十六项来源
     remote_gate = remote_gate_payload(state)  # 第三十六项载荷
 
-    # 远程依赖和配置状态由独立处理器组装。
-    tuple_remote_dependency_step = remote_dependency_step(  # 接收远程依赖阶段五元组
-        state, status, kind, list_confirmed_keys, remote_gate  # 传递远程状态组装所需上下文
+    # 状态处理器统一解析为五元组，主函数只负责字段命名。
+    tuple_step = resolve_interactive_step(  # 当前状态的统一交互步骤
+        state,  # 统一步骤读取的状态记录
+        status,  # 统一步骤消费的分派状态
+        kind,  # 统一步骤使用的项目类型
+        str_mode,  # 当前执行模式
+
+        # 问题组、确认键和远程门禁完成步骤解析上下文。
+        list_group_ids,  # 当前问题组标识
+        list_confirmed_keys,  # 阶段复核使用的确认键
+        remote_gate,  # 路由步骤使用的远程证据
     )
 
-    # 完成状态由独立处理器生成写入或只读后续动作。
-    tuple_completion_step = completion_step(state, status, kind, str_mode)  # 接收完成阶段五元组
+    # 五元组首项是当前问题组标识。
+    list_current_group = tuple_step[0]  # 当前问题组
 
-    # 设计审查状态由独立处理器生成提交或返工动作。
-    tuple_design_review_step = design_review_step(  # 接收设计审查阶段五元组
-        state, status, kind, list_confirmed_keys  # 传递审查状态组装所需上下文
-    )
+    # 次项是返回给用户的结构化问题集合。
+    list_questions = tuple_step[1]  # 当前问题集合
 
-    # 本地访谈状态由独立处理器生成问题和对齐动作。
-    tuple_local_interview_step = local_interview_step(  # 接收本地访谈阶段五元组
-        state, status, kind, list_group_ids, list_confirmed_keys  # 传递本地访谈组装所需上下文
-    )
+    # 第三项是已确认字段和待确认字段复核摘要。
+    review = tuple_step[2]  # 当前阶段复核摘要
 
-    # 主状态机按处理器优先级解析并消费实际分派状态。
-    match resolved_dispatch_status(
-        status,
-        tuple_remote_dependency_step,
-        tuple_completion_step,
-        tuple_design_review_step,
-        tuple_local_interview_step,
-    ):
+    # 第四项是当前状态的人类可读确认提示。
+    str_confirmation_question = tuple_step[3]  # 当前确认提示
 
-        # 远程依赖处理器的结果接入统一载荷字段。
-        case "remote_dependency_handled":
-
-            # 第一百十一项来源
-            list_current_group, list_questions, review, str_confirmation_question, str_next_action = (  # 第一百十一项载荷
-                tuple_remote_dependency_step  # 解包远程处理器返回的统一字段
-            )
-
-        # 完成态处理器的结果接入统一载荷字段。
-        case "completion_handled":
-
-            # 第一百十二项来源
-            list_current_group, list_questions, review, str_confirmation_question, str_next_action = (  # 第一百十二项载荷
-                tuple_completion_step  # 解包完成处理器返回的统一字段
-            )
-
-        # 设计审查处理器的结果接入统一载荷字段。
-        case "design_review_handled":
-
-            # 第一百十三项来源
-            list_current_group, list_questions, review, str_confirmation_question, str_next_action = (  # 第一百十三项载荷
-                tuple_design_review_step  # 解包设计审查处理器返回的统一字段
-            )
-
-        # 本地访谈处理器的结果接入统一载荷字段。
-        case "local_interview_handled":
-
-            # 第一百十四项来源
-            list_current_group, list_questions, review, str_confirmation_question, str_next_action = (  # 第一百十四项载荷
-                tuple_local_interview_step  # 解包本地访谈处理器返回的统一字段
-            )
-
-        # 路由映射态为已选服务器分配主用和回退任务路线。
-        case "awaiting_remote_server_route_mapping":
-
-            # 第一百一项来源
-            tuple_remote_route_step = remote_route_mapping_step(  # 保存远程路由阶段五元组
-                state,  # 提供路由阶段访谈状态
-                kind,  # 提供路由项目类型
-                list_confirmed_keys,  # 提供路由已确认字段
-                remote_gate,  # 提供候选服务器门禁载荷
-            )
-
-            # 第一百二项来源
-            list_current_group = tuple_remote_route_step[0]  # 接入路由问题组
-
-            # 第一百三项来源
-            list_questions = tuple_remote_route_step[1]  # 接入路由问题记录
-
-            # 第一百四项来源
-            review = tuple_remote_route_step[2]  # 接入路由复核摘要
-
-            # 第一百五项来源
-            str_confirmation_question = tuple_remote_route_step[3]  # 接入路由确认提示
-
-            # 第一百六项来源
-            str_next_action = tuple_remote_route_step[4]  # 接入路由下一动作
-        case _:
-
-            # 第一百七项来源
-            tuple_fallback_step = fallback_interview_step(  # 保存未知状态恢复五元组
-                state,  # 提供恢复阶段访谈状态
-                kind,  # 提供恢复项目类型
-                list_group_ids,  # 提供恢复问题编号
-                list_confirmed_keys,  # 提供恢复已确认字段
-            )
-
-            # 第一百八项来源
-            list_current_group = tuple_fallback_step[0]  # 接入恢复问题组
-
-            # 第一百九项来源
-            list_questions = tuple_fallback_step[1]  # 接入恢复问题记录
-
-            # 第一百十项来源
-            review = tuple_fallback_step[2]  # 接入恢复复核摘要
-
-            # 恢复提示沿用辅助函数确定的用户引导文案。
-            str_confirmation_question = tuple_fallback_step[3]  # 接入恢复确认提示
-
-            # 恢复动作要求用户继续或重置现有访谈链。
-            str_next_action = tuple_fallback_step[4]  # 接入恢复下一动作
+    # 第五项是客户端或用户应执行的下一动作。
+    str_next_action = tuple_step[4]  # 当前下一动作
 
     # 汇总各状态处理器生成的最终交互字段。
     dict_payload: dict[str, Any] = {  # 形成 CLI 返回的完整载荷

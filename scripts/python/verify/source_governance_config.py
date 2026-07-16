@@ -9,11 +9,18 @@ from pathlib import Path
 from typing import Any
 
 # 复用语言技能路由默认文案与强制短语，保持渲染和校验一致。
-from language_skill_routing_contract import (
+from routing_contract import (
     DEFAULT_LANGUAGE_SKILL_ROUTING_PYTHON,
+    DEFAULT_LANGUAGE_SKILL_ROUTING_SHARED,
     DEFAULT_LANGUAGE_SKILL_ROUTING_SCRIPT,
     PYTHON_LANGUAGE_SKILL_ROUTE_REQUIRED_SNIPPETS,
+    SHARED_LANGUAGE_SKILL_ROUTE_REQUIRED_SNIPPETS,
     SCRIPT_LANGUAGE_SKILL_ROUTE_REQUIRED_SNIPPETS,
+
+    # 禁用短语根据当前实际安装状态阻止路由虚构技能可用性。
+    PYTHON_LANGUAGE_SKILL_ROUTE_FORBIDDEN_SNIPPETS,
+    SCRIPT_LANGUAGE_SKILL_ROUTE_FORBIDDEN_SNIPPETS,
+    managed_language_skill_route_defaults,
     missing_language_skill_route_snippets,
 )
 
@@ -221,6 +228,7 @@ def default_global_rule_overrides() -> dict[str, Any]:
             "comment_quality": "只允许非显然意图、不变量、风险、生成边界或公共 API 行为注释；禁止复述代码；禁止未经明确要求的批量 AI 注释；行为变化时必须更新旧注释。",
             "formatting": "生成代码必须保留回车/空行分隔，不能把语句、注释、函数粘连到一起；严禁把代码压缩到一行，严禁生成人看不懂的炫技代码。",
             "language_skill_routing": {
+                "shared": DEFAULT_LANGUAGE_SKILL_ROUTING_SHARED,
                 "python": DEFAULT_LANGUAGE_SKILL_ROUTING_PYTHON,
                 "script": DEFAULT_LANGUAGE_SKILL_ROUTING_SCRIPT,
             },
@@ -430,6 +438,113 @@ def legacy_global_rule_overrides(profile: dict[str, Any] | None) -> dict[str, An
         },
     )
 
+# 旧版注释位置合同单独校验，避免主策略校验器同时承担枚举和正文职责。
+def validate_code_comment_positions(
+    comment_policy: dict[str, Any],
+    *,
+    require_explicit: bool = False,
+) -> list[str]:
+    """校验旧版注释位置映射及 Python 赋值例外。
+
+    参数:
+        comment_policy: 旧版注释策略映射。
+        require_explicit: 是否要求所有位置键显式存在。
+
+    返回:
+        按检查顺序累积的位置合同错误。
+    """
+
+    # 读取注释位置映射，并在显式模式下先确认 positions 键没有被删掉。
+    dict_positions = comment_policy.get("positions")  # 注释位置映射
+
+    # 本函数独立累积位置诊断，供主策略校验器统一合并。
+    list_errors: list[str] = []  # 注释位置合同诊断
+
+    # 显式模式要求保留 positions 主键，避免位置约束悄悄退回默认值。
+    if require_explicit and "positions" not in comment_policy:
+
+        # 追加主键缺失错误，提醒调用方不要丢掉整块位置策略。
+        list_errors.append("code_comment_policy.positions must be explicitly set")
+
+    # 非对象的 positions 无法继续按键验证，因此这里直接终止并返回。
+    if not isinstance(dict_positions, dict):
+
+        # 把类型错误附加到当前诊断列表后整体返回。
+        return list_errors + ["code_comment_policy.positions must be an object"]
+
+    # 固化兼容迁移后各语言注释位置的强制映射。
+    dict_required_positions = {  # 各语言必须固定下来的注释位置
+        "python.public_api": "docstring",  # Python 公共 API 注释位置
+        "python.inline": "above",  # Python 行内解释统一放在上方
+        "python.trailing": "strict-readable-assignment-purpose",  # Python 赋值用途注释位置
+        "c_cpp.function": "above",  # C/C++ 函数说明写在声明上方
+        "c_cpp.module": "above",  # C/C++ 模块注释位置
+        "c_cpp.variable": "above",  # C/C++ 变量注释位置
+        "c_cpp.specific_behavior": "above",  # C/C++ 特定行为注释位置
+        "c_cpp.macro_define": "right_side",  # C/C++ 宏定义注释位置
+        "verilog_systemverilog.module": "above",  # Verilog 模块总说明写在模块头上方
+        "verilog_systemverilog.declaration": "right_side",  # Verilog 声明注释位置
+        "verilog_systemverilog.assign": "right_side",  # Verilog assign 注释位置
+        "verilog_systemverilog.task_function_generate_always": "above",  # Verilog 行为块注释位置
+        "verilog_systemverilog.always_register_assignment": "right_side",  # Verilog 时序赋值注释位置
+    }
+
+    # 限定 positions 允许使用的枚举值，防止兼容层把任意字符串吞进来。
+    set_allowed_positions = {  # 允许使用的注释位置枚举
+        "above",  # 上方注释位置
+        "right_side",  # 右侧注释位置
+        "docstring",  # docstring 位置只用于公共 API 说明
+        "forbidden",  # 禁止注释位置
+        "strict-readable-assignment-purpose",  # 严格可读赋值用途注释位置
+    }
+
+    # 逐项比对强制位置，并在显式模式下检查原始键是否完整保留。
+    for str_position_key, str_expected_value in dict_required_positions.items():
+
+        # 显式模式下缺键本身就是错误，因为这会掩盖真实治理漂移。
+        if require_explicit and str_position_key not in dict_positions:
+
+            # 记录缺少的位置键，方便直接回到配置文件补齐。
+            list_errors.append(f"code_comment_policy.positions.{str_position_key} must be explicitly set")
+
+        # 兼容迁移后的值必须与仓库约定完全一致，不能只做到“差不多”。
+        if dict_positions.get(str_position_key) != str_expected_value:
+
+            # 报告期望值，减少调用方再次查 schema 的往返成本。
+            list_errors.append(f"code_comment_policy.positions.{str_position_key} must be {str_expected_value}")
+
+    # 额外扫描用户自带的 positions，拒绝任何未登记的枚举值。
+    for str_position_key, str_position_value in dict_positions.items():
+
+        # 只允许仓库认可的位置值，避免未知字符串进入后续渲染链路。
+        if str_position_value not in set_allowed_positions:
+
+            # 把非法枚举值原样回显，帮助调用方快速定位拼写或概念错误。
+            list_errors.append(
+                f"code_comment_policy.positions.{str_position_key} has invalid value {str_position_value}",
+            )
+
+    # Python 普通赋值只允许不设置或明确设为 right_side。
+    if dict_positions.get("python.assignment") not in (None, "right_side"):
+
+        # 报告赋值位置越界，防止旧配置引入未约定的注释落点。
+        list_errors.append("code_comment_policy.positions.python.assignment must be right_side when set")
+
+    # 当 Python 赋值允许右侧注释时，策略正文里也必须写明该例外。
+    if dict_positions.get("python.assignment") == "right_side":
+
+        # 提取 Python 注释策略文本，核对是否同步声明右侧用途注释例外。
+        str_python_policy = str(comment_policy.get("python", ""))  # Python 注释策略文本
+
+        # 缺少例外说明会让位置规则与正文策略相互矛盾。
+        if "右侧中文用途注释" not in str_python_policy:
+
+            # 明确指出缺失的是赋值例外说明，避免用户误补到别的字段。
+            list_errors.append("code_comment_policy.python missing required assignment exception `右侧中文用途注释`")
+
+    # 返回位置合同的完整诊断供主校验器合并。
+    return list_errors
+
 # 校验旧版 code_comment_policy 兼容配置是否仍满足仓库注释治理要求。
 def validate_code_comment_policy_data(comment_policy: dict[str, Any], *, require_explicit: bool = False) -> list[str]:
     """校验旧版 `code_comment_policy` 兼容配置是否仍满足仓库注释治理要求。
@@ -537,94 +652,8 @@ def validate_code_comment_policy_data(comment_policy: dict[str, Any], *, require
                     f"code_comment_policy.{str_field_name} missing required rule `{str_required_snippet}`",
                 )
 
-    # 读取注释位置映射，并在显式模式下先确认 positions 键没有被删掉。
-    dict_positions = comment_policy.get("positions")  # 注释位置映射
-
-    # 显式模式要求保留 positions 主键，避免位置约束悄悄退回默认值。
-    if require_explicit and "positions" not in comment_policy:
-
-        # 追加主键缺失错误，提醒调用方不要丢掉整块位置策略。
-        list_errors.append("code_comment_policy.positions must be explicitly set")
-
-    # 非对象的 positions 无法继续按键验证，因此这里直接终止并返回。
-    if not isinstance(dict_positions, dict):
-
-        # 把类型错误附加到当前诊断列表后整体返回。
-        return list_errors + ["code_comment_policy.positions must be an object"]
-
-    # 固化兼容迁移后各语言注释位置的强制映射。
-    dict_required_positions = {  # 各语言必须固定下来的注释位置
-        "python.public_api": "docstring",  # Python 公共 API 注释位置
-        "python.inline": "above",  # Python 行内解释统一放在上方
-        "python.trailing": "strict-readable-assignment-purpose",  # Python 赋值用途注释位置
-        "c_cpp.function": "above",  # C/C++ 函数说明写在声明上方
-        "c_cpp.module": "above",  # C/C++ 模块注释位置
-        "c_cpp.variable": "above",  # C/C++ 变量注释位置
-        "c_cpp.specific_behavior": "above",  # C/C++ 特定行为注释位置
-        "c_cpp.macro_define": "right_side",  # C/C++ 宏定义注释位置
-        "verilog_systemverilog.module": "above",  # Verilog 模块总说明写在模块头上方
-        "verilog_systemverilog.declaration": "right_side",  # Verilog 声明注释位置
-        "verilog_systemverilog.assign": "right_side",  # Verilog assign 注释位置
-        "verilog_systemverilog.task_function_generate_always": "above",  # Verilog 行为块注释位置
-        "verilog_systemverilog.always_register_assignment": "right_side",  # Verilog 时序赋值注释位置
-    }
-
-    # 限定 positions 允许使用的枚举值，防止兼容层把任意字符串吞进来。
-    set_allowed_positions = {  # 允许使用的注释位置枚举
-        "above",  # 上方注释位置
-        "right_side",  # 右侧注释位置
-        "docstring",  # docstring 位置只用于公共 API 说明
-        "forbidden",  # 禁止注释位置
-        "strict-readable-assignment-purpose",  # 严格可读赋值用途注释位置
-    }
-
-    # 逐项比对强制位置，并在显式模式下检查原始键是否完整保留。
-    for str_position_key, str_expected_value in dict_required_positions.items():
-
-        # 显式模式下缺键本身就是错误，因为这会掩盖真实治理漂移。
-        if require_explicit and str_position_key not in dict_positions:
-
-            # 记录缺少的位置键，方便直接回到配置文件补齐。
-            list_errors.append(
-                f"code_comment_policy.positions.{str_position_key} must be explicitly set",
-            )
-
-        # 兼容迁移后的值必须与仓库约定完全一致，不能只做到“差不多”。
-        if dict_positions.get(str_position_key) != str_expected_value:
-
-            # 报告期望值，减少调用方再次查 schema 的往返成本。
-            list_errors.append(
-                f"code_comment_policy.positions.{str_position_key} must be {str_expected_value}",
-            )
-
-    # 额外扫描用户自带的 positions，拒绝任何未登记的枚举值。
-    for str_position_key, str_position_value in dict_positions.items():
-
-        # 只允许仓库认可的位置值，避免未知字符串进入后续渲染链路。
-        if str_position_value not in set_allowed_positions:
-
-            # 把非法枚举值原样回显，帮助调用方快速定位拼写或概念错误。
-            list_errors.append(
-                f"code_comment_policy.positions.{str_position_key} has invalid value {str_position_value}",
-            )
-
-    # Python 普通赋值只允许不设置或明确设为 right_side。
-    if dict_positions.get("python.assignment") not in (None, "right_side"):
-
-        # 报告赋值位置越界，防止旧配置引入未约定的注释落点。
-        list_errors.append("code_comment_policy.positions.python.assignment must be right_side when set")
-
-    # 当 Python 赋值允许右侧注释时，策略正文里也必须写明该例外。
-    if dict_positions.get("python.assignment") == "right_side":
-
-        # 提取 Python 注释策略文本，核对是否同步声明右侧用途注释例外。
-        str_python_policy = str(comment_policy.get("python", ""))  # Python 注释策略文本
-
-        # 缺少例外说明会让位置规则与正文策略相互矛盾。
-        if "右侧中文用途注释" not in str_python_policy:
-
-            # 明确指出缺失的是赋值例外说明，避免用户误补到别的字段。
-            list_errors.append("code_comment_policy.python missing required assignment exception `右侧中文用途注释`")
+    # 位置枚举和 Python 赋值例外由独立校验器追加诊断。
+    list_errors.extend(validate_code_comment_positions(comment_policy, require_explicit=require_explicit))
 
     # 返回完整诊断列表，保持与其他治理校验函数一致的接口契约。
     # 把 coding_behavior 的诊断结果返回给调用方。
@@ -672,6 +701,7 @@ def migrate_code_comment_policy_to_coding_behavior(raw: dict[str, Any]) -> dict[
             ).strip(),
             "formatting": str_formatting or dict_default_coding_behavior["formatting"],  # 兼容后的格式治理文本
             "language_skill_routing": {  # 兼容后的语言技能路由映射
+                "shared": dict_default_coding_behavior["language_skill_routing"]["shared"],  # 共同门禁文本
                 "python": str_python_route,  # Python 技能路由文本
                 "script": dict_default_coding_behavior["language_skill_routing"]["script"],  # 脚本技能路由文本
             },
@@ -738,6 +768,92 @@ def append_missing_language_route_snippets(
                 f"{str_route_name} missing required rule `{str_required_snippet}`",
             )
 
+# 语言技能路由验证器检查必需目标、短语和禁用技能名。
+def language_skill_routing_errors(
+    dict_routing: dict[str, Any],
+    *,
+    require_explicit: bool,
+) -> list[str]:
+    """返回 Python 与脚本语言路由的字段和内容错误。
+
+    参数：dict_routing 为路由映射，require_explicit 控制显式字段要求。
+    返回：保持目标语言和短语检查顺序的错误列表。
+    """
+
+    # 当前 helper 的错误仅覆盖语言技能路由分区。
+    list_errors: list[str] = []  # 语言路由诊断列表
+
+    # 共同门禁和两个语言目标都必须存在且给出非空路由文本。
+    for str_route_key in ("shared", "python", "script"):
+
+        # 显式模式下缺少子键本身就是治理漂移。
+        if require_explicit and str_route_key not in dict_routing:
+
+            # 回显缺少的目标语言键。
+            list_errors.append(f"coding_behavior.language_skill_routing.{str_route_key} must be explicitly set")
+
+        # 空白路由文本会让技能边界失效。
+        if not str(dict_routing.get(str_route_key, "")).strip():
+
+            # 空字符串不能代替路由合同。
+            list_errors.append(f"coding_behavior.language_skill_routing.{str_route_key} must be set")
+
+    # 三类路由分别绑定必需短语与禁用技能名。
+    list_route_contracts = [  # 语言目标合同表
+        ("shared", SHARED_LANGUAGE_SKILL_ROUTE_REQUIRED_SNIPPETS, ()),  # 共同门禁合同
+        ("python", PYTHON_LANGUAGE_SKILL_ROUTE_REQUIRED_SNIPPETS, PYTHON_LANGUAGE_SKILL_ROUTE_FORBIDDEN_SNIPPETS),  # Python 路由合同
+        ("script", SCRIPT_LANGUAGE_SKILL_ROUTE_REQUIRED_SNIPPETS, SCRIPT_LANGUAGE_SKILL_ROUTE_FORBIDDEN_SNIPPETS),  # 脚本路由合同
+    ]
+
+    # 合同顺序保持共同门禁先于 Python 和脚本。
+    for str_route_name, tuple_required, tuple_forbidden in list_route_contracts:
+
+        # 路由文本供必需和禁用规则复用。
+        str_route_text = str(dict_routing.get(str_route_name, ""))  # 当前目标路由文本
+
+        # 公共 helper 逐项追加必需短语缺口。
+        append_missing_language_route_snippets(
+            str_route_text, tuple_required, str_route_name, list_errors,
+        )
+
+        # 禁用技能名不能残留在安装态路由中。
+        for str_forbidden_snippet in tuple_forbidden:
+
+            # 精确诊断回显不可用技能名。
+            if str_forbidden_snippet in str_route_text:
+
+                # 当前错误绑定目标路由和具体技能名。
+                list_errors.append(
+                    f"coding_behavior.language_skill_routing.{str_route_name} mentions unavailable skill "
+                    f"`{str_forbidden_snippet}`",
+                )
+
+    # 返回完整语言路由诊断。
+    return list_errors
+
+# 格式规则验证器检查多行排版和可读性下限。
+def formatting_rule_errors(str_formatting: str) -> list[str]:
+    """返回编码格式治理文本缺少的强制规则。
+
+    参数：str_formatting 为编码格式约束文本。
+    返回：按固定短语顺序排列的格式错误。
+    """
+
+    # 必需短语覆盖分隔、粘连、一行压缩和炫技写法。
+    tuple_required_snippets = (  # 格式规则必备短语
+        "回车/空行分隔",  # 多行分隔要求
+        "不能把语句、注释、函数粘连到一起",  # 结构分隔要求
+        "严禁把代码压缩到一行",  # 禁止一行压缩
+        "炫技代码",  # 禁止晦涩写法
+    )
+
+    # 列表推导保持错误顺序与既有循环一致。
+    return [
+        f"coding_behavior.formatting missing required rule `{str_snippet}`"
+        for str_snippet in tuple_required_snippets
+        if str_snippet not in str_formatting
+    ]
+
 # 校验新的 coding_behavior 结构是否完整保留语言路由和格式治理约束。
 def validate_coding_behavior_data(coding_behavior: dict[str, Any], *, require_explicit: bool = False) -> list[str]:
     """校验新式 `coding_behavior` 结构是否满足语言技能路由与格式治理要求。
@@ -774,56 +890,11 @@ def validate_coding_behavior_data(coding_behavior: dict[str, Any], *, require_ex
         # 把类型/空值问题作为根因返回，避免继续产生级联噪声。
         return list_errors + ["coding_behavior.language_skill_routing must be a non-empty object"]
 
-    # Python 和脚本两个目标都必须存在且给出非空路由文本。
-    for str_route_key in ("python", "script"):
+    # 语言路由 helper 保持 Python 与脚本诊断顺序。
+    list_errors.extend(language_skill_routing_errors(dict_routing, require_explicit=require_explicit))
 
-        # 显式模式下缺少子键本身就是治理漂移，需要直接报错。
-        if require_explicit and str_route_key not in dict_routing:
-
-            # 回显缺少的路由键，方便用户直接补齐对应目标语言配置。
-            list_errors.append(f"coding_behavior.language_skill_routing.{str_route_key} must be explicitly set")
-
-        # 即使不是显式模式，空白路由文本也会让技能边界失效。
-        if not str(dict_routing.get(str_route_key, "")).strip():
-
-            # 记录空值错误，阻止空字符串绕过路由契约校验。
-            list_errors.append(f"coding_behavior.language_skill_routing.{str_route_key} must be set")
-
-    # 逐项核对 Python 路由的必备短语，确认 readable-python-generator 的强制边界仍然完整。
-    append_missing_language_route_snippets(
-        str(dict_routing.get("python", "")),
-        PYTHON_LANGUAGE_SKILL_ROUTE_REQUIRED_SNIPPETS,
-        "python",
-        list_errors,
-    )
-
-    # 逐项核对脚本路由的包装器边界短语，确认脚本目标没有吞掉 Python 目标职责。
-    append_missing_language_route_snippets(
-        str(dict_routing.get("script", "")),
-        SCRIPT_LANGUAGE_SKILL_ROUTE_REQUIRED_SNIPPETS,
-        "script",
-        list_errors,
-    )
-
-    # 读取格式治理文本，确认新版编码行为仍然约束回车、空行和禁止压缩写法。
-    str_formatting = str(coding_behavior.get("formatting", ""))  # 编码格式约束文本
-
-    # 列出格式治理必须保留的短语，防止输出重新退化成不可读的一行式代码。
-    tuple_required_formatting_snippets = (  # 格式规则必备短语
-        "回车/空行分隔",  # 多行代码排版基线
-        "不能把语句、注释、函数粘连到一起",  # 语句和注释必须留出可读分隔
-        "严禁把代码压缩到一行",  # 禁止一行压缩写法
-        "炫技代码",  # 不接受那种靠小聪明缩行数、但团队成员很难一眼读懂的写法
-    )
-
-    # 逐项核对格式短语，确保新配置没有丢掉可读性下限。
-    for str_required_snippet in tuple_required_formatting_snippets:
-
-        # 任一格式短语缺失都意味着编码行为基线被削弱。
-        if str_required_snippet not in str_formatting:
-
-            # 回显缺失短语，帮助调用方直接修补格式治理文本。
-            list_errors.append(f"coding_behavior.formatting missing required rule `{str_required_snippet}`")
+    # 格式 helper 追加多行排版和可读性规则缺口。
+    list_errors.extend(formatting_rule_errors(str(coding_behavior.get("formatting", ""))))
 
     # 这里直接返回 coding_behavior 错误列表，供上层决定是否阻断渲染。
     return list_errors
@@ -1244,6 +1315,88 @@ def append_source_governance_readability_errors(data: dict[str, Any], list_error
             # 逐项指出哪个可读性阈值失效，方便调用方一次补齐对应数值。
             list_errors.append(f"source_governance.readability_gate.{str_threshold_key} must be a positive integer")
 
+# 文件命名配置只能保持或收紧技能默认硬边界。
+def append_file_naming_errors(data: dict[str, Any], list_errors: list[str]) -> None:
+    """补充文件命名开关、长度、例外和字符模式错误。
+
+    参数：
+        data: 待验证的源码治理配置映射。
+        list_errors: 由调用方维护的配置错误列表。
+    返回：本函数只向错误列表追加诊断，不返回业务值。
+    """
+
+    # 文件命名门禁对象集中承载全部不可弱化字段。
+    dict_gate = data.get("file_naming_gate")  # 待验证的文件命名配置
+
+    # 非对象配置无法提供稳定字段合同，先报告并停止本组检查。
+    if not isinstance(dict_gate, dict):
+
+        # 类型诊断明确定位到文件命名配置根。
+        list_errors.append("source_governance.file_naming_gate must be an object")
+
+        # 缺少映射时不能继续安全读取下级字段。
+        return
+
+    # 只有布尔真值才能启用不可绕过的命名门禁。
+    if not dict_gate.get("enabled"):
+
+        # 禁止项目通过关闭开关弱化技能默认规则。
+        list_errors.append("source_governance.file_naming_gate.enabled must be true")
+
+    # 词干上限必须保持在用户指定的三十字符边界内。
+    int_max_stem_chars = dict_gate.get("max_stem_chars")  # 当前配置的文件词干字符上限
+
+    # 排除布尔值并拒绝非正数或超过三十的整数。
+    if (
+        not isinstance(int_max_stem_chars, int)  # 上限必须是整数
+        or isinstance(int_max_stem_chars, bool)  # Python 布尔值不能冒充整数
+        or not 1 <= int_max_stem_chars <= 30  # 数值必须落在不可弱化范围
+    ):
+
+        # 一次说明完整合法区间，避免调用方逐次试错。
+        list_errors.append(
+            "source_governance.file_naming_gate.max_stem_chars must be an integer from 1 to 30"
+        )
+
+    # 例外只能保留不承担功能摘要职责的包初始化文件。
+    list_exemptions = dict_gate.get("exemptions")  # 当前配置声明的文件名豁免项
+
+    # 非数组或包含其他文件名都会扩大规则绕过面。
+    if (
+        not isinstance(list_exemptions, list)  # 豁免项必须使用数组表达
+        or not set(str(item) for item in list_exemptions).issubset({"__init__.py"})  # 只允许初始化文件
+    ):
+
+        # 诊断固定列出唯一允许项，便于直接修复配置。
+        list_errors.append(
+            "source_governance.file_naming_gate.exemptions may contain only __init__.py"
+        )
+
+    # 受管正则锁住 Python 与其他源码的功能单词结构。
+    dict_expected_patterns = {
+        "python_pattern": r"^[a-z]+(?:_[a-z]+)*$",  # Python 小写下划线功能名
+        "source_pattern": r"^[a-z]+(?:[_-][a-z]+)*$",  # 其他源码允许下划线或连字符
+    }  # 不可由项目放宽的命名模式
+
+    # 分别验证两类源码模式，保留精确字段诊断。
+    for str_key, str_expected in dict_expected_patterns.items():
+
+        # 任意正则漂移都可能重新允许数字或无语义字符。
+        if dict_gate.get(str_key) != str_expected:
+
+            # 指出发生漂移的模式字段，要求恢复受管值。
+            list_errors.append(
+                f"source_governance.file_naming_gate.{str_key} must preserve the managed pattern"
+            )
+
+    # 功能摘要属于 Agent 判断，不能被确定性正则替代或关闭。
+    if not dict_gate.get("semantic_review_required"):
+
+        # 强制 revision-bound 语义证据进入发布审查链。
+        list_errors.append(
+            "source_governance.file_naming_gate.semantic_review_required must be true"
+        )
+
 # 统一校验 source_governance，锁住源码体积、注释治理和可读性门禁的基础契约。
 def validate_source_governance_data(data: dict[str, Any]) -> list[str]:
     """校验 `source_governance` 是否保留源码体积与注释治理契约。
@@ -1261,7 +1414,7 @@ def validate_source_governance_data(data: dict[str, Any]) -> list[str]:
         # 直接指出 source_governance 缺失，避免后续子字段错误淹没入口问题。
         return ["source_governance must be a non-empty object"]
 
-    # 这里按源码体积、测试白名单和注释治理三组边界持续累积失败项。
+    # 这里按源码体积、测试白名单、注释、可读性和命名边界持续累积失败项。
     list_errors: list[str] = []  # 源治理缺口总账
 
     # 先校验根级体积与测试路径边界。
@@ -1272,6 +1425,9 @@ def validate_source_governance_data(data: dict[str, Any]) -> list[str]:
 
     # 最后校验 readability_gate，继续锁住长行与压缩源码阈值。
     append_source_governance_readability_errors(data, list_errors)
+
+    # 文件命名门禁必须保持强制启用且不能放宽三十字符边界。
+    append_file_naming_errors(data, list_errors)
 
     # 这里返回的是 source_governance 全量诊断，供上层决定是否阻断生成与校验。
     return list_errors
@@ -1586,6 +1742,81 @@ def load_global_rule_overrides(root: Path, profile: dict[str, Any] | None = None
     # 返回路径、存在性、合并后数据和累计错误，供调用方统一消费。
     return {"path": path_path, "exists": path_path.is_file(), "data": dict_merged, "errors": list_errors}
 
+# 受管语言路由刷新器只更新完整命中历史默认值的三字段合同。
+def refresh_managed_language_skill_routes(dict_existing_raw: dict[str, Any]) -> bool:
+    """按当前安装状态刷新仍由生成器管理的语言技能路由。
+
+    参数:
+        dict_existing_raw: 磁盘治理配置的可变映射。
+
+    返回:
+        三字段路由发生实际变化时为 True，否则为 False。
+    """
+
+    # 读取新版编码行为对象，损坏类型不参与受管路由刷新。
+    dict_existing_coding = dict_existing_raw.get("coding_behavior", {})  # 现有编码行为配置
+
+    # 只有映射类型才能继续读取语言技能路由。
+    dict_existing_routing = (  # 现有语言技能路由配置
+        dict_existing_coding.get("language_skill_routing", {})  # 新版路由子对象
+        if isinstance(dict_existing_coding, dict)  # 有效编码行为映射
+        else {}  # 损坏配置回退为空路由
+    )
+
+    # 非映射路由交给配置验证器报告，不在迁移阶段猜测修复。
+    if not isinstance(dict_existing_routing, dict):
+
+        # 未发生安全刷新时保持磁盘内容不变。
+        return False
+
+    # 四种安装组合和历史固定文本共同构成可安全升级的默认集合。
+    tuple_managed_defaults = managed_language_skill_route_defaults()  # 三类受管路由默认集合
+
+    # 三类默认集合分别约束共同门禁和两个语言所有权字段。
+    set_shared_defaults, set_python_defaults, set_script_defaults = tuple_managed_defaults  # 受管路由默认集合
+
+    # 缺少 shared 且两条语言路由均受管时，允许从旧两字段合同整体升级。
+    bool_legacy_pair_managed = (  # 旧两字段合同是否可安全迁移
+        "shared" not in dict_existing_routing  # 历史结构没有共同门禁字段
+        and dict_existing_routing.get("python") in set_python_defaults  # Python 路由属于受管默认
+        and dict_existing_routing.get("script") in set_script_defaults  # 脚本路由属于受管默认
+    )
+
+    # 已有三字段配置只有在三项均受管时才允许随安装状态整体刷新。
+    bool_current_triple_managed = (  # 当前三字段合同是否可安全刷新
+        dict_existing_routing.get("shared") in set_shared_defaults  # 共同门禁属于受管默认
+        and dict_existing_routing.get("python") in set_python_defaults  # Python owner 文案仍由生成器管理
+        and dict_existing_routing.get("script") in set_script_defaults  # 脚本 owner 文案仍由生成器管理
+    )
+
+    # 任一字段自定义都会阻止整组自动迁移或刷新。
+    if not (bool_legacy_pair_managed or bool_current_triple_managed):
+
+        # 用户自定义路由必须原样保留。
+        return False
+
+    # 当前安装态三字段默认值作为原子更新目标。
+    dict_current_routes = {  # 当前三字段受管默认
+        "shared": DEFAULT_LANGUAGE_SKILL_ROUTING_SHARED,  # 当前共同门禁
+        "python": DEFAULT_LANGUAGE_SKILL_ROUTING_PYTHON,  # 当前 Python 路由
+        "script": DEFAULT_LANGUAGE_SKILL_ROUTING_SCRIPT,  # 当前脚本路由
+    }
+
+    # 磁盘值已经等于当前默认时不产生无意义写回。
+    if dict_existing_routing == dict_current_routes:
+
+        # 相同合同不属于实际刷新。
+        return False
+
+    # 清空旧键后整体写入三字段，避免残留未知受管字段。
+    dict_existing_routing.clear()
+
+    # 原子更新确保 shared 与两条语言路由始终来自同一安装状态。
+    dict_existing_routing.update(dict_current_routes)
+
+    # 返回真实变化供调用方决定是否写盘和重载。
+    return True
+
 # 确保本地全局治理覆盖文件与 GUI 例外 manifest 存在，并在需要时执行旧键迁移写回。
 def ensure_global_rule_overrides_file(root: Path, profile: dict[str, Any] | None = None) -> dict[str, Any]:
     """确保本地治理覆盖文件存在，并在需要时补齐 GUI 例外 manifest。
@@ -1624,6 +1855,24 @@ def ensure_global_rule_overrides_file(root: Path, profile: dict[str, Any] | None
 
         # 读取磁盘上的现有 JSON，判断是否仍处于旧版 code_comment_policy 形态。
         dict_existing_raw = read_json(path_overrides_json)  # 磁盘上的原始治理 JSON
+
+        # 已知受管默认路由可按当前安装状态安全刷新，用户自定义文本保持原样。
+        if isinstance(dict_existing_raw, dict):
+
+            # 独立刷新器只修改完整命中历史默认值的语言路由三元组。
+            bool_routes_refreshed = refresh_managed_language_skill_routes(dict_existing_raw)  # 是否需要写回路由
+
+            # 只有实际命中受管默认时才写盘，避免无意义改写用户 JSON。
+            if bool_routes_refreshed:
+
+                # 保留用户字段顺序并使用 UTF-8 写回当前默认路由。
+                path_overrides_json.write_text(
+                    json.dumps(dict_existing_raw, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+
+                # 写盘后重新加载，确保返回值反映磁盘事实。
+                dict_loaded = load_global_rule_overrides(root, profile)  # 路由刷新后的治理配置
 
         # 旧键残留或新版 coding_behavior 缺失时，都需要落盘新版治理结构。
         if isinstance(dict_existing_raw, dict) and (

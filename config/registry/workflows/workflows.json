@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "workflows": [
+    {
+      "id": "workflow.managed-change", "title": "受管仓库变更闭环", "summary": "恢复检查、记忆门禁、会话登记、实现验证和交接的最小闭环。", "aliases": {"zh": ["受管任务完整流程", "从恢复到交接"], "en": ["managed change workflow", "resume to handoff"]}, "steps": ["docs.operations", "docs.start-session", "verify.quick-validate", "verify.evaluate-skill", "docs.operations"], "boundaries": ["每个写入门禁失败都必须先处理再继续"]
+    },
+    {
+      "id": "workflow.registry-update", "title": "命令注册表更新闭环", "summary": "修改 JSON 事实源、重建 SQLite、运行问询测试并检查文档漂移。", "aliases": {"zh": ["更新命令 RAG", "注册表修改流程"], "en": ["registry update workflow", "command RAG update"]}, "steps": ["registry.build", "registry.ask", "verify.quick-validate"], "boundaries": ["禁止手工编辑生成式 SQLite"]
+    },
+    {
+      "id": "workflow.release", "title": "技能发布与安装闭环", "summary": "验证、准备版本包、生成回执并在明确授权后安装。", "aliases": {"zh": ["技能发布流程", "发布并安装"], "en": ["skill release workflow", "release and install"]}, "steps": ["verify.confidence-gate", "docs.operations", "release.install-skill"], "boundaries": ["发布与安装均需独立满足授权和证据门禁"]
+    }
+  ]
+}

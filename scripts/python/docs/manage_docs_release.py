@@ -32,8 +32,8 @@ def _load_module_shards(tuple_shard_names: tuple[str, ...]) -> None:
 # 策略定义先于打包和门禁实现加载。
 _load_module_shards(
     (
-        "_manage_docs_release_policy.py",
-        "_manage_docs_release_package.py",
-        "_manage_docs_release_gate.py",
+        "release_policy.py",
+        "release_package.py",
+        "release_gate.py",
     )
 )

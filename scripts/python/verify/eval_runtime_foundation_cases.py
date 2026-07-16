@@ -3,6 +3,9 @@
 # 延迟类型注解，避免评估上下文尚未装载时解析共享类型。
 from __future__ import annotations
 
+# 句界识别用于核验产品入口只保留一个启动句。
+import re
+
 # 分片显式声明使用的运行时符号，避免依赖隐式全局上下文。
 from eval_runtime_core import (
     Any,
@@ -40,6 +43,9 @@ PATH_EVALUATION_SCENARIOS = PATH_SKILL_REPOSITORY / "references" / "evaluation-s
 
 # 正式评估清单用于检查门禁变更是否同步更新 eval。
 PATH_EVALS = PATH_SKILL_REPOSITORY / "evals" / "evals.json"  # 正式评估清单相对路径
+
+# OpenAI 产品入口元数据用于核验发现、启动和渐进披露职责。
+PATH_OPENAI_YAML = PATH_SKILL_REPOSITORY / "agents" / "openai.yaml"  # OpenAI 元数据相对路径
 
 # 仓库级测试文件代表伴随测试证据。
 PATH_REVIEW_TEST = Path("tests") / "test_agents_md_scripts.py"  # 审查伴随测试相对路径
@@ -219,6 +225,82 @@ def review_companion_report(helper: EvalFixtures) -> dict[str, Any]:
             "all",  # 同时检查代码、测试、文档与版本
             cwd=REPO_ROOT,  # 使用仓库正式伴随治理审查运行时
         )
+
+# OpenAI UI 元数据案例验证入口文案不复制完整治理手册。
+def case_openai_metadata_standard_contract(
+    case: dict[str, Any],
+    _helper: EvalFixtures,
+) -> dict[str, Any]:
+    """评估 OpenAI 技能元数据的长度、单句和渐进披露合同。
+
+    参数：case 为当前案例元数据，_helper 保留统一处理器签名。
+    返回：标准元数据与无治理基线的结构化对照结果。
+    """
+
+    # 真实技能元数据是有技能路径的唯一事实来源。
+    path_openai = REPO_ROOT / PATH_OPENAI_YAML  # OpenAI 元数据路径
+
+    # 单行 YAML 字段足以覆盖当前稳定 interface 结构。
+    dict_interface: dict[str, str] = {}  # 解析后的 interface 字段
+
+    # 逐行提取三个公开字段，避免为评估引入生产依赖。
+    for str_line in path_openai.read_text(encoding="utf-8").splitlines():
+
+        # 去除缩进后匹配稳定字段名和双引号值。
+        str_stripped_line = str_line.strip()  # 当前规范化 YAML 行
+
+        # 每个字段只接受首次出现的一级标量。
+        for str_key in ("display_name", "short_description", "default_prompt"):
+
+            # 非目标字段继续检查下一候选字段名。
+            if not str_stripped_line.startswith(f"{str_key}:"):
+
+                # 当前行与该字段无关。
+                continue
+
+            # 去掉字段名和外围引号得到真实 UI 文案。
+            dict_interface[str_key] = str_stripped_line.split(":", 1)[1].strip().strip("'\"")  # 当前 UI 字段正文
+
+    # 分离两个用户可见文本，便于逐项形成证据。
+    str_description = dict_interface.get("short_description", "")  # 技能简介
+
+    # 默认提示词独立承担技能启动职责。
+    str_prompt = dict_interface.get("default_prompt", "")  # 默认提示词
+
+    # 详细政策片段不应重新进入产品入口。
+    tuple_policy_markers = (  # 仅属于技能正文或引用文档的政策标记
+        "remote-server use",  # 远程服务器政策标记
+        "codebase-memory use",  # 代码图谱政策标记
+        "token-usage request",  # Token 统计政策标记
+        "sessions-root",  # 会话根目录政策标记
+    )
+
+    # 有技能路径必须同时满足所有标准元数据职责。
+    dict_with_checks = {  # 当前技能元数据事实检查
+        "description_length_standard": 25 <= len(str_description) <= 64,  # 简介字符边界
+        "prompt_budget_compact": len(str_prompt.encode("utf-8")) <= 256,  # 提示词字节预算
+        "prompt_invokes_skill": str_prompt.startswith("Use $agents-md-generator"),  # 显式技能启动
+        "prompt_is_one_sentence": len(re.findall(r"[!?]|[.](?=\s|$)", str_prompt)) == 1,  # 单句入口
+        "prompt_avoids_policy_duplication": not any(  # 渐进披露边界
+            str_marker in str_prompt.lower()  # 当前政策标记是否泄漏
+            for str_marker in tuple_policy_markers  # 遍历详细政策标记
+        ),
+    }
+
+    # 无技能基线没有字段合同、审计门禁或渐进披露边界。
+    dict_without_checks = {  # 无治理的对照基线
+        str_key: False  # 基线不具备当前元数据能力
+        for str_key in dict_with_checks  # 遍历本案例全部检查项
+    }
+
+    # 统一结果报告通过项和量化改进。
+    return build_case_result(
+        case,
+        with_skill_checks=dict_with_checks,
+        without_skill_checks=dict_without_checks,
+        with_skill_detail={"openai_yaml": str(path_openai)},
+        without_skill_detail={"baseline": "no governed OpenAI skill metadata contract"},
+    )
 
 # 审查伴随项场景验证门禁变更必须同步测试、文档和 eval。
 def case_review_governance_companion_checks(case: dict[str, Any], helper: EvalFixtures) -> dict[str, Any]:
@@ -432,7 +514,7 @@ def case_source_governance_test_boundary(case: dict[str, Any], _helper: EvalFixt
     path_runtime_fixture = SCRIPT_DIR / "eval_runtime_fixtures.py"  # 正式 eval 夹具路径
 
     # tests 入口只保留历史命令兼容委托。
-    path_wrapper_runner = REPO_ROOT / "tests" / "run_skill_evals.py"  # 测试兼容包装器路径
+    path_wrapper_runner = REPO_ROOT / "tests" / "evaluation" / "run_skill_evals.py"  # 测试兼容包装器路径
 
     # 旧 tests 夹具必须删除，避免生产和测试出现双重事实源。
     path_legacy_fixture = REPO_ROOT / "tests" / "eval_fixtures.py"  # 已退役测试夹具路径
@@ -488,7 +570,7 @@ def case_source_governance_test_boundary(case: dict[str, Any], _helper: EvalFixt
         with_skill_detail={
             "run_skill_evals": (
                 "formal runner lives under scripts/python/verify/; "
-                "tests/run_skill_evals.py is only a compatibility wrapper"
+                "tests/evaluation/run_skill_evals.py is only a compatibility wrapper"
             )
         },
         without_skill_detail={

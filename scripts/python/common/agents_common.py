@@ -1160,6 +1160,68 @@ def extract_global_codex_managed_block(text: str) -> str:
     # 返回值包含两端标记，供模板与现状直接比较。
     return text[int_start:int_end]
 
+# 全局基线诊断器按互斥优先级返回首个修复原因和确认提示。
+def global_codex_agents_repair_details(
+    bool_exists: bool,
+    bool_empty: bool,
+    bool_managed: bool,
+    bool_meta_ok: bool,
+    str_actual_block: str,
+    str_expected_block: str,
+) -> tuple[list[str], bool, str]:
+    """诊断全局 AGENTS 基线并返回确定性的首个修复动作。
+
+    Args:
+        bool_exists: 全局文件是否存在。
+        bool_empty: 已存在文件是否为空。
+        bool_managed: 文件是否包含完整受管边界。
+        bool_meta_ok: 文件是否包含当前基线元标记。
+        str_actual_block: 当前受管区块文本。
+        str_expected_block: 当前技能期望的受管区块文本。
+
+    Returns:
+        修复原因列表、用户确认状态和确认提示文本。
+    """
+
+    # 缺失文件可直接用受管模板创建。
+    if not bool_exists:
+
+        # 缺失状态不涉及人工内容确认。
+        return ["missing_global_codex_agents_md"], False, ""
+
+    # 空文件同样可以安全写入完整模板。
+    if bool_empty:
+
+        # 空文件原因保留与缺失文件的诊断差异。
+        return ["empty_global_codex_agents_md"], False, ""
+
+    # 有人工内容但没有边界标记时必须确认插入位置。
+    if not bool_managed:
+
+        # 提示明确建议插入而不是覆盖现有文件。
+        str_user_message = (  # 用户确认提示
+            "Global .codex/AGENTS.md has manual content but no managed baseline block; "
+            "insert the generated baseline block near the top of the file after any opening comments."
+        )
+
+        # 人工内容场景公开确认门禁及其唯一修复原因。
+        return ["missing_global_codex_agents_managed_block"], True, str_user_message
+
+    # 受管区块缺少 v3 元标记时需要版本升级。
+    if not bool_meta_ok:
+
+        # 元标记缺失优先于文本漂移诊断。
+        return ["missing_global_codex_agents_v3_meta"], False, ""
+
+    # 元标记存在但文本不同属于基线漂移。
+    if str_actual_block != str_expected_block:
+
+        # 文本漂移需要重新同步当前模板。
+        return ["outdated_global_codex_agents_baseline"], False, ""
+
+    # 基线完全一致时不需要修复或确认。
+    return [], False, ""
+
 # 全局状态报告区分缺失、空文件、无受管块和版本漂移。
 def global_codex_agents_status(
     codex_home: str | None = None,
@@ -1213,53 +1275,24 @@ def global_codex_agents_status(
     # 通过状态要求受管、版本正确且区块文本完全一致。
     bool_baseline_ok = bool_managed and bool_meta_ok and str_actual_block == str_expected_block  # 基线是否一致
 
-    # 修复原因只记录首个互斥状态，保持建议稳定。
-    list_repair_reasons: list[str] = []  # 全局基线修复原因
+    # 诊断器保持修复原因优先级并隔离人工内容确认分支。
+    tuple_repair_details = global_codex_agents_repair_details(  # 全局基线修复诊断元组
+        bool_exists,  # 文件存在性
+        bool_empty,  # 空文件状态
+        bool_managed,  # 受管边界状态
+        bool_meta_ok,  # v3 版本证据判断
+        str_actual_block,  # 现状文本比较输入
+        str_expected_block,  # 模板文本比较输入
+    )
 
-    # 默认允许自动修复，人工无边界内容例外。
-    bool_requires_user_confirmation = False  # 是否需要用户确认
+    # 首项保存唯一的修复原因列表。
+    list_repair_reasons = tuple_repair_details[0]  # 全局基线修复原因
 
-    # 用户消息仅在需要确认插入边界时填充。
-    str_user_message = ""  # 全局基线修复提示
+    # 第二项控制人工内容场景的用户确认门禁。
+    bool_requires_user_confirmation = tuple_repair_details[1]  # 是否需要用户确认
 
-    # 文件缺失可直接用受管模板创建。
-    if not bool_exists:
-
-        # 缺失原因触发完整模板创建。
-        list_repair_reasons.append("missing_global_codex_agents_md")
-
-    # 空文件同样可以安全写入完整模板。
-    elif bool_empty:
-
-        # 空文件原因保留与缺失文件的诊断差异。
-        list_repair_reasons.append("empty_global_codex_agents_md")
-
-    # 有人工内容但没有边界标记时必须确认插入位置。
-    elif not bool_managed:
-
-        # 无边界原因禁止覆盖人工内容。
-        list_repair_reasons.append("missing_global_codex_agents_managed_block")
-
-        # 插入受管区块前必须取得用户确认。
-        bool_requires_user_confirmation = True  # 启用用户确认门禁
-
-        # 提示明确建议插入而不是覆盖现有文件。
-        str_user_message = (  # 用户确认提示
-            "Global .codex/AGENTS.md has manual content but no managed baseline block; "
-            "insert the generated baseline block near the top of the file after any opening comments."
-        )
-
-    # 受管区块缺少 v3 元标记时需要版本升级。
-    elif not bool_meta_ok:
-
-        # 元标记缺失需要升级受管区块版本。
-        list_repair_reasons.append("missing_global_codex_agents_v3_meta")
-
-    # 元标记存在但文本不同属于基线漂移。
-    elif str_actual_block != str_expected_block:
-
-        # 文本漂移需要重新同步当前模板。
-        list_repair_reasons.append("outdated_global_codex_agents_baseline")
+    # 末项提供需要确认时的可执行提示。
+    str_user_message = tuple_repair_details[2]  # 全局基线修复提示
 
     # 任一诊断原因都表示基线需要修复。
     bool_repair_required = bool(list_repair_reasons)  # 是否需要修复全局基线

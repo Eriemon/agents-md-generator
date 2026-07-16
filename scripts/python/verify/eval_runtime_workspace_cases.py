@@ -218,13 +218,13 @@ def global_template_checks(str_template: str) -> dict[str, bool]:
         "## Coding Behavior Baseline" in str_template  # 是否包含编码行为基线
         and "readable-python-generator" in str_template  # 是否路由 Python 技能
         and "readable-script-generator" in str_template  # 是否路由脚本技能
-        and "bat/cmd, shell/bash, PowerShell, and Tcl scripts" in str_template  # 是否覆盖全部脚本语言族
+        and "bat/cmd, shell/bash, PowerShell, and Tcl changes" in str_template  # 是否覆盖全部脚本语言族
     )
 
     # Markdown 公式规则要求行内和块级语法且不误导为代码围栏。
     bool_markdown_math = (  # Markdown 公式合同完整性
         "Markdown documentation formulas" in str_template  # 是否声明公式治理范围
-        and "inline \u0060$...$\u0060 or block \u0060$$...$$\u0060 syntax" in str_template  # 是否声明两种公式语法
+        and "inline \u0060$...$\u0060 or block \u0060$$...$$\u0060" in str_template  # 是否声明两种公式语法
         and "fenced code blocks" not in str_template  # 是否避免错误代码围栏建议
     )
 

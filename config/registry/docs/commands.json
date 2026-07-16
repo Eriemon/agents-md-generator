@@ -1,0 +1,23 @@
+{
+  "schema_version": 2,
+  "category": "docs",
+  "commands": [
+    {
+      "id": "docs.start-session", "category": "docs", "entrypoint": "manage_docs.py", "subcommand": "start-session", "title": "开始受管文档会话", "summary": "在恢复、记忆和图谱前置检查完成后登记当前工作会话。", "when_to_use": "受管仓库的新一轮实现即将开始写入前。",
+      "aliases": {"zh": ["如何开始文档治理会话", "开始受管会话", "登记当前任务"], "en": ["start docs governance session", "begin managed session"]},
+      "parameters": [{"name": "project", "required": true, "description": "项目根目录"}, {"name": "--input", "required": true, "description": "会话 JSON 文件"}], "invocation_templates": ["python <skill>/scripts/python/docs/manage_docs.py start-session <project> --input <session.json>"],
+      "examples": {"valid": ["python skills/agents-md-generator/scripts/python/docs/manage_docs.py start-session . --input .agents/session.json"], "invalid": ["不要在 resume-check 或 memory-gate 失败时开始写入会话"]},
+      "prerequisites": ["resume-check 无未恢复中断", "memory-gate 通过", "受管写入时代码图门禁通过"], "outputs": {"format": "json", "success_exit_codes": [0], "failure_exit_codes": [1, 2]}, "risk": {"level": "medium", "writes": true, "warning": "会更新活动会话和治理文档状态"}, "boundaries": ["临时输入文件不应长期保留", "不会代替任务实现"] , "related_command_ids": ["docs.operations", "registry.ask"]
+    },
+    {
+      "id": "docs.operations", "category": "docs", "entrypoint": "manage_docs.py", "subcommand": "<operation>", "title": "管理文档、记忆、交接与发布治理", "summary": "集中提供恢复、记忆、同步、验证、交接和发布准备等 24 个受管子命令。", "when_to_use": "需要继续中断任务、维护治理文档、检索项目记忆或准备发布时。",
+      "aliases": {"zh": ["恢复中断任务", "写交接", "记忆门禁", "读取项目记忆", "压缩项目记忆", "验证治理文档", "准备发布", "同步根 AGENTS"], "en": ["resume interrupted work", "write handoff", "memory gate", "read project memory", "compress memory", "verify docs", "prepare release", "sync root AGENTS"]},
+      "parameters": [
+        {"name": "scaffold", "required": false, "description": "创建文档治理骨架"}, {"name": "preflight", "required": false, "description": "运行文档前置检查"}, {"name": "memory-gate", "required": false, "description": "验证记忆持久化和精确 cwd 引导"}, {"name": "memory-bootstrap-sessions", "required": false, "description": "补齐精确 cwd 会话引导"}, {"name": "memory-verify", "required": false, "description": "验证记忆数据库与视图"}, {"name": "branch-gate", "required": false, "description": "检查分支治理"}, {"name": "verify", "required": false, "description": "验证文档治理状态"}, {"name": "handoff", "required": false, "description": "写入完成交接"}, {"name": "start-session", "required": false, "description": "开始受管会话"}, {"name": "resume-repair", "required": false, "description": "修复中断会话"}, {"name": "resume-check", "required": false, "description": "检查是否存在中断任务"}, {"name": "memory-init", "required": false, "description": "初始化项目记忆；创建时显式使用 --confirm-create"}, {"name": "memory-write", "required": false, "description": "写入项目记忆事件"}, {"name": "memory-read", "required": false, "description": "检索项目记忆"}, {"name": "memory-compress", "required": false, "description": "生成压缩记忆视图"}, {"name": "repair-handoff-names", "required": false, "description": "修复交接归档名"}, {"name": "development", "required": false, "description": "更新开发文档"}, {"name": "git-changelog", "required": false, "description": "更新变更日志"}, {"name": "sync-root-agents", "required": false, "description": "同步根 AGENTS；确认验证时使用 --mark-verified"}, {"name": "sync-global-codex-agents", "required": false, "description": "同步全局 Codex 规则"}, {"name": "release-gate", "required": false, "description": "验证发布门禁"}, {"name": "release-prepare", "required": false, "description": "准备版本化发布"}, {"name": "package-release", "required": false, "description": "生成发布包"}, {"name": "work-folder-gate", "required": false, "description": "检查工作目录合同"}
+      ],
+      "invocation_templates": ["python <skill>/scripts/python/docs/manage_docs.py <operation> <project> [operation-options]"],
+      "examples": {"valid": ["python skills/agents-md-generator/scripts/python/docs/manage_docs.py resume-check ."], "invalid": ["不要在未恢复活动会话时直接覆盖 handoff"]},
+      "prerequisites": ["先查对应子命令 --help", "写入操作使用已审查输入 JSON"], "outputs": {"format": "json", "success_exit_codes": [0], "failure_exit_codes": [1, 2]}, "risk": {"level": "high", "writes": true, "warning": "部分子命令会修改 handoff、memory、release 或根规则"}, "boundaries": ["先区分只读检查与写入子命令", "发布和全局同步需要额外授权"], "related_command_ids": ["docs.start-session", "dirs.manage", "verify.quick-validate"]
+    }
+  ]
+}

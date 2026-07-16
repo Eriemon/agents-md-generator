@@ -454,6 +454,127 @@ def apply_keyword_rating(
     # 未触发关键词阈值时保持当前评分。
     return str_difficulty, str_scale, ""
 
+# 评级信号计数器保持三类关键词的固定顺序。
+def rating_signal_counts(text: str) -> tuple[int, int, int]:
+    """统计复杂、不清晰和低风险任务信号。
+
+    参数：text 为合并后的任务与上下文文本。
+    返回：复杂、不清晰和简单信号命中数三元组。
+    """
+
+    # 三类计数顺序与 apply_keyword_rating 的输入合同一致。
+    return (
+        count_matches(text, COMPLEX_KEYWORDS),
+        count_matches(text, UNCLEAR_KEYWORDS),
+        count_matches(text, SIMPLE_KEYWORDS),
+    )
+
+# 原因构造器集中维护评分诊断文本的优先顺序。
+def rating_reasons(
+    bool_explicit_rating: bool,
+    str_user_difficulty: str,
+    str_user_scale: str,
+    str_keyword_reason: str,
+    int_unclear_hits: int,
+) -> list[str]:
+    """构造稳定顺序的评分原因列表。
+
+    参数：bool_explicit_rating 为显式评分状态，str_user_difficulty 为用户难度，
+    str_user_scale 为用户规模，str_keyword_reason 为阈值原因，
+    int_unclear_hits 为不清晰信号数。
+    返回：至少包含一项的评分原因列表。
+    """
+
+    # 原因列表按评分决策顺序解释最终结果。
+    list_reasons: list[str] = []  # 评分原因列表
+
+    # 显式评分存在时不得再次询问同一信息。
+    if bool_explicit_rating:
+
+        # 原因文本成为机器可读评分载荷的一部分。
+        list_reasons.append("explicit user rating found; do not ask again")
+
+    # 上下文评分同样代表用户已表达等级。
+    elif str_user_difficulty or str_user_scale:
+
+        # 上下文来源与显式来源分开记录，便于审计。
+        list_reasons.append("contextual user rating found; do not ask again")
+
+    # 关键词阈值原因按用户评分原因之后追加。
+    if str_keyword_reason:
+
+        # 阈值原因保持 apply_keyword_rating 的原始文本。
+        list_reasons.append(str_keyword_reason)
+
+    # 任何不确定关键词都进入原因列表。
+    if int_unclear_hits:
+
+        # 调用方可据此解释为什么需要确认。
+        list_reasons.append("unclear requirement signal detected")
+
+    # 没有其他信号时记录普通默认判断。
+    if not list_reasons:
+
+        # 默认原因明确表示未发现高风险信号。
+        list_reasons.append("no high-risk task signals detected")
+
+    # 返回值始终可直接写入评分载荷。
+    return list_reasons
+
+# 评级结论器决定用户确认与置信度，不改变难度和规模。
+def rating_recommendations(
+    str_difficulty: str,
+    str_scale: str,
+    bool_user_rating: bool,
+    tuple_signal_hits: tuple[int, int, int],
+) -> tuple[bool, str, list[str]]:
+    """返回确认状态、置信度和后续治理动作。
+
+    参数：str_difficulty 为最终难度，str_scale 为最终规模，
+    bool_user_rating 为用户参与状态，tuple_signal_hits 为信号计数。
+    返回：是否询问用户、置信度和稳定顺序动作列表。
+    """
+
+    # 分项读取保持信号语义清晰。
+    int_complex_hits = tuple_signal_hits[0]  # 复杂任务信号数
+
+    # 不清晰信号会降低确认态置信度。
+    int_unclear_hits = tuple_signal_hits[1]  # 不清晰需求信号数
+
+    # 简单信号用于识别纯低风险高置信场景。
+    int_simple_hits = tuple_signal_hits[2]  # 低风险任务信号数
+
+    # 高风险或不清晰任务在用户未评级时建议确认。
+    bool_ask_user_rating = not bool_user_rating and (  # 是否需要用户确认评级
+        int_unclear_hits > 0  # 不清晰需求必须确认
+        or int_complex_hits >= 3  # 多个复杂信号必须确认
+        or str_difficulty in {"hard", "hell", "nightmare"}  # 高难度必须确认
+        or str_scale in {"large", "project"}  # 大范围必须确认
+    )
+
+    # 用户评分或纯低风险信号提供高置信度，其余默认中等。
+    str_confidence = (  # 当前评分置信度
+        "high"  # 用户评级或纯低风险任务的置信度
+        if bool_user_rating or (int_simple_hits and int_complex_hits == 0 and int_unclear_hits == 0)  # 高置信条件
+        else "medium"  # 无明确评级的普通任务置信度
+    )
+
+    # 需求不清且需要确认时置信度降为低。
+    if bool_ask_user_rating and int_unclear_hits:
+
+        # 低置信度提示调用方不要直接据此扩大执行范围。
+        str_confidence = "low"  # 不清晰且需确认时的置信度
+
+    # 动作构造继续复用既有公开 helper。
+    list_actions = build_recommended_actions(  # 最终治理动作序列
+        bool_ask_user_rating,  # 是否先确认评级
+        str_difficulty,  # 最终难度
+        str_scale,  # 最终规模
+    )
+
+    # 三项结论供评分入口直接写入稳定载荷。
+    return bool_ask_user_rating, str_confidence, list_actions
+
 # 评分主入口先尊重用户显式值，再使用启发式信号补足缺失维度。
 def infer_from_text(task_text: str, context_summary: str = "") -> dict[str, Any]:
     """推断任务难度、规模、置信度和建议动作。
@@ -487,35 +608,14 @@ def infer_from_text(task_text: str, context_summary: str = "") -> dict[str, Any]
     # 未提供规模时从小型任务起步。
     str_scale = str_user_scale or "small"  # 当前推断规模
 
-    # 原因列表按评分决策顺序解释最终结果。
-    list_reasons: list[str] = []  # 评分原因列表
-
-    # 显式评分存在时不得再次询问同一信息。
-    if bool_explicit_rating:
-
-        # 原因文本成为机器可读评分载荷的一部分。
-        list_reasons.append("explicit user rating found; do not ask again")
-
-    # 上下文评分同样代表用户已表达等级。
-    elif str_user_difficulty or str_user_scale:
-
-        # 上下文来源与显式来源分开记录，便于审计。
-        list_reasons.append("contextual user rating found; do not ask again")
-
     # 三类关键词信号分别计数，供阈值规则组合判断。
-    int_complex_hits = count_matches(str_combined, COMPLEX_KEYWORDS)  # 复杂任务信号数
-
-    # 不确定信号会降低置信度并可能要求用户确认。
-    int_unclear_hits = count_matches(str_combined, UNCLEAR_KEYWORDS)  # 不清晰需求信号数
-
-    # 简单信号仅在没有复杂或不确定信号时降级任务。
-    int_simple_hits = count_matches(str_combined, SIMPLE_KEYWORDS)  # 低风险任务信号数
+    tuple_signal_hits = rating_signal_counts(str_combined)  # 关键词信号计数元组
 
     # 阈值升级集中处理，并返回本轮决策原因。
     tuple_keyword_rating = apply_keyword_rating(  # 关键词评分结果
         (str_difficulty, str_scale),  # 当前评分
         (str_user_difficulty, str_user_scale),  # 用户评分
-        (int_complex_hits, int_unclear_hits, int_simple_hits),  # 关键词命中数
+        tuple_signal_hits,  # 关键词命中数
     )
 
     # 三元组首项是阈值调整后的难度。
@@ -527,63 +627,43 @@ def infer_from_text(task_text: str, context_summary: str = "") -> dict[str, Any]
     # 可选原因为空时表示没有触发关键词阈值。
     str_keyword_reason = tuple_keyword_rating[2]  # 关键词评分原因
 
-    # 仅在阈值确实触发时追加原因。
-    if str_keyword_reason:
-
-        # 原因列表维持评分决策发生顺序。
-        list_reasons.append(str_keyword_reason)
-
-    # 任何不确定关键词都进入原因列表。
-    if int_unclear_hits:
-
-        # 调用方可据此解释为什么需要确认。
-        list_reasons.append("unclear requirement signal detected")
-
-    # 没有其他信号时记录普通默认判断。
-    if not list_reasons:
-
-        # 默认原因明确表示未发现高风险信号。
-        list_reasons.append("no high-risk task signals detected")
+    # 原因构造器保持用户评分、阈值和不清晰信号的原顺序。
+    list_reasons = rating_reasons(  # 最终评分决策原因
+        bool_explicit_rating,  # 显式评分状态
+        str_user_difficulty,  # 用户难度输入
+        str_user_scale,  # 用户规模输入
+        str_keyword_reason,  # 关键词阈值原因
+        tuple_signal_hits[1],  # 不清晰信号计数
+    )
 
     # 任一用户评分维度存在即视为用户已参与评级。
     bool_user_rating = bool(str_user_difficulty or str_user_scale)  # 用户是否已给出评级
 
-    # 高风险或不清晰任务在用户未评级时建议确认。
-    bool_ask_user_rating = not bool_user_rating and (  # 是否需要用户确认评级
-        int_unclear_hits > 0  # 需求不清时需要确认
-        or int_complex_hits >= 3  # 多个复杂信号需要确认
-        or str_difficulty in {"hard", "hell", "nightmare"}  # 高难度需要确认
-        or str_scale in {"large", "project"}  # 大范围需要确认
+    # 评级结论器集中计算确认状态、置信度和治理动作。
+    tuple_recommendations = rating_recommendations(  # 评级建议结论元组
+        str_difficulty,  # 最终判定难度
+        str_scale,  # 最终判定规模
+        bool_user_rating,  # 用户评级参与状态
+        tuple_signal_hits,  # 三类关键词信号
     )
 
-    # 用户评分或纯低风险信号提供高置信度，其余默认中等。
-    str_confidence = (  # 当前评分置信度
-        "high"  # 用户评级或纯低风险任务的置信度
-        if bool_user_rating or (int_simple_hits and int_complex_hits == 0 and int_unclear_hits == 0)  # 高置信条件
-        else "medium"  # 无明确评级的普通任务置信度
-    )
+    # 首项决定是否需要用户确认评级。
+    bool_ask_user_rating = tuple_recommendations[0]  # 用户评级确认状态
 
-    # 需求不清且需要确认时置信度降为低。
-    if bool_ask_user_rating and int_unclear_hits:
+    # 第二项是与证据强度匹配的置信度。
+    str_confidence = tuple_recommendations[1]  # 评分置信度
 
-        # 低置信度提示调用方不要直接据此扩大执行范围。
-        str_confidence = "low"  # 不清晰且需确认时的置信度
-
-    # 动作构造与评分计算分离，保证输出顺序稳定。
-    list_actions = build_recommended_actions(  # 最终治理动作序列
-        bool_ask_user_rating,  # 是否先确认评级
-        str_difficulty,  # 最终难度
-        str_scale,  # 最终规模
-    )
+    # 末项保持后续治理动作的既有顺序。
+    list_actions = tuple_recommendations[2]  # 后续治理动作列表
 
     # 返回稳定字段集合供 CLI 和其他治理入口消费。
     return {
         "ask_user_rating": bool_ask_user_rating,  # 是否建议询问用户评级
         "inferred_difficulty": str_difficulty,  # 最终难度等级
         "inferred_scale": str_scale,  # 最终规模等级
-        "confidence": str_confidence,  # 评分置信度
-        "reasons": list_reasons,  # 最终评分决策原因
-        "recommended_actions": list_actions,  # 后续治理动作列表
+        "confidence": str_confidence,  # 对外证据置信等级
+        "reasons": list_reasons,  # 按判定顺序输出的审计依据
+        "recommended_actions": list_actions,  # 调用方应依次执行的治理步骤
     }
 
 # CLI 参数保持任务文本必填，项目根和上下文摘要可选。

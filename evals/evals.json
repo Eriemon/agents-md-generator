@@ -104,21 +104,21 @@
       "kind": "source_governance_regression",
       "patterns": ["Tool Wrapper", "Pipeline"],
       "handler": "source_governance_test_boundary",
-      "description": "The formal skill-effectiveness runner and runtime helper must live under scripts/python/verify/, tests/run_skill_evals.py must remain only a compatibility wrapper, and stale test-only fixtures must not be required for installed validation."
+      "description": "The formal skill-effectiveness runner and runtime helper must live under scripts/python/verify/, tests/evaluation/run_skill_evals.py must remain only a compatibility wrapper, and stale test-only fixtures must not be required for installed validation."
     },
     {
       "id": "source_governance_size_readability_contract",
       "kind": "source_governance_regression",
       "patterns": ["Tool Wrapper", "Reviewer", "Pipeline"],
       "handler": "source_governance_size_readability_contract",
-      "description": "Source governance must enforce the 64KB UTF-8 size limit, preserve decomposition-plan exceptions, skip excluded roots, and block one-line or minified unreadable source."
+      "description": "After internal readability helper decomposition, source governance must preserve its public JSON contract, enforce the 64KB UTF-8 size limit, preserve decomposition-plan exceptions, skip excluded roots, and block one-line or minified unreadable source."
     },
     {
       "id": "root_version_sync_contract",
       "kind": "governance_runtime_regression",
       "patterns": ["Tool Wrapper", "Pipeline"],
       "handler": "root_version_sync_contract",
-      "description": "sync-root-agents must repair both root metadata and the managed Control Profile version line so verify/manage_docs guidance does not point users at a partial fix."
+      "description": "After internal helper decomposition, sync-root-agents must preserve its CLI and JSON contract while repairing both root metadata and the managed Control Profile version line so verify/manage_docs guidance does not point users at a partial fix."
     },
     {
       "id": "source_repo_render_version_contract",
@@ -132,7 +132,7 @@
       "kind": "render_verify_regression",
       "patterns": ["Generator", "Reviewer", "Pipeline"],
       "handler": "language_skill_routing_contract",
-      "description": "Generated root AGENTS.md must include Coding Behavior Baseline language skill routing, route Python work to readable-python-generator, route bat/cmd, shell/bash, PowerShell, and Tcl script work to readable-script-generator, keep legacy installed versions on compatibility wording while strict versions enforce the dual-skill wording, write coding_behavior.language_skill_routing config, and verification must reject missing or weakened routing rules."
+      "description": "Generated root AGENTS.md must store coding_behavior.language_skill_routing as exactly shared, python, and script; render the shared think-first and in-process dual-skill gate only once（只渲染一次）; keep Python and script routes limited to scope, ownership, and cross-language boundaries; preserve all four readable-skill installation states and legacy two-field compatibility only in legacy verification mode; and reject missing, repeated, or weakened routing in strict mode."
     },
     {
       "id": "script_output_policy_contract",
@@ -188,7 +188,7 @@
       "kind": "governance_runtime_regression",
       "patterns": ["Tool Wrapper", "Reviewer", "Pipeline"],
       "handler": "governance_cli_entrypoint_smoke",
-      "description": "Governance CLI entrypoints must start cleanly, current-workspace planning triggers must remain documented, external workspaces must use installed runtime commands, and remote .local.json workspace settings must be blocked."
+      "description": "Governance CLI entrypoints must start cleanly, current-workspace planning triggers and mandatory codebase-memory-mcp choice/install/index rules must remain documented, external workspaces must use installed runtime commands, and remote .local.json workspace settings must be blocked."
     },
     {
       "id": "task_rating_gate_contract",
@@ -203,6 +203,13 @@
       "patterns": ["Tool Wrapper", "Generator", "Reviewer", "Pipeline"],
       "handler": "memory_governance_gate",
       "description": "Strong-control memory governance must block missing or disabled memory, require authorized creation, bootstrap exact-cwd Codex sessions into timestamped summaries, and pass only after memory verification is complete."
+    },
+    {
+      "id": "openai_metadata_standard_contract",
+      "kind": "skill_metadata_regression",
+      "patterns": ["Reviewer", "Pipeline"],
+      "handler": "openai_metadata_standard_contract",
+      "description": "OpenAI skill metadata must keep short_description within 25-64 characters and default_prompt as one concise Use $agents-md-generator sentence without duplicating detailed governance policy."
     }
   ]
 }

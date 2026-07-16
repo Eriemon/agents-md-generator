@@ -239,7 +239,6 @@ def prepare_root_whitelist_project(path_project: Path) -> None:
         json.dumps(root_whitelist_control(), ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-
     # 最小 skill 主目录使项目分类与目录合同保持一致。
     path_skill = path_project / "skills" / "demo-skill"  # 模拟 skill 源目录
 
@@ -360,10 +359,11 @@ def case_evolution_removed_contract(case: dict[str, Any], _helper: EvalFixtures)
     dict_with_checks = {  # evolution 退役合同断言
         "cli_removed": "import-evolution" not in str_help_text  # 旧命令是否从帮助中消失
         and " evolve " not in f" {str_help_text} ",  # 兼容旧命令别名的词边界检查
-        "skill_declares_removal": "v1.0.0" in str_skill_text  # 主说明是否声明退役版本
-        and "不再支持" in str_skill_text,  # 主说明是否明确拒绝旧能力
-        "script_guide_declares_removal": "v1.0.0" in str_script_guide  # 脚本指南是否同步退役合同
-        and "不再支持 evolution" in str_script_guide,  # 指南是否明确拒绝旧命令
+        "skill_declares_removal": (  # 技能旧子系统退役声明检查
+            "removed evolution or experience subsystems" in str_skill_text  # 技能退役声明锚点
+        ),  # 技能正文声明旧子系统已移除
+        "script_guide_declares_removal": "removed evolution and experience commands remain invalid"  # 指南退役声明锚点
+        in str_script_guide,  # 指南正文命中旧子系统退役合同
         "scenarios_cover_removal": "Evolution removed" in str_scenarios,  # 评估文档是否覆盖退役回归
     }
 
@@ -976,6 +976,35 @@ def case_install_release_completeness(case: dict[str, Any], helper: EvalFixtures
             },
         )
 
+# 受管技能需要仓库根提供拆分计划和治理配置。
+def managed_project_root(path_skill_dir: Path) -> Path:
+    """解析外部技能可用的受管项目根。
+
+    参数：path_skill_dir 为待评估技能根目录。
+    返回：标准 skills 布局下的受管仓库根；未发现时返回技能根。
+    """
+
+    # 规范路径用于比较候选根下的标准技能位置。
+    path_resolved_skill = path_skill_dir.resolve()  # 外部技能规范路径
+
+    # 由近到远查找同时具备治理标记和标准技能布局的祖先。
+    for path_candidate in (path_resolved_skill, *path_resolved_skill.parents):
+
+        # 控制文件证明候选目录是受管项目根。
+        path_control = path_candidate / ".agents" / "agents-control.json"  # 项目治理标记
+
+        # 标准布局绑定同名技能，避免借用无关祖先治理。
+        path_expected_skill = path_candidate / "skills" / path_resolved_skill.name  # 候选技能位置
+
+        # 两项事实同时匹配时才扩大项目边界。
+        if path_control.is_file() and path_expected_skill.resolve() == path_resolved_skill:
+
+            # 返回最近的可信受管根。
+            return path_candidate
+
+    # 独立安装技能保持自身最小项目边界。
+    return path_resolved_skill
+
 # 外部通用 skill 健康场景复用公共 audit 和 evaluate 入口。
 def case_external_generic_health(skill_dir: Path, case: dict[str, Any]) -> dict[str, Any]:
     """评估调用方提供的外部通用 skill 健康状态。
@@ -995,11 +1024,14 @@ def case_external_generic_health(skill_dir: Path, case: dict[str, Any]) -> dict[
         cwd=REPO_ROOT,  # 使用仓库公共审计运行时
     )
 
-    # 综合评估使用同一目录作为 skill 与目标项目边界。
+    # 受管源码技能从仓库根读取治理计划，独立安装保持自身边界。
+    path_project_root = managed_project_root(skill_dir)  # 外部技能评估项目根
+
+    # 综合评估使用解析后的真实项目边界。
     dict_evaluate = run_json_script(  # 外部 skill 综合评估结果
         "evaluate_skill.py",  # 外部 skill 综合评估入口
         skill_dir,  # 外部调用方指定的评估技能
-        skill_dir,  # 同一目录作为最小目标项目
+        path_project_root,  # 受管仓库根或独立技能最小边界
         cwd=REPO_ROOT,  # 外部健康检查复用正式综合评估运行时
     )
 

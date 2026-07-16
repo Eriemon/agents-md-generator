@@ -1,0 +1,94 @@
+{
+  "documents": [
+    {
+      "content_sha256": "83c65f1744a5777c14d145bce6a4d86dafc555fe35786c80de84a3064445d594",
+      "id": "document.skill",
+      "path": "SKILL.md",
+      "responsibility": "定义技能触发条件、工作流顺序、停止边界与渐进披露入口。",
+      "status": "reviewed",
+      "summary": "agents-md-generator 的最外层执行合同与资源路由。"
+    },
+    {
+      "content_sha256": "8ac2a9f94f0ff795abe6eab6b8ee13c4ecf47844853c1b0ac8984775a4d640b5",
+      "id": "document.references-agents-md-guidance",
+      "path": "references/agents-md-guidance.md",
+      "responsibility": "定义 AGENTS.md 的内容组织原则、根与作用域章节设计以及兼容性边界。",
+      "status": "reviewed",
+      "summary": "AGENTS.md 编写、压缩、分层与兼容性指导。"
+    },
+    {
+      "content_sha256": "d4cde4c289d45e3f7ab8b0b2ce62d5a32994bd69f0d24f6fade8f6205fab1400",
+      "id": "document.references-book-rules-coverage",
+      "path": "references/book-rules-coverage.md",
+      "responsibility": "定义工程书籍规则集的选择、压缩、作用域与禁止复制策略。",
+      "status": "reviewed",
+      "summary": "工程规则集覆盖范围与非复制决策。"
+    },
+    {
+      "content_sha256": "329886a39ff067e27fb5d664515b1c767830f3238ad0b167a370ca6305eba2e1",
+      "id": "document.references-capability-coverage",
+      "path": "references/capability-coverage.md",
+      "responsibility": "映射外部 AGENTS 生成器能力到本技能实现，并记录有意不纳入的能力。",
+      "status": "reviewed",
+      "summary": "项目检测、治理、验证与兼容能力覆盖地图。"
+    },
+    {
+      "content_sha256": "3d9f32ccc40dc19127a77386f4c07c215e2f2ea5fdc29f03000008995d406b30",
+      "id": "document.references-coding-behavior-language-routing",
+      "path": "references/coding-behavior-language-routing.md",
+      "responsibility": "定义 Python 与脚本族可读技能的安装感知路由、共同前置门禁和最终所有权。",
+      "status": "reviewed",
+      "summary": "编码行为中的 Python 与脚本技能路由合同。"
+    },
+    {
+      "content_sha256": "e04f892bf3a2303752f50d5bdc2f68edc5ddad97a64c296e9578191863ca976c",
+      "id": "document.references-evaluation-scenarios",
+      "path": "references/evaluation-scenarios.md",
+      "responsibility": "定义技能变更后的前向测试场景及其预期结果。",
+      "status": "reviewed",
+      "summary": "功能、治理、发布与兼容性的前向验证场景。"
+    },
+    {
+      "content_sha256": "ecb4ad440c67754bc0051d1c2b9f3afa3091a17f8c8460622802871147344a6b",
+      "id": "document.references-question-bank",
+      "path": "references/question-bank.md",
+      "responsibility": "定义仓库事实无法回答时使用的设计访谈问题、分支和确认流程。",
+      "status": "reviewed",
+      "summary": "AGENTS.md 设计访谈问题库与分支合同。"
+    },
+    {
+      "content_sha256": "494668d0f63c9b0d7a4f0f3dc84c691f09ab2673946a9c57518bda99f38742fb",
+      "id": "document.references-review-checklist",
+      "path": "references/review-checklist.md",
+      "responsibility": "定义生成或修改治理规则时的人工审查证据和发布前检查清单。",
+      "status": "reviewed",
+      "summary": "内容、结构、运行时、验证与发布审查清单。"
+    },
+    {
+      "content_sha256": "21ec98d27a72ba441b5017ca58f568bfd710a1de1dbb7ee525c2bc74039eed2a",
+      "id": "document.references-script-guide",
+      "path": "references/script-guide.md",
+      "responsibility": "定义核心脚本生命周期、验证链和命令注册表问询入口。",
+      "status": "reviewed",
+      "summary": "脚本核心用法与结构化命令注册表路由。"
+    },
+    {
+      "content_sha256": "1d99c9251046d527ab853978a8644d6d0002fc9264e644e0044c26ec69b3f859",
+      "id": "document.references-script-output-policy",
+      "path": "references/script-output-policy.md",
+      "responsibility": "定义人类可读过程输出前缀、可配置 Kind、quiet 行为与机器协议例外。",
+      "status": "reviewed",
+      "summary": "脚本 INFO、WARNING、ERR 与机器输出政策。"
+    },
+    {
+      "content_sha256": "e138ff6bdda1bff43711401a381a0ab69702bbb006b7f629a7fd1c7b37f86680",
+      "id": "document.references-skill-design-coverage",
+      "path": "references/skill-design-coverage.md",
+      "responsibility": "映射 Skill 设计模式到权威实现，并定义渐进披露与设计合同覆盖。",
+      "status": "reviewed",
+      "summary": "Tool Wrapper、Generator、Reviewer、Inversion 与 Pipeline 覆盖地图。"
+    }
+  ],
+  "schema_version": 1,
+  "status": "current"
+}

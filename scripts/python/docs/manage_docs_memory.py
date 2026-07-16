@@ -29,5 +29,11 @@ def _load_module_shards(tuple_shard_names: tuple[str, ...]) -> None:
         # 分片写入共同命名空间以维持历史导入合同。
         exec(code_shard, globals())
 
-# 存储职责必须先于记忆门禁加载。
-_load_module_shards(("_manage_docs_memory_store.py", "_manage_docs_memory_gate.py"))
+# 存储基础先于写入事务和记忆门禁加载。
+_load_module_shards(
+    (
+        "memory_store.py",
+        "memory_write.py",
+        "memory_gate.py",
+    )
+)

@@ -1,0 +1,477 @@
+{
+  "exact_reviews": [
+    {
+      "authoritative_location": "",
+      "decision": "keep",
+      "evidence": {
+        "locations": [
+          {
+            "block_index": "7",
+            "path": "references/book-rules-coverage.md",
+            "preview": "## Deliberate Non-Copy Decisions"
+          },
+          {
+            "block_index": "4",
+            "path": "references/capability-coverage.md",
+            "preview": "## Deliberate Non-Copy Decisions"
+          }
+        ],
+        "sha256": "07804ba7934c2146d738779c63210c94d12f298c7d4a2c6e00e1a03bf4228bd7"
+      },
+      "id": "exact.07804ba7934c2146",
+      "rationale": "相同章节标题只承担局部结构导航，不复制知识正文，属于允许重复的结构指针。"
+    },
+    {
+      "authoritative_location": "",
+      "decision": "keep",
+      "evidence": {
+        "locations": [
+          {
+            "block_index": "20",
+            "path": "SKILL.md",
+            "preview": "```text python skills/agents-md-generator/scripts/python/docs/manage_docs.py resume-check . python skills/agents-md-generator/scripts/python/docs/manage_docs.py memory-gate . python skills/agents-md-generator/scripts/python/docs/manage_docs"
+          },
+          {
+            "block_index": "8",
+            "path": "references/script-guide.md",
+            "preview": "```text python skills/agents-md-generator/scripts/python/docs/manage_docs.py resume-check . python skills/agents-md-generator/scripts/python/docs/manage_docs.py memory-gate . python skills/agents-md-generator/scripts/python/docs/manage_docs"
+          }
+        ],
+        "sha256": "4943149576dae85c911c168f6663966c3950452f683c1b471652b4e6193e701b"
+      },
+      "id": "exact.4943149576dae85c",
+      "rationale": "SKILL.md 提供执行入口，script-guide 保留核心生命周期速查；该命令块属于跨层路由指针，不是重复知识正文。"
+    },
+    {
+      "authoritative_location": "",
+      "decision": "keep",
+      "evidence": {
+        "locations": [
+          {
+            "block_index": "22",
+            "path": "references/agents-md-guidance.md",
+            "preview": "## Compatibility"
+          },
+          {
+            "block_index": "24",
+            "path": "references/script-guide.md",
+            "preview": "## Compatibility"
+          }
+        ],
+        "sha256": "4e8179e57482e4df9192fa56de0cbb29f2886f9cab5d1a6c84eeed6a2de335d8"
+      },
+      "id": "exact.4e8179e57482e4df",
+      "rationale": "Compatibility 是不同责任文档中的局部结构标题，不承载可合并知识。"
+    },
+    {
+      "authoritative_location": "",
+      "decision": "keep",
+      "evidence": {
+        "locations": [
+          {
+            "block_index": "2",
+            "path": "references/agents-md-guidance.md",
+            "preview": "## Table of Contents"
+          },
+          {
+            "block_index": "2",
+            "path": "references/question-bank.md",
+            "preview": "## Table of Contents"
+          }
+        ],
+        "sha256": "8f69bcfd17f83a1341b4065d1d216e505044e8d06d131085b9aa1fb2dcebb94d"
+      },
+      "id": "exact.8f69bcfd17f83a13",
+      "rationale": "Table of Contents 是各权威文档自身的导航指针，允许重复且不能跨文档合并。"
+    },
+    {
+      "authoritative_location": "",
+      "decision": "keep",
+      "evidence": {
+        "locations": [
+          {
+            "block_index": "22",
+            "path": "SKILL.md",
+            "preview": "```text python skills/agents-md-generator/scripts/python/verify/quick_validate.py skills/agents-md-generator python -m unittest discover -s tests -t . -v python skills/agents-md-generator/scripts/python/verify/audit_skill.py skills/agents-m"
+          },
+          {
+            "block_index": "13",
+            "path": "references/script-guide.md",
+            "preview": "```text python skills/agents-md-generator/scripts/python/verify/quick_validate.py skills/agents-md-generator python -m unittest discover -s tests -t . -v python skills/agents-md-generator/scripts/python/verify/audit_skill.py skills/agents-m"
+          }
+        ],
+        "sha256": "add7c11021dad2ed51309c22170d64a72e20bb70f38f5fc9f8f971e0b5795e42"
+      },
+      "id": "exact.add7c11021dad2ed",
+      "rationale": "验证命令块是 SKILL 路由入口与 script-guide 核心速查之间允许重复的接口指针。"
+    },
+    {
+      "authoritative_location": "",
+      "decision": "keep",
+      "evidence": {
+        "locations": [
+          {
+            "block_index": "26",
+            "path": "SKILL.md",
+            "preview": "```text python skills/agents-md-generator/scripts/python/registry/query_registry.py ask \"<question>\" [--kind <kind>] [--category <name>] [--limit 1..10] [--json] ```"
+          },
+          {
+            "block_index": "19",
+            "path": "references/script-guide.md",
+            "preview": "```text python skills/agents-md-generator/scripts/python/registry/query_registry.py ask \"<question>\" [--kind <kind>] [--category <name>] [--limit 1..10] [--json] ```"
+          }
+        ],
+        "sha256": "1b299fdcb3684d708ce796ab27fbae661bc36f2f528688f219ef256f63793fa0"
+      },
+      "id": "exact.1b299fdcb3684d70",
+      "rationale": "注册表问询命令是渐进披露入口，在技能入口与脚本指南中重复属于必要指针。"
+    },
+    {
+      "authoritative_location": "",
+      "decision": "keep",
+      "evidence": {
+        "locations": [
+          {
+            "block_index": "18",
+            "path": "SKILL.md",
+            "preview": "## Verify"
+          },
+          {
+            "block_index": "15",
+            "path": "references/script-guide.md",
+            "preview": "## Verify"
+          }
+        ],
+        "sha256": "9fb6d35b9791cf610a58524f852b077ebe3de26a6cef47abb116028785ac5c0b"
+      },
+      "id": "exact.9fb6d35b9791cf61",
+      "rationale": "Verify 是两个不同层级文档的结构标题，不包含重复知识正文。"
+    }
+  ],
+  "fuzzy_reviews": [],
+  "interface_reviews": [
+    {
+      "command_ids": [
+        "verify.confidence-gate"
+      ],
+      "decision": "mapped",
+      "kind": "option",
+      "rationale": "",
+      "sources": [
+        "references/capability-coverage.md"
+      ],
+      "value": "--agents-generator-dir"
+    },
+    {
+      "command_ids": [
+        "design.collect-profile"
+      ],
+      "decision": "mapped",
+      "kind": "option",
+      "rationale": "",
+      "sources": [
+        "references/question-bank.md"
+      ],
+      "value": "--answer-file"
+    },
+    {
+      "command_ids": [
+        "design.collect-profile"
+      ],
+      "decision": "mapped",
+      "kind": "option",
+      "rationale": "",
+      "sources": [
+        "SKILL.md",
+        "references/question-bank.md"
+      ],
+      "value": "--answers"
+    },
+    {
+      "command_ids": [
+        "registry.ask"
+      ],
+      "decision": "mapped",
+      "kind": "option",
+      "rationale": "",
+      "sources": [
+        "SKILL.md",
+        "references/script-guide.md"
+      ],
+      "value": "--category"
+    },
+    {
+      "command_ids": [
+        "docs.operations"
+      ],
+      "decision": "mapped",
+      "kind": "option",
+      "rationale": "",
+      "sources": [
+        "references/evaluation-scenarios.md"
+      ],
+      "value": "--confirm-create"
+    },
+    {
+      "command_ids": [
+        "design.collect-profile"
+      ],
+      "decision": "mapped",
+      "kind": "option",
+      "rationale": "",
+      "sources": [
+        "references/evaluation-scenarios.md"
+      ],
+      "value": "--enter-write-review"
+    },
+    {
+      "command_ids": [
+        "docs.start-session",
+        "dirs.manage"
+      ],
+      "decision": "mapped",
+      "kind": "option",
+      "rationale": "",
+      "sources": [
+        "SKILL.md",
+        "references/script-guide.md"
+      ],
+      "value": "--input"
+    },
+    {
+      "command_ids": [
+        "verify.verify-agents"
+      ],
+      "decision": "mapped",
+      "kind": "option",
+      "rationale": "",
+      "sources": [
+        "SKILL.md",
+        "references/review-checklist.md",
+        "references/script-guide.md"
+      ],
+      "value": "--installed-skill-dir"
+    },
+    {
+      "command_ids": [
+        "design.collect-profile"
+      ],
+      "decision": "mapped",
+      "kind": "option",
+      "rationale": "",
+      "sources": [
+        "references/evaluation-scenarios.md"
+      ],
+      "value": "--intent"
+    },
+    {
+      "command_ids": [
+        "detect.token-usage-review",
+        "detect.task-rating",
+        "registry.ask"
+      ],
+      "decision": "mapped",
+      "kind": "option",
+      "rationale": "",
+      "sources": [
+        "SKILL.md",
+        "references/script-guide.md"
+      ],
+      "value": "--json"
+    },
+    {
+      "command_ids": [
+        "registry.ask"
+      ],
+      "decision": "mapped",
+      "kind": "option",
+      "rationale": "",
+      "sources": [
+        "SKILL.md",
+        "references/script-guide.md"
+      ],
+      "value": "--kind"
+    },
+    {
+      "command_ids": [
+        "registry.ask"
+      ],
+      "decision": "mapped",
+      "kind": "option",
+      "rationale": "",
+      "sources": [
+        "SKILL.md",
+        "references/script-guide.md"
+      ],
+      "value": "--limit"
+    },
+    {
+      "command_ids": [
+        "docs.operations"
+      ],
+      "decision": "mapped",
+      "kind": "option",
+      "rationale": "",
+      "sources": [
+        "references/capability-coverage.md"
+      ],
+      "value": "--mark-verified"
+    },
+    {
+      "command_ids": [
+        "verify.review-governance",
+        "release.select-rules"
+      ],
+      "decision": "mapped",
+      "kind": "option",
+      "rationale": "",
+      "sources": [
+        "references/evaluation-scenarios.md"
+      ],
+      "value": "--mode"
+    },
+    {
+      "command_ids": [],
+      "decision": "not_public",
+      "kind": "option",
+      "rationale": "该选项在文档中描述生成脚本的横切输出政策，不对应当前技能的单一公开命令入口。",
+      "sources": [
+        "references/review-checklist.md",
+        "references/script-output-policy.md"
+      ],
+      "value": "--quiet"
+    },
+    {
+      "command_ids": [
+        "design.collect-profile"
+      ],
+      "decision": "mapped",
+      "kind": "option",
+      "rationale": "",
+      "sources": [
+        "references/question-bank.md"
+      ],
+      "value": "--resume"
+    },
+    {
+      "command_ids": [
+        "verify.confidence-gate"
+      ],
+      "decision": "mapped",
+      "kind": "option",
+      "rationale": "",
+      "sources": [
+        "references/capability-coverage.md"
+      ],
+      "value": "--review-base"
+    },
+    {
+      "command_ids": [
+        "verify.review-governance",
+        "verify.confidence-gate"
+      ],
+      "decision": "mapped",
+      "kind": "option",
+      "rationale": "文件命名语义复核证据由自动审查与总置信门禁共同验证。",
+      "sources": [
+        "SKILL.md",
+        "references/capability-coverage.md",
+        "references/script-guide.md"
+      ],
+      "value": "--semantic-review"
+    },
+    {
+      "command_ids": [
+        "verify.review-governance",
+        "verify.confidence-gate"
+      ],
+      "decision": "mapped",
+      "kind": "option",
+      "rationale": "",
+      "sources": [
+        "references/capability-coverage.md"
+      ],
+      "value": "--skill-dir"
+    },
+    {
+      "command_ids": [
+        "design.collect-profile"
+      ],
+      "decision": "mapped",
+      "kind": "option",
+      "rationale": "",
+      "sources": [
+        "references/question-bank.md"
+      ],
+      "value": "--start"
+    },
+    {
+      "command_ids": [
+        "design.collect-profile",
+        "render.render-agents",
+        "verify.review-governance",
+        "release.install-skill",
+        "registry.build"
+      ],
+      "decision": "mapped",
+      "kind": "option",
+      "rationale": "",
+      "sources": [
+        "SKILL.md",
+        "references/evaluation-scenarios.md",
+        "references/question-bank.md",
+        "references/script-guide.md"
+      ],
+      "value": "--write"
+    }
+  ],
+  "schema_version": 1,
+  "source_documents": [
+    {
+      "path": "SKILL.md",
+      "sha256": "83c65f1744a5777c14d145bce6a4d86dafc555fe35786c80de84a3064445d594"
+    },
+    {
+      "path": "references/agents-md-guidance.md",
+      "sha256": "8ac2a9f94f0ff795abe6eab6b8ee13c4ecf47844853c1b0ac8984775a4d640b5"
+    },
+    {
+      "path": "references/book-rules-coverage.md",
+      "sha256": "d4cde4c289d45e3f7ab8b0b2ce62d5a32994bd69f0d24f6fade8f6205fab1400"
+    },
+    {
+      "path": "references/capability-coverage.md",
+      "sha256": "329886a39ff067e27fb5d664515b1c767830f3238ad0b167a370ca6305eba2e1"
+    },
+    {
+      "path": "references/coding-behavior-language-routing.md",
+      "sha256": "3d9f32ccc40dc19127a77386f4c07c215e2f2ea5fdc29f03000008995d406b30"
+    },
+    {
+      "path": "references/evaluation-scenarios.md",
+      "sha256": "e04f892bf3a2303752f50d5bdc2f68edc5ddad97a64c296e9578191863ca976c"
+    },
+    {
+      "path": "references/question-bank.md",
+      "sha256": "ecb4ad440c67754bc0051d1c2b9f3afa3091a17f8c8460622802871147344a6b"
+    },
+    {
+      "path": "references/review-checklist.md",
+      "sha256": "494668d0f63c9b0d7a4f0f3dc84c691f09ab2673946a9c57518bda99f38742fb"
+    },
+    {
+      "path": "references/script-guide.md",
+      "sha256": "21ec98d27a72ba441b5017ca58f568bfd710a1de1dbb7ee525c2bc74039eed2a"
+    },
+    {
+      "path": "references/script-output-policy.md",
+      "sha256": "1d99c9251046d527ab853978a8644d6d0002fc9264e644e0044c26ec69b3f859"
+    },
+    {
+      "path": "references/skill-design-coverage.md",
+      "sha256": "e138ff6bdda1bff43711401a381a0ab69702bbb006b7f629a7fd1c7b37f86680"
+    }
+  ],
+  "status": "finalized",
+  "user_confirmation": "not_required"
+}

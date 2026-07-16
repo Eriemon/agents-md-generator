@@ -141,7 +141,7 @@ def build_shared_task_dependencies() -> dict[str, Any]:
 shared_task_dependencies = lru_cache(maxsize=1)(build_shared_task_dependencies)  # 共享依赖缓存访问入口
 
 # 导入语言技能路由契约校验，阻止 Python/脚本双技能门禁被弱化。
-from language_skill_routing_contract import validate_language_skill_route_lines
+from routing_contract import validate_language_skill_route_lines
 
 # 导入源码治理报告格式化工具，用于把 profile 结果折叠成 AGENTS 诊断。
 from source_governance import format_source_governance_errors, source_governance_report

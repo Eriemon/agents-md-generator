@@ -96,17 +96,26 @@ def build_worktree_prohibition_checks(
     str_policy_text = PATH_WORKTREE_POLICY.read_text(encoding="utf-8")  # worktree 策略源码
 
     # 发布门禁源码用于验证 worktree 检查早于普通配置加载。
-    str_release_text = (SCRIPTS_PYTHON_DIR / "docs" / "_manage_docs_release_package.py").read_text(  # 发布门禁源码
+    str_release_text = (SCRIPTS_PYTHON_DIR / "docs" / "release_package.py").read_text(  # 发布门禁源码
         encoding="utf-8"  # 按仓库统一编码读取发布治理实现
     )
 
     # 渲染入口源码证明硬阻断不能被人工确认降级。
-    str_render_text = (SCRIPTS_PYTHON_DIR / "render" / "_render_agents_entrypoints.py").read_text(  # 渲染入口源码
+    str_render_text = (SCRIPTS_PYTHON_DIR / "render" / "render_entrypoints.py").read_text(  # 渲染入口源码
         encoding="utf-8"  # 按仓库统一编码读取渲染入口实现
     )
 
-    # 技能说明必须向调用 agent 明确禁止创建或使用额外 worktree。
-    str_skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")  # 技能公开规则文本
+    # 根合同聚合层和专用压缩层共同承载 worktree 禁令实现。
+    list_contract_paths = [  # worktree 合同源码分片
+        SCRIPTS_PYTHON_DIR / "render" / "render_contracts.py",  # 根合同聚合分片
+        SCRIPTS_PYTHON_DIR / "render" / "render_gate_compaction.py",  # 门禁压缩分片
+    ]
+
+    # 合并两个职责分片，避免源码拆分让公开政策检查失去证据。
+    str_contract_text = "\n".join(  # 根规则 worktree 合同源码
+        path_contract.read_text(encoding="utf-8")  # 按仓库统一编码读取合同实现
+        for path_contract in list_contract_paths  # 遍历聚合与压缩分片
+    )
 
     # 嵌套检查载荷包含 worktree 策略的硬阻断事实。
     dict_worktree_report = dict_branch_report.get("checks", {}).get(  # 分支门禁中的 worktree 专项检查
@@ -137,8 +146,8 @@ def build_worktree_prohibition_checks(
         "branch_gate_checks_before_profile": str_release_text.index("inspect_worktree_policy(project)")  # 是否先检查污染
         < str_release_text.index("agents-control.json"),  # worktree 检查是否早于普通配置读取
         "hard_block_cannot_be_confirmed": "dict_branch.get(\"hard_blocking\", False) or" in str_render_text,  # 是否禁止确认硬阻断
-        "skill_forbids_creation": "forbid creating or using additional Git worktrees" in str_skill_text  # 是否声明禁止额外 worktree
-        and "git worktree add" in str_skill_text,  # 是否明确禁止创建命令
+        "public_rules_forbid_creation": "Do not create or use additional Git worktrees" in str_contract_text
+        and "git worktree add" in str_contract_text,  # 生成规则是否明确禁止创建命令
     }
 
 # 公开案例把分层证据转换为统一的有技能与无技能对照结果。
@@ -554,18 +563,20 @@ def case_source_repo_render_version_contract(
         },
     )
 
-# 语言技能路由片段覆盖配置来源、代码可读性和 Python/脚本双向约束。
+# 语言技能路由片段覆盖配置来源、代码可读性、共同门禁和语言所有权。
 REQUIRED_LANGUAGE_ROUTING_SNIPPETS = (  # 生成根规则必须包含的路由语义
     "编码行为配置来源：`.agents/global-rule-overrides.json`",  # 编码行为配置来源
     "注释质量：只允许非显然意图、不变量、风险、生成边界或公共 API 行为注释",  # 注释语义边界
     "严禁把代码压缩到一行",  # 禁止压缩代码
     "炫技代码",  # 禁止不可读技巧
+    "语言技能共同门禁：",  # 共同门禁标题
+    "必须先思考并同时加载",  # 双技能共同门禁
     "语言技能路由（Python）：",  # Python 路由标题
     "readable-python-generator",  # Python 最终责任技能
     "语言技能路由（脚本）：",  # 脚本路由标题
     "readable-script-generator",  # 脚本最终责任技能
     "Python 目标继续使用 `readable-python-generator`",  # 跨语言冲突归属
-    "脚本包装器调用 Python",  # 脚本包装器归属
+    "调用 Python 外部命令的脚本包装器",  # 脚本包装器归属
 )
 
 # 解析公开命令输出时统一保留结构化错误，避免空 stdout 隐藏诊断。
@@ -771,6 +782,84 @@ def collect_language_routing_evidence() -> dict[str, Any]:
         "config": dict_config,  # 渲染器写出的原始配置
     }
 
+# 渲染行查找器按标题返回一条完整语言路由，缺失时保留空串供能力检查失败。
+def rendered_language_route(str_agents_text: str, str_prefix: str) -> str:
+    """返回根规则中以指定标题开头的第一条语言路由。
+
+    Args:
+        str_agents_text: 渲染后的完整根规则正文。
+        str_prefix: 待定位语言路由的固定标题前缀。
+
+    Returns:
+        第一条匹配路由；没有匹配项时返回空串。
+    """
+
+    # 生成器保证每类路由最多一条，因此首个匹配项就是完整证据。
+    return next(
+        (str_line for str_line in str_agents_text.splitlines() if str_line.startswith(str_prefix)),
+        "",
+    )
+
+# 能力检查构造器把原始渲染和负向验证证据归一化为布尔合同。
+def build_language_routing_checks(dict_evidence: dict[str, Any]) -> dict[str, bool]:
+    """把语言路由分层证据转换为正式评测能力键。
+
+    Args:
+        dict_evidence: 渲染文本、配置源和正负向验证报告。
+
+    Returns:
+        每项语言路由合同是否成立的布尔映射。
+    """
+
+    # 原始根文本同时提供章节、共同门禁和两条所有权路由证据。
+    str_agents_text = str(dict_evidence["agents_text"])  # 未篡改的根规则正文
+
+    # 缺失错误证明删除任一 owner 名称会被严格验证拒绝。
+    list_missing_errors = dict_evidence["missing_verify"].get("errors", [])  # 删除路由后的错误
+
+    # 弱化错误证明配置内容不能被泛化助手文本替代。
+    list_weakened_errors = dict_evidence["weakened_verify"].get("errors", [])  # 弱化配置后的错误
+
+    # 配置源必须显式区分共同门禁与两个目标语言字段。
+    dict_routing = dict_evidence["config"].get("coding_behavior", {}).get("language_skill_routing", {})  # 路由配置
+
+    # Python 路由只承载目标范围、最终 owner 和跨技能边界。
+    str_python_route = rendered_language_route(str_agents_text, "- 语言技能路由（Python）：")  # Python 所有权行
+
+    # 脚本路由独立提取，避免 Python 目标边界被共同门禁掩盖。
+    str_script_route = rendered_language_route(str_agents_text, "- 语言技能路由（脚本）：")  # 脚本所有权行
+
+    # 共同标题的唯一性直接锁定单次渲染合同。
+    bool_shared_once = str_agents_text.count("- 语言技能共同门禁：") == 1  # 共同门禁唯一性
+
+    # 先确认两条所有权路由都由渲染器生成。
+    bool_routes_present = bool(str_python_route and str_script_route)  # 两条所有权路由存在性
+
+    # Python 路由只保留自身范围与所有权，不得复制 shared 加载句。
+    bool_python_route_clean = "必须先思考并同时加载" not in str_python_route  # Python 路由未复制共同句
+
+    # 脚本路由同样排除 shared 加载句，避免跨语言正文重复。
+    bool_script_route_clean = "必须先思考并同时加载" not in str_script_route  # 脚本路由未复制共同句
+
+    # 返回值覆盖生成、配置、正向接受和两种负向拒绝。
+    return {
+        "render_succeeded": dict_evidence["render_code"] == 0,
+        "rendered_language_skill_routing": "## Coding Behavior Baseline" in str_agents_text
+        or "## Local conventions" in str_agents_text,
+        "policy_rules": all(str_snippet in str_agents_text for str_snippet in REQUIRED_LANGUAGE_ROUTING_SNIPPETS),
+        "config_has_three_routing_fields": set(dict_routing) == {"shared", "python", "script"},
+        "shared_gate_rendered_once": bool_shared_once,
+        "language_routes_exclude_shared_gate": all(
+            (bool_routes_present, bool_python_route_clean, bool_script_route_clean)
+        ),
+        "verify_accepts_policy": dict_evidence["verify"].get("errors") == [],
+        "verify_rejects_missing_policy": bool(list_missing_errors)
+        and any("language skill routing" in str_item for str_item in list_missing_errors),
+        "verify_rejects_weakened_policy": bool(list_weakened_errors)
+        and any("coding_behavior.language_skill_routing" in str_item for str_item in list_weakened_errors),
+        "config_written": bool(dict_routing),
+    }
+
 # 公开案例将多层语言路由证据转换为稳定能力键。
 def case_language_skill_routing_contract(
     case: dict[str, Any],
@@ -780,43 +869,17 @@ def case_language_skill_routing_contract(
 
     Args:
         case: 当前评估案例定义。
-        _helper: 为统一案例签名保留但本场景无需使用的夹具助手。
+        _helper: 为统一案例签名保留的夹具助手。
 
     Returns:
-        包含渲染、正向验证与负向破坏检查的案例结果。
+        含技能路径、无技能基线和改进比较的案例结果。
     """
 
     # 隔离场景固化渲染文本、配置源和三份验证报告。
     dict_evidence = collect_language_routing_evidence()  # 语言技能路由分层证据
 
-    # 两类负向报告分别证明渲染文本和配置源都受治理。
-    list_missing_errors = dict_evidence["missing_verify"].get("errors", [])  # 缺失路由错误列表
-
-    # 配置弱化错误应精确指向语言技能路由配置键。
-    list_weakened_errors = dict_evidence["weakened_verify"].get("errors", [])  # 弱化配置错误列表
-
-    # 正向检查覆盖规则生成、配置写入、正常接受与双重拒绝。
-    dict_with_checks = {  # 语言技能路由合同检查
-        "render_succeeded": dict_evidence["render_code"] == 0,  # 根规则渲染是否成功
-        "rendered_language_skill_routing": "## Coding Behavior Baseline"  # 是否生成全局编码行为章节
-        in dict_evidence["agents_text"]  # 全局基线章节是否出现
-        or "## Local conventions" in dict_evidence["agents_text"],  # 或项目局部约定章节
-        "policy_rules": all(  # 是否包含全部双技能路由语义
-            str_snippet in dict_evidence["agents_text"]  # 当前必需片段是否出现
-            for str_snippet in REQUIRED_LANGUAGE_ROUTING_SNIPPETS  # 遍历治理要求的路由片段
-        ),
-        "verify_accepts_policy": dict_evidence["verify"].get("errors") == [],  # 原始规则是否被接受
-        "verify_rejects_missing_policy": bool(list_missing_errors)  # 删除脚本技能后是否产生错误
-        and any("language skill routing" in str_item for str_item in list_missing_errors),  # 错误是否命中路由语义
-        "verify_rejects_weakened_policy": bool(list_weakened_errors)  # 弱化 Python 配置后是否产生错误
-        and any(  # 错误是否命中配置源键
-            "coding_behavior.language_skill_routing" in str_item  # 当前错误是否指向路由配置
-            for str_item in list_weakened_errors  # 遍历弱化配置错误
-        ),
-        "config_written": bool(  # 是否写出结构化语言路由配置
-            dict_evidence["config"].get("coding_behavior", {}).get("language_skill_routing")  # 双技能路由映射
-        ),
-    }
+    # 专用构造器集中维护正式评测的布尔能力键。
+    dict_with_checks = build_language_routing_checks(dict_evidence)  # 语言路由合同检查
 
     # 无治理基线不能保证任一双技能路由能力。
     dict_without_checks = {  # 无技能路径的语言路由对照
@@ -844,7 +907,7 @@ def case_language_skill_routing_contract(
     )
 
 # 扩展策略场景从拆分模块显式回导，保持原公开映射稳定。
-from eval_runtime_policy_extended_cases import (
+from eval_policy_cases import (
     case_codex_token_usage_review_contract,
     case_plan_mode_language_lock_contract,
     case_script_output_policy_contract,

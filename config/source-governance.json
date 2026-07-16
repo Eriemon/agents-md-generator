@@ -37,6 +37,7 @@
     "target",
     "node_modules",
     "vendor",
+    ".agents",
     ".git",
     "ref"
   ],
@@ -71,5 +72,15 @@
     "max_physical_line_bytes": 4096,
     "single_line_min_bytes": 2048,
     "minified_line_min_bytes": 1000
+  },
+  "file_naming_gate": {
+    "enabled": true,
+    "max_stem_chars": 30,
+    "exemptions": [
+      "__init__.py"
+    ],
+    "python_pattern": "^[a-z]+(?:_[a-z]+)*$",
+    "source_pattern": "^[a-z]+(?:[_-][a-z]+)*$",
+    "semantic_review_required": true
   }
 }

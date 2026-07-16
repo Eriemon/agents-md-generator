@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "category": "release",
+  "commands": [
+    {
+      "id": "release.install-skill", "category": "release", "entrypoint": "install_skill.py", "subcommand": "", "title": "安装已验证技能发布包", "summary": "从带 RELEASE_RECEIPT.json 的版本化 dist 目录替换目标安装副本。", "when_to_use": "发布包完成验证且用户明确要求安装或替换时。",
+      "aliases": {"zh": ["安装技能发布包", "替换已安装技能"], "en": ["install skill release", "replace installed skill"]},
+      "parameters": [{"name": "release_dir", "required": true, "description": "版本化 dist 发布目录"}, {"name": "--target", "required": false, "description": "codex、custom 或 skip"}, {"name": "--codex-home", "required": false, "description": "Codex 根目录"}, {"name": "--custom-root", "required": false, "description": "自定义安装根"}, {"name": "--install-intent", "required": false, "description": "确认安装意图"}, {"name": "--replace", "required": false, "description": "替换已有副本"}, {"name": "--write", "required": false, "description": "执行安装写入"}], "invocation_templates": ["python <skill>/scripts/python/release/install_skill.py <dist-release-dir> --target <codex|custom|skip> [--write]"],
+      "examples": {"valid": ["python skills/agents-md-generator/scripts/python/release/install_skill.py dist/agents-md-generator-vX.Y.Z --target skip"], "invalid": ["禁止从 skills/agents-md-generator 源目录直接安装"]},
+      "prerequisites": ["用户明确授权安装", "发布回执和内容校验通过"], "outputs": {"format": "json", "success_exit_codes": [0], "failure_exit_codes": [1, 2]}, "risk": {"level": "critical", "writes": true, "warning": "会替换安装目录内容"}, "boundaries": ["只接受版本化发布目录", "不同版本历史不可改写"], "related_command_ids": ["docs.operations", "verify.audit-skill"]
+    },
+    {
+      "id": "release.select-rules", "category": "release", "entrypoint": "select_engineering_rules.py", "subcommand": "", "title": "选择工程规则子集", "summary": "从完整参考规则中选择与目标工程相关的发布内容。", "when_to_use": "构建精简安装包且需要剔除无关工程规则时。",
+      "aliases": {"zh": ["选择工程规则", "精简发布规则"], "en": ["select engineering rules", "trim release rules"]},
+      "parameters": [{"name": "--task", "required": false, "description": "目标任务"}, {"name": "--scope", "required": false, "description": "规则范围"}, {"name": "--mode", "required": false, "description": "选择模式"}, {"name": "--primary", "required": false, "description": "主规则集"}, {"name": "--secondary", "required": false, "description": "次规则集"}, {"name": "--notes", "required": false, "description": "选择备注"}, {"name": "--list", "required": false, "description": "列出候选规则"}], "invocation_templates": ["python <skill>/scripts/python/release/select_engineering_rules.py --task <task> --scope <scope> --mode <mode>"],
+      "examples": {"valid": ["python skills/agents-md-generator/scripts/python/release/select_engineering_rules.py --list"], "invalid": ["不要删除安装运行时必需规则"]},
+      "prerequisites": ["发布选择策略已确认"], "outputs": {"format": "json", "success_exit_codes": [0], "failure_exit_codes": [1, 2]}, "risk": {"level": "medium", "writes": true, "warning": "会写入规则选择结果"}, "boundaries": ["不会安装或发布技能"], "related_command_ids": ["docs.operations"]
+    }
+  ]
+}

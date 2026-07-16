@@ -709,6 +709,23 @@ def planned_structure(project: Path) -> dict[str, Any]:
         for item in set_current_dirs  # 逐项规范目录标记。
     }  # 规范化后的允许目录集合。
 
+    # 读取控制画像以取得当前项目已经批准的目录合同。
+    dict_profile = control_profile(project)  # 包含项目目录和远程结构策略的控制画像
+
+    # 非字典目录合同回退为空映射，避免无效画像污染计划文件。
+    dict_directory_contract = (  # 完成类型收窄后的项目目录合同
+        dict_profile.get("directory_contract", {})  # 控制画像声明的目录策略
+        if isinstance(dict_profile.get("directory_contract"), dict)  # 只接受对象形式合同
+        else {}  # 无效类型不投影任何目录策略
+    )  # 可安全读取下级布局字段的目录合同
+
+    # 测试布局由目录合同投影到批准计划，供结构门禁离线复核。
+    dict_tests_layout = (  # 单根 tests 与一层功能目录布局合同
+        dict_directory_contract.get("tests_layout", {})  # 项目明确批准的测试布局
+        if isinstance(dict_directory_contract.get("tests_layout"), dict)  # 只接受对象形式布局
+        else {}  # 无效布局不写入计划策略
+    )  # 结构门禁读取的 tests 布局映射
+
     # 返回包含本地、远程和强制覆盖规则的初始计划。
     return {
         "schema_version": 1,
@@ -727,6 +744,7 @@ def planned_structure(project: Path) -> dict[str, Any]:
             }
         ),
         "enforce_primary_project_root": tuple_enforce_primary,
+        "tests_layout": dict_tests_layout,
         "protected_paths": sorted(GOVERNANCE_PREFIXES),
         "review_required_for": ["create", "move", "delete", "rename"],
         "remote_deployment": remote_deployment_plan(project),
@@ -1119,6 +1137,65 @@ def verify_json(path: Path, errors: list[str]) -> dict[str, Any]:
     # 返回经过对象类型和非空约束的治理内容。
     return dict_data
 
+# 远程部署字段验证器返回精确到字段路径的合同错误。
+def remote_deployment_path_errors(remote: dict[str, Any]) -> list[str]:
+    """验证远程部署映射的必填值、容器类型和嵌套字段。
+
+    参数：remote 为 remote_deployment 配置映射。
+    返回：保持字段检查顺序的远程部署合同错误。
+    """
+
+    # 错误前缀统一指向批准结构文件。
+    str_prefix = f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment"  # 远程合同错误前缀。
+
+    # 按公开诊断顺序检查简单字段存在性和容器类型。
+    list_checks = [  # 顶层远程合同检查表。
+        ("workspace_root", bool(remote.get("workspace_root")), "must be configured or `not configured`"),  # 工作区根锚点。
+        ("planned_structure", isinstance(remote.get("planned_structure"), list), "must be a list"),  # 远程规划目录清单。
+        ("conda_environment", isinstance(remote.get("conda_environment"), dict), "must be configured"),  # Conda 环境合同。
+        ("runtime_artifacts", isinstance(remote.get("runtime_artifacts"), dict), "must be configured"),  # 运行时产物合同。
+        ("review_required_for", isinstance(remote.get("review_required_for"), list), "must be a list"),  # 强制评审操作清单。
+        ("protected_path_classes", isinstance(remote.get("protected_path_classes"), list), "must be a list"),  # 受保护路径类别。
+        ("require_review_for_all_mutations", bool(remote.get("require_review_for_all_mutations")), "must be true"),  # 全变更评审开关。
+    ]
+
+    # 顶层字段错误保持原有逐项诊断顺序。
+    list_errors = [  # 顶层远程合同错误。
+        f"{str_prefix}.{str_field} {str_message}"  # 带完整配置路径的错误文本。
+        for str_field, bool_valid, str_message in list_checks  # 按声明顺序遍历字段合同。
+        if not bool_valid  # 仅输出未通过的字段。
+    ]
+
+    # 有效环境映射必须显式声明路径模板。
+    dict_conda = remote.get("conda_environment", {}) if isinstance(remote.get("conda_environment"), dict) else {}  # 隔离环境映射。
+
+    # 字段缺失与空模板具有不同配置语义。
+    if "path_template" not in dict_conda:
+
+        # 环境路径错误追加在顶层类型检查之后。
+        list_errors.append(f"{str_prefix}.conda_environment.path_template must be configured")
+
+    # 运行产物字段必须覆盖路径、运行标识和归档开关。
+    dict_runtime = remote.get("runtime_artifacts", {}) if isinstance(remote.get("runtime_artifacts"), dict) else {}  # 运行产物映射。
+
+    # 逐项验证保持错误消息精确到缺失字段。
+    for str_field in [
+        "active_path_template",
+        "backup_path_template",
+        "run_id_required",
+        "archive_after_verification",
+        "archive_trigger",
+    ]:
+
+        # 缺失字段不能由默认值静默掩盖发布配置漂移。
+        if str_field not in dict_runtime:
+
+            # 错误路径携带实际字段名，便于直接修复计划 JSON。
+            list_errors.append(f"{str_prefix}.runtime_artifacts.{str_field} must be configured")
+
+    # 调用方把本列表合并到完整目录治理验证结果。
+    return list_errors
+
 # 验证远程部署计划具备路径保护和强制审查字段。
 def verify_remote_deployment_policy(
     planned: dict[str, Any], list_errors: list[str]
@@ -1140,119 +1217,17 @@ def verify_remote_deployment_policy(
     # 非空计划必须提供对象类型的 remote_deployment 分区。
     if planned and not isinstance(remote, dict):
 
-        # 将顶层类型错误附加到共享验证结果。
-        list_errors.append(
-            f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment must be configured"
-        )
+        # 顶层类型错误无法继续安全读取内部字段。
+        list_errors.append(f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment must be configured")
 
-    # 只有映射合同才可继续验证内部字段。
+        # 当前验证器完成诊断后立即返回。
+        return
+
+    # 有效映射的内部诊断统一追加到共享错误列表。
     if isinstance(remote, dict):
 
-        # 工作区根必须显式记录路径或 not configured 哨兵。
-        if not remote.get("workspace_root"):
-
-            # 缺失根路径会让所有远程保护路径失去锚点。
-            list_errors.append(
-                f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.workspace_root "
-                "must be configured or `not configured`"
-            )
-
-        # 允许路径清单必须保持 JSON 数组合同。
-        if not isinstance(remote.get("planned_structure"), list):
-
-            # 拒绝字符串等不可安全迭代的错误类型。
-            list_errors.append(
-                f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.planned_structure "
-                "must be a list"
-            )
-
-        # 隔离环境字段必须是具名策略映射。
-        if not isinstance(remote.get("conda_environment"), dict):
-
-            # 环境配置缺失会使远程 Python 依赖位置不可验证。
-            list_errors.append(
-                f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.conda_environment "
-                "must be configured"
-            )
-
-        # 运行产物字段必须同时描述活跃和备份目录。
-        if not isinstance(remote.get("runtime_artifacts"), dict):
-
-            # 缺少产物策略时无法证明运行后清理与归档边界。
-            list_errors.append(
-                f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.runtime_artifacts "
-                "must be configured"
-            )
-
-        # 受审查动作必须使用数组表达多个目录操作类别。
-        if not isinstance(remote.get("review_required_for"), list):
-
-            # 类型错误会破坏 create/move/delete/rename 的覆盖检查。
-            list_errors.append(
-                f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.review_required_for "
-                "must be a list"
-            )
-
-        # 保护类别清单必须可枚举并保持稳定 JSON 结构。
-        if not isinstance(remote.get("protected_path_classes"), list):
-
-            # 非列表值无法逐项确认工作区、环境和运行根保护。
-            list_errors.append(
-                f"{PLANNED_STRUCTURE.as_posix()}: "
-                "remote_deployment.protected_path_classes must be a list"
-            )
-
-        # 所有远程目录变更都必须经过审查，不允许局部关闭。
-        if not remote.get("require_review_for_all_mutations"):
-
-            # 严格布尔真值是远程安全边界的发布条件。
-            list_errors.append(
-                f"{PLANNED_STRUCTURE.as_posix()}: "
-                "remote_deployment.require_review_for_all_mutations must be true"
-            )
-
-        # 类型收窄后的环境策略供必需字段检查复用。
-        conda = (
-            remote.get("conda_environment", {})  # 原始隔离环境分区。
-            if isinstance(remote.get("conda_environment"), dict)  # 收窄环境分区类型。
-            else {}  # 错误类型交由前序诊断报告。
-        )  # 可安全读取的隔离环境映射。
-
-        # 类型收窄后的运行策略供字段完整性循环使用。
-        runtime = (
-            remote.get("runtime_artifacts", {})  # 原始运行产物分区。
-            if isinstance(remote.get("runtime_artifacts"), dict)  # 收窄产物分区类型。
-            else {}  # 错误类型使用空映射安全继续。
-        )  # 可安全读取的运行产物映射。
-
-        # 环境策略必须显式包含路径模板，即使当前状态禁用。
-        if isinstance(conda, dict) and "path_template" not in conda:
-
-            # 显式空模板与字段缺失具有不同的配置语义。
-            list_errors.append(
-                f"{PLANNED_STRUCTURE.as_posix()}: "
-                "remote_deployment.conda_environment.path_template must be configured"
-            )
-
-        # 有效运行映射必须覆盖路径、运行标识和归档开关。
-        if isinstance(runtime, dict):
-
-            # 逐项验证保持错误消息精确到缺失字段。
-            for key in [
-                "active_path_template",
-                "backup_path_template",
-                "run_id_required",
-                "archive_after_verification",
-                "archive_trigger",
-            ]:
-
-                # 缺失字段不能由默认值静默掩盖发布配置漂移。
-                if key not in runtime:
-
-                    # 错误路径携带实际字段名，便于直接修复计划 JSON。
-                    list_errors.append(
-                        f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment.runtime_artifacts.{key} must be configured"
-                    )
+        # helper 只返回诊断，不产生写入副作用。
+        list_errors.extend(remote_deployment_path_errors(remote))
 
 # 确认目录治理的文档、快照和证据目录已经落地。
 def verify_manager_paths(project: Path, list_errors: list[str]) -> list[str]:

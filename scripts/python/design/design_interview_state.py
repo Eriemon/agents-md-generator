@@ -30,4 +30,4 @@ def _load_module_shards(tuple_shard_names: tuple[str, ...]) -> None:
         exec(code_shard, globals())
 
 # 状态流必须先于完成判定加载。
-_load_module_shards(("_design_interview_state_flow.py", "_design_interview_state_completion.py"))
+_load_module_shards(("interview_state_flow.py", "interview_completion.py"))

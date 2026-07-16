@@ -188,7 +188,10 @@ def dispatch_manage_docs_command(path_project: Path, namespace_args: argparse.Na
         "memory-gate": lambda: docs_function("memory_gate")(path_project),  # 检查记忆门禁。
         "memory-bootstrap-sessions": lambda: docs_function("bootstrap_sessions")(path_project),  # 补录历史会话。
         "memory-write": lambda: docs_function("write_memory")(path_project, namespace_args.input),  # 写入记忆事件。
-        "memory-compress": lambda: docs_function("compress_memory")(path_project),  # 压缩记忆摘要。
+        "memory-compress": lambda: docs_function("compress_memory")(  # 压缩记忆摘要。
+            path_project,  # 当前治理项目根目录
+            namespace_args.full_output,  # 可选完整导出相对路径
+        ),  # 生成有界摘要并按需生成完整导出
         "memory-read": lambda: docs_function("read_memory")(path_project, namespace_args.query, namespace_args.limit),  # 查询记忆内容。
         "memory-verify": lambda: docs_function("verify_memory")(path_project),  # 校验记忆文件。
         "repair-handoff-names": lambda: docs_function("repair_handoff_names")(path_project, write=namespace_args.write),  # 修复交接命名。
@@ -203,6 +206,7 @@ def dispatch_manage_docs_command(path_project: Path, namespace_args: argparse.Na
             write=namespace_args.write,  # 是否落盘同步结果。
             installed_skill_dir_override=namespace_args.installed_skill_dir,  # 可选安装技能覆盖。
             mark_verified=namespace_args.mark_verified,  # 是否登记验证时间。
+            confirm_codebase_memory_untrack=namespace_args.confirm_codebase_memory_untrack,  # 知识图谱解除跟踪确认。
         ),
         "sync-global-codex-agents": lambda: docs_function("sync_global_codex_agents")(  # 全局基线同步动作。
             path_project,  # 治理规则来源项目。
@@ -356,7 +360,6 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "preflight",  # 检查文档前置条件。
         "memory-gate",  # 判断记忆状态能否继续工作。
         "memory-bootstrap-sessions",  # 将历史会话写入记忆索引。
-        "memory-compress",  # 重建长期记忆检索摘要。
         "memory-verify",  # 验证记忆存储。
         "branch-gate",  # 检查当前分支。
         "verify",  # 验证文档结构。
@@ -404,6 +407,12 @@ def build_argument_parser() -> argparse.ArgumentParser:
     # 缺省返回五条最相关记忆。
     argument_parser_memory_read.add_argument("--limit", type=int, default=5)
 
+    # 记忆压缩默认只写有界视图，显式选项才额外导出完整 Markdown。
+    argument_parser_memory_compress = add_project_parser(object_subparsers_commands, "memory-compress")  # 记忆压缩解析器。
+
+    # 完整导出路径必须相对 memory 根目录，并由实现执行越界检查。
+    argument_parser_memory_compress.add_argument("--full-output", default=None)
+
     # 交接命名修复只有显式 write 才落盘。
     argument_parser_repair = add_project_parser(object_subparsers_commands, "repair-handoff-names")  # 命名修复解析器。
 
@@ -436,6 +445,12 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
     # 验证标记只在调用方明确要求时更新。
     argument_parser_sync_root.add_argument("--mark-verified", action="store_true")
+
+    # 已跟踪知识图谱产物只能在用户确认后从 Git 索引移除，磁盘文件保留。
+    argument_parser_sync_root.add_argument(
+        "--confirm-codebase-memory-untrack",
+        action="store_true",
+    )
 
     # 全局规则同步接受写入标志和 Codex 主目录覆盖。
     argument_parser_sync_global = add_project_parser(object_subparsers_commands, "sync-global-codex-agents")  # 全局同步解析器。

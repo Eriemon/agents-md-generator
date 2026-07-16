@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "category": "design",
+  "commands": [
+    {
+      "id": "design.collect-profile", "category": "design", "entrypoint": "collect_design_profile.py", "subcommand": "", "title": "收集并确认设计配置", "summary": "通过平面答案或分组访谈建立 .agents/agents-control.json 的受管设计事实。", "when_to_use": "新建、接管或重新确认强治理项目的 AGENTS 设计时。",
+      "aliases": {"zh": ["开始 AGENTS 设计访谈", "收集设计配置", "接管旧项目"], "en": ["collect design profile", "start AGENTS design interview", "take over legacy project"]},
+      "parameters": [{"name": "project", "required": false, "description": "项目根目录"}, {"name": "--kind", "required": false, "description": "skill 或 engineering"}, {"name": "--answers", "required": false, "description": "完整答案 JSON"}, {"name": "--answer-file", "required": false, "description": "当前访谈步骤答案"}, {"name": "--intent", "required": false, "description": "write 或 read_only"}, {"name": "--write", "required": false, "description": "写入治理配置"}, {"name": "--confirm-codebase-memory-untrack", "required": false, "description": "确认索引取消跟踪"}, {"name": "--start", "required": false, "description": "开始分组访谈"}, {"name": "--start-takeover", "required": false, "description": "开始接管访谈"}, {"name": "--enter-write-review", "required": false, "description": "进入写入复核"}, {"name": "--resume", "required": false, "description": "继续访谈"}, {"name": "--resume-takeover", "required": false, "description": "继续接管访谈"}, {"name": "--reset-interview", "required": false, "description": "放弃当前访谈"}],
+      "invocation_templates": ["python <skill>/scripts/python/design/collect_design_profile.py <project> --start --intent read_only", "python <skill>/scripts/python/design/collect_design_profile.py <project> --answers <answers.json> --write"],
+      "examples": {"valid": ["python skills/agents-md-generator/scripts/python/design/collect_design_profile.py . --start --intent read_only"], "invalid": ["未经复核不要直接使用 --write"]},
+      "prerequisites": ["先检查项目事实", "写入前满足代码图和评审门禁"], "outputs": {"format": "json", "success_exit_codes": [0], "failure_exit_codes": [1, 2]}, "risk": {"level": "high", "writes": true, "warning": "--write 会创建或更新治理配置"}, "boundaries": ["read_only 不得写入", "用户政策不能由检测事实替代"], "related_command_ids": ["detect.inspect-project", "render.render-agents"]
+    }
+  ]
+}

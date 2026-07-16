@@ -50,6 +50,7 @@ from manage_docs_shared import (
     verify_dir_manager,
 )
 from source_governance import format_source_governance_errors, source_governance_report
+from codebase_memory_mcp import enforce_codebase_memory_write_gate
 
 # 版本表达式用于对齐 AGENTS、开发记录和发布文档。
 VERSION_RE = re.compile(r"\bv\d+\.\d+\.\d+\b")  # 语义版本匹配器
@@ -745,6 +746,202 @@ def _rewrite_root_agents(
     # 规范化文件尾，只保留一个终止换行。
     return "\n".join(list_rewritten).rstrip() + "\n"
 
+# 根规则写入器只重写受管头部并返回实际文本与更新状态。
+def apply_root_agents_sync(
+    # 文件路径和原文限定唯一写入目标。
+    path_agents: Path,
+    str_text: str,
+    # 版本与生命周期元组保持公开字段来源分组。
+    tuple_versions: tuple[str, str],
+    tuple_lifecycle: tuple[str, str, str],
+    # 三个控制标志决定重写、写入和验证刷新。
+    bool_sync_required: bool,
+    write: bool,
+    mark_verified: bool,
+) -> tuple[str, bool]:
+    """按写入条件生成并可选落盘根 AGENTS 受管元数据。
+
+    参数：path_agents 为目标文件，str_text 为原文，tuple_versions 为两套版本，
+    tuple_lifecycle 为语言和时间，bool_sync_required、write、mark_verified 为控制状态。
+    返回：报告使用的文本与是否实际更新文件。
+    """
+
+    # 检查模式默认保持原文且不产生写入。
+    str_synced_text = str_text  # 检查模式下的规则文本
+
+    # 实际更新状态仅由内容差异和写模式共同决定。
+    bool_updated = False  # 是否实际更新根文件
+
+    # 无写入请求或无需同步时直接返回原始状态。
+    if not write or (not bool_sync_required and not mark_verified):
+
+        # 检查模式不触碰文件系统。
+        return str_synced_text, bool_updated
+
+    # 重写器只触碰受管头部和受管控制档案版本。
+    str_synced_text = _rewrite_root_agents(  # 写模式生成的候选根规则文本
+        str_text,  # 原根规则文本
+
+        # 两个版本分别维护兼容元数据和项目控制档案。
+        tuple_versions[0],  # 生成器兼容版本
+        tuple_versions[1],  # 项目业务版本
+
+        # 生命周期字段保持语言、更新时间和验证时间顺序。
+        tuple_lifecycle[0],  # 默认语言
+        (tuple_lifecycle[1], tuple_lifecycle[2]),  # 更新时间和验证时间
+
+        # 关键字标志控制两类时间头刷新。
+        sync_required=bool_sync_required,  # 是否刷新更新时间
+        mark_verified=mark_verified,  # 是否刷新验证时间
+    )
+
+    # 幂等结果与原文相同时无需落盘。
+    if str_synced_text == str_text:
+
+        # 返回候选文本供报告读取实际时间头。
+        return str_synced_text, bool_updated
+
+    # UTF-8 写入保持治理文档编码统一。
+    path_agents.write_text(str_synced_text, encoding="utf-8")
+
+    # 内容差异已经形成实际文件更新。
+    return str_synced_text, True
+
+# 根同步报告构造器保持版本、时间和修复字段的稳定顺序。
+def root_agents_sync_report(
+    # 项目和目标路径形成报告身份。
+    project: Path,
+    path_agents: Path,
+    # 修复命令与上下文提供全部报告值。
+    str_repair_command: str,
+    dict_context: dict[str, Any],
+) -> dict[str, Any]:
+    """构造成功路径的根 AGENTS 同步报告。
+
+    参数：project 为项目根，path_agents 为目标文件，str_repair_command 为修复命令，
+    dict_context 为版本、分析、同步文本和写入状态上下文。
+    返回：保持既有字段顺序的成功同步报告。
+    """
+
+    # 写入后重新读取时间头，用实际结果支撑报告。
+    match_refreshed = LAST_UPDATED_HEADER_RE.search(dict_context["synced_text"])  # 实际报告文本中的时间头
+
+    # 无匹配时保留分析阶段读取的原更新时间。
+    str_refreshed_raw = match_refreshed.group(1).strip() if match_refreshed else dict_context["analysis"][1]  # 报告更新时间
+
+    # 正常报告覆盖同步决策、版本事实和实际写入结果。
+    return {
+        "project": str(project),  # 完成根同步检查的项目
+        "agents_path": str(path_agents),  # 本次检查或更新的规则文件
+        "expected_version": dict_context["versions"][0],  # AGENTS 兼容元数据基准
+        "version_source": dict_context["versions"][1],  # 兼容版本的安装事实来源
+        "project_skill_version": dict_context["versions"][2],  # Control Profile 业务版本
+        "project_version_source": dict_context["versions"][3],  # 业务版本事实来源
+        "project_skill_dir": str(dict_context["versions"][4]) if dict_context["versions"][4] else "",  # 业务 VERSION 所在 skill
+        "default_language": dict_context["analysis"][3],  # 根元数据声明的语言
+        "last_updated_raw": str_refreshed_raw,  # 报告中的更新时间
+        "sync_required": bool(dict_context["analysis"][0]),  # 检查时是否发现漂移
+        "updated": dict_context["updated"],  # 本次是否实际写入
+        "mark_verified": dict_context["mark_verified"],  # 是否请求刷新验证时间
+        "reasons": dict_context["analysis"][0],  # 本次检查识别的漂移原因
+        "errors": [],  # 正常路径没有阻断错误
+        "repair_command": str_repair_command,  # 可重复执行的修复命令
+    }
+
+# 根同步预检器在任何 AGENTS 写入前执行知识图谱与覆盖配置门禁。
+def root_agents_sync_preflight(
+    project: Path,
+    path_agents: Path,
+    profile: dict[str, Any],
+    write: bool,
+    confirm_untrack: bool,
+) -> dict[str, Any] | None:
+    """执行根规则同步前置门禁并返回可选阻断报告。
+
+    参数：project 为项目根，path_agents 为目标，profile 为档案，write 为写模式，
+    confirm_untrack 为解除知识图谱产物跟踪的用户确认。
+    返回：门禁失败报告；无需阻断时返回 None。
+    """
+
+    # 检查模式或未受管项目不执行写入前门禁。
+    if not write or not profile:
+
+        # None 表示无需运行任何写入型门禁。
+        return None
+
+    # 共享门禁先验证依赖、索引证据和 Git 产物边界。
+    dict_codebase_gate = enforce_codebase_memory_write_gate(  # 根规则写入前知识图谱门禁
+        project,  # 待同步根规则的项目
+        profile,  # 当前强控制画像
+        apply=True,  # 执行必要忽略规则修复
+        confirm_untrack=confirm_untrack,  # 用户解除跟踪确认
+    )
+
+    # 失败载荷直接返回，确保根规则尚未发生写入。
+    if not dict_codebase_gate.get("ok"):
+
+        # 阻断报告保留知识图谱门禁的全部诊断字段。
+        return {
+            "project": str(project),
+            "agents_path": str(path_agents),
+            "updated": False,
+            **dict_codebase_gate,
+        }
+
+    # 写模式下保证全局规则覆盖文件与当前档案同步。
+    ensure_global_rule_overrides_file(project, profile)
+
+    # None 表示所有前置门禁均已通过。
+    return None
+
+# 根同步版本解析器统一处理缺失文件和生成器版本错误。
+def root_agents_sync_version_context(
+    project: Path,
+    path_agents: Path,
+    str_repair_command: str,
+    installed_skill_dir_override: str | Path | None,
+) -> dict[str, Any]:
+    """解析根同步所需版本并返回可选阻断报告。
+
+    参数：project 为项目根，path_agents 为目标，str_repair_command 为修复命令，
+    installed_skill_dir_override 为可选安装副本。
+    返回：包含 values 五元组或 error 报告的互斥映射。
+    """
+
+    # 缺少根文件时不能安全创建项目规则内容。
+    if not path_agents.exists():
+
+        # 失败报告要求先完成正式渲染或写入。
+        return {"error": _root_sync_error(
+            project,
+            path_agents,
+            str_repair_command,
+            "root AGENTS.md does not exist; render or write AGENTS.md before syncing metadata",
+        )}
+
+    # 元数据版本与项目版本分别从其权威来源解析。
+    tuple_versions = root_metadata_version(project, installed_skill_dir_override)  # 根同步版本上下文
+
+    # 有生成器版本时返回完整五元组供后续分析。
+    if tuple_versions[0]:
+
+        # values 键与 error 键保持互斥。
+        return {"values": tuple_versions}
+
+    # 缺少生成器版本时报告仍保留项目版本上下文。
+    return {"error": _root_sync_error(
+        project,
+        path_agents,
+        str_repair_command,
+        "agents-md-generator version is unavailable; cannot sync root AGENTS metadata",
+        version_context=(
+            tuple_versions[1],
+            tuple_versions[2],
+            tuple_versions[3],
+            tuple_versions[4],
+        ),
+    )}
+
 # 检查并按需同步根 AGENTS 的受管元数据。
 def sync_root_agents(
     project: Path,
@@ -752,11 +949,12 @@ def sync_root_agents(
     installed_skill_dir_override: str | Path | None = None,
     *,
     mark_verified: bool = False,
+    confirm_codebase_memory_untrack: bool = False,
 ) -> dict[str, Any]:
     """检查或写入根 AGENTS 的版本、语言和验证时间。
 
     参数：project 为项目根，write 控制写入。
-    参数：installed_skill_dir_override 指定安装副本，mark_verified 刷新验证时间。
+    参数：installed_skill_dir_override 指定安装副本，mark_verified 刷新验证时间，confirm_codebase_memory_untrack 表示用户是否确认解除本地产物的 Git 跟踪。
     返回：同步需求、实际更新、版本来源和修复命令。
     """
 
@@ -766,11 +964,20 @@ def sync_root_agents(
     # 项目档案用于同步全局规则覆盖并构造修复命令。
     profile = project_profile(project)  # 用于覆盖规则和修复命令的项目档案
 
-    # 写模式下保证全局规则覆盖文件与当前档案同步。
-    if write and profile:
+    # 前置门禁在任何根规则写入前完成知识图谱和覆盖配置检查。
+    dict_preflight = root_agents_sync_preflight(  # 可选根同步阻断报告
+        project,  # 前置门禁所属仓库
+        agents_path,  # 唯一根规则目标
+        profile,  # 项目治理档案
+        write,  # 写入请求状态
+        confirm_codebase_memory_untrack,  # 本地产物解除跟踪确认
+    )
 
-        # 共享函数只修改受管覆盖配置。
-        ensure_global_rule_overrides_file(project, profile)
+    # 失败报告直接返回，确保目标文件尚未变化。
+    if dict_preflight is not None:
+
+        # 前置门禁报告已经具备完整项目与错误上下文。
+        return dict_preflight
 
     # 无论检查成功与否都向调用方提供可执行修复命令。
     repair_command = root_agents_sync_command(  # 根元数据修复命令
@@ -779,42 +986,28 @@ def sync_root_agents(
         installed_skill_dir_override,  # 可选安装副本
     )
 
-    # 缺少根文件时不能安全创建项目规则内容。
-    if not agents_path.exists():
+    # 版本解析器统一返回成功五元组或完整阻断报告。
+    dict_version_context = root_agents_sync_version_context(  # 根同步版本解析结果
+        project,  # 版本解析所属仓库
+        agents_path,  # 根规则目标文件
+        repair_command,  # 同步修复命令
+        installed_skill_dir_override,  # 安装版本查找覆盖值
+    )
 
-        # 失败报告要求先完成正式渲染或写入。
-        return _root_sync_error(
-            project,  # 缺少根规则文件的仓库
-            agents_path,  # 缺失的目标路径
-            repair_command,  # 后续同步命令
-            "root AGENTS.md does not exist; render or write AGENTS.md before syncing metadata",  # 阻断原因
-        )
+    # 解析失败时直接返回既有错误协议。
+    if "error" in dict_version_context:
 
-    # 元数据版本与项目版本分别从其权威来源解析。
+        # error 值已经包含项目、目标和修复命令。
+        return dict_version_context["error"]
+
+    # 成功五元组按既有位置恢复具名变量。
     (
         tuple_metadata_version,  # AGENTS 兼容性元数据基准
         tuple_version_source,  # 生成器版本来源
         tuple_project_version,  # Control Profile 应声明的业务版本
         tuple_project_version_source,  # 项目版本来源
         tuple_project_skill_dir,  # 项目 skill 目录
-    ) = root_metadata_version(project, installed_skill_dir_override)
-
-    # 没有生成器版本时不能重写兼容元数据。
-    if not tuple_metadata_version:
-
-        # 报告仍保留可能已经解析出的项目版本上下文。
-        return _root_sync_error(
-            project,  # 缺少生成器版本的仓库
-            agents_path,  # 根 AGENTS 路径
-            repair_command,  # 建议同步命令
-            "agents-md-generator version is unavailable; cannot sync root AGENTS metadata",  # 缺少生成器版本的阻断说明
-            version_context=(
-                tuple_version_source,  # 失败的生成器版本来源
-                tuple_project_version,  # 仍可报告的项目业务版本
-                tuple_project_version_source,  # 项目 VERSION 事实来源
-                tuple_project_skill_dir,  # 项目 VERSION 所在目录
-            ),
-        )
+    ) = dict_version_context["values"]
 
     # 容错读取允许检查包含历史坏字符的 Markdown。
     str_text = agents_path.read_text(encoding="utf-8", errors="ignore")  # 原根 AGENTS 内容
@@ -830,60 +1023,50 @@ def sync_root_agents(
     # 任一原因存在即表示受管元数据需要同步。
     bool_sync_required = bool(tuple_list_reasons)  # 是否检测到元数据漂移
 
-    # 检查模式默认不产生写入。
-    bool_updated = False  # 是否实际更新根文件
+    # 写入器隔离候选文本生成、幂等比较和实际落盘。
+    tuple_sync_result = apply_root_agents_sync(  # 根规则同步文本与更新状态
+        agents_path,  # 受管头实际落盘路径
+        str_text,  # 同步前原文
 
-    # 未进入写模式时报告基于原文计算。
-    str_synced_text = str_text  # 检查模式下保持原规则文本
+        # 版本元组区分生成器兼容版本和项目业务版本。
+        (tuple_metadata_version, tuple_project_version),  # 兼容与业务版本
 
-    # 写模式只在存在漂移或显式刷新验证时间时工作。
-    if write and (bool_sync_required or mark_verified):
+        # 生命周期元组保持语言、更新时间和验证时间。
+        (tuple_default_language, tuple_last_updated_raw, tuple_last_verified),  # 生命周期元数据
 
-        # 重写器只触碰受管头部和受管控制档案版本。
-        str_synced_text = _rewrite_root_agents(  # 写模式生成的候选根规则文本
-            str_text, tuple_metadata_version, tuple_project_version,  # 原文及两套版本基准
-            tuple_default_language, (tuple_last_updated_raw, tuple_last_verified),  # 语言与生命周期时间
-            sync_required=bool_sync_required,  # 是否刷新更新时间
-            mark_verified=mark_verified,  # 是否刷新验证时间
-        )
-
-        # 幂等结果与原文不同才落盘。
-        if str_synced_text != str_text:
-
-            # UTF-8 写入保持治理文档编码统一。
-            agents_path.write_text(str_synced_text, encoding="utf-8")
-
-            # 报告明确本次调用产生了文件变化。
-            bool_updated = True  # 根 AGENTS 已更新
-
-    # 写入后重新读取时间头，用实际结果支撑报告。
-    refreshed_match = LAST_UPDATED_HEADER_RE.search(str_synced_text)  # 实际报告文本中的时间头
-
-    # 无匹配时保留分析阶段读取的原更新时间。
-    refreshed_raw = (  # 写入后报告的更新时间
-        refreshed_match.group(1).strip()  # 新时间头中的更新时间
-        if refreshed_match  # 是否存在标准时间头
-        else tuple_last_updated_raw  # 无时间头时保留原分析值
+        # 三个标志决定是否以及如何写入。
+        bool_sync_required,  # 是否存在版本或语言漂移
+        write,  # 是否允许实际写入
+        mark_verified,  # 是否显式刷新复核时间
     )
 
-    # 正常报告覆盖同步决策、版本事实和实际写入结果。
-    return {
-        "project": str(project),  # 完成根同步检查的项目
-        "agents_path": str(agents_path),  # 本次检查或更新的规则文件
-        "expected_version": tuple_metadata_version,  # AGENTS 兼容元数据基准
-        "version_source": tuple_version_source,  # 兼容版本的安装事实来源
-        "project_skill_version": tuple_project_version,  # Control Profile 的业务版本基准
-        "project_version_source": tuple_project_version_source,  # 业务版本对应的 VERSION 来源
-        "project_skill_dir": str(tuple_project_skill_dir) if tuple_project_skill_dir else "",  # 业务 VERSION 所在 skill
-        "default_language": tuple_default_language,  # 根元数据声明的语言
-        "last_updated_raw": refreshed_raw,  # 报告中的更新时间
-        "sync_required": bool_sync_required,  # 检查时是否发现漂移
-        "updated": bool_updated,  # 本次是否实际写入
-        "mark_verified": mark_verified,  # 是否请求刷新验证时间
-        "reasons": tuple_list_reasons,  # 本次检查识别的漂移原因
-        "errors": [],  # 正常路径没有阻断错误
-        "repair_command": repair_command,  # 可重复执行的修复命令
+    # 报告上下文集中保存版本、分析和写入结果。
+    dict_report_context = {  # 根同步成功报告上下文
+        "versions": (  # 兼容与业务版本上下文
+            tuple_metadata_version,  # 报告槽位一的期望版本
+            tuple_version_source,  # 报告槽位二的版本证据
+            tuple_project_version,  # 控制档案声明基准
+            tuple_project_version_source,  # 业务版本证据位置
+            tuple_project_skill_dir,  # VERSION 所属技能根
+        ),
+        "analysis": (  # 漂移原因与生命周期分析
+            tuple_list_reasons,  # 元数据同步原因序列
+            tuple_last_updated_raw,  # 重写前更新时间原文
+            tuple_last_verified,  # 重写前验证时间原文
+            tuple_default_language,  # 规则声明的默认语言
+        ),
+        "synced_text": tuple_sync_result[0],  # 写入器返回的最终文本
+        "updated": tuple_sync_result[1],  # 实际文件更新状态
+        "mark_verified": mark_verified,  # 调用方复核刷新请求
     }
+
+    # 成功报告构造器保持既有字段顺序和值来源。
+    return root_agents_sync_report(
+        project,  # 完成同步检查的项目
+        agents_path,  # 根 AGENTS 目标
+        repair_command,  # 报告复用的同步命令
+        dict_report_context,  # 聚合后的成功路径证据
+    )
 
 # 判断全局 baseline 前方是否只含可随区块替换的受管元数据。
 def global_codex_between_is_replaceable_meta(text: str) -> bool:

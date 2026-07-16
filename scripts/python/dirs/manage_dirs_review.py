@@ -5,6 +5,7 @@ from __future__ import annotations
 
 # 标准库提供 JSON 编码、路径操作和通用类型。
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -79,6 +80,12 @@ def critical_move_reason(action: str, path: str, target: str | None) -> str | No
 
     # 创建动作不迁移现有关键目录，无需检查目标边界。
     if action in {"move", "rename", "delete"}:
+
+        # Python 生成缓存不是关键根本身，可在非治理路径中安全清理。
+        if action == "delete" and normalized.split("/")[-1] == "__pycache__":
+
+            # 精确末级目录例外不放宽 tests、docs 等真实关键根删除。
+            return None
 
         # 顶层目录决定当前路径是否属于关键项目结构。
         top = normalized.split("/", 1)[0]  # 源路径顶层目录
@@ -970,56 +977,222 @@ def takeover_fix(project: Path) -> dict[str, Any]:
         "errors": list_errors,  # 冲突与治理重建错误。
     }
 
-# 结构门禁把批准计划、实际目录和保守修复候选汇总为统一决策载荷。
-def structure_gate(project: Path) -> dict[str, Any]:
-    """比较当前目录结构与批准计划并生成结构门禁结果。
+# 功能目录检查器隔离 tests 一级目录的命名合同。
+def append_test_feature_findings(
+    list_reasons: list[str],
+    list_directories: list[str],
+    str_root: str,
+    str_feature_pattern: str,
+) -> None:
+    """追加 tests 一级功能目录的命名违规。
 
-    参数：project 为待验证项目根目录。
-    返回：包含批准状态、漂移原因和可选修复候选的门禁载荷。
-    异常：结构扫描或治理文件读取失败时传播对应文件系统异常。
+    参数：
+        list_reasons: 需要原位追加的布局诊断列表。
+        list_directories: 规范化后的当前目录路径。
+        str_root: 唯一合法的测试根目录名称。
+        str_feature_pattern: 功能目录允许的完整正则模式。
+    返回：无；诊断直接追加到 list_reasons。
     """
 
-    # 项目没有启用控制配置时，目录治理保持显式放行。
-    profile = control_profile(project)  # 非空配置才启用结构约束。
+    # 只检查 tests 下第一层功能目录，文件深度由独立规则负责。
+    for str_directory in list_directories:
 
-    # 未受管项目不制造目录漂移或用户确认请求。
-    if not profile:
+        # 路径部分用于精确识别 tests/<feature> 层级。
+        tuple_parts = str_directory.split("/")  # 当前目录的相对路径部分
 
-        # 返回字段完整的批准结果，保持调用方处理协议稳定。
-        return {
-            "project": str(project),  # 当前工作区根。
-            "approved": True,  # 未受管项目默认批准。
-            "decision": "approved",  # 供机器读取的决策值。
-            "reasons": [],  # 没有治理阻断原因。
-            "default_confirmation": "yes",  # 保持统一确认协议。
-            "recommended_option": "yes",  # 默认建议继续。
-            "auto_fix_plan": [],  # 无需自动修复。
-            "requires_user_confirmation": False,  # 不要求额外授权。
-            "user_message": "",  # 不产生阻断提示。
-            "decision_request": {},  # 不构造交互请求。
-        }
+        # 非功能目录层级无需参与功能名称判断。
+        if len(tuple_parts) != 2 or tuple_parts[0] != str_root:
 
-    # 优先读取批准计划，缺失时从控制配置生成预期结构。
-    planned = load_planned(project) or planned_structure(project)  # 统一比较基准。
+            # 跳过根外目录和更深的目录层级。
+            continue
 
-    # 扫描当前目录事实，避免依据陈旧治理快照作出判断。
-    current = scan_structure(project)  # 实际文件系统结构。
+        # 不符合功能单词模式的目录无法表达测试职责。
+        if not re.fullmatch(str_feature_pattern, tuple_parts[1]):
+
+            # 诊断保留实际目录并声明所需命名语义。
+            list_reasons.append(
+                f"invalid-feature-folder: {str_directory}/ must use lowercase functional words"
+            )
+
+# Python 测试检查器隔离根级豁免和固定深度合同。
+def append_test_python_findings(
+    list_reasons: list[str],
+    list_files: list[str],
+    str_root: str,
+    set_root_exemptions: set[str],
+) -> None:
+    """追加 Python 测试文件的根级和深度违规。
+
+    参数：
+        list_reasons: 需要原位追加的布局诊断列表。
+        list_files: 规范化后的当前文件路径。
+        str_root: 唯一合法的测试根目录名称。
+        set_root_exemptions: 允许保留在 tests 根级的 Python 文件名。
+    返回：无；诊断直接追加到 list_reasons。
+    """
+
+    # Python 测试文件必须位于 tests 根或恰好一层功能目录中。
+    for str_file in list_files:
+
+        # 文件路径部分支持根级豁免和功能目录深度判断。
+        tuple_parts = str_file.split("/")  # 当前文件的相对路径部分
+
+        # 非 tests Python 文件不属于当前布局门禁的扫描范围。
+        if (
+            not tuple_parts  # 空路径不能形成有效测试文件
+            or tuple_parts[0] != str_root  # 排除 tests 根以外的文件
+            or not str_file.endswith(".py")  # 只约束 Python 测试布局
+        ):
+
+            # 跳过非目标文件并继续扫描剩余结构事实。
+            continue
+
+        # tests 根级仅允许配置列出的初始化文件。
+        if len(tuple_parts) == 2:
+
+            # 未获豁免的 Python 文件必须进入对应功能目录。
+            if tuple_parts[-1] not in set_root_exemptions:
+
+                # 根级文件诊断给出目标 tests/<feature>/ 结构。
+                list_reasons.append(
+                    f"python-at-tests-root: {str_file} must move into tests/<feature>/"
+                )
+
+            # 根级文件完成豁免判断后无需再检查三段深度。
+            continue
+
+        # 功能测试文件必须精确匹配 tests/<feature>/*.py 三段结构。
+        if len(tuple_parts) != 3:
+
+            # 过深或异常路径统一报告固定深度合同。
+            list_reasons.append(
+                f"invalid-test-depth: {str_file} must match tests/<feature>/*.py"
+            )
+
+# 测试布局诊断器验证单一根目录和固定功能层级。
+def tests_layout_findings(
+    dict_current: dict[str, Any],
+    dict_planned: dict[str, Any],
+) -> list[str]:
+    """返回根 tests、功能目录和 Python 文件深度诊断。
+
+    参数：
+        dict_current: 当前工作文件夹的目录与文件事实。
+        dict_planned: 已批准的目录治理计划。
+    返回：保持检查顺序的 tests 布局违规原因。
+    """
+
+    # 计划中的 tests_layout 是本检查的唯一策略来源。
+    dict_layout = dict_planned.get("tests_layout", {})  # 根目录与功能分组布局合同
+
+    # 未配置布局策略时保持旧项目的兼容行为。
+    if not isinstance(dict_layout, dict) or not dict_layout:
+
+        # 空原因列表表示当前项目不启用 tests 布局门禁。
+        return []
+
+    # 规范化根目录名称，空配置回退到固定 tests 合同。
+    str_root = normalize_rel(str(dict_layout.get("required_root", "tests"))) or "tests"  # 唯一合法测试根
+
+    # 当前目录事实统一为正斜杠相对路径，便于跨平台比较。
+    list_directories = [
+        normalize_rel(item)  # 规范化后的实际目录路径
+        for item in dict_current.get("directories", [])  # 标准化计划比对所需的每个目录条目
+    ]  # 当前工作文件夹的全部目录
+
+    # 文件路径使用同一规范化规则，供 Python 深度检查复用。
+    list_files = [
+        normalize_rel(item)  # 规范化后的实际文件路径
+        for item in dict_current.get("files", [])  # 标准化 Python 深度检查所需的每个文件条目
+    ]  # 当前工作文件夹的全部文件
+
+    # 任意层级同名 tests 都进入唯一根目录检查。
+    list_test_roots = [
+        item  # 名称等于目标测试根的目录路径
+        for item in list_directories  # 检查每个实际目录的末级名称
+        if item.split("/")[-1] == str_root  # 收集任意层级出现的 tests 同名目录
+    ]  # 当前结构中发现的全部 tests 同名目录
+
+    # 原因列表按缺失、位置、数量、功能名和文件深度依次累计。
+    list_reasons: list[str] = []  # tests 布局诊断结果
+
+    # 根目录不存在时报告固定且可测试的缺失代码。
+    if str_root not in list_test_roots:
+
+        # 缺失诊断明确指出必须创建的根级目录。
+        list_reasons.append(
+            f"tests-missing: required root directory {str_root}/ is missing"
+        )
+
+    # 所有非根级 tests 都必须迁移到唯一合法位置。
+    for str_test_root in list_test_roots:
+
+        # 根级目录自身满足位置合同，不产生重复诊断。
+        if str_test_root != str_root:
+
+            # 位置错误保留实际目录，便于生成迁移审查请求。
+            list_reasons.append(
+                f"tests-not-at-root: {str_test_root}/ must be {str_root}/"
+            )
+
+    # 即使一个位于根级，多个 tests 同名目录仍违反唯一性。
+    if len(list_test_roots) > 1:
+
+        # 数量诊断与逐目录位置诊断共同提供完整修复信息。
+        list_reasons.append(
+            "multiple-tests-roots: only one tests directory is allowed"
+        )
+
+    # 根级 Python 豁免通常只允许包初始化文件。
+    set_root_exemptions = {
+        str(item)  # 根级允许保留的 Python 文件名
+        for item in dict_layout.get("root_python_exemptions", [])  # 读取批准的根级文件例外
+    }  # tests 根级 Python 文件豁免集合
+
+    # 功能目录正则强制使用可读的小写功能单词。
+    str_feature_pattern = str(  # tests 一级功能目录必须满足的命名模式
+        dict_layout.get("feature_pattern", r"^[a-z]+(?:_[a-z]+)*$")  # 默认小写功能单词模式
+    )  # tests 一级功能目录命名正则
+
+    # 功能目录名称和 Python 文件深度分别由单一职责检查器追加。
+    append_test_feature_findings(
+        list_reasons, list_directories, str_root, str_feature_pattern
+    )
+
+    # Python 文件位置检查独立于功能目录命名检查。
+    append_test_python_findings(
+        list_reasons, list_files, str_root, set_root_exemptions
+    )
+
+    # 返回全部 tests 布局问题，空列表表示结构通过。
+    return list_reasons
+
+# 结构诊断器比较批准计划与实际目录事实。
+def structure_gate_findings(dict_current: dict[str, Any], dict_planned: dict[str, Any]) -> list[str]:
+    """返回业务根、目录污染和根文件违规原因。
+
+    参数：dict_current 为当前结构，dict_planned 为批准结构计划。
+    返回：保持检查顺序的全部结构偏差原因。
+    """
 
     # 按检查顺序累计所有结构偏差，避免首错掩盖后续问题。
     list_reasons: list[str] = []  # 空列表最终表示批准。
 
+    # 测试布局先形成专用诊断，再继续执行通用目录白名单检查。
+    list_reasons.extend(tests_layout_findings(dict_current, dict_planned))
+
     # 规范化批准的业务根，供存在性和包含关系检查复用。
     primary_root = normalize_rel(  # 目标保持仓库相对形式。
-        str(planned.get("primary_project_root", "")).strip()  # 提取计划声明。
+        str(dict_planned.get("primary_project_root", "")).strip()  # 提取计划声明。
     )
 
     # 仅在计划明确强制业务根且路径有效时检查其存在性。
-    if planned.get("enforce_primary_project_root") and primary_root:
+    if dict_planned.get("enforce_primary_project_root") and primary_root:
 
         # 业务根本身或其任一后代存在，都证明根目录结构已经建立。
-        if primary_root not in current.get("directories", []) and not any(
+        if primary_root not in dict_current.get("directories", []) and not any(
             path.startswith(primary_root + "/")  # 后代路径隐含父根存在。
-            for path in current.get("directories", [])  # 遍历实际目录事实。
+            for path in dict_current.get("directories", [])  # 遍历实际目录事实。
         ):
 
             # 缺失强制业务根是独立的结构阻断原因。
@@ -1029,7 +1202,7 @@ def structure_gate(project: Path) -> dict[str, Any]:
             )
 
     # 检查每个实际目录是否属于批准结构或嵌套污染。
-    for directory in current.get("directories", []):
+    for directory in dict_current.get("directories", []):
 
         # 统一目录分隔形式，确保规则匹配跨平台一致。
         normalized = normalize_rel(directory)  # 当前目录的仓库相对路径。
@@ -1043,7 +1216,7 @@ def structure_gate(project: Path) -> dict[str, Any]:
         # 优先识别嵌套工作区或版本控制污染，提供更具体原因。
         nested_reason = nested_workspace_artifact_reason(  # 空值表示没有嵌套污染。
             normalized,  # 待检查的实际目录。
-            planned,  # 批准结构提供忽略和根路径语义。
+            dict_planned,  # 批准结构提供忽略和根路径语义。
         )
 
         # 嵌套污染已形成完整原因时，不再追加泛化违规描述。
@@ -1056,7 +1229,7 @@ def structure_gate(project: Path) -> dict[str, Any]:
             continue
 
         # 非污染目录仍必须匹配批准路径规则。
-        if not allowed_path(normalized, planned):
+        if not allowed_path(normalized, dict_planned):
 
             # 记录未被计划允许的实际目录。
             list_reasons.append(  # 诊断使用规范化相对路径。
@@ -1064,12 +1237,89 @@ def structure_gate(project: Path) -> dict[str, Any]:
             )
 
     # 根级文件采用独立白名单检查，避免目录规则误判文件。
-    for file_path in unapproved_root_files(current, planned):
+    for file_path in unapproved_root_files(dict_current, dict_planned):
 
         # 每个未批准根文件都形成可独立修复的原因。
         list_reasons.append(  # 保持扫描器提供的仓库相对路径。
             f"root-level file violates planned structure: {file_path}"
         )
+
+    # 调用方使用原因列表构造交互决策和修复候选。
+    return list_reasons
+
+# 结构门禁载荷构造器统一机器决策与人工确认协议。
+def structure_gate_payload(
+    project: Path,
+    list_reasons: list[str],
+    list_auto_fix_plan: list[dict[str, str]],
+) -> dict[str, Any]:
+    """根据结构原因和修复候选生成完整门禁载荷。
+
+    参数：project 为项目根，list_reasons 为偏差原因，list_auto_fix_plan 为安全动作。
+    返回：保持既有字段、选项与提示文本的门禁载荷。
+    """
+
+    # 任一结构偏差都必须阻断并请求明确处理决策。
+    approved = not list_reasons  # 布尔值驱动所有响应字段。
+
+    # 返回机器决策、人工说明和可选修复计划的完整协议。
+    return {
+        "project": str(project),
+        "approved": approved,
+        "decision": "approved" if approved else "blocked",
+        "reasons": list_reasons,
+        "default_confirmation": "yes",
+        "recommended_option": "yes",
+        "auto_fix_plan": list_auto_fix_plan,
+        "requires_user_confirmation": not approved,
+        "user_message": "" if approved else "目录结构不符合治理契约，默认应先按规范整理/迁移。若继续，请明确确认是否执行结构修复，默认推荐“是”。",
+        "decision_request": {} if approved else decision_request(
+            "structure_normalization",
+            question="目录结构不符合治理契约。是否按推荐方案执行结构修复？",
+            options=[
+                {
+                    "label": "是，执行修复",  # 推荐动作标签。
+                    "value": "yes",  # 机器可读确认值。
+                    "description": "默认选项；按 auto_fix_plan 或人工整理方案恢复治理结构。",  # 修复路径说明。
+                    "recommended": True,  # 默认突出修复动作。
+                },
+                {
+                    "label": "否，暂停",  # 保守动作标签。
+                    "value": "no",  # 机器可读暂停值。
+                    "description": "保留当前结构，暂停会修改工作区结构的操作。",  # 暂停边界说明。
+                    "recommended": False,  # 暂停不作为默认建议。
+                },
+            ],
+            default="yes",
+            risk="high",
+            next_action="run structure fix or manually normalize the work folder, then rerun structure-gate",
+            context={"reasons": list_reasons, "auto_fix_plan": list_auto_fix_plan},
+        ),
+    }
+
+# 结构门禁把批准计划、实际目录和保守修复候选汇总为统一决策载荷。
+def structure_gate(project: Path) -> dict[str, Any]:
+    """比较当前目录结构与批准计划并生成结构门禁结果。
+
+    参数：project 为待验证项目根目录。
+    返回：包含批准状态、漂移原因和可选修复候选的门禁载荷。
+    异常：结构扫描或治理文件读取失败时传播对应文件系统异常。
+    """
+
+    # 项目没有启用控制配置时，目录治理保持显式放行。
+    profile = control_profile(project)  # 非空配置才启用结构约束。
+
+    # 未受管项目通过空诊断复用同一稳定载荷协议。
+    if not profile:
+
+        # 空原因和空计划形成批准结果。
+        return structure_gate_payload(project, [], [])
+
+    # 优先读取批准计划，缺失时从控制配置生成预期结构。
+    planned = load_planned(project) or planned_structure(project)  # 统一比较基准。
+
+    # 扫描当前目录事实并生成全部结构偏差。
+    list_reasons = structure_gate_findings(scan_structure(project), planned)  # 当前结构诊断。
 
     # 自动修复计划只承载经保守检测器证明无歧义的动作。
     list_auto_fix_plan: list[dict[str, str]] = []  # 默认要求人工规范化。
@@ -1089,52 +1339,8 @@ def structure_gate(project: Path) -> dict[str, Any]:
             {"action": "move", **dict_candidate}
         )
 
-    # 任一结构偏差都必须阻断并请求明确处理决策。
-    approved = not list_reasons  # 布尔值驱动所有响应字段。
-
-    # 返回机器决策、人工说明和可选修复计划的完整协议。
-    return {
-        "project": str(project),  # 被验证的工作区根。
-        "approved": approved,  # 结构门禁最终状态。
-        "decision": "approved" if approved else "blocked",  # 机器决策枚举。
-        "reasons": list_reasons,  # 全部结构偏差证据。
-        "default_confirmation": "yes",  # 推荐执行规范化修复。
-        "recommended_option": "yes",  # 供交互层突出默认选择。
-        "auto_fix_plan": list_auto_fix_plan,  # 可安全自动执行的动作。
-        "requires_user_confirmation": not approved,  # 阻断时要求用户决策。
-        "user_message": (  # 仅在阻断时提供中文操作说明。
-            "" if approved else "目录结构不符合治理契约，默认应先按规范整理/迁移。若继续，请明确确认是否执行结构修复，默认推荐“是”。"
-        ),
-        "decision_request": (  # 批准时不生成多余交互载荷。
-            {}
-            if approved
-            else decision_request(
-                "structure_normalization",  # 稳定的决策请求标识。
-                question="目录结构不符合治理契约。是否按推荐方案执行结构修复？",  # 结构修复确认问题。
-                options=[  # 提供继续修复与暂停两种明确选择。
-                    {
-                        "label": "是，执行修复",  # 推荐选项显示文本。
-                        "value": "yes",  # 机器可读值。
-                        "description": "默认选项；按 auto_fix_plan 或人工整理方案恢复治理结构。",  # 推荐修复路径说明。
-                        "recommended": True,  # 标记默认建议。
-                    },
-                    {
-                        "label": "否，暂停",  # 保守选项显示文本。
-                        "value": "no",  # 暂停分支的协议值。
-                        "description": "保留当前结构，暂停会修改工作区结构的操作。",  # 停止边界。
-                        "recommended": False,  # 非默认建议。
-                    },
-                ],
-                default="yes",  # 默认执行推荐修复。
-                risk="high",  # 目录移动属于高风险变更。
-                next_action="run structure fix or manually normalize the work folder, then rerun structure-gate",  # 后续闭环命令。
-                context={  # 决策界面需要的完整证据。
-                    "reasons": list_reasons,
-                    "auto_fix_plan": list_auto_fix_plan,
-                },
-            )
-        ),
-    }
+    # 载荷构造器保持批准与阻断分支的公开字段一致。
+    return structure_gate_payload(project, list_reasons, list_auto_fix_plan)
 
 # 自动修复只执行门禁识别出的单一、无歧义目录移动。
 def apply_structure_fix(project: Path) -> dict[str, Any]:

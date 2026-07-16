@@ -44,15 +44,6 @@ SANITIZED_INLINE_RULES = [
     ("local_path", LOCAL_PRIVATE_PATH_RE),  # 私有绝对路径匹配器。
 ]
 
-# 明确声明的公开归属邮箱用于作者署名和学术引用，不应被发布清洗器删除。
-PUBLIC_ATTRIBUTION_EMAILS = frozenset({"erie@seu.edu.cn"})
-
-# 归一化比较保证大小写变化不会破坏公开归属保留规则。
-def is_public_attribution_email(str_email: str) -> bool:
-    """判断邮箱是否属于已确认的公开作者归属信息。"""
-
-    return str_email.strip().casefold() in PUBLIC_ATTRIBUTION_EMAILS
-
 # 二进制内容不自动改写，只报告可确认的敏感模式。
 SANITIZED_BINARY_PATTERNS = [
     ("api_key", re.compile(br"sk-(?:live|proj|test)-[A-Za-z0-9_-]+")),  # OpenAI 风格密钥字节模式。
@@ -173,25 +164,11 @@ def sanitize_release_text(str_text: str) -> tuple[str, list[dict[str, str]]]:
         # 行内规则同样使用稳定占位符。
         str_placeholder = SANITIZED_PLACEHOLDERS[str_rule_name]  # 当前行内规则占位符。
 
-        # 只统计实际替换次数，公开归属邮箱保持原文且不写入清洗收据。
-        int_replaced = 0
-
-        # 回调允许对公开归属邮箱执行精确例外，而不是放宽其他邮箱或凭据规则。
-        def replace_inline(match_inline: re.Match[str]) -> str:
-            """替换单个行内敏感值并保留已确认的公开归属邮箱。"""
-
-            nonlocal int_replaced
-            str_match = match_inline.group(0)
-            if str_rule_name == "email" and is_public_attribution_email(str_match):
-                return str_match
-            int_replaced += 1
-            return str_placeholder
-
-        # 对当前规则执行可审计的逐匹配替换。
-        str_updated = pattern_inline.sub(replace_inline, str_redacted)
+        # subn 同时返回更新文本和命中次数。
+        str_updated, int_count = pattern_inline.subn(str_placeholder, str_redacted)  # 行内规则处理结果。
 
         # 至少一次命中才形成清洗证据。
-        if int_replaced:
+        if int_count:
 
             # 当前规则加入收据所需记录。
             list_matches.append({"rule": str_rule_name, "placeholder": str_placeholder})

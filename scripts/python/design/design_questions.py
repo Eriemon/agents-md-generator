@@ -39,6 +39,12 @@ REMOTE_SSH_INSTALL_SPECS = [
 # 远程服务器启用答案键用于保持后续处理语义明确。
 USE_REMOTE_SERVER_KEY = "use_remote_server"  # 远程服务器启用答案键
 
+# 代码知识图谱启用答案键用于强制记录用户的显式选择。
+USE_CODEBASE_MEMORY_MCP_KEY = "use_codebase_memory_mcp"  # 知识图谱启用答案键
+
+# 缺少本地依赖时由用户确认是否进入人工安装流程。
+CODEBASE_MEMORY_INSTALL_CONFIRM_KEY = "install_codebase_memory_mcp"  # 人工安装确认答案键
+
 # 远程安装确认答案键用于保持后续处理语义明确。
 REMOTE_INSTALL_CONFIRM_KEY = "install_remote_ssh_dependency"  # 远程安装确认答案键
 
@@ -109,6 +115,17 @@ COMMON_QUESTIONS = [  # 所有项目共用的设计问题
         "required": True,  # 用于声明必答状态问题 45；问卷第十六项
         "branch": "all",  # 用于限定适用分支问题 45；问卷第十七项
         "ask": "本次生成或重构 AGENTS.md 是否需要启用远程服务器链路？如果启用，后续必须完成依赖检查、服务器配置/选择、校验和锁定。",  # 展示问题 45 的远程启用提示；问卷第十八项
+    },
+    {
+        "question_id": "55",  # 稳定知识图谱问题标识
+        "answer_key": USE_CODEBASE_MEMORY_MCP_KEY,  # 绑定显式启用选择
+        "required": True,  # 禁止字段缺失推断默认值
+        "branch": "all",  # 所有项目类型均需回答
+        "ask": (  # 知识图谱使用范围与前置条件问题
+            "本次生成或更新 AGENTS.md 是否使用 codebase-memory-mcp？启用后可用知识图谱理解项目架构、"
+            "追踪调用关系并优先辅助代码调试，但必须安装并配置本地 MCP、在项目根完成 full + persistence "
+            "索引，且 `.codebase-memory/` 只能保留为 Git 忽略的本地产物。"
+        ),
     },
 ]
 
@@ -326,7 +343,7 @@ ENGINEERING_RULE_SCOPES = {"project-baseline", "scoped", "on-demand"}  # 工程�
 MEMORY_GROUPS = [["50", "51", "52", "53", "54"]]  # 项目记忆问题分组
 
 # 公共设计问题分组用于保持后续处理语义明确。
-COMMON_GROUPS = [["1", "32", "45"], ["50", "51", "52", "53", "54"]]  # 公共设计问题分组
+COMMON_GROUPS = [["1", "32", "45", "55"], ["50", "51", "52", "53", "54"]]  # 公共设计问题分组
 
 # 技能设计问题分组用于保持后续处理语义明确。
 SKILL_GROUPS = [  # 技能设计问题分组
@@ -354,7 +371,7 @@ ENGINEERING_GROUPS = [  # 工程设计问题分组
 ]
 
 # 接管流程公共问题分组用于保持后续处理语义明确。
-TAKEOVER_COMMON_GROUPS = [["1", "32", "45"], ["50", "51", "52", "53", "54"]]  # 接管流程公共问题分组
+TAKEOVER_COMMON_GROUPS = [["1", "32", "45", "55"], ["50", "51", "52", "53", "54"]]  # 接管流程公共问题分组
 
 # 接管技能项目问题分组用于保持后续处理语义明确。
 TAKEOVER_SKILL_GROUPS = [["6"], ["42", "43", "44", "46", "47", "48", "49"], ["21"]]  # 接管技能项目问题分组
@@ -576,6 +593,20 @@ QUESTION_OPTIONS: dict[str, list[dict[str, Any]]] = {  # 答案字段对应的�
             "description": "本次必须完成 erie-remote-ssh 依赖检查、服务器配置/选择、校验和锁定。",  # 第五百十五项选择说明
             "recommended": False,  # 第五百十六项推荐状态
         },  # 远程生成模式
+    ],
+    USE_CODEBASE_MEMORY_MCP_KEY: [  # 知识图谱启用选择的交互选项
+        {
+            "label": "使用知识图谱",  # 启用选项标签
+            "value": True,  # 启用知识图谱的提交值
+            "description": "调试时优先查询项目知识图谱，并强制完成根级持久化索引门禁。",  # 启用后的治理义务
+            "recommended": True,  # 完整架构分析场景默认推荐启用
+        },
+        {
+            "label": "不使用知识图谱",  # 禁用选项标签
+            "value": False,  # 禁用知识图谱的提交值
+            "description": "不检测或调用 MCP，但仍保持 `.codebase-memory/` 被忽略且不受 Git 跟踪。",  # 禁用后的仓库边界
+            "recommended": False,  # 完整架构分析场景不推荐禁用
+        },
     ],
     "memory_enabled": [  # 用于声明“memory_enabled”设计合同项；问卷第一百五十六项
         {

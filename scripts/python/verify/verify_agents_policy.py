@@ -7,8 +7,9 @@ from __future__ import annotations
 import re
 
 # 导入 AGENTS 双技能路由契约常量。
-from language_skill_routing_contract import (
+from routing_contract import (
     PYTHON_LANGUAGE_SKILL_ROUTE_REQUIRED_SNIPPETS,
+    SHARED_LANGUAGE_SKILL_ROUTE_REQUIRED_SNIPPETS,
     SCRIPT_LANGUAGE_SKILL_ROUTE_REQUIRED_SNIPPETS,
 )
 
@@ -28,14 +29,16 @@ ROOT_AGENTS_MAX_BYTES = ROOT_AGENTS_MAX_KB * 1024  # 根 AGENTS 的字节级体�
 
 # 收集默认语言锁定规则，供根 AGENTS 元数据校验复用。
 LANGUAGE_LOCK_RE = re.compile(  # 匹配普通自然语言回复的默认语言锁
-    r"All natural-language responses must use\s+(.+?)\s+unless the user explicitly switches languages\.",  # 普通回复语言锁整句
+    r"(?:All natural-language responses must use|Natural-language replies.*?use)\s+"  # 支持旧版和精炼版前缀
+    r"(.+?)\s+unless the user (?:explicitly )?switches language(?:s)?[.;]",  # 捕获默认语言与切换条件
     flags=re.IGNORECASE,  # 兼容手写标题的大小写差异
 )
 
 # 单独锁定 Plan Mode 中的 `<proposed_plan>` 语言，避免计划内容悄悄切回英文。
 PLAN_LANGUAGE_LOCK_RE = re.compile(  # 匹配 Plan Mode 专用的默认语言锁
-    r"In Plan Mode,\s+any content inside\s+`<proposed_plan>`\s+must use\s+(.+?)\s+"
-    r"unless the user explicitly switches languages\.",  # Plan Mode 语言锁整句
+    r"(?:In Plan Mode,\s+any content inside\s+`<proposed_plan>`\s+must use|"  # 旧版计划锁前缀
+    r"Natural-language replies, including\s+`<proposed_plan>`\s+content, use)\s+"  # 精炼版计划锁前缀
+    r"(.+?)\s+unless the user (?:explicitly )?switches language(?:s)?[.;]",  # 默认语言与切换条件
     flags=re.IGNORECASE,  # 兼容 `<proposed_plan>` 段落的大小写差异
 )
 
@@ -46,9 +49,10 @@ CODING_BEHAVIOR_LANGUAGE_ROUTING_REQUIRED_SNIPPETS = (  # 编码行为基础短�
     "不能把语句、注释、函数粘连到一起",  # 代码排版不能退化成粘连块
     "严禁把代码压缩到一行",  # 一行压缩规则必须继续保留
     "炫技代码",  # 反花哨可读性约束必须保留
-    "语言技能路由（Python）：",  # Python 路由标题必须继续存在
-    "语言技能路由（脚本）：",  # 脚本路由标题必须继续存在
 )
+
+# 复用共同门禁强制短语，确保跨语言前置要求只由 shared 行承载。
+CODING_BEHAVIOR_LANGUAGE_ROUTING_SHARED_REQUIRED_SNIPPETS = SHARED_LANGUAGE_SKILL_ROUTE_REQUIRED_SNIPPETS  # 共同门禁强制短语
 
 # 复用 Python 路由强制短语，保持渲染、校验和测试的精确短语一致。
 CODING_BEHAVIOR_LANGUAGE_ROUTING_PYTHON_REQUIRED_SNIPPETS = PYTHON_LANGUAGE_SKILL_ROUTE_REQUIRED_SNIPPETS  # Python 路由强制短语用于本步校验判断

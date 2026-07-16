@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v1.4.6-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v2.0.1-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  最新版本：<strong>v1.4.6</strong> · 发布日期：<strong>2026-07-12</strong>
+  最新版本：<strong>v2.0.1</strong> · 发布日期：<strong>2026-07-16</strong>
 </p>
 
 AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的治理文件，而不是凭记忆拼接规则。它把触发元数据、分组式设计访谈、确定性 Python 脚本、文档治理辅助、目录治理门禁和验证链组合在一起，让 Agent 能从仓库事实稳定走到可信的 `AGENTS.md` 输出。
@@ -48,20 +48,41 @@ AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的�
 - 提取命令、文档、CI 线索、作用域和治理信号等仓库事实。
 - 为 skill 项目和 engineering 项目生成 strong-control profile。
 - 提供 handoff、memory、development、install、git-manager 等 docs 治理辅助。
+- 提供由 JSON source、SQLite FTS 索引和只读查询 CLI 组成的渐进披露命令注册表。
 - 通过 `scripts/python/dirs/manage_dirs.py` 执行目录治理审查与结构门禁。
 - 在需要时生成 `CLAUDE.md` 与 `GEMINI.md` 兼容 shim。
 - 提供验证、审计、自动 review 治理、skill-effectiveness eval 和 aggregate confidence gate，用于发布前把关。
 
-## v1.4.6 重点更新
+## v2.0.1 重点更新
 
-- 在 v1.4.1 的 runtime 拆分基础上，新增 worktree、远程策略、release 安装、命令合同、root 合同、扫描和 runtime eval 专用模块。
-- Python 与脚本类工作现在必须先通过两个 readable skill 的联合前置门禁，再按目标语言保留最终归属；生成的 root 和验证器都会拒绝被弱化的路由合同。
-- 禁止额外 Git worktree、`git config core.worktree` 重定向及 `.worktrees` 等污染目录，治理变更统一留在当前目录并使用本地分支隔离。
-- 将版本化 skill 安装拆成 release manifest、脱敏、仓库验证和可回滚复制模块，增加收据哈希、内容策略和安全替换检查。
-- 扩充 project、workspace、policy、release、语言路由、token 用量、源码治理和 release 内容回归评估；允许受治理的 `evals/` 随包发布，同时继续排除本地 tests。
-- 增加远程 conda 环境与 runtime 归档策略，收紧命令/路径合同，并同步强化 Plan Mode 语言、脚本输出和 global baseline 规则。
-- 新增配置驱动的 Script Output Policy（`> INFO/WARNING/ERR: [kind]`）、Python 进度输出的 `--quiet` 支持及机器可读 stdout 例外；验证器同步覆盖 root、远程服务器、memory、命令和 release 内容合同。
-- 保留明确声明的公开作者/联系邮箱用于开源归属，同时继续对未授权邮箱、凭据和机器本地路径执行发布脱敏。
+v2.0.1 是首个公开 v2 版本，专门优化了本 skill 与 Codex 中 [GPT-5.6 Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol) 的配合方式：压缩始终加载的指令面，把详细操作知识转移到确定性的按需查询，并让执行证据更容易复核。这些是架构级效率优化；项目不会声明未经实际测量的耗时或 token 成本提升百分比。
+
+### 更小的 Agent 上下文，更丰富的按需 runtime
+
+- `SKILL.md` 从 44,796 字节、202 行压缩到 12,683 字节、119 行，主要 Agent 指令文件按字节减少 71.7%。
+- 详细命令语法迁移到 `config/registry/`，由版本化 JSON source、schema、manifest 和 SQLite FTS 索引共同管理。`query_registry.py ask` 只检索当前任务需要的指令，且绝不会执行查询结果中的命令。
+- 明确说明取舍：确定性 Python 模块从 89 个增加到 99 个，因为实现与验证细节是从主提示中迁移到工具层，而不是被直接删除。
+
+### Runtime 与治理架构
+
+- 用面向职责的公开模块替换 26 个旧下划线内部模块及其分解说明，覆盖项目发现、profile 组装、持久记忆、release 策略、渲染、路由合同以及 policy/release eval。
+- 新增一等 codebase-memory 集成，在受治理写入前显式检查 full index、architecture analysis、持久化状态和 live/disk 数量一致性。
+- 新增持久记忆存储和有界检索视图，同时保留 handoff 与长期记忆合同，并继续拒绝机器本地原始路径。
+- 新增可选文档注册，包含 catalog、knowledge、interface、重复项复核和 migration 记录。该能力仍为显式启用：用户没有明确要求文档注册或迁移时，不创建任何注册状态。
+- 强化源码治理、内容密度、语义 review 证据、release 打包、脱敏、来源收据以及 command/root/routing 合同评估。
+
+### 兼容与迁移
+
+- 现有公开 CLI 入口继续作为受支持接口；内部模块路径不属于兼容合同。适用时，兼容包装器会把旧公开入口路由到新的职责模块。
+- 将 `source_file_limits.max_lines` 和 `source_governance.max_lines` 迁移为基于字节的 `max_bytes`；v2 会拒绝已退役的行数配置字段。
+- 将已弃用的 confidence gate 参数 `--skip-missing-eval-runner` 和 `--require-eval-runner` 替换为 `--eval-runner-policy optional` 与 `--eval-runner-policy required`。
+- evolution 与 experience 子系统继续保持退役；`CLAUDE.md` 和 `GEMINI.md` 兼容 shim 仍然只能显式启用。
+
+### 发布安全
+
+- 从 v1.4.6 到 v2.0.1 的受管 payload 对比为：新增 50 个文件、更新 52 个文件、淘汰 26 个路径、保持不变 38 个文件；公开发布收据随后重新生成。
+- 可安装资产继续排除 repo-local tests、smoke 运行、reports、缓存、嵌套 `dist/`、本地认证文件、凭据、私钥和机器专属绝对路径。
+- 经明确批准的作者/联系邮箱继续公开用于署名；未授权联系方式和其他敏感信息仍会被阻止或脱敏。
 
 ## Skill 架构
 
@@ -93,6 +114,7 @@ AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的�
 | `SKILL.md` | 面向 Agent 的触发、流程、约束和验证规则。 |
 | `agents/openai.yaml` | 宿主 UI 使用的 skill 元数据。 |
 | `scripts/python/` | 检查、访谈、渲染、文档治理、目录治理、release 安装、验证、审计和评估脚本。 |
+| `config/registry/` | 版本化命令 source、schema、manifest、文档治理记录和生成的 SQLite FTS 索引。 |
 | `assets/templates/` | 当前 release 流程使用的 root/scoped `AGENTS.md` 模板。 |
 | `evals/` | 供治理脚本使用的仓库内 skill-effectiveness 用例与可安全发布的评估数据。 |
 | `references/` | 脚本指南、审查清单、问题库、能力覆盖说明和 AGENTS 指南。 |
@@ -139,6 +161,14 @@ python scripts/python/verify/verify_agents.py <project>
 python scripts/python/docs/manage_docs.py verify <project>
 ```
 
+按需查询详细操作说明：
+
+```powershell
+python scripts/python/registry/query_registry.py ask "verify" --limit 3 --json
+```
+
+FTS 查询优先使用简短的命令或策略关键词；需要缩小结果时使用 `--category` 或 `--kind`，不要把多个无关词直接组合成一个查询。
+
 Codex token 用量审查：
 
 ```powershell
@@ -151,9 +181,17 @@ Skill 发布前验证：
 
 ```powershell
 python scripts/python/verify/quick_validate.py .
-python scripts/python/verify/audit_skill.py .
+python scripts/python/verify/run_skill_evals.py evals/evals.json
 python scripts/python/verify/evaluate_skill.py . <project>
 ```
+
+自身审计合同用于加入公开仓库文档之前的可安装 runtime，因为规范 runtime 有意只把 `SKILL.md` 作为根级说明：
+
+```powershell
+python scripts/python/verify/audit_skill.py <runtime-stage>
+```
+
+加入 `README.md`、`README-CN.md`、`LICENSE` 和 `CITATION.cff` 后，应使用 release package 检查与 release gate 验证最终 ZIP，而不是把公开镜像误当作规范 runtime 执行自身审计。
 
 源码仓库说明：
 
@@ -202,8 +240,8 @@ Jiyuan Liu 和 He Li 隶属于东南大学电子科学与工程学院。
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {1.4.6},
-  date         = {2026-07-12},
+  version      = {2.0.1},
+  date         = {2026-07-16},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}

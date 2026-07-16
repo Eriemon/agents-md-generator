@@ -4,111 +4,76 @@
 # Codex Global AGENTS Baseline
 
 ## Instruction Scope
-- Follow explicit user instructions first.
-- Codex normally loads applicable AGENTS guidance automatically at session start.
-- Global guidance applies across repositories; project guidance applies from the project root down to the current working directory.
-- At each directory level, `AGENTS.override.md` replaces `AGENTS.md` when present.
-- Files closer to the current working directory override broader guidance on conflict.
-- Keep repository-specific commands, paths, thresholds, exceptions, directory layouts, and release rules in the nearest project AGENTS file or governance config.
+- Explicit user instructions win.
+- Apply global guidance across repositories and project guidance from its root downward.
+- `AGENTS.override.md` replaces same-level `AGENTS.md`; closer files win conflicts.
+- Keep repository commands, paths, thresholds, exceptions, layouts, and release rules in the nearest project AGENTS file or repository governance config.
 
 ## Managed Repository Entry
-- Re-check instruction scope when the working directory changes, loaded guidance is uncertain, or repository governance appears stale.
-- Treat a repository as `agents-md-generator` managed only when generated AGENTS metadata or a repository governance marker indicates that status.
-- In a managed repository, if the root `AGENTS.md` is missing, malformed, stale, or version-incompatible, run `agents-md-generator` inspection or repair before ordinary implementation.
-- In an unmanaged repository, a missing root `AGENTS.md` is not itself a blocker.
-- If automated repair is unavailable or fails, report the blocker and do not manually rewrite generated managed sections unless the user explicitly requests it.
+- Re-check scope after changing directory or when guidance may be stale.
+- A repository is managed only when generated metadata or a governance marker says so.
+- Before implementation in a managed repository, inspect or repair a missing, malformed, stale, or incompatible root with `agents-md-generator`.
+- Missing root guidance does not block unmanaged repositories.
+- If repair fails, report it; do not manually rewrite managed sections without authorization.
 
 ## Execution Mode
-- Keep small, local, reversible tasks lightweight.
-- Prefer existing repository patterns, tools, libraries, templates, and mature open-source code before building from scratch.
-- Use a written plan for cross-cutting, high-risk, materially ambiguous, release-sensitive, or project-scale work.
-- Use `task_rating_gate.py` when repository governance provides it and the task is non-trivial enough for rating to affect execution mode; treat its output as advisory.
-- If the rating helper is missing, fails, or is disproportionate to the task, infer an appropriate mode and continue safely.
-- Ask the user only when a decision materially affects scope, external behavior, public interfaces, data, security, irreversible actions, cost, or production dependencies.
-- For very high-risk or project-scale work, split work into phases, keep the plan updated, and record material reuse candidates, fit, risks, and rejection reasons.
+- Keep small, local, reversible work lightweight.
+- Prefer existing repository patterns, tools, libraries, templates, and mature open-source code before building replacements.
+- Plan cross-cutting, high-risk, ambiguous, release-sensitive, or project-scale work.
+- Use `task_rating_gate.py` only when repository governance provides it and the task is non-trivial enough for rating to affect execution mode; its result is advisory.
+- Ask only when an answer materially changes scope, interfaces, data, security, cost, irreversible actions, production dependencies, or external behavior.
+- For very high-risk work, phase the plan and record material reuse choices and risks.
 
 ## Coding Behavior Baseline
-Guidelines for avoiding common LLM coding mistakes. Merge with project-specific rules.
-
-Prefer caution over speed, but use judgment for trivial tasks.
+Guidelines for avoiding common LLM coding mistakes.
 
 ### 1. Think Before Coding
-Before implementation:
-- Ground decisions in repository evidence before guessing.
-- If work creates or modifies Python code or bat/cmd, shell/bash, PowerShell, and Tcl scripts, think first, load both `readable-python-generator` and `readable-script-generator`, and continue only after both skills' gates pass.
-- Keep final ownership with the target language: Python stays with `readable-python-generator`; bat/cmd, shell/bash, PowerShell, and Tcl stay with `readable-script-generator`.
-- State assumptions explicitly when they affect behavior, risk, or verification.
-- Surface meaningful ambiguities, alternatives, and tradeoffs before choosing.
-- Resolve low-risk local ambiguity with reasonable defaults and mention them when relevant.
-- Ask when uncertainty affects scope, interfaces, data, security, dependencies, cost, or irreversible actions.
-- If a simpler approach exists, say so. Push back when warranted.
+- Ground decisions in repository evidence; state material assumptions.
+- Resolve low-risk ambiguity locally; ask about consequential ambiguity.
+- For Python or bat/cmd, shell/bash, PowerShell, and Tcl changes, think first, load both `readable-python-generator` and `readable-script-generator`, and pass both gates before continuing. Final ownership stays with the target-language skill.
+- Recommend a substantially simpler sound approach when one exists.
 
 ### 2. Simplicity First
 Minimum code that solves the problem. Nothing speculative.
 
-- Add no unrequested features, abstractions, flexibility, or configuration.
-- Do not handle impossible scenarios.
-- Avoid abstractions used only once unless they clearly match existing project style.
-- If the solution can be substantially smaller, rewrite it.
-- If a senior engineer would call it overengineered, simplify it.
+- Add no unrequested feature, abstraction, flexibility, or configuration.
+- Avoid one-use abstractions unless repository style requires them.
 
 ### 3. Surgical Changes
-When editing existing code:
-- Change only what the request requires.
-- Do not refactor, reformat, or improve unrelated code.
-- Match the existing style.
-- Mention unrelated dead code; do not remove it.
-- Remove only code made unused by your changes, including imports, variables, functions, files, and generated artifacts.
-
-Every changed line must trace directly to the request, required integration, or required verification.
+- Change only what the request requires; preserve style and user work.
+- Do not refactor, reformat, or remove unrelated code. Mention unrelated dead code instead.
+- Remove artifacts only when your change makes them unused.
+- Every changed line must trace directly to the request, required integration, or required verification.
 
 ### 4. Work Toward Verifiable Goals
-Define success criteria before implementation and iterate until verified.
-
-Examples:
-- Validation: test invalid inputs, then make them pass.
-- Bug fix: reproduce with a test, then make it pass.
-- Refactor: verify tests before and after.
-- Honesty: fabricating test cases, outputs, or verification evidence to resolve problems is forbidden.
-
-For multi-step or non-trivial work, give a brief plan:
-
-```text
-1. [Step] -> verify: [Check]
-2. [Step] -> verify: [Check]
-3. [Step] -> verify: [Check]
-```
-
-Use concrete checks, not vague goals such as "make it work."
+- Define success checks before implementation and iterate until they pass.
+- Reproduce bugs; test invalid inputs and refactors before/after.
+- fabricating test cases, outputs, or verification evidence is forbidden.
+- For non-trivial work, use `1. [Step] -> verify: [Check]` rather than vague goals.
 
 ### Done When
-- Material assumptions and ambiguities were surfaced before coding.
-- The solution is no more complex than necessary.
-- The diff contains no unrelated changes.
-- Success criteria were verified, or skipped checks were reported with reasons and remaining risk.
+- Material assumptions were surfaced; complexity is necessary.
+- No unrelated diff remains; relevant checks passed or skips and risk were reported.
 
 ## Comments And Documentation
 - Comment public contracts, key invariants, non-obvious decisions, generation boundaries, and risk boundaries.
-- Do not restate obvious code. Do not narrate obvious syntax or restate the code.
+- Do not restate obvious code or narrate syntax.
 - Update stale comments and documentation when behavior changes.
-- Follow repository conventions for docstrings, public API docs, generated documentation, and language-specific comment style.
-- When writing Markdown documentation formulas, use inline `$...$` or block `$$...$$` syntax unless repository documentation rules say otherwise.
+- Follow repository documentation conventions.
+- For Markdown documentation formulas, use inline `$...$` or block `$$...$$` unless project rules differ.
 
 ## Environment And Dependency Safety
-- Detect and use the repository's existing environment, package manager, and dependency workflow before creating a new environment.
-- Before installing Python dependencies or running long-lived Python services, ensure an isolated project environment is active.
-- If no environment exists and the repository provides no preference, create a project-local environment such as `.venv`.
-- On remote servers, use the repository's configured environment when present; otherwise create an isolated environment under the remote workspace before Python execution or dependency installation.
-- Never install into system Python, conda `base`, global site-packages, user site-packages, `pip install --user`, or through `sudo pip`.
-- Get user approval before adding a new production dependency unless project instructions explicitly authorize it.
-- Do not modify installed skill contents directly.
+- Use the repository's existing environment, package manager, and dependency workflow.
+- Before installing Python dependencies or running long-lived services, activate an isolated project environment such as `.venv`.
+- On remote systems, use the configured environment or create an isolated environment under the remote workspace.
+- Never install into system Python, conda `base`, global or user site-packages, with `pip install --user`, or with `sudo pip`.
+- Obtain approval before adding an unauthorized production dependency.
 - Treat installed skill directories such as `$CODEX_HOME/skills`, `~/.codex/skills`, and global tool installations as read-only unless the user explicitly requests installation, replacement, or direct modification.
 
 ## Governance Hygiene
-- Read project-specific paths, limits, exception manifests, long-task policy, script-layout rules, and decomposition rules from repository governance when present.
-- Respect configured source-size and readability gates; do not invent global thresholds when repository governance defines them.
-- Keep generated or modified source readable: preserve line breaks and blank-line separation, must not use clever or obfuscated code, and must not compress code into one line.
-- When repository limits require decomposition, create or update the configured decomposition plan before continuing.
-- Follow repository tool-script layout rules when present; do not impose a fixed script directory layout on unmanaged repositories.
-- Ask before enabling automatic timed follow-ups or thread-level progress checks; use them only when the current Codex environment supports them and the task has a reliable completion signal.
+- Read project limits, paths, exceptions, and layouts from repository governance.
+- Keep source readable: preserve line and blank-line separation, avoid clever or obfuscated code, and must not compress code into one line.
+- Create the configured decomposition plan when project limits require it.
+- Do not impose one script layout on unmanaged repositories.
+- Ask before automatic timed follow-up; require a reliable completion signal.
 <!-- AGENTS-GENERATED:END global-codex-baseline -->

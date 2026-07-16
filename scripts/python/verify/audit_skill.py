@@ -94,49 +94,51 @@ CORE_REQUIRED_FILES = [  # 通用技能必需文件
 
 # 自身技能额外要求完整产品、治理和验证资源。
 SELF_REQUIRED_FILES = [  # 自身技能必需资源
-    "VERSION",  # 自身技能版本文件
-    "agents/openai.yaml",  # OpenAI 产品界面配置
-    "evals/evals.json",  # 效果测试案例配置
-    "references/agents-md-guidance.md",  # AGENTS 规则编写指南
-    "references/book-rules-coverage.md",  # 书籍规则覆盖说明
-    "references/capability-coverage.md",  # 技能能力覆盖矩阵
-    "references/coding-behavior-language-routing.md",  # 编码语言技能路由说明
-    "references/skill-design-coverage.md",  # 技能设计模式覆盖说明
-    "references/question-bank.md",  # 设计访谈问题库
-    "references/review-checklist.md",  # 治理审查清单
-    "references/script-guide.md",  # 脚本命令与发布流程指南
-    "references/evaluation-scenarios.md",  # 效果测试场景说明
-    "assets/templates/root-agents.md",  # 根 AGENTS 渲染模板
-    "assets/templates/scoped-agents.md",  # 目录作用域 AGENTS 模板
-    "assets/templates/global-codex-agents.md",  # 全局 Codex 基线模板
-    "config/source-governance.json",  # 源码治理规则配置
-    "config/script-output-policy-default.json",  # 默认脚本输出策略
-    "scripts/python/verify/check_source_governance.py",  # 源码治理检查入口
-    "scripts/python/detect/codex_token_usage_review.py",  # Token 用量统计入口
-    "scripts/python/detect/inspect_project.py",  # 项目事实检测入口
-    "scripts/python/design/collect_design_profile.py",  # 设计访谈采集入口
-    "scripts/python/design/design_review_gate.py",  # 设计审查门禁入口
-    "scripts/python/detect/extract_commands.py",  # 项目命令提取入口
-    "scripts/python/detect/extract_context.py",  # 项目上下文提取入口
-    "scripts/python/detect/detect_scopes.py",  # 指令作用域检测入口
-    "scripts/python/render/render_agents.py",  # AGENTS 规则渲染入口
-    "scripts/python/docs/manage_docs.py",  # 文档生命周期治理入口
-    "scripts/python/dirs/manage_dirs.py",  # 目录结构治理入口
-    "scripts/python/dirs/manage_dirs_review.py",  # 目录变更审查入口
-    "scripts/python/dirs/manage_dirs_state.py",  # 目录治理状态验证入口
-    "scripts/python/common/agents_decisions.py",  # AGENTS 决策事实模块
-    "scripts/python/release/install_skill.py",  # 技能发布安装入口
-    "scripts/python/verify/review_governance.py",  # 治理审查编排入口
-    "scripts/python/release/select_engineering_rules.py",  # 工程规则选择入口
-    "scripts/python/verify/verify_agents.py",  # AGENTS 一致性验证入口
-    "scripts/python/detect/check_freshness.py",  # 规则新鲜度检查入口
-    "scripts/python/verify/quick_validate.py",  # 技能快速验证入口
-    "scripts/python/verify/run_confidence_gate.py",  # 完整信心门禁入口
-    "scripts/python/verify/source_governance.py",  # 源码规模与可读性入口
-    "scripts/python/verify/source_governance_config.py",  # 源码治理配置验证模块
-    "scripts/python/render/create_agent_shims.py",  # 兼容代理规则垫片入口
-    "scripts/python/verify/audit_skill.py",  # 技能包完整审计入口
-    "scripts/python/verify/evaluate_skill.py",  # 技能效果评估入口
+    Path("VERSION"),  # 自身技能版本文件
+    Path("agents") / "openai.yaml",  # OpenAI 产品界面配置
+    Path("evals") / "evals.json",  # 效果测试案例配置
+    Path("references") / "agents-md-guidance.md",  # AGENTS 规则编写指南
+    Path("references") / "book-rules-coverage.md",  # 书籍规则覆盖说明
+    Path("references") / "capability-coverage.md",  # 技能能力覆盖矩阵
+    Path("references") / "coding-behavior-language-routing.md",  # 编码语言技能路由说明
+    Path("references") / "skill-design-coverage.md",  # 技能设计模式覆盖说明
+    Path("references") / "question-bank.md",  # 设计访谈问题库
+    Path("references") / "review-checklist.md",  # 治理审查清单
+    Path("references") / "script-guide.md",  # 脚本命令与发布流程指南
+    Path("references") / "evaluation-scenarios.md",  # 效果测试场景说明
+    Path("assets") / "templates" / "root-agents.md",  # 根 AGENTS 渲染模板
+    Path("assets") / "templates" / "scoped-agents.md",  # 目录作用域 AGENTS 模板
+    Path("assets") / "templates" / "global-codex-agents.md",  # 全局 Codex 基线模板
+    Path("config") / "source-governance.json",  # 源码治理规则配置
+    Path("config") / "script-output-policy-default.json",  # 默认脚本输出策略
+    Path("config") / "content-quality-policy.json",  # Markdown 精炼预算与政策所有者
+    Path("scripts") / "python" / "verify" / "check_source_governance.py",  # 源码治理检查入口
+    Path("scripts") / "python" / "detect" / "codex_token_usage_review.py",  # Token 用量统计入口
+    Path("scripts") / "python" / "detect" / "inspect_project.py",  # 项目事实检测入口
+    Path("scripts") / "python" / "design" / "collect_design_profile.py",  # 设计访谈采集入口
+    Path("scripts") / "python" / "design" / "design_review_gate.py",  # 设计审查门禁入口
+    Path("scripts") / "python" / "detect" / "extract_commands.py",  # 项目命令提取入口
+    Path("scripts") / "python" / "detect" / "extract_context.py",  # 项目上下文提取入口
+    Path("scripts") / "python" / "detect" / "detect_scopes.py",  # 指令作用域检测入口
+    Path("scripts") / "python" / "render" / "render_agents.py",  # AGENTS 规则渲染入口
+    Path("scripts") / "python" / "docs" / "manage_docs.py",  # 文档生命周期治理入口
+    Path("scripts") / "python" / "docs" / "memory_write.py",  # memory 事务写入分片
+    Path("scripts") / "python" / "dirs" / "manage_dirs.py",  # 目录结构治理入口
+    Path("scripts") / "python" / "dirs" / "manage_dirs_review.py",  # 目录变更审查入口
+    Path("scripts") / "python" / "dirs" / "manage_dirs_state.py",  # 目录治理状态验证入口
+    Path("scripts") / "python" / "common" / "agents_decisions.py",  # AGENTS 决策事实模块
+    Path("scripts") / "python" / "release" / "install_skill.py",  # 技能发布安装入口
+    Path("scripts") / "python" / "verify" / "review_governance.py",  # 治理审查编排入口
+    Path("scripts") / "python" / "release" / "select_engineering_rules.py",  # 工程规则选择入口
+    Path("scripts") / "python" / "verify" / "verify_agents.py",  # AGENTS 一致性验证入口
+    Path("scripts") / "python" / "detect" / "check_freshness.py",  # 规则新鲜度检查入口
+    Path("scripts") / "python" / "verify" / "quick_validate.py",  # 技能快速验证入口
+    Path("scripts") / "python" / "verify" / "run_confidence_gate.py",  # 完整信心门禁入口
+    Path("scripts") / "python" / "verify" / "source_governance.py",  # 源码规模与可读性入口
+    Path("scripts") / "python" / "verify" / "source_governance_config.py",  # 源码治理配置验证模块
+    Path("scripts") / "python" / "render" / "create_agent_shims.py",  # 兼容代理规则垫片入口
+    Path("scripts") / "python" / "verify" / "audit_skill.py",  # 技能包完整审计入口
+    Path("scripts") / "python" / "verify" / "evaluate_skill.py",  # 技能效果评估入口
 ]
 
 # 自身技能根拒绝与 SKILL.md 重复的安装和变更文档。
@@ -223,92 +225,30 @@ COMMON_GROUP_LABELS = (  # 可识别的公共分组标签
     "Engineering development groups are",  # 工程开发分组标签
 )
 
-# 接管提示词必须区分远程结构治理和服务器启用流程。
-TAKEOVER_REMOTE_PROMPT_RULE = (  # 接管模式远程提示词规则
-    "remote structure governance as separate from the remote-server enablement "
-    "and task-route mapping flow"
-)
+# Markdown 内容预算防止入口和生成模板重新膨胀。
+GLOBAL_TEMPLATE_MAX_BYTES = 5 * 1024  # 全局受管基线预算。
 
-# OpenAI 默认提示词必须覆盖语言、远程路由和双技能合同。
-OPENAI_REQUIRED_PROMPT_SNIPPETS = (  # OpenAI 提示词必需片段
-    "explicitly ask for and confirm the default conversation language",  # 默认语言确认
-    "explicitly ask whether the work folder needs remote servers",  # 远程需求确认
-    "future remote server validation must resolve the matched task route primary "
-    "server from `.agents/agents-control.json`",
-    "automatically try registered fallback servers",  # 远程后备路由策略
-    "stop for unmatched tasks until AGENTS.md/profile is updated",  # 未匹配任务停止线
-    "Coding Behavior Baseline language skill routing",  # 编码语言路由合同
-    "coding_behavior.language_skill_routing",  # 语言路由配置路径
-    "readable-python-generator",  # Python 技能路由名称
-    "readable-script-generator",  # 脚本技能路由名称
-)
+# 技能简介遵循标准 UI 元数据字符边界。
+OPENAI_SHORT_DESCRIPTION_MIN_CHARS = 25  # 技能简介最少字符数。
 
-# Token 统计入口必须限制触发意图、脚本和 sessions 根目录。
-OPENAI_TOKEN_USAGE_PROMPT_SNIPPETS = (  # 显式统计意图同时绑定统计脚本与会话根目录约束，防止普通成本问题误触发
-    "explicitly asks for codex token usage statistics",  # Token 统计显式意图
-    "codex_token_usage_review.py",  # Token 统计入口脚本
-    "keep `--sessions-root` inside the active codex sessions tree",  # 会话记录根目录安全边界
-    "do not trigger this token-usage path for generic cost, optimization, or session-health questions",  # 非统计意图排除规则
-    "only in codex environments where `$codex_home/sessions` or `~/.codex/sessions` exists",  # Codex 环境限定
-)
+# 技能简介的上限与标准 skill-creator 合同保持一致。
+OPENAI_SHORT_DESCRIPTION_MAX_CHARS = 64  # 技能简介最多字符数。
 
-# 关键参考文档必须镜像默认语言、远程治理和目录边界。
-REFERENCE_ALIGNMENT_RULES = {  # 参考文档对齐规则
-    "references/review-checklist.md": (  # 审查清单对齐规则
-        "default_conversation_language",  # 默认对话语言字段
-        "natural-language responses stay in that configured language unless the user explicitly switches languages",  # 对话语言保持规则
-        "use_remote_server",  # 远程服务器启用字段
-        "automatic fallback rule",  # 自动后备服务器规则
-        "unmatched remote tasks must update AGENTS.md/profile",  # 未匹配远程任务治理
-        "root-level file whitelist",  # 根文件白名单规则
-        "confirm-structure-fix",  # 结构修复显式确认
-        "source and target paths must both stay inside the governed remote plan",  # 远程双端路径边界
-        "64KB UTF-8",  # 源码规模治理单位
-        ".agents/global-rule-overrides.json",  # 编码路由权威配置文件
-        "thread heartbeat",  # 长任务线程心跳规则
-        "shell",  # shell 技能路由关键词
-        "powershell",  # PowerShell 问题组选择标识
-        "extra_requirements",  # 补充需求问题组字段
-        'reviewer_type="subagent"',  # 子代理审查者类型声明
-        "reviewed_answers_hash",  # 已审查访谈答案哈希
-    ),
-    "references/script-guide.md": (  # 脚本指南对齐规则
-        "default_conversation_language",  # 脚本指南默认语言字段
-        "explicit natural-language reply rule",  # 自然语言回复约束
-        "use_remote_server",  # 脚本指南远程启用字段
-        "extra_requirements",  # 脚本指南补充需求字段
-        "design_review",  # 设计审查状态字段
-        "reviewed_profile_hash",  # 已审查配置哈希字段
-        "task-route table",  # 任务远程路由表规则
-        "update AGENTS.md/profile before validation continues",  # 未匹配任务更新要求
-        "allow the conservative structure-fix attempt",  # 保守结构修复许可
-        "allowed_root_files",  # 脚本指南根文件白名单
-        "path_classes",  # 远程路径类别字段
-        "--installed-skill-dir skills/agents-md-generator",  # 安装副本验证参数
-        ".agents/global-rule-overrides.json",  # 脚本指南全局覆盖配置
-        "global JSON governance config",  # 全局 JSON 治理配置说明
-        "codex_token_usage_review.py",  # 脚本指南 Token 统计入口
-        "只在用户明确要求进行 Codex Token 用量统计时调用",  # Token 统计显式触发规则
-        "仅在当前环境可解析到 `$CODEX_HOME/sessions` 或 `~/.codex/sessions` 且目录存在时执行",  # Codex 会话目录存在性前置条件
-        "sessions_root_outside_codex_root",  # 会话根目录越界错误标识
-    ),
-    "references/skill-design-coverage.md": (  # 设计覆盖文档中的路由锚点
-        "default_conversation_language",  # 设计覆盖默认语言字段
-        "locks natural-language replies to it",  # 自然语言锁定默认语言
-        "use_remote_server",  # 设计覆盖远程启用字段
-        "automatic fallback gate",  # 远程后备服务器门禁
-        "unmatched-task blocking gate",  # 未匹配任务阻断门禁
-        "root-level file whitelist",  # 设计覆盖根文件白名单
-        "confirm-structure-fix",  # 设计覆盖结构修复确认
-        "remote mutation governance for all actions",  # 远程变更统一治理规则
-        "global `.codex/AGENTS.md`",  # 全局 Codex 规则文件
-        "local JSON governance config",  # 本地 JSON 治理配置
-    ),
+# 默认提示词仅承担单句启动职责，避免复制完整技能正文。
+OPENAI_DEFAULT_PROMPT_MAX_BYTES = 256  # 技能默认提示词 UTF-8 预算。
+
+# 每类参考只验证自身职责，不要求多表面镜像整段政策。
+REFERENCE_ALIGNMENT_RULES = {  # 参考文档单一职责锚点。
+    "references/review-checklist.md": ("## Verification", "## Content"),  # 审查证据与内容边界
+    "references/script-guide.md": ("## Detect", "## Render", "## Verify"),  # 命令流程入口
+    "references/skill-design-coverage.md": ("map, not a manual", "## Patterns"),  # 设计模式索引
 }
 
-# 双技能预检与目标语言归属必须在指定文档间保持一致。
-LANGUAGE_SKILL_ROUTING_ALIGNMENT_RULES = {  # 五份参考材料逐项绑定双技能预检、目标文件归属和审查锚点
+# 语言路由的完整正文只由专用参考负责；其他表面只需指向该所有者。
+LANGUAGE_SKILL_ROUTING_ALIGNMENT_RULES = {
     "references/coding-behavior-language-routing.md": (  # 语言路由说明对齐规则
+        "shared",  # 共同门禁字段
+        "只渲染一次",  # 共同门禁单次渲染
         "Python",  # Python 目标语言声明
         "readable-python-generator",  # Python 可读性技能
         "readable-script-generator",  # 脚本可读性技能
@@ -316,53 +256,31 @@ LANGUAGE_SKILL_ROUTING_ALIGNMENT_RULES = {  # 五份参考材料逐项绑定双�
         "shell/bash",  # POSIX 命令行脚本目标
         "PowerShell",  # PowerShell 脚本目标
         "Tcl",  # Tcl 文件路由范围
-        "脚本包装器调用 Python",  # Python 子命令不改变脚本归属
+        "调用 Python 外部命令的脚本包装器",  # Python 子命令不改变脚本归属
         "不能把语句、注释、函数粘连到一起",  # 代码结构分隔要求
         "严禁把代码压缩到一行",  # 禁止单行压缩代码要求
         "炫技代码",  # 禁止晦涩代码表达
     ),
-    "references/review-checklist.md": (  # 审查清单中的路由锚点
-        "Generated root `AGENTS.md` must include Coding Behavior Baseline language skill routing",  # 语言路由审计片段
-        ".agents/global-rule-overrides.json",  # 审查清单中的配置事实来源
-        "readable-python-generator",  # 审查清单中的 Python 技能
-        "readable-script-generator",  # 审查清单中的脚本技能
-        "严禁把代码压缩到一行",  # 审查清单中的压缩禁令
-    ),
-    "references/script-guide.md": (  # 脚本指南中的路由锚点
-        "`render_agents.py` emits Coding Behavior Baseline language skill routing",  # 语言路由渲染审计证据
-        "coding_behavior.language_skill_routing",  # 脚本指南路由配置路径
-        "`verify_agents.py` rejects managed root `AGENTS.md` files that omit or weaken language skill routing",  # 路由验证器阻断规则
-    ),
-    "references/skill-design-coverage.md": (  # 设计覆盖文档中的双技能锚点
-        "Coding Behavior Baseline language skill routing",  # 设计覆盖中的路由基线
-        "coding_behavior.language_skill_routing",  # 设计覆盖中的路由配置路径
-        "readable-script-generator",  # 设计覆盖中的脚本技能
-    ),
-    "references/evaluation-scenarios.md": (  # 效果测试文档中的路由锚点
-        "language_skill_routing_contract",  # 效果测试中的路由合同案例
-        "readable-python-generator",  # 全局基线 Python 路由技能
-        "readable-script-generator",  # 效果测试中的脚本技能
-    ),
 }
 
 # SKILL.md 必须保留结构修复与远程变更边界。
-SKILL_REQUIRED_SNIPPETS = (  # 主说明必需治理片段
-    "root-level files outside the governed primary project root",  # 根目录越界规则
+SKILL_REQUIRED_SNIPPETS = (  # 主说明必需治理片段。
+    "root-level files outside the governed primary project root require review",  # 根目录越界规则。
     "allow the conservative structure-fix attempt",  # 保守结构修复授权
     "rerun `structure-gate`",  # 结构修复后复验要求
-    "remote `create`, `move`, `delete`, or `rename` must keep both source and target "
-    "paths inside the governed remote plan",
+    "every remote `create`, `move`, `delete`, or `rename` must keep both source and "
+    "target paths inside the governed remote plan",  # 远程变更两端路径边界
     "allowed_root_files",  # 根文件白名单配置
     "remote_deployment.protected_path_classes",  # 远程受保护路径类别
 )
 
 # 中文主说明必须完整描述 Token 用量统计的触发边界。
-SKILL_TOKEN_USAGE_SNIPPETS = (  # 主说明 Token 统计片段
-    "如果用户明确要求进行 Codex Token 用量统计",  # Token 统计触发条件
-    "`python skills/agents-md-generator/scripts/python/detect/codex_token_usage_review.py --hours 48`",  # 默认统计命令
-    "不要进入 AGENTS 设计访谈",  # Token 意图旁路访谈
-    "当前环境可解析到 `$CODEX_HOME/sessions` 或 `~/.codex/sessions` 且目录存在时执行",  # sessions 可用性前置条件
-    "`--sessions-root` 只允许等于或位于当前 Codex sessions 根目录之下",  # sessions 参数安全边界
+SKILL_TOKEN_USAGE_SNIPPETS = (  # 用于验证 SKILL.md 的 Token 统计命令和意图边界。
+    "If the user explicitly asks for Codex Token usage statistics",  # 技能正文限定显式统计请求。
+    "registry instruction `detect.token-usage-review`",  # 技能正文路由到结构化注册指令。
+    "do not enter the AGENTS design interview",  # 技能正文要求统计意图旁路访谈。
+    "only when `$CODEX_HOME/sessions` or `~/.codex/sessions` exists",  # 技能正文要求会话目录可用。
+    "keep any sessions-root override inside that active sessions tree",  # 技能正文限制统计参数边界。
 )
 
 # eval 集合必须覆盖技能设计合同规定的五类核心模式。
@@ -394,6 +312,7 @@ REQUIRED_EVAL_CASE_IDS = {  # 必需效果测试案例标识
     "task_rating_gate_contract",  # 任务评级门禁合同案例
     "memory_governance_gate",  # 项目记忆治理门禁案例
     "governance_cli_entrypoint_smoke",  # 治理命令入口冒烟案例
+    "openai_metadata_standard_contract",  # OpenAI 技能元数据标准合同案例
 }
 
 # 旧 numbered shard 名称不得残留在运行时源码引用中。
@@ -905,8 +824,11 @@ def validate_skill_rule_hardening(text: str, errors: list[str]) -> None:
     返回：无；缺失的硬化合同追加到 errors。
     """
 
+    # 自然语言锚点按大小写不敏感比较，避免句首大小写制造无意义耦合。
+    str_normalized_text = text.lower()  # 技能入口规范比较文本。
+
     # 本地根边界与远程变更规则必须作为一个完整合同出现。
-    if not all(snippet in text for snippet in SKILL_REQUIRED_SNIPPETS):
+    if not all(snippet.lower() in str_normalized_text for snippet in SKILL_REQUIRED_SNIPPETS):
 
         # 缺失任一安全片段即报告入口硬化不完整。
         errors.append(
@@ -914,10 +836,105 @@ def validate_skill_rule_hardening(text: str, errors: list[str]) -> None:
         )
 
     # Token 用量请求需要独立只读路由，不能误入设计访谈。
-    if not all(snippet in text for snippet in SKILL_TOKEN_USAGE_SNIPPETS):
+    if not all(snippet.lower() in str_normalized_text for snippet in SKILL_TOKEN_USAGE_SNIPPETS):
 
         # 报告明确的工具分支合同缺口。
         errors.append("SKILL.md: missing explicit Codex token usage routing guidance")
+
+# OpenAI 界面合同验证器返回字段和提示词错误。
+def openai_yaml_contract_errors(interface: dict[str, str]) -> list[str]:
+    """验证界面必填字段及简短技能启动提示合同。
+
+    参数：interface 为解析后的 OpenAI 界面字段。
+    返回：保持字段、长度、启动前缀和单句规则顺序的错误列表。
+    """
+
+    # 当前 helper 的诊断仅覆盖有效 interface 映射。
+    list_errors: list[str] = []  # OpenAI 界面合同错误
+
+    # 三个用户可见字段必须均存在且不能保留占位文本。
+    for str_key in ("display_name", "short_description", "default_prompt"):
+
+        # 统一去除外围空白后判断真实内容。
+        str_value = interface.get(str_key, "").strip()  # 当前界面字段内容
+
+        # 空值表示必填界面字段未配置。
+        if not str_value:
+
+            # 错误携带具体字段路径。
+            list_errors.append(f"agents/openai.yaml: missing interface.{str_key}")
+
+        # 常见占位词不能作为发布文案通过审计。
+        elif str_value.lower() in {"todo", "tbd", "placeholder"}:
+
+            # 报告仍需人工完成的界面字段。
+            list_errors.append(f"agents/openai.yaml: interface.{str_key} is a placeholder")
+
+    # 简介长度按用户可见字符计算，不以 UTF-8 字节误判中文。
+    str_short_description = interface.get("short_description", "").strip()  # 技能简介正文
+
+    # 占位简介已经由字段循环报告，长度门禁只处理真实文案。
+    bool_description_ready = (  # 简介是否适合执行长度检查
+        bool(str_short_description)  # 简介不能是空值
+        and str_short_description.lower() not in {"todo", "tbd", "placeholder"}  # 简介不能是占位词
+    )
+
+    # 仅对真实简介追加长度诊断，避免同一根因产生重复错误。
+    if bool_description_ready:
+
+        # 实际字符数进入稳定错误，便于直接修复边界。
+        int_description_chars = len(str_short_description)  # 技能简介实际字符数
+
+        # 标准技能元数据要求简介落在闭区间 25 到 64。
+        bool_description_length_valid = (  # 简介长度是否符合标准
+            OPENAI_SHORT_DESCRIPTION_MIN_CHARS  # 标准允许的最少字符数
+            <= int_description_chars  # 当前简介的实际字符数
+            <= OPENAI_SHORT_DESCRIPTION_MAX_CHARS  # 标准允许的最多字符数
+        )
+
+        # 超出任一边界都报告范围和当前事实。
+        if not bool_description_length_valid:
+
+            # 字段级诊断同时报告标准范围和当前字符数。
+            list_errors.append(
+                "agents/openai.yaml: short_description must contain 25-64 characters "
+                f"({int_description_chars})"
+            )
+
+    # 默认提示词原文用于字节预算、启动前缀和句子数检查。
+    str_prompt = interface.get("default_prompt", "").strip()  # 默认提示词正文
+
+    # UTF-8 字节预算直接限制产品入口上下文成本。
+    int_prompt_bytes = len(str_prompt.encode("utf-8"))  # 默认提示词实际字节数
+
+    # 超限内容必须下沉到 SKILL.md 或引用文档。
+    if int_prompt_bytes > OPENAI_DEFAULT_PROMPT_MAX_BYTES:
+
+        # 稳定诊断给出预算和实际字节数。
+        list_errors.append(
+            "agents/openai.yaml: default_prompt exceeds 256 UTF-8 bytes "
+            f"({int_prompt_bytes})"
+        )
+
+    # 产品入口应直接展示可复制的显式技能调用。
+    if str_prompt and not str_prompt.startswith("Use $agents-md-generator"):
+
+        # 前缀错误比宽松的任意位置包含更可执行。
+        list_errors.append(
+            "agents/openai.yaml: default_prompt must start with Use $agents-md-generator"
+        )
+
+    # 句末标点只识别空白或字符串结尾前的英文标点，不误判 AGENTS.md。
+    list_sentence_endings = re.findall(r"[!?]|[.](?=\s|$)", str_prompt)  # 提示词句末标点
+
+    # 非空提示词必须是恰好一个完整句子。
+    if str_prompt and len(list_sentence_endings) != 1:
+
+        # 单句职责门禁阻止治理手册重新进入 UI 元数据。
+        list_errors.append("agents/openai.yaml: default_prompt must be one sentence")
+
+    # 调用方把合同错误追加到完整审计结果。
+    return list_errors
 
 # OpenAI 界面门禁只对本技能启用，通用技能不继承产品专属提示词。
 def validate_openai_yaml(path: Path, errors: list[str], *, self_skill: bool) -> None:
@@ -954,74 +971,8 @@ def validate_openai_yaml(path: Path, errors: list[str], *, self_skill: bool) -> 
         # 无字段映射时终止后续提示词验证。
         return
 
-    # 三个用户可见字段必须均存在且不能保留占位文本。
-    for key in ("display_name", "short_description", "default_prompt"):
-
-        # 统一去除外围空白后判断真实内容。
-        raw_value = interface.get(key, "").strip()  # 当前界面字段内容
-
-        # 空值表示必填界面字段未配置。
-        if not raw_value:
-
-            # 错误携带具体字段路径。
-            errors.append(f"agents/openai.yaml: missing interface.{key}")
-
-        # 常见占位词不能作为发布文案通过审计。
-        elif raw_value.lower() in {"todo", "tbd", "placeholder"}:
-
-            # 报告仍需人工完成的界面字段。
-            errors.append(f"agents/openai.yaml: interface.{key} is a placeholder")
-
-    # 默认提示词承担技能触发和治理分支说明。
-    default_prompt = interface.get("default_prompt", "")  # 默认提示词原文
-
-    # 提示词必须显式点名技能调用入口。
-    if default_prompt and "$agents-md-generator" not in default_prompt:
-
-        # 缺少技能名会使产品入口无法清楚引导调用。
-        errors.append(
-            "agents/openai.yaml: default_prompt must mention $agents-md-generator"
-        )
-
-    # 不区分大小写比较英文治理片段。
-    normalized_prompt = default_prompt.lower()  # 提示词规范比较文本
-
-    # 默认语言、远程服务器与双技能路由必须完整保留。
-    for snippet in OPENAI_REQUIRED_PROMPT_SNIPPETS:
-
-        # 仅在实际配置提示词时检查每个必需片段。
-        if default_prompt and snippet.lower() not in normalized_prompt:
-
-            # 单条错误概括同一政策族的提示词漂移。
-            errors.append(
-                "agents/openai.yaml: default_prompt must keep explicit default-language and remote task-routing rules"
-            )
-
-            # 首个缺口已能证明该政策族不完整。
-            break
-
-    # Token 统计必须保持独立只读工具分支。
-    for snippet in OPENAI_TOKEN_USAGE_PROMPT_SNIPPETS:
-
-        # 检查 Token 分支的触发、命令与路径安全约束。
-        if default_prompt and snippet.lower() not in normalized_prompt:
-
-            # 报告产品提示词缺少明确 Token 用量路由。
-            errors.append(
-                "agents/openai.yaml: default_prompt must document explicit Codex token usage routing"
-            )
-
-            # 避免同一政策族生成多条重复错误。
-            break
-
-    # 接管提示词必须区分远程目录治理和服务器任务路由两类职责。
-    if default_prompt and TAKEOVER_REMOTE_PROMPT_RULE.lower() not in normalized_prompt:
-
-        # 报告会导致接管访谈含混的远程政策缺口。
-        errors.append(
-            "agents/openai.yaml: takeover prompt must separate remote structure "
-            "governance from remote server enablement and task-route mapping"
-        )
+    # 字段和提示词 helper 保持既有诊断顺序。
+    errors.extend(openai_yaml_contract_errors(interface))
 
 # 全局基线模板必须保持跨仓库通用，不得泄漏本仓库实现细节。
 def validate_global_baseline_template(path: Path, errors: list[str]) -> None:
@@ -1039,6 +990,30 @@ def validate_global_baseline_template(path: Path, errors: list[str]) -> None:
 
     # 读取模板正文供通用规则与泄漏片段比对。
     text = path.read_text(encoding="utf-8", errors="ignore")  # 待审计全局基线正文
+
+    # 预算只计受管基线正文；管理声明和元数据不属于生成规则内容。
+    str_managed_text = text.split(  # 从模板中截取受管基线起点后的正文
+        "AGENTS-GENERATED:START global-codex-baseline -->",  # 受管基线起点
+        1,  # 只切分首个起点声明
+    )[-1]  # 起点之后的候选受管正文
+
+    # 终点之前的部分才参与生成内容预算。
+    str_managed_text = str_managed_text.split(  # 从候选正文中移除受管终点后的内容
+        "<!-- AGENTS-GENERATED:END global-codex-baseline",  # 受管基线终点
+        1,  # 只切分首个终点声明
+    )[0]  # 终点之前的受管正文
+
+    # UTF-8 字节数与最终落盘体积保持同一口径。
+    int_template_bytes = len(str_managed_text.encode("utf-8"))  # 受管基线实际字节数。
+
+    # 超限时仍继续执行语义锚点检查，一次返回完整诊断。
+    if int_template_bytes > GLOBAL_TEMPLATE_MAX_BYTES:
+
+        # 固定预算写入错误，便于测试和维护者理解边界。
+        errors.append(
+            "assets/templates/global-codex-agents.md: exceeds 5120 UTF-8 bytes "
+            f"({int_template_bytes})"
+        )
 
     # 必需片段覆盖元数据、执行模式、编码纪律和环境安全合同。
     tuple_required_snippets = (  # 全局基线必需规则片段
@@ -1503,24 +1478,27 @@ def audit_required_layout(
     """
 
     # 自身技能在通用入口之外还需完整产品和治理资源。
-    required_files = CORE_REQUIRED_FILES + (  # 当前身份要求的文件集合
+    list_required_files = [Path(item) for item in CORE_REQUIRED_FILES] + (  # 当前身份要求的文件集合
         SELF_REQUIRED_FILES if bool_self_skill else []  # 自身技能额外必需文件
     )
 
     # 每个必需相对路径都进入覆盖清单并检查存在性。
-    for rel_path in required_files:
+    for path_relative in list_required_files:
 
         # 组合技能根得到当前必需文件的实际位置。
-        path = skill_dir / rel_path  # 当前必需文件路径
+        path = skill_dir / path_relative  # 当前必需文件路径
+
+        # 对外诊断统一使用 POSIX 风格相对路径。
+        str_rel_path = path_relative.as_posix()  # 当前必需资源相对路径
 
         # 无论存在与否都记录本次门禁已经检查该路径。
-        list_checked.append(rel_path)
+        list_checked.append(str_rel_path)
 
         # 缺失文件直接破坏技能包结构合同。
         if not path.exists():
 
             # 错误保留相对路径以适配源码和发布目录。
-            list_errors.append(f"missing required file: {rel_path}")
+            list_errors.append(f"missing required file: {str_rel_path}")
 
     # 自身技能根还要拒绝与 SKILL.md 重复的额外文档。
     if bool_self_skill:
@@ -1808,6 +1786,110 @@ def audit_script_sources(
                 validate_decomposition_plan(path_project_root, relative_to_project)
             )
 
+# 文本资源审计器检查引用目录、占位符和本地路径。
+def audit_text_resource(
+    path: Path,
+    rel_path: str,
+    rel_parts: tuple[str, ...],
+    text: str,
+    list_errors: list[str],
+    list_warnings: list[str],
+) -> None:
+    """审计已经读取的技能文本资源。
+
+    参数：path 为文件，rel_path 为相对路径，rel_parts 为路径组件，text 为正文，
+    list_errors 与 list_warnings 为共享结果列表。
+    返回：无；文本诊断写入对应列表。
+    """
+
+    # 长引用文档需要目录帮助代理快速定位内容。
+    if rel_parts and rel_parts[0] == "references" and path.suffix == ".md":
+
+        # 物理行用于长度阈值和前部目录探测。
+        lines = text.splitlines()  # 当前引用文档物理行
+
+        # 超过一百行且无目录会降低引用检索效率。
+        if len(lines) > 100 and not has_toc(lines):
+
+            # 错误指出具体长文档和目录要求。
+            list_errors.append(f"{rel_path}: reference files over 100 lines need a table of contents")
+
+    # 主说明和代理界面中的模板语法可能是未渲染残留。
+    if "{{" in text and (rel_path == "SKILL.md" or rel_path.startswith("agents/")):
+
+        # 可疑占位符保留为警告而非直接阻断。
+        list_warnings.append(f"{rel_path}: contains template placeholder syntax outside templates")
+
+    # 正式模板只能使用渲染器声明的已知占位符。
+    if rel_path.startswith("assets/templates/"):
+
+        # 文件名选择对应模板的占位符白名单。
+        str_template_name = path.name  # 当前模板文件名
+
+        # 未登记模板拒绝所有隐式占位符。
+        set_known = KNOWN_TEMPLATE_PLACEHOLDERS.get(str_template_name, set())  # 允许占位符
+
+        # 差集逐项报告渲染器无法识别的占位符。
+        for str_placeholder in sorted(set(TEMPLATE_PLACEHOLDER_RE.findall(text)) - set_known):
+
+            # 错误携带模板名和未知字段名。
+            list_errors.append(
+                f"{str_template_name}: contains unknown template placeholder: {str_placeholder}"
+            )
+
+    # 任何分发文本都不得依赖开发机本地绝对路径。
+    if contains_local_reference(text):
+
+        # 路径泄漏作为发布阻断错误记录。
+        list_errors.append(f"{rel_path}: references local-only development material")
+
+# 单资源审计器筛选缓存、目录和可读文本类型。
+def audit_resource_path(
+    path: Path,
+    skill_dir: Path,
+    list_errors: list[str],
+    list_warnings: list[str],
+) -> None:
+    """审计技能树中的单个文件系统成员。
+
+    参数：path 为资源，skill_dir 为技能根，list_errors 累计错误，
+    list_warnings 累计警告。
+    返回：无；当前资源诊断写入对应严重度列表。
+    """
+
+    # POSIX 相对路径用于稳定跨平台诊断文本。
+    rel_path = path.relative_to(skill_dir).as_posix()  # 当前资源相对路径
+
+    # 路径组件便于识别缓存和版本控制目录。
+    rel_parts = path.relative_to(skill_dir).parts  # 当前资源路径组件
+
+    # 嵌套 Git 元数据不属于技能分发审计范围。
+    if ".git" in rel_parts:
+
+        # Git 内部成员不产生审计结果。
+        return
+
+    # Python 缓存目录和字节码文件都不得进入技能包。
+    if "__pycache__" in rel_parts or path.suffix in DISALLOWED_CACHE_SUFFIXES:
+
+        # 缓存路径作为阻断错误写入报告。
+        list_errors.append(f"disallowed generated cache artifact: {rel_path}")
+
+        # 缓存内容无需继续做文本检查。
+        return
+
+    # 目录和非文本资源没有内容合同。
+    if not path.is_file() or path.suffix not in {".md", ".yaml", ".yml", ".py"}:
+
+        # 无文本合同的成员结束当前审计。
+        return
+
+    # 容错读取保持一次审计可覆盖完整资源树。
+    text = path.read_text(encoding="utf-8", errors="ignore")  # 当前资源文本
+
+    # 文本 helper 继续执行引用、模板和路径检查。
+    audit_text_resource(path, rel_path, rel_parts, text, list_errors, list_warnings)
+
 # 资源树检查缓存、目录、模板占位符和本地路径泄漏。
 def audit_resource_tree(
     skill_dir: Path, list_errors: list[str], list_warnings: list[str]
@@ -1818,95 +1900,11 @@ def audit_resource_tree(
     返回：无；发现写入对应严重度列表。
     """
 
-    # 递归扫描技能包内所有目录和文件，统一执行内容边界检查。
+    # 外层只保持稳定遍历顺序，单资源 helper 负责分类。
     for path in skill_dir.rglob("*"):
 
-        # POSIX 相对路径用于稳定跨平台诊断文本。
-        rel_path = path.relative_to(skill_dir).as_posix()  # 当前资源相对路径
-
-        # 路径组件便于识别缓存、引用目录和版本控制目录。
-        rel_parts = path.relative_to(skill_dir).parts  # 当前资源路径组件
-
-        # 嵌套 Git 元数据不属于技能分发内容审计范围。
-        if ".git" in rel_parts:
-
-            # 跳过版本控制内部文件。
-            continue
-
-        # Python 缓存目录和字节码文件都不得进入技能包。
-        if "__pycache__" in rel_parts or path.suffix in DISALLOWED_CACHE_SUFFIXES:
-
-            # 缓存路径作为阻断错误写入报告。
-            list_errors.append(f"disallowed generated cache artifact: {rel_path}")
-
-            # 缓存内容无需继续做文本检查。
-            continue
-
-        # 目录本身没有可读取的内容合同。
-        if not path.is_file():
-
-            # 继续处理下一个资源成员。
-            continue
-
-        # 仅扫描可能承载说明、配置或 Python 源码的文本类型。
-        if path.suffix not in {".md", ".yaml", ".yml", ".py"}:
-
-            # 二进制和其他资源类型不做文本规则判断。
-            continue
-
-        # 容错读取保持一次审计可覆盖完整资源树。
-        text = path.read_text(encoding="utf-8", errors="ignore")  # 当前资源文本
-
-        # 长引用文档需要目录帮助代理快速定位内容。
-        if rel_parts and rel_parts[0] == "references" and path.suffix == ".md":
-
-            # 物理行用于长度阈值和前部目录探测。
-            lines = text.splitlines()  # 当前引用文档物理行
-
-            # 超过一百行且无目录会降低引用检索效率。
-            if len(lines) > 100 and not has_toc(lines):
-
-                # 错误指出具体长文档和目录要求。
-                list_errors.append(
-                    f"{rel_path}: reference files over 100 lines need a table of contents"
-                )
-
-        # 主说明和代理界面中的模板语法可能是未渲染残留。
-        if "{{" in text and (
-            rel_path == "SKILL.md" or rel_path.startswith("agents/")
-        ):
-
-            # 该情况可疑但不一定破坏运行时，因此保留为 warning。
-            list_warnings.append(
-                f"{rel_path}: contains template placeholder syntax outside templates"
-            )
-
-        # 正式模板只能使用渲染器声明的已知占位符。
-        if rel_path.startswith("assets/templates/"):
-
-            # 文件名选择对应模板的占位符白名单。
-            template_name = path.name  # 当前模板文件名
-
-            # 未登记模板使用空集合，从而拒绝所有隐式占位符。
-            known = KNOWN_TEMPLATE_PLACEHOLDERS.get(  # 当前模板允许占位符
-                template_name, set()  # 未登记模板默认无允许占位符
-            )
-
-            # 差集逐项报告渲染器无法识别的占位符。
-            for placeholder in sorted(
-                set(TEMPLATE_PLACEHOLDER_RE.findall(text)) - known
-            ):
-
-                # 错误携带模板名和未知字段名。
-                list_errors.append(
-                    f"{template_name}: contains unknown template placeholder: {placeholder}"
-                )
-
-        # 任何分发文本都不得依赖开发机本地绝对路径。
-        if contains_local_reference(text):
-
-            # 路径泄漏作为发布阻断错误记录。
-            list_errors.append(f"{rel_path}: references local-only development material")
+        # 每个成员独立追加诊断并保持 rglob 顺序。
+        audit_resource_path(path, skill_dir, list_errors, list_warnings)
 
 # 总审计编排结构、引用、产品合同和仓库治理检查。
 def audit(skill_dir: Path) -> dict:

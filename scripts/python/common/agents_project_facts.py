@@ -30,4 +30,4 @@ def _load_module_shards(tuple_shard_names: tuple[str, ...]) -> None:
         exec(code_shard, globals())
 
 # 项目事实入口依次装载发现与治理职责分片。
-_load_module_shards(("_agents_project_facts_discovery.py", "_agents_project_facts_governance.py"))
+_load_module_shards(("project_facts_discovery.py", "project_facts_governance.py"))

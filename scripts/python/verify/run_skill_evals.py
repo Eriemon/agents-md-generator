@@ -67,6 +67,7 @@ def foundation_handlers() -> dict[str, EvalHandler]:
         "evaluate_failure_classification": project_cases.case_evaluate_classification,
         "install_release_completeness": project_cases.case_install_release_completeness,
         "review_governance_companion_checks": foundation_cases.case_review_governance_companion_checks,
+        "openai_metadata_standard_contract": foundation_cases.case_openai_metadata_standard_contract,
         "design_review_gate": foundation_cases.case_design_review_gate,
         "source_governance_test_boundary": foundation_cases.case_source_governance_test_boundary,
         "source_governance_size_readability_contract": (

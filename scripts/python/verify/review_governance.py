@@ -5,6 +5,7 @@ from __future__ import annotations
 
 # 导入治理审查所需的标准库模块。
 import argparse
+import hashlib
 import importlib
 import json
 import subprocess
@@ -175,6 +176,277 @@ def changed_files(project: Path, base: str, head: str) -> list[str]:
         line.strip().replace("\\", "/")
         for line in completed_process_result.stdout.splitlines()
         if line.strip()
+    )
+
+# 文件名语义复核只覆盖功能源码和 Python 测试，不要求初始化文件摘要。
+def semantic_review_paths(changes: list[str]) -> list[str]:
+    """返回需要 Agent 判断文件名是否总结功能的变更路径。
+
+    参数：
+        changes: Git 对比得到的仓库相对路径。
+    返回：需要语义复核的功能源码与 Python 测试路径。
+    """
+
+    # 集合查询用于快速判断变更文件是否属于受支持源码类型。
+    set_source_extensions = set(  # 文件名功能摘要人工复核使用的源码后缀白名单
+        (
+            ".py .js .jsx .ts .tsx "  # 覆盖解释器与浏览器执行的功能实现
+            ".java .kt .kts .go .rs "  # 覆盖虚拟机和静态编译的后端实现
+            ".php .rb .cs .swift "  # 覆盖服务端脚本与移动应用实现
+            ".m .mm .c .cc .cpp .cxx "  # 覆盖本地工具链编译的功能实现
+            ".h .hh .hpp "  # 覆盖本地编译单元公开的接口契约
+            ".css .scss .sass .less .html"  # 覆盖页面结构和视觉行为实现
+        ).split()  # 把分组文本转换为精确后缀成员
+    )  # 与 tests Python 规则共同限定必须提交功能摘要的源码类型
+
+    # 排序结果使同一变更集合生成稳定的语义证据哈希。
+    return sorted(
+        str_path
+        for str_path in changes
+        if Path(str_path).name != "__init__.py"
+        and (
+            (
+                str_path.startswith("tests/")
+                and Path(str_path).suffix.lower() == ".py"
+            )
+            or (
+                str_path.startswith(("skills/", "engineering/"))
+                and Path(str_path).suffix.lower() in set_source_extensions
+            )
+        )
+    )
+
+# 修订解析器把 HEAD 等别名固定为证据可绑定的提交标识。
+def resolve_revision(project: Path, revision: str) -> str:
+    """返回 Git 修订对应的完整提交哈希。
+
+    参数：
+        project: Git 仓库根目录。
+        revision: 需要解析的修订表达式。
+    返回：解析成功时为完整提交哈希，失败时为空字符串。
+    """
+
+    # Git 解析结果同时保留退出码和标准输出，供失败分支判断。
+    completed_process_revision = run_git(project, ["rev-parse", revision])  # 修订解析进程结果
+
+    # 无效修订不能绑定语义证据，因此返回空标识。
+    if completed_process_revision.returncode != 0:
+
+        # 空字符串让调用方按证据失配处理，而不是采用不确定值。
+        return ""
+
+    # 成功结果去除行尾空白后作为证据中的规范提交标识。
+    return completed_process_revision.stdout.strip()
+
+# 语义证据内容检查器验证修订绑定和逐文件裁决。
+def validate_semantic_evidence_content(
+    project: Path,
+    base: str,
+    head: str,
+    list_required_paths: list[str],
+    dict_evidence: dict[str, Any],
+    dict_result: dict[str, Any],
+) -> dict[str, Any]:
+    """验证已解析语义证据的新鲜度、摘要和裁决。
+
+    参数：
+        project: Git 仓库根目录。
+        base: 对比基线修订。
+        head: 对比目标修订。
+        list_required_paths: 本次必须复核的功能文件路径。
+        dict_evidence: 已成功解析的证据载荷。
+        dict_result: 等待补充诊断的基础结果。
+    返回：包含覆盖路径和稳定失败代码的语义复核结果。
+    """
+
+    # 路径列表哈希把证据绑定到确定的变更文件集合。
+    str_expected_hash = hashlib.sha256(  # 当前语义复核路径集合的绑定哈希
+        "\n".join(list_required_paths).encode("utf-8")  # 规范排序后的路径字节串
+    ).hexdigest()  # 当前变更路径集合的预期哈希
+
+    # 新鲜度错误集中收集，确保一次返回全部修订绑定问题。
+    list_stale_errors: list[str] = []  # 修订或路径哈希失配诊断
+
+    # 基线修订必须与证据记录的完整提交哈希一致。
+    if dict_evidence.get("base") != resolve_revision(project, base):
+
+        # 登记基线不一致，提示重新生成 revision-bound 证据。
+        list_stale_errors.append("semantic review base revision does not match")
+
+    # 目标修订必须与证据记录的完整提交哈希一致。
+    if dict_evidence.get("head") != resolve_revision(project, head):
+
+        # 登记目标修订不一致，阻止复用旧提交的审查结果。
+        list_stale_errors.append("semantic review head revision does not match")
+
+    # 路径哈希必须覆盖当前全部功能源码变更。
+    if dict_evidence.get("changed_path_hash") != str_expected_hash:
+
+        # 路径集合变化后要求重新逐文件复核。
+        list_stale_errors.append("semantic review changed path hash does not match")
+
+    # 任一新鲜度错误都会使整份证据失效。
+    if list_stale_errors:
+
+        # 返回全部失配原因，减少逐次修复的信息往返。
+        dict_result["errors"] = list_stale_errors  # 修订绑定错误列表
+
+        # 标记证据不再对应当前审查快照。
+        dict_result["ok"] = False  # 证据新鲜度未通过
+
+        # 稳定代码允许上层门禁区分 stale 与 missing。
+        dict_result["failure_code"] = "file-name-semantic-review-stale"  # 修订或路径绑定失效代码
+
+        # 新鲜度失败后不再信任条目级裁决。
+        return dict_result
+
+    # 条目数组承载每个文件的功能摘要与 pass 裁决。
+    list_entries = dict_evidence.get("entries", [])  # 原始逐文件复核条目
+
+    # 非数组 entries 不能提供可靠的逐文件覆盖关系。
+    if not isinstance(list_entries, list):
+
+        # 归一为空数组，让后续覆盖检查输出确定性缺失诊断。
+        list_entries = []  # 无效条目结构的安全替代值
+
+    # 以路径建立索引，保证每个目标文件只读取对应摘要与裁决。
+    dict_entries = {
+        str(item.get("path", "")): item  # 证据条目按仓库相对路径索引
+        for item in list_entries  # 逐项读取证据中的文件摘要记录
+        if isinstance(item, dict) and str(item.get("path", ""))  # 排除无效条目
+    }  # 可参与覆盖校验的有效证据条目
+
+    # 输出实际覆盖路径，便于审查者核对遗漏与多余项。
+    dict_result["reviewed_paths"] = sorted(dict_entries)  # 证据已复核路径
+
+    # 条目级错误集中记录缺少摘要、失败裁决和未解决发现。
+    list_failed_errors: list[str] = []  # 语义复核内容错误
+
+    # 每个必需路径都必须拥有具体功能摘要和通过裁决。
+    for str_path in list_required_paths:
+
+        # 当前路径缺少条目时使用空字典触发两类明确诊断。
+        dict_entry = dict_entries.get(str_path, {})  # 当前文件的语义复核条目
+
+        # 空白摘要不能证明文件名概括了真实功能。
+        if not str(dict_entry.get("functional_summary", "")).strip():
+
+            # 指明缺失摘要的路径，便于审查者逐项补充。
+            list_failed_errors.append(f"missing functional summary for {str_path}")
+
+        # 只有明确的 pass 裁决才允许文件名通过发布门禁。
+        if dict_entry.get("verdict") != "pass":
+
+            # 非 pass 或缺失裁决均保留对应文件路径。
+            list_failed_errors.append(f"semantic review did not pass for {str_path}")
+
+    # 任一未解决项或无效结构都会使语义复核失败。
+    list_unresolved = dict_evidence.get("unresolved_findings", [])  # 尚未关闭的人工发现
+
+    # 顶层未解决发现必须是空数组，禁止用错误类型绕过阻断。
+    if not isinstance(list_unresolved, list) or list_unresolved:
+
+        # 汇总顶层未关闭状态，要求审查者先完成裁决。
+        list_failed_errors.append("semantic review has unresolved findings")
+
+    # 内容错误存在时写入稳定失败代码并保持全部诊断。
+    if list_failed_errors:
+
+        # 返回全部逐文件问题，支持一次完成修复。
+        dict_result["errors"] = list_failed_errors  # 语义复核失败诊断
+
+        # 标记功能摘要或裁决合同未完全满足。
+        dict_result["ok"] = False  # 语义内容审查未通过
+
+        # 内容失败与证据缺失、新鲜度失败使用不同稳定代码。
+        dict_result["failure_code"] = "file-name-semantic-review-failed"  # 内容失败代码
+
+    # 返回经过修订绑定和逐文件覆盖检查的最终诊断。
+    return dict_result
+
+# 语义证据校验提交、新鲜路径哈希、覆盖率、摘要和裁决。
+def validate_semantic_review(
+    project: Path,
+    base: str,
+    head: str,
+    changes: list[str],
+    semantic_review_path: Path | None,
+) -> dict[str, Any]:
+    """验证 Agent 文件名功能摘要证据并返回稳定诊断。
+
+    参数：
+        project: Git 仓库根目录。
+        base: 对比基线修订。
+        head: 对比目标修订。
+        changes: 两个修订之间的仓库相对变更路径。
+        semantic_review_path: Agent 语义复核证据文件路径。
+    返回：覆盖路径、证据状态与稳定失败代码组成的诊断字典。
+    """
+
+    # 语义复核只覆盖本次修订中具有功能含义的源码和测试文件。
+    list_required_paths = semantic_review_paths(changes)  # 必须获得功能摘要的变更路径
+
+    # 初始结果采用通过状态，后续任一证据缺口都会显式翻转。
+    dict_result: dict[str, Any] = {
+        "required_paths": list_required_paths,  # 本次必须复核的路径
+        "reviewed_paths": [],  # 证据实际覆盖的路径
+        "evidence_path": "",  # 仓库内可追踪的证据位置
+        "errors": [],  # 语义证据校验错误
+        "ok": True,  # 当前证据是否满足全部合同
+    }  # 语义复核诊断结果
+
+    # 没有功能源码变更时无需强制提供空语义证据。
+    if not list_required_paths:
+
+        # 直接返回稳定的空覆盖通过结果。
+        return dict_result
+
+    # 存在复核对象时必须提供真实且可读取的证据文件。
+    if semantic_review_path is None or not semantic_review_path.is_file():
+
+        # 缺失证据记录为可由上层稳定识别的阻断原因。
+        dict_result["errors"] = ["semantic review evidence is required"]  # 缺失证据诊断
+
+        # 阻止缺少人工判断的变更进入发布链。
+        dict_result["ok"] = False  # 证据合同未满足
+
+        # 失败代码区分缺失证据与证据内容失效。
+        dict_result["failure_code"] = "file-name-semantic-review-missing"  # 缺失证据代码
+
+        # 返回完整诊断供审查 CLI 聚合。
+        return dict_result
+
+    # 优先记录仓库相对路径，避免证据输出泄露本机绝对路径。
+    dict_result["evidence_path"] = (
+        semantic_review_path.relative_to(project).as_posix()  # 仓库内证据使用相对路径
+        if semantic_review_path.is_relative_to(project)  # 判断证据是否属于当前仓库
+        else semantic_review_path.as_posix()  # 外部证据保留规范化路径用于诊断
+    )  # 实际参与校验的证据路径
+
+    # JSON 解析异常统一转换为证据过期或损坏诊断。
+    try:
+
+        # 一次性读取并解析证据，避免多次读取期间内容漂移。
+        dict_evidence = json.loads(semantic_review_path.read_text(encoding="utf-8"))  # 语义证据载荷
+
+    # 文件读取失败和 JSON 语法错误都表示证据不可采信。
+    except (OSError, json.JSONDecodeError) as obj_error:
+
+        # 原始异常文本保留在诊断中，便于定位损坏原因。
+        dict_result["errors"] = [f"semantic review evidence is invalid: {obj_error}"]  # 无效证据诊断
+
+        # 无法解析的证据不能支持通过裁决。
+        dict_result["ok"] = False  # 证据解析失败
+
+        # 损坏证据与修订失配共同归入 stale 类别。
+        dict_result["failure_code"] = "file-name-semantic-review-stale"  # 失效证据代码
+
+        # 立即返回，避免继续使用不可信的载荷。
+        return dict_result
+
+    # 已解析证据交由单一职责检查器验证修订绑定与逐文件内容。
+    return validate_semantic_evidence_content(
+        project, base, head, list_required_paths, dict_evidence, dict_result
     )
 
 # 发现构造器集中维护机器输出字段及路径排序契约。
@@ -366,7 +638,7 @@ def build_findings(changes: list[str], skill_dir_rel: str) -> list[dict[str, Any
     if (
         list_runtime_routing_changes
         and str_evals_json not in set_changed
-        and "tests/run_skill_evals.py" not in set_changed
+        and "tests/evaluation/run_skill_evals.py" not in set_changed
     ):
 
         # 记录运行态评测执行链未同步的治理发现。
@@ -375,7 +647,7 @@ def build_findings(changes: list[str], skill_dir_rel: str) -> list[dict[str, Any
                 "runtime-routing-change-without-eval-harness",
                 (
                     "Governance runtime routing changes require eval coverage "
-                    "in evals/evals.json or tests/run_skill_evals.py."
+                    "in evals/evals.json or tests/evaluation/run_skill_evals.py."
                 ),
                 list_runtime_routing_changes,
             )
@@ -453,12 +725,10 @@ def review_request(
 
 # 审查编排器连接变更发现、规则评估和可选请求持久化。
 def review_governance(
-    project: Path,
-    base: str,
-    head: str,
-    skill_dir: Path,
-    mode: str,
+    project: Path, base: str, head: str,
+    skill_dir: Path, mode: str,
     write_request: bool = False,
+    semantic_review_path: Path | None = None,
 ) -> dict[str, Any]:
     """执行变更治理审查并按需写入审查请求文件。
 
@@ -469,6 +739,7 @@ def review_governance(
         skill_dir: 被审查技能目录。
         mode: 当前审查模式。
         write_request: 是否写入 ``.agents/review-request.json``。
+        semantic_review_path: revision-bound 文件名语义复核证据路径。
     返回：包含发现、调度策略和请求载荷的审查结果。
     """
 
@@ -484,6 +755,27 @@ def review_governance(
 
     # 确定性规则只读取同一份变更快照。
     list_findings = build_findings(list_changes, str_skill_dir_rel)  # 治理发现列表
+
+    # Agent 语义证据补足确定性正则无法判断的“文件名是否总结功能”。
+    dict_semantic_review = validate_semantic_review(  # 文件名功能语义复核诊断
+        project,  # 当前 Git 仓库根目录
+        base,  # 证据绑定的基线修订
+        head,  # 证据绑定的目标修订
+        list_changes,  # 本次修订差异中的文件路径
+        semantic_review_path,  # Agent 逐文件功能摘要证据
+    )
+
+    # 语义证据失败时把稳定代码并入确定性治理发现。
+    if not dict_semantic_review["ok"]:
+
+        # 复用统一发现结构，保持聚合输出和退出码语义一致。
+        list_findings.append(
+            finding(
+                str(dict_semantic_review["failure_code"]),
+                "; ".join(dict_semantic_review["errors"]),
+                list(dict_semantic_review["required_paths"]),
+            )
+        )
 
     # 当前审查模式的策略用于最终结果声明人工复核要求。
     str_dispatch = review_dispatch_policy(mode, list_changes)  # 最终结果采用的复核策略
@@ -529,6 +821,7 @@ def review_governance(
         "findings": list_findings,
         "review_dispatch_policy": str_dispatch,
         "required_manual_review": str_dispatch == "required_for_release",
+        "semantic_review": dict_semantic_review,
         "ok": not any(item["severity"] == "error" for item in list_findings),
         "review_request": dict_request,
         "review_request_path": str_request_path,
@@ -566,6 +859,9 @@ def main() -> None:
     # 请求写入开关保持默认执行只读。
     parser.add_argument("--write-request", action="store_true")
 
+    # 文件名功能摘要证据由 Agent 生成并绑定当前修订与路径集合。
+    parser.add_argument("--semantic-review")
+
     # 完成参数解析后再加载项目公共运行时依赖。
     namespace_args: argparse.Namespace = parser.parse_args()  # 已验证命令行参数
 
@@ -581,14 +877,25 @@ def main() -> None:
         # 合成项目内技能目录的绝对位置。
         path_skill_dir = path_project / path_skill_dir  # 项目内技能绝对路径
 
+    # 相对语义复核证据路径同样以项目根为解析基准。
+    path_semantic_review = (  # 用户提供的文件名语义证据位置
+        Path(namespace_args.semantic_review)  # 把 CLI 文本转换为可解析路径
+        if namespace_args.semantic_review  # 仅在用户提供证据参数时构造路径
+        else None  # 未提供证据时交由治理门禁判断是否必需
+    )
+
+    # 相对证据路径必须绑定当前项目，避免随启动目录漂移。
+    if path_semantic_review is not None and not path_semantic_review.is_absolute():
+
+        # 合成仓库内证据的绝对路径供校验器读取。
+        path_semantic_review = path_project / path_semantic_review  # 项目根下的语义证据路径
+
     # 治理编排器返回完整机器可读结果。
     dict_result = review_governance(  # 最终治理审查结果
-        path_project,  # CLI 已解析的项目位置
-        namespace_args.base,  # CLI 指定的起始修订
-        namespace_args.head,  # CLI 指定的结束修订
-        path_skill_dir.resolve(),  # 规范化技能目录
-        namespace_args.mode,  # CLI 选择的审查等级
+        path_project, namespace_args.base, namespace_args.head,  # 项目与修订范围
+        path_skill_dir.resolve(), namespace_args.mode,  # 技能目录与审查等级
         write_request=namespace_args.write_request,  # CLI 请求落盘开关
+        semantic_review_path=path_semantic_review,  # Agent 文件名功能摘要证据
     )
 
     # 无论通过与否都先输出诊断载荷。

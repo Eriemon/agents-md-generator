@@ -1,0 +1,178 @@
+{
+  "records": [
+    {
+      "content_sha256": "83c65f1744a5777c14d145bce6a4d86dafc555fe35786c80de84a3064445d594",
+      "id": "knowledge.skill",
+      "keywords": [
+        "route",
+        "inspect",
+        "design",
+        "generate",
+        "verify"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "SKILL.md",
+      "summary": "技能触发条件、工作流顺序、停止边界与渐进披露入口。",
+      "title": "AGENTS.md Generator"
+    },
+    {
+      "content_sha256": "8ac2a9f94f0ff795abe6eab6b8ee13c4ecf47844853c1b0ac8984775a4d640b5",
+      "id": "knowledge.references-agents-md-guidance",
+      "keywords": [
+        "AGENTS.md",
+        "thin root",
+        "scope",
+        "compression",
+        "compatibility"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/agents-md-guidance.md",
+      "summary": "AGENTS.md 编写、压缩、分层、根与作用域章节以及兼容性指导。",
+      "title": "AGENTS.md Guidance"
+    },
+    {
+      "content_sha256": "d4cde4c289d45e3f7ab8b0b2ce62d5a32994bd69f0d24f6fade8f6205fab1400",
+      "id": "knowledge.references-book-rules-coverage",
+      "keywords": [
+        "engineering rules",
+        "mini",
+        "nano",
+        "full",
+        "non-copy"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/book-rules-coverage.md",
+      "summary": "工程书籍规则集的选择、压缩、作用域、追溯和非复制策略。",
+      "title": "Book Rules Coverage"
+    },
+    {
+      "content_sha256": "329886a39ff067e27fb5d664515b1c767830f3238ad0b167a370ca6305eba2e1",
+      "id": "knowledge.references-capability-coverage",
+      "keywords": [
+        "capability",
+        "detection",
+        "governance",
+        "verification",
+        "compatibility"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/capability-coverage.md",
+      "summary": "项目检测、治理、验证、发布与兼容能力的实现覆盖地图。",
+      "title": "Capability Coverage"
+    },
+    {
+      "content_sha256": "3d9f32ccc40dc19127a77386f4c07c215e2f2ea5fdc29f03000008995d406b30",
+      "id": "knowledge.references-coding-behavior-language-routing",
+      "keywords": [
+        "readable-python-generator",
+        "readable-script-generator",
+        "routing",
+        "owner"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/coding-behavior-language-routing.md",
+      "summary": "Python 与脚本族可读技能的安装感知路由、共同门禁和最终所有权。",
+      "title": "Coding Behavior Language Skill Routing"
+    },
+    {
+      "content_sha256": "e04f892bf3a2303752f50d5bdc2f68edc5ddad97a64c296e9578191863ca976c",
+      "id": "knowledge.references-evaluation-scenarios",
+      "keywords": [
+        "evaluation",
+        "forward testing",
+        "expected result",
+        "governance"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/evaluation-scenarios.md",
+      "summary": "技能功能、治理、运行时、发布与兼容性的前向测试场景。",
+      "title": "Evaluation Scenarios"
+    },
+    {
+      "content_sha256": "ecb4ad440c67754bc0051d1c2b9f3afa3091a17f8c8460622802871147344a6b",
+      "id": "knowledge.references-question-bank",
+      "keywords": [
+        "question bank",
+        "design interview",
+        "confirmation",
+        "answers"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/question-bank.md",
+      "summary": "设计访谈问题、技能与工程分支、逐组确认和回答持久化合同。",
+      "title": "AGENTS.md Question Bank"
+    },
+    {
+      "content_sha256": "494668d0f63c9b0d7a4f0f3dc84c691f09ab2673946a9c57518bda99f38742fb",
+      "id": "knowledge.references-review-checklist",
+      "keywords": [
+        "review",
+        "checklist",
+        "evidence",
+        "release"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/review-checklist.md",
+      "summary": "内容、结构、编码输出、运行时、验证与发布所需人工审查证据。",
+      "title": "AGENTS.md Review Checklist"
+    },
+    {
+      "content_sha256": "21ec98d27a72ba441b5017ca58f568bfd710a1de1dbb7ee525c2bc74039eed2a",
+      "id": "knowledge.references-script-guide",
+      "keywords": [
+        "script",
+        "lifecycle",
+        "validation",
+        "registry",
+        "query"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/script-guide.md",
+      "summary": "核心文档生命周期、验证链和结构化命令注册表问询方式。",
+      "title": "Script Guide"
+    },
+    {
+      "content_sha256": "1d99c9251046d527ab853978a8644d6d0002fc9264e644e0044c26ec69b3f859",
+      "id": "knowledge.references-script-output-policy",
+      "keywords": [
+        "INFO",
+        "WARNING",
+        "ERR",
+        "quiet",
+        "machine-readable"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/script-output-policy.md",
+      "summary": "INFO、WARNING、ERR 前缀、可配置 Kind、quiet 与机器输出例外。",
+      "title": "Script Output Policy"
+    },
+    {
+      "content_sha256": "e138ff6bdda1bff43711401a381a0ab69702bbb006b7f629a7fd1c7b37f86680",
+      "id": "knowledge.references-skill-design-coverage",
+      "keywords": [
+        "Tool Wrapper",
+        "Generator",
+        "Reviewer",
+        "Inversion",
+        "Pipeline"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/skill-design-coverage.md",
+      "summary": "Skill 设计模式、渐进披露、权威实现与设计合同覆盖地图。",
+      "title": "Skill Design Coverage"
+    }
+  ],
+  "schema_version": 1,
+  "status": "current"
+}

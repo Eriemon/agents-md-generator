@@ -1,0 +1,21 @@
+{
+  "schema_version": 2,
+  "category": "render",
+  "commands": [
+    {
+      "id": "render.render-agents", "category": "render", "entrypoint": "render_agents.py", "subcommand": "", "title": "渲染受管 AGENTS.md", "summary": "从项目事实、治理配置和模板生成根级与必要的作用域规则。", "when_to_use": "设计配置已经确认，需要预览或写入 AGENTS.md 时。",
+      "aliases": {"zh": ["生成 AGENTS.md", "渲染规则文件"], "en": ["render AGENTS.md", "generate agent rules"]},
+      "parameters": [{"name": "project", "required": false, "description": "项目根目录"}, {"name": "--write", "required": false, "description": "写入文件，默认仅预览"}, {"name": "--template-dir", "required": false, "description": "模板目录"}, {"name": "--profile", "required": false, "description": "治理配置路径"}, {"name": "--confirm-docs-layout", "required": false, "description": "确认文档布局"}, {"name": "--confirm-structure-fix", "required": false, "description": "确认结构修复"}, {"name": "--confirm-branch-governance", "required": false, "description": "确认分支治理例外"}, {"name": "--confirm-codebase-memory-untrack", "required": false, "description": "确认索引取消跟踪"}, {"name": "--migrate-redundant-scopes", "required": false, "description": "报告或移除冗余作用域"}],
+      "invocation_templates": ["python <skill>/scripts/python/render/render_agents.py <project>", "python <skill>/scripts/python/render/render_agents.py <project> --write"],
+      "examples": {"valid": ["python skills/agents-md-generator/scripts/python/render/render_agents.py ."], "invalid": ["未预览和确认门禁前不要追加 --write"]},
+      "prerequisites": ["设计配置有效", "写入前通过受管根检查"], "outputs": {"format": "text-or-json", "success_exit_codes": [0], "failure_exit_codes": [1, 2]}, "risk": {"level": "high", "writes": true, "warning": "--write 会修改 AGENTS.md 和治理文档"}, "boundaries": ["默认模式只打印根草稿", "不得手工重写受管区块"], "related_command_ids": ["design.collect-profile", "verify.verify-agents"]
+    },
+    {
+      "id": "render.create-shims", "category": "render", "entrypoint": "create_agent_shims.py", "subcommand": "", "title": "创建代理兼容入口", "summary": "为受支持的编码代理创建指向 AGENTS.md 的兼容 shim。", "when_to_use": "项目明确需要其他代理规则文件与 AGENTS.md 对齐时。",
+      "aliases": {"zh": ["创建代理 shim", "同步其他代理规则入口"], "en": ["create agent shims", "agent rules compatibility links"]},
+      "parameters": [{"name": "project", "required": false, "description": "项目根目录"}, {"name": "--include-skipped", "required": false, "description": "包含默认跳过目录"}], "invocation_templates": ["python <skill>/scripts/python/render/create_agent_shims.py <project> [--include-skipped]"],
+      "examples": {"valid": ["python skills/agents-md-generator/scripts/python/render/create_agent_shims.py ."], "invalid": ["不要覆盖已有人工规则文件"]},
+      "prerequisites": ["根 AGENTS.md 已验证"], "outputs": {"format": "json", "success_exit_codes": [0], "failure_exit_codes": [1, 2]}, "risk": {"level": "medium", "writes": true, "warning": "可能创建兼容文件或链接"}, "boundaries": ["不会替代根 AGENTS.md 作为事实源"], "related_command_ids": ["render.render-agents", "verify.verify-agents"]
+    }
+  ]
+}

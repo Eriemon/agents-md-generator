@@ -1,0 +1,25 @@
+{
+  "budgets": {
+    "core_references_total_bytes": 57344,
+    "default_prompt_bytes": 1536,
+    "global_managed_bytes": 5120,
+    "memory_summary_bytes": 131072,
+    "project_managed_bytes": 6144,
+    "scoped_bytes": 2048,
+    "skill_bytes": 20480
+  },
+  "duplication": {
+    "cross_surface_max_ratio": 0.08,
+    "jaccard_threshold": 0.9,
+    "minimum_line_chars": 80,
+    "within_file_max_ratio": 0.05
+  },
+  "policy_owners": {
+    "command_syntax": "references/script-guide.md",
+    "design_patterns": "references/skill-design-coverage.md",
+    "language_skill_routing": "references/coding-behavior-language-routing.md",
+    "review_evidence": "references/review-checklist.md",
+    "skill_workflow": "SKILL.md"
+  },
+  "schema_version": 1
+}

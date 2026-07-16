@@ -1,87 +1,41 @@
 # Skill Design Coverage
 
-This file distills the useful guidance from local saved HTML reference material into durable rules for Skill-focused AGENTS.md generation. Do not copy downloaded CSS or JS from saved web pages into the skill; only keep decision-changing constraints.
+This file maps design patterns to their authoritative implementation. It is a map, not a manual.
 
 ## Patterns
 
-| Pattern | Use in Skill design |
-|---------|---------------------|
-| Tool Wrapper | Put repeatable, deterministic, or fragile operations in `scripts/` so agents run tools instead of rewriting logic |
-| Generator | Use `assets/` templates when output shape must stay stable across runs |
-| Reviewer | Store review criteria in `references/` and automate checks that can be deterministic |
-| Inversion | Ask required intent questions before generation when files cannot reveal the answer |
-| Pipeline | Encode hard checkpoints such as detect, collect, render, verify, audit, and evaluate; gate conditions define whether the next step may run |
+| Pattern | Use |
+|---|---|
+| Tool Wrapper | Put deterministic or fragile operations in `scripts/` |
+| Generator | Keep stable output shapes in `assets/` templates |
+| Reviewer | Keep criteria in `references/` and automate deterministic checks |
+| Inversion | Ask for intent that repository facts cannot reveal |
+| Pipeline | Run route, inspect, design, generate, and verify in order |
 
-Patterns can be combined. A strong Skill often uses Inversion to collect intent, Generator to produce stable output, Tool Wrapper for scripts, Reviewer for checks, and Pipeline to enforce order. Do NOT skip steps or proceed if a step fails.
+Patterns may be combined; gate conditions control progress: do not skip steps or proceed when a required step fails.
 
 ## Progressive Disclosure
 
-- Keep `SKILL.md` focused on trigger, core workflow, and resource navigation.
-- Move detailed policy, examples, schemas, and checklists into one-level `references/` files.
-- Put reusable deterministic code in `scripts/`; test scripts by running them.
-- Put output templates and copied starter material in `assets/`.
-- Keep `agents/openai.yaml` aligned with `SKILL.md` and regenerate or update it when stale.
-- Keep default-language handling aligned across interview prompts, rendered AGENTS.md output, verification rules, and `agents/openai.yaml`; do not let any one layer silently weaken the language contract.
-- Keep Coding Behavior Baseline language skill routing aligned across rendered AGENTS.md output, verification rules, reference review docs, eval coverage, and `agents/openai.yaml`; generated roots must summarize configurable `coding_behavior.language_skill_routing` from `.agents/global-rule-overrides.json`, require Python and script-family create/modify work to think first, explicitly load both readable skills, pass both gates before continuing, keep Python final ownership with `readable-python-generator`, keep bat/cmd, shell/bash, PowerShell, and Tcl script final ownership with `readable-script-generator`, and keep detailed routing examples in `references/coding-behavior-language-routing.md`.
-- Keep Script Output Policy handling aligned across rendered AGENTS.md output, verification rules, reference review docs, eval coverage, and `agents/openai.yaml`; generated roots must summarize configurable `script_output_policy`, keep `Kind` values in JSON config, and avoid hard-coded Kind enums in implementation.
-- Keep remote-server governance aligned across interview prompts, dependency gates, rendered AGENTS.md output, verification rules, and `agents/openai.yaml`; do not let any one layer bypass `erie-remote-ssh`.
-- Keep remote structure governance separate from remote-server enablement and task-route mapping. A takeover interview may minimize identity questions, but it must still ask `use_remote_server` explicitly before any remote task route can be written and it must still complete the structured directory contract, including remote conda and runtime archive policy when remote structure is configured.
-- Keep local root-file governance explicit. Strong-control directory contracts should carry a fixed root-level file whitelist, should whitelist only a small fixed set of root governance files, and must not silently allow new root-level files outside the governed primary project root.
-- Keep explicit AGENTS design/update requests separate from `计划` / `规划` / `准备` root-check triggers. Trigger-only checks may stop after reporting root health; explicit governance work must continue into the full interview/update flow.
-- Restrict automatic takeover to version-mismatched old workspaces. Missing root files or missing version metadata must stay on the full grouped interview path.
+- Use progressive disclosure: Map, not manual.
+- `SKILL.md` owns trigger, stop lines, workflow order, and safety boundaries.
+- `references/script-guide.md` owns command syntax; `references/review-checklist.md` owns review evidence.
+- `.agents/agents-control.json` owns project remote routes; `.agents/global-rule-overrides.json` is the local JSON governance config for configurable coding/output rules.
+- Global `.codex/AGENTS.md` owns cross-repository defaults; project and scoped files own narrower facts.
+- Generated documents point to owners instead of copying their full policy.
+- Distill saved HTML into decision-changing rules. Do not copy downloaded CSS or JS.
 
-## AGENTS.md Contract
+## Contract Coverage
 
-For Skill development, generated AGENTS.md should include a Skill Design Contract with:
-
-- Trigger scenarios that explain when the Skill should load.
-- Design patterns selected for the Skill and why they matter.
-- Resource boundaries for `SKILL.md`, `references/`, `scripts/`, `assets/`, and `agents/openai.yaml`.
-- Progressive disclosure policy so the root instructions stay concise.
-- Validation gates such as `python skills/agents-md-generator/scripts/python/verify/quick_validate.py skills/agents-md-generator`, skill audit, AGENTS.md verification, and full evaluate chain.
-- Validation method and validation granularity, including whether acceptance is automated, manual, forward-tested, or a combination.
-- Forward-testing policy for complex or high-risk Skills.
-- An explicit default-language reply rule in the root `AGENTS.md` whenever `default_language` metadata is present.
-- Coding Behavior Baseline language skill routing that points to `coding_behavior.language_skill_routing` in `.agents/global-rule-overrides.json`, requires Python and script-family create/modify work to think first, explicitly load both readable skills, pass both gates before continuing, keeps Python code generation/modification/commenting/normalization under `readable-python-generator`, keeps bat/cmd, shell/bash, PowerShell, and Tcl script work under `readable-script-generator`, preserves the script-wrapper boundary, and keeps detailed examples in `references/coding-behavior-language-routing.md`.
-- A `## Script Output Policy` section that points to `script_output_policy` in `.agents/global-rule-overrides.json`, requires `> INFO: [{kind}]`, `> WARNING: [{kind}]`, and `> ERR: [{kind}]` for human-readable process output, keeps Kind values config-driven, requires Python `--quiet`, and exempts machine-readable output from prefixes.
-- A dedicated compact remote-server contract in the root `AGENTS.md` whenever remote usage is enabled, pointing to `.agents/agents-control.json` for the registered server registry and per-task primary/fallback routes while keeping only runtime route resolution, the automatic fallback gate, and the unmatched-task blocking gate in root text.
-
-Strong-control generated AGENTS.md should also include a Documentation Governance Contract. This contract records `docs/handoff/HANDOFF.md` as the newest handoff, requires time-suffixed handoff history, points long-term context to `docs/memory/`, points stage, install, and git management records to `docs/development/`, `docs/install_configuration/`, and `docs/git_manager/`, requires `docs/dir_manager/` review before local or remote deployment folder structure changes, and archives old dir manager content to `docs/dir_manager/history_dir_manager/<timestamp>/` before user force-confirmed blocked changes are applied.
-
-## AGENTS.md Principles
-
-- Use Map, not manual: point agents to files, scripts, docs, and examples instead of pasting long manuals.
-- Aggregate scripts: give agents one reliable command or wrapper instead of scattered shell fragments.
-- Require a verification loop: code or content changes are not complete until the relevant checks run.
-- Prefer automated rule checks when a rule can be verified mechanically.
-- Keep task handoff in the docs governance tree and long-term lesson/context capture in `docs/memory/`.
-- Never create governed `docs/experience/` files or root-level `experience/`; legacy experience folders are unmanaged historical data.
-- New user-developed Skills belong in `skills/<skill-name>/`, and the `SKILL.md` frontmatter name must match that folder.
-- Require selectable interview options and repeated summary confirmation before writing a strong-control profile.
-- Return structured `decision_request` payloads for blocking branch, release/install, structure, directory, and remote-server confirmations so callers do not parse prose prompts.
-- Require an explicit `default_conversation_language` answer before any AGENTS generation or takeover write; implicit fallback defaults are not acceptable.
-- Require an explicit `use_remote_server` decision in interactive AGENTS generation flows; if remote usage is enabled, require erie-remote-ssh install/configure/choices/check/workspace-check completion before write, persist a normalized server registry plus task routes in `.agents/agents-control.json`, and fall back to primary-server `functions` in the profile when a route omits explicit task responsibilities.
-- Require the rendered root `AGENTS.md` to keep the explicit default-language rule and to state that remote validation resolves the matched task route's primary/fallback servers from `.agents/agents-control.json`, automatically try fallback servers after failed validation, and block unmatched tasks until AGENTS/profile is updated.
-- Require the rendered root `AGENTS.md` to keep Coding Behavior Baseline language skill routing; verification must reject managed roots that remove the routing text, lose `coding_behavior.language_skill_routing`, weaken `必须先思考`, weaken the dual-skill preload, weaken the both-gates requirement, remove Python final ownership, remove script final ownership, remove the Python-target guard, remove the script-wrapper guard, or weaken the formatting separation rule.
-- Require the rendered root `AGENTS.md` to keep the Script Output Policy; verification must reject managed roots that remove the section, lose `script_output_policy`, weaken INFO/WARNING/ERR templates, drop config-driven Kind handling, drop Python `--quiet`, or remove the machine-readable output exemption.
-- Put shared cross-repository principles in global `.codex/AGENTS.md` v3 only: `baseline_version=3` meta, instruction scope, managed repository entry behavior, reuse-first execution mode, advisory `task_rating_gate.py` use, the English `Coding Behavior Baseline` title with four discipline sections, `Done When`, and lightweight language skill routing, `Comments And Documentation` without skill-selection rules, environment/dependency safety for isolated environments, installed skill protection, and Markdown documentation formulas using `$...$` / `$$...$$`. Keep repository-specific thresholds, fixed script-layout rules, language-level comment policy, long-task heartbeat detail, decomposition-plan locations, GUI script exceptions, and release policy in the project `AGENTS.md` or local JSON repository governance config.
-- Root `AGENTS.md` should point to `.agents/global-rule-overrides.json` instead of restating config-level maintainability and script-governance detail.
-- The local JSON governance config locks the 64KB UTF-8 source-file size limit, readability gates against one-line/minified source, decomposition-plan requirements, and the fixed non-GUI script quartet `scripts/python/<function>/<name>.py`, `scripts/shell/<function>/<name>.sh`, `scripts/bat/<function>/<name>.bat`, and `scripts/powershell/<function>/<name>.ps1`.
-- Use a strict directory governance gate for folder moves; blocked reviews require explicit user force-confirmation and old dir manager content archival before execution.
-- Treat `render_agents.py --write --confirm-structure-fix` as permission to attempt the conservative structure fix, not permission to bypass the gate. The write path must rerun `structure-gate` after the fix attempt and stay blocked if any violation remains.
-- Require remote mutation governance for all actions, not only create targets. Remote source and target paths must both stay inside the governed remote plan, protected remote path classes must block destructive actions by default, and runtime artifact state must control whether a path belongs in active runs or backups.
-- Keep local reference paths and temporary source folders out of generated AGENTS.md.
+- `default_conversation_language` locks natural-language replies to it unless the user switches languages.
+- `use_remote_server` is explicit. Routes include primary/fallback checks, an automatic fallback gate, and an unmatched-task blocking gate.
+- Remote structure remains separate from remote server enablement. Remote mutation governance for all actions validates both endpoints and protected path classes.
+- The root-level file whitelist uses `allowed_root_files`; structure repair requires `confirm-structure-fix`.
+- Codebase-memory requires root-only persistent evidence and a ready full index.
+- Coding Behavior Baseline language skill routing comes from `coding_behavior.language_skill_routing`: `shared` is 只渲染一次, Python belongs to `readable-python-generator`, and scripts belong to `readable-script-generator`.
+- Memory summaries are bounded retrieval views; SQLite and JSONL preserve full history.
+- The Documentation Governance Contract points current context to `docs/handoff/HANDOFF.md`, durable context to `docs/memory/`, and directory changes to `docs/dir_manager/`.
+- The verification loop uses `python skills/agents-md-generator/scripts/python/verify/quick_validate.py skills/agents-md-generator`, audit, AGENTS verification, docs verification, and evaluation.
 
 ## Review Gate
 
-Before claiming a Skill AGENTS.md is strict, verify that:
-
-- The Skill Design Contract is generated from `.agents/agents-control.json`.
-- The contract contains design patterns, resource boundaries, progressive disclosure, validation gates, validation method, validation granularity, and forward-testing policy.
-- The generation flow explicitly asks for the default conversation language, the rendered root AGENTS.md locks natural-language replies to it, and verification fails if either side is missing.
-- The generated root includes Coding Behavior Baseline language skill routing, points to `coding_behavior.language_skill_routing`, requires dual-skill preflight plus both-gates pass, keeps Python work under `readable-python-generator`, keeps script work under `readable-script-generator`, and verification fails if the routing is missing or weakened.
-- The generated root includes `## Script Output Policy`, the policy points to `script_output_policy`, summarizes strict process-output prefixes, and verification fails if the policy is missing or weakened.
-- The generation flow explicitly asks whether remote servers are enabled, routes missing remote dependencies and server configuration through explicit user confirmation, records task-routed primary/fallback remote servers in AGENTS.md, and verification fails if the remote gate is incomplete.
-- Temporary reference material is distilled into stable guidance and not copied as local paths.
-- Docs governance verification confirms handoff, history, memory, development, install configuration, git manager files, and remote deployment directory planning exist.
-- The full validation chain reports no unresolved placeholders or local reference leaks.
+Read-only work does not dispatch a reviewer. Write and governance-high-risk flows require the evidence defined in `SKILL.md` and `references/review-checklist.md`. Release and installation are separate scopes and never follow automatically from source readiness.

@@ -1409,19 +1409,19 @@ def validate_development_record(path: Path) -> list[str]:
     # 返回全部错误，允许调用方一次性呈现完整修复清单。
     return list_errors
 
-# Git Manager 文档根据项目上下文渲染可执行命令或通用占位命令。
-def git_manager_doc(
+# Git Manager 命令构造器选择仓库运行时或安装态占位路径。
+def git_manager_commands(
     project: Path | None = None,
     profile: dict[str, Any] | None = None,
-) -> str:
-    """生成分支、发布包和变更日志治理说明。
+) -> dict[str, str]:
+    """生成发布准备、门禁、打包和变更日志命令。
 
     Args:
         project: 可选的项目根目录，用于解析仓库内脚本路径。
         profile: 可选的脚本命令治理配置。
 
     Returns:
-        Git Manager Markdown 文本。
+        按用途命名的四条 Git Manager 命令。
     """
 
     # 有项目上下文时生成当前仓库可直接执行的命令。
@@ -1507,7 +1507,33 @@ def git_manager_doc(
             "git-changelog <project> --input changelog.json"
         )  # 无仓库上下文时的变更日志示例
 
-    # 文档正文引用上述命令，确保说明与运行入口同步。
+    # 命名映射让文档渲染职责与命令路由职责解耦。
+    return {
+        "release_prepare": str_release_prepare_command,
+        "release_gate": str_release_gate_command,
+        "package_release": str_package_release_command,
+        "changelog": str_changelog_command,
+    }
+
+# Git Manager 文档根据项目上下文渲染可执行命令或通用占位命令。
+def git_manager_doc(
+    project: Path | None = None,
+    profile: dict[str, Any] | None = None,
+) -> str:
+    """生成分支、发布包和变更日志治理说明。
+
+    Args:
+        project: 可选的项目根目录，用于解析仓库内脚本路径。
+        profile: 可选的脚本命令治理配置。
+
+    Returns:
+        Git Manager Markdown 文本。
+    """
+
+    # 命令构造器统一处理仓库上下文和安装态占位路径。
+    dict_commands = git_manager_commands(project, profile)  # Git Manager 命令映射
+
+    # 文档正文引用命名命令，确保说明与运行入口同步。
     return "\n".join([
         "# Git Manager",
         "",
@@ -1523,7 +1549,7 @@ def git_manager_doc(
             "development branches into `master`."
         ),
         (
-            f"- Use `{str_release_prepare_command}` to auto-commit governed paths from the "
+            f"- Use `{dict_commands['release_prepare']}` to auto-commit governed paths from the "
             f"active temporary branch, merge it into `master`, and delete the local branch "
             f"before packaging."
         ),
@@ -1531,7 +1557,7 @@ def git_manager_doc(
         "- After release preparation, delete local branches other than `master` and `release`.",
         "- Do not delete remote branches unless the user explicitly requests remote cleanup.",
         (
-            f"- Run `{str_release_gate_command}` before and after packaging to verify branch, "
+            f"- Run `{dict_commands['release_gate']}` before and after packaging to verify branch, "
             "worktree, release artifact, release receipt, and parity gates."
         ),
         "",
@@ -1539,7 +1565,7 @@ def git_manager_doc(
         "- Place installable releases under `dist/`.",
         "- Name installable release folders as `<name>-vx.x.x` and create a matching zip when required.",
         (
-            f"- Build installable releases with `{str_package_release_command}` so the "
+            f"- Build installable releases with `{dict_commands['package_release']}` so the "
             f"versioned release directory, matching zip, and `RELEASE_RECEIPT.json` "
             f"provenance stay aligned."
         ),
@@ -1589,7 +1615,7 @@ def git_manager_doc(
             "`docs/git_manager/history_git_manager/YYYYMMDD-HHMMSS/CHANGELOG.md` before "
             "writing the next current entry."
         ),
-        f"- Use `{str_changelog_command}` to rotate and write the current change summary.",
+        f"- Use `{dict_commands['changelog']}` to rotate and write the current change summary.",
         "",
         "## Current Version",
         "- Record the active version here during release preparation and keep detailed changes in `CHANGELOG.md`.",

@@ -66,4 +66,4 @@ def _load_module_shards(tuple_shard_names: tuple[str, ...]) -> None:
 _extend_task_module_search_path()
 
 # 渲染入口按基础、合同和命令编排顺序加载。
-_load_module_shards(("_render_agents_foundation.py", "_render_agents_contracts.py", "_render_agents_entrypoints.py"))
+_load_module_shards(("render_foundation.py", "render_contracts.py", "render_entrypoints.py"))

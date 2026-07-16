@@ -552,7 +552,7 @@ def case_handoff_naming_gate(case: dict[str, Any], helper: EvalFixtures) -> dict
     )
 
 # 扩展发布场景从拆分模块显式回导，保持原公开映射稳定。
-from eval_runtime_release_extended_cases import (
+from eval_release_cases import (
     case_governance_cli_entrypoint_smoke,
     case_release_content_evals_install_contract,
     case_release_sanitizer_regex_constant,

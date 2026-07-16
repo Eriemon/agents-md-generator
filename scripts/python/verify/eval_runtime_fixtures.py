@@ -101,6 +101,7 @@ class EvalFixtures:
             "development_type": "skill",  # 项目开发类型
             "default_conversation_language": "\u4e2d\u6587",  # 默认交互语言
             "use_remote_server": use_remote_server,  # 是否使用远程服务器
+            "use_codebase_memory_mcp": False,  # 评估夹具明确禁用代码知识图谱
             "memory_enabled": True,  # 启用项目长期记忆
             "memory_storage_backend": "sqlite-plus-jsonl",  # 记忆存储后端
             "memory_capture_scope": (  # 长期记忆捕获范围
@@ -263,6 +264,9 @@ class EvalFixtures:
 
         # 未声明远程服务器时明确记录禁用状态。
         dict_explicit_answers.setdefault("use_remote_server", False)
+
+        # 正式评估夹具必须显式覆盖知识图谱选择，不能依赖生产默认值。
+        dict_explicit_answers.setdefault("use_codebase_memory_mcp", False)
 
         # 评估项目默认启用长期记忆治理。
         dict_explicit_answers.setdefault("memory_enabled", True)
@@ -443,6 +447,9 @@ class EvalFixtures:
 
         # 递归创建技能根以支持空临时项目。
         path_skill.mkdir(parents=True)
+
+        # 受管工作区夹具默认满足唯一根 tests 目录合同。
+        (root / "tests").mkdir(exist_ok=True)
 
         # scripts 存放可执行验证入口。
         (path_skill / "scripts").mkdir(exist_ok=True)
@@ -653,6 +660,9 @@ class EvalFixtures:
 
         # 首先落盘可被设计和发布流程识别的技能骨架。
         path_skill = self.make_governed_skill_project(root, name=name, version=project_version)  # 技能源码目录
+
+        # 渲染前满足受管工作区唯一根 tests 目录契约。
+        (root / "tests").mkdir(exist_ok=True)
 
         # 完整技能答案用于强控制设计写入。
         dict_answers = self.skill_answers(name=name)  # 技能设计访谈答案

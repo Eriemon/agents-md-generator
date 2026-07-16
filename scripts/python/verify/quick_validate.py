@@ -131,6 +131,62 @@ def registered_script_errors(
     # 完整列表供主入口一次报告所有缺失项。
     return list_errors
 
+# 可选文档门禁只在目标技能持久配置明确启用后执行。
+def document_registry_errors(path_skill_dir: Path) -> list[str]:
+    """检查显式启用的文档职责、知识指针和联合 SQLite 索引。
+
+    参数：path_skill_dir 为待验证技能目录。
+    返回：未启用时为空；启用后的治理或索引错误列表。
+    """
+
+    # registry 任务目录已由 load_common_module 加入模块搜索路径。
+    module_document_registry = importlib.import_module("document_registry_common")  # 文档治理共享模块。
+
+    # 配置缺失或 enabled 非真时可选门禁保持关闭。
+    try:
+
+        # 持久配置是唯一启用来源。
+        dict_status = module_document_registry.document_governance_status(path_skill_dir)  # 当前文档门禁状态。
+
+    # 配置存在但损坏时必须阻断而不是按未启用处理。
+    except (OSError, ValueError) as object_error:
+
+        # 返回稳定诊断供 quick_validate 前缀化。
+        return [f"document registry config invalid: {object_error}"]
+
+    # 未明确启用的技能不执行文档和数据库门禁。
+    if not dict_status["enabled"]:
+
+        # 空列表表示条件门禁不适用。
+        return []
+
+    # 联合注册表模块提供数据库领域异常和当前性检查。
+    module_registry = importlib.import_module("registry_common")  # 联合注册表共享模块。
+
+    # 文档治理 current 检查和数据库当前性必须共同通过。
+    try:
+
+        # 职责、重复裁决、接口映射与正文摘要使用同一完整门禁。
+        module_document_registry.validate_document_governance(  # 当前文档治理验证结果。
+            path_skill_dir,
+            bool_require_current=True,
+        )
+
+        # 命令与知识联合索引必须与全部 JSON 源同步。
+        connection_database, _ = module_registry.ensure_database_current(path_skill_dir)  # 已验证只读数据库连接。
+
+        # Windows 上后续构建需要及时释放只读句柄。
+        connection_database.close()
+
+    # 文档、JSON、文件和 SQLite 领域错误统一成为预检诊断。
+    except (OSError, ValueError, module_registry.RegistryError) as object_error:
+
+        # 具体底层消息保留给维护者定位。
+        return [f"document registry gate failed: {object_error}"]
+
+    # 两层门禁均通过时没有诊断。
+    return []
+
 # agents-md-generator 自检先于通用 skill-creator 验证运行。
 def self_governance_preflight_errors(
     path_skill_dir: Path,
@@ -145,16 +201,20 @@ def self_governance_preflight_errors(
     # 仅名称和 SKILL.md 同时匹配时确认目标是本技能源码或发布包。
     path_skill_manifest = path_skill_dir / "SKILL.md"  # 技能说明文件路径。
 
-    # 外部技能只使用通用 quick_validate，不应用本仓库登记表。
+    # 文档注册化是跨技能可选门禁，只由目标配置决定是否执行。
+    list_document_errors = document_registry_errors(path_skill_dir)  # 当前技能文档注册诊断。
+
+    # 外部技能不应用本仓库脚本登记表，但仍保留其显式启用的文档门禁。
     if path_skill_dir.name != "agents-md-generator" or not path_skill_manifest.is_file():
 
-        # 非本技能目标没有专用预检错误。
-        return []
+        # 返回条件文档门禁结果，不追加所有者专用脚本检查。
+        return list_document_errors
 
     # 两类入口退化均应在调用外部验证器之前阻断。
-    return stale_numbered_shard_errors(path_skill_dir) + registered_script_errors(
-        path_skill_dir,
-        dict_script_tasks,
+    return (
+        stale_numbered_shard_errors(path_skill_dir)
+        + registered_script_errors(path_skill_dir, dict_script_tasks)
+        + list_document_errors
     )
 
 # 系统 skill-creator 是通用技能结构规则的来源。

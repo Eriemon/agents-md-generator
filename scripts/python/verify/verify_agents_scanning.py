@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 # 命令合同模块负责识别配置来源、脚本路径和运行时命令错误。
-from verify_agents_command_contracts import (
+from command_contracts import (
     config_backed_command_error,
     documented_script_path_error,
     is_expected_contract_example_path,

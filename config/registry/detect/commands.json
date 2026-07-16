@@ -1,0 +1,55 @@
+{
+  "schema_version": 2,
+  "category": "detect",
+  "commands": [
+    {
+      "id": "detect.check-freshness", "category": "detect", "entrypoint": "check_freshness.py", "subcommand": "", "title": "检查 AGENTS 新鲜度", "summary": "比较生成元数据、事实输入与当前规则文件，识别是否需要重新渲染。", "when_to_use": "准备修改受管 AGENTS.md 或完成治理变更前。",
+      "aliases": {"zh": ["检查 AGENTS 是否过期", "新鲜度检查"], "en": ["check AGENTS freshness", "stale AGENTS check"]},
+      "parameters": [{"name": "project", "required": false, "description": "项目根目录"}], "invocation_templates": ["python <skill>/scripts/python/detect/check_freshness.py <project>"],
+      "examples": {"valid": ["python skills/agents-md-generator/scripts/python/detect/check_freshness.py ."], "invalid": ["不要用手工时间戳代替新鲜度检查"]},
+      "prerequisites": ["项目事实可读取"], "outputs": {"format": "json", "success_exit_codes": [0], "failure_exit_codes": [1, 2]}, "risk": {"level": "low", "writes": false, "warning": "只读检查"}, "boundaries": ["不会渲染或写入 AGENTS.md"], "related_command_ids": ["render.render-agents", "verify.verify-agents"]
+    },
+    {
+      "id": "detect.token-usage-review", "category": "detect", "entrypoint": "codex_token_usage_review.py", "subcommand": "", "title": "审查 Codex token 使用", "summary": "汇总会话 token 与上下文使用证据。", "when_to_use": "诊断上下文膨胀或准备压缩治理文档时。",
+      "aliases": {"zh": ["token 用量审查", "上下文用量"], "en": ["token usage review", "context usage audit"]},
+      "parameters": [{"name": "--hours", "required": false, "description": "回看小时数"}, {"name": "--sessions-root", "required": false, "description": "Codex sessions 树内目录"}, {"name": "--now", "required": false, "description": "固定统计时间"}, {"name": "--verbose", "required": false, "description": "详细人类输出"}, {"name": "--json", "required": false, "description": "机器可读输出"}], "invocation_templates": ["python <skill>/scripts/python/detect/codex_token_usage_review.py --hours <hours> [--verbose|--json]"],
+      "examples": {"valid": ["python skills/agents-md-generator/scripts/python/detect/codex_token_usage_review.py --hours 48 --json"], "invalid": ["不要把 --sessions-root 指向活动 Codex sessions 树之外"]},
+      "prerequisites": ["Codex 会话记录可访问"], "outputs": {"format": "text-or-json", "success_exit_codes": [0], "failure_exit_codes": [1, 2]}, "risk": {"level": "low", "writes": false, "warning": "输出可能包含会话统计"}, "boundaries": ["不会改写会话"], "related_command_ids": ["docs.operations"]
+    },
+    {
+      "id": "detect.detect-scopes", "category": "detect", "entrypoint": "detect_scopes.py", "subcommand": "", "title": "检测 AGENTS 作用域", "summary": "发现根级和嵌套目录的规则作用域候选。", "when_to_use": "新增、压缩或审查 scoped AGENTS.md 前。",
+      "aliases": {"zh": ["检测规则作用域", "查找 scoped AGENTS"], "en": ["detect AGENTS scopes", "find scoped rules"]},
+      "parameters": [{"name": "project", "required": false, "description": "项目根目录"}], "invocation_templates": ["python <skill>/scripts/python/detect/detect_scopes.py <project>"],
+      "examples": {"valid": ["python skills/agents-md-generator/scripts/python/detect/detect_scopes.py ."], "invalid": ["不要把每个目录都自动变成新作用域"]},
+      "prerequisites": ["项目目录可扫描"], "outputs": {"format": "json", "success_exit_codes": [0], "failure_exit_codes": [1, 2]}, "risk": {"level": "low", "writes": false, "warning": "只提供候选"}, "boundaries": ["不会创建 AGENTS.md"], "related_command_ids": ["render.render-agents"]
+    },
+    {
+      "id": "detect.extract-commands", "category": "detect", "entrypoint": "extract_commands.py", "subcommand": "", "title": "提取项目命令", "summary": "从项目配置和文档中发现可验证的构建、测试与发布命令。", "when_to_use": "设计 AGENTS.md 命令规则或核对文档命令事实时。",
+      "aliases": {"zh": ["提取构建测试命令", "发现项目命令"], "en": ["extract project commands", "discover build test commands"]},
+      "parameters": [{"name": "project", "required": false, "description": "项目根目录"}], "invocation_templates": ["python <skill>/scripts/python/detect/extract_commands.py <project>"],
+      "examples": {"valid": ["python skills/agents-md-generator/scripts/python/detect/extract_commands.py ."], "invalid": ["不要把示例占位命令登记为已验证命令"]},
+      "prerequisites": ["项目配置可读取"], "outputs": {"format": "json", "success_exit_codes": [0], "failure_exit_codes": [1, 2]}, "risk": {"level": "low", "writes": false, "warning": "发现结果仍需事实确认"}, "boundaries": ["不会执行发现的命令"], "related_command_ids": ["detect.extract-context", "design.collect-profile"]
+    },
+    {
+      "id": "detect.extract-context", "category": "detect", "entrypoint": "extract_context.py", "subcommand": "", "title": "提取项目上下文", "summary": "聚合语言、框架、目录和治理标记等项目事实。", "when_to_use": "开始 AGENTS 设计或排查错误项目类型识别时。",
+      "aliases": {"zh": ["提取项目事实", "项目上下文发现"], "en": ["extract project context", "discover project facts"]},
+      "parameters": [{"name": "project", "required": false, "description": "项目根目录"}], "invocation_templates": ["python <skill>/scripts/python/detect/extract_context.py <project>"],
+      "examples": {"valid": ["python skills/agents-md-generator/scripts/python/detect/extract_context.py ."], "invalid": ["不要用猜测覆盖检测事实"]},
+      "prerequisites": ["项目目录可读取"], "outputs": {"format": "json", "success_exit_codes": [0], "failure_exit_codes": [1, 2]}, "risk": {"level": "low", "writes": false, "warning": "只读事实提取"}, "boundaries": ["不会写入治理配置"], "related_command_ids": ["detect.inspect-project", "design.collect-profile"]
+    },
+    {
+      "id": "detect.inspect-project", "category": "detect", "entrypoint": "inspect_project.py", "subcommand": "", "title": "综合检查项目", "summary": "组合项目事实、规则状态和治理候选，输出设计前快照。", "when_to_use": "需要一次性了解项目是否适合受管 AGENTS 流程时。",
+      "aliases": {"zh": ["综合项目检查", "检查仓库治理状态"], "en": ["inspect project", "repository governance inspection"]},
+      "parameters": [{"name": "project", "required": false, "description": "项目根目录"}], "invocation_templates": ["python <skill>/scripts/python/detect/inspect_project.py <project>"],
+      "examples": {"valid": ["python skills/agents-md-generator/scripts/python/detect/inspect_project.py ."], "invalid": ["不要把检查结果直接当作用户政策"]},
+      "prerequisites": ["项目目录可读取"], "outputs": {"format": "json", "success_exit_codes": [0], "failure_exit_codes": [1, 2]}, "risk": {"level": "low", "writes": false, "warning": "只读检查"}, "boundaries": ["不会启动设计访谈"], "related_command_ids": ["design.collect-profile"]
+    },
+    {
+      "id": "detect.task-rating", "category": "detect", "entrypoint": "task_rating_gate.py", "subcommand": "", "title": "评定任务执行等级", "summary": "依据仓库治理配置给任务复杂度和风险提供建议等级。", "when_to_use": "非平凡任务需要判断轻量执行或计划化执行时。",
+      "aliases": {"zh": ["任务评级门禁", "任务复杂度评估"], "en": ["task rating gate", "task complexity rating"]},
+      "parameters": [{"name": "--project", "required": false, "description": "项目根目录"}, {"name": "--task-text", "required": true, "description": "任务描述"}, {"name": "--context-summary", "required": false, "description": "上下文摘要"}, {"name": "--json", "required": false, "description": "机器可读输出"}], "invocation_templates": ["python <skill>/scripts/python/detect/task_rating_gate.py --project <project> --task-text <description> [--context-summary <summary>] [--json]"],
+      "examples": {"valid": ["python skills/agents-md-generator/scripts/python/detect/task_rating_gate.py --project . --task-text \"更新规则生成器\" --json"], "invalid": ["不要把建议等级当作用户授权"]},
+      "prerequisites": ["仓库提供任务评级配置时使用"], "outputs": {"format": "json", "success_exit_codes": [0], "failure_exit_codes": [1, 2]}, "risk": {"level": "low", "writes": false, "warning": "结果是建议而非授权"}, "boundaries": ["不会执行任务"], "related_command_ids": ["detect.inspect-project"]
+    }
+  ]
+}

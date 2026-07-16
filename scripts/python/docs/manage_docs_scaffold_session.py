@@ -7,6 +7,7 @@ from __future__ import annotations
 from datetime import datetime
 import json
 from pathlib import Path
+import re
 import shutil
 from typing import Any
 
@@ -1018,6 +1019,177 @@ def resume_repair(project: Path, input_path: str | None) -> dict[str, Any]:
     # 调用方可同时验证恢复 handoff 和触发恢复的原始原因。
     return dict_result
 
+# 当前 handoff 修复器只处理正式文件与根级候选的互斥关系。
+def repair_current_handoff_candidate(
+    # 项目上下文用于生成相对结果路径。
+    project: Path,
+    # 正式当前文件是唯一允许的重命名目标。
+    path_current: Path,
+    # 根级 Markdown 候选已经过基础类型筛选。
+    list_candidates: list[Path],
+    # 写模式决定是否执行 rename。
+    write: bool,
+    # 三个共享列表承载动作、跳过和错误结果。
+    list_renamed: list[dict[str, str]],
+    list_skipped: list[str],
+    list_errors: list[str],
+) -> None:
+    """验证当前 handoff 候选并记录或执行唯一安全重命名。
+
+    参数：project 为项目根，path_current 为正式文件，list_candidates 为候选，
+    write 为写模式，list_renamed、list_skipped、list_errors 为共享结果列表。
+    返回：无；通过共享列表报告结果。
+    """
+
+    # 正式当前文件存在时，其他 Markdown 候选构成多当前文件冲突。
+    if path_current.exists():
+
+        # 任一额外候选都无法自动判断应该归档还是删除。
+        if list_candidates:
+
+            # 错误明确指出正式文件与额外 Markdown 并存。
+            list_errors.append(
+                "cannot repair handoff naming automatically because docs/handoff contains "
+                "HANDOFF.md plus additional markdown candidates"
+            )
+
+        # 正式文件场景已经完成当前候选处理。
+        return
+
+    # 多个 Markdown 候选无法自动选择哪一个是当前 handoff。
+    if len(list_candidates) > 1:
+
+        # 要求用户先消除候选歧义再重跑修复。
+        list_errors.append(
+            "cannot repair handoff naming automatically because docs/handoff contains "
+            "multiple markdown candidates"
+        )
+
+        # 歧义候选不产生任何文件系统变更。
+        return
+
+    # 没有正式文件和候选时记录可解释的跳过原因。
+    if not list_candidates:
+
+        # 没有候选时无需执行当前文件重命名。
+        list_skipped.append("no current handoff rename candidate found")
+
+        # 空候选处理到此结束。
+        return
+
+    # 单一候选是唯一可安全推断的当前 handoff 来源。
+    path_source = list_candidates[0]  # 当前 handoff 来源候选
+
+    # dry-run 只记录计划，write 模式才修改文件系统。
+    if write:
+
+        # 同目录 rename 将候选转换为正式当前文件。
+        path_source.rename(path_current)
+
+    # 结果无论预览或写入都展示相同的来源和目标。
+    list_renamed.append({
+        "from": path_source.relative_to(project).as_posix(),
+        "to": path_current.relative_to(project).as_posix(),
+    })
+
+# 历史 handoff 修复器逐项验证文件类型、内容和目标时间戳。
+def repair_history_handoff_candidates(
+    # 项目根用于生成稳定的相对路径。
+    project: Path,
+    # 历史目录提供待检查条目和目标位置。
+    path_history_dir: Path,
+    # 写模式决定是否实际重命名。
+    write: bool,
+    # 三个共享列表收集动作和诊断。
+    list_renamed: list[dict[str, str]],
+    list_skipped: list[str],
+    list_errors: list[str],
+) -> None:
+    """验证历史 handoff 条目并记录或执行规范重命名。
+
+    参数：project 为项目根，path_history_dir 为历史目录，write 为写模式，
+    list_renamed、list_skipped、list_errors 为共享结果列表。
+    返回：无；所有诊断和动作通过共享列表返回。
+    """
+
+    # 历史目录中的每个条目独立验证并按生成时间规范命名。
+    for path_entry in sorted(path_history_dir.iterdir()) if path_history_dir.is_dir() else []:
+
+        # 相对路径用于所有错误、跳过和重命名结果。
+        str_relative_path = path_entry.relative_to(project).as_posix()  # 当前历史条目路径
+
+        # 历史目录中的子目录或特殊对象不能自动重命名。
+        if not path_entry.is_file():
+
+            # 非文件错误保留具体路径以支持人工处理。
+            list_errors.append(
+                "cannot repair history handoff naming automatically because a non-file "
+                f"entry exists: {str_relative_path}"
+            )
+
+            # 非文件条目无法进入正文或命名分析。
+            continue
+
+        # 已符合正式历史文件名的条目保持不变。
+        if HANDOFF_HISTORY_RE.fullmatch(path_entry.name):
+
+            # 合规名称无需加入重命名或跳过清单。
+            continue
+
+        # 非 Markdown 文件不属于可识别的历史 handoff。
+        if path_entry.suffix.lower() != ".md":
+
+            # 类型错误需要保留具体路径供人工处理。
+            list_errors.append(
+                "cannot repair history handoff naming automatically because a non-markdown "
+                f"file exists: {str_relative_path}"
+            )
+
+            # 不支持的文件类型不读取正文。
+            continue
+
+        # Markdown 正文用于确认文件确实具备 handoff 章节合同。
+        str_text = path_entry.read_text(encoding="utf-8", errors="ignore")  # 历史文件正文
+
+        # 普通 Markdown 文档不能仅凭所在目录被当作 handoff 改名。
+        if not looks_like_handoff_markdown(str_text):
+
+            # 内容不匹配时报告文件路径并保留原文件。
+            list_errors.append(
+                "cannot repair history handoff naming automatically because file does not "
+                f"look like a handoff: {str_relative_path}"
+            )
+
+            # 不可信正文不参与时间提取。
+            continue
+
+        # 优先使用文档自身记录的生成时间，缺失时采用文件修改时间。
+        datetime_moment = parse_handoff_generated_at(str_text) or datetime.fromtimestamp(path_entry.stat().st_mtime)  # 命名时间依据
+
+        # 唯一路径生成器避免同一秒历史文件互相覆盖。
+        path_target = unique_handoff_history_path(path_history_dir, datetime_moment)  # 规范历史目标
+
+        # 路径生成结果与当前文件相同表示无需修改。
+        if path_target == path_entry:
+
+            # 显式记录异常但已规范的历史候选。
+            list_skipped.append(str_relative_path)
+
+            # 当前文件已经处于唯一规范目标。
+            continue
+
+        # 实际重命名只在调用方明确请求 write 时发生。
+        if write:
+
+            # 同目录 rename 保留文件内容和时间事实。
+            path_entry.rename(path_target)
+
+        # dry-run 与 write 结果使用一致的重命名映射。
+        list_renamed.append({
+            "from": str_relative_path,
+            "to": path_target.relative_to(project).as_posix(),
+        })
+
 # 预览或执行当前及历史 handoff 的规范命名修复。
 def repair_handoff_names(project: Path, write: bool = False) -> dict[str, Any]:
     """修复可安全推断的 handoff 文件名并拒绝歧义现场。
@@ -1080,135 +1252,17 @@ def repair_handoff_names(project: Path, write: bool = False) -> dict[str, Any]:
             for item in list_extra_current
         )
 
-    # 正式当前文件存在时，其他 Markdown 候选构成多当前文件冲突。
-    if path_current.exists():
+    # 当前候选和历史候选分别由单一职责 helper 处理。
+    repair_current_handoff_candidate(
+        project, path_current, list_current_candidates, write,
+        list_renamed, list_skipped, list_errors,
+    )
 
-        # 任一额外候选都无法自动判断应该归档还是删除。
-        if list_current_candidates:
-
-            # 错误明确指出正式文件与额外 Markdown 并存。
-            list_errors.append(
-                "cannot repair handoff naming automatically because docs/handoff contains "
-                "HANDOFF.md plus additional markdown candidates"
-            )
-
-    # 正式文件缺失且只有一个 Markdown 候选时可以确定迁移目标。
-    elif len(list_current_candidates) == 1:
-
-        # 单一候选是唯一可安全推断的当前 handoff 来源。
-        path_source = list_current_candidates[0]  # 当前 handoff 来源候选
-
-        # dry-run 只记录计划，write 模式才修改文件系统。
-        if write:
-
-            # 同目录 rename 将候选转换为正式当前文件。
-            path_source.rename(path_current)
-
-        # 结果无论预览或写入都展示相同的来源和目标。
-        list_renamed.append(
-            {
-                "from": path_source.relative_to(project).as_posix(),  # 原候选路径
-                "to": path_current.relative_to(project).as_posix(),  # 正式当前路径
-            }
-        )
-
-    # 多个 Markdown 候选无法自动选择哪一个是当前 handoff。
-    elif len(list_current_candidates) > 1:
-
-        # 要求用户先消除候选歧义再重跑修复。
-        list_errors.append(
-            "cannot repair handoff naming automatically because docs/handoff contains "
-            "multiple markdown candidates"
-        )
-
-    # 没有正式文件和候选时记录可解释的跳过原因。
-    else:
-
-        # 没有正式文件也没有候选时无需执行当前文件重命名。
-        list_skipped.append("no current handoff rename candidate found")
-
-    # 历史目录中的每个条目独立验证并按生成时间规范命名。
-    for path_entry in sorted(path_history_dir.iterdir()) if path_history_dir.is_dir() else []:
-
-        # 相对路径用于所有错误、跳过和重命名结果。
-        str_relative_path = path_entry.relative_to(project).as_posix()  # 当前历史条目路径
-
-        # 历史目录中的子目录或特殊对象不能自动重命名。
-        if not path_entry.is_file():
-
-            # 非文件错误保留具体路径以支持人工处理。
-            list_errors.append(
-                "cannot repair history handoff naming automatically because a non-file "
-                f"entry exists: {str_relative_path}"
-            )
-
-            # 当前条目不可读取，直接检查下一个历史条目。
-            continue
-
-        # 已符合正式历史文件名的条目保持不变。
-        if HANDOFF_HISTORY_RE.fullmatch(path_entry.name):
-
-            # 合规文件无需加入 skipped，审计器会统一证明其状态。
-            continue
-
-        # 非 Markdown 文件不属于可识别的历史 handoff。
-        if path_entry.suffix.lower() != ".md":
-
-            # 文件类型错误不能通过简单改名安全修复。
-            list_errors.append(
-                "cannot repair history handoff naming automatically because a non-markdown "
-                f"file exists: {str_relative_path}"
-            )
-
-            # 跳过正文解析，继续检查其他历史条目。
-            continue
-
-        # Markdown 正文用于确认文件确实具备 handoff 章节合同。
-        str_text = path_entry.read_text(encoding="utf-8", errors="ignore")  # 历史文件正文
-
-        # 普通 Markdown 文档不能仅凭所在目录被当作 handoff 改名。
-        if not looks_like_handoff_markdown(str_text):
-
-            # 内容不匹配时报告文件路径并保留原文件。
-            list_errors.append(
-                "cannot repair history handoff naming automatically because file does not "
-                f"look like a handoff: {str_relative_path}"
-            )
-
-            # 不可信正文不参与时间提取或目标路径生成。
-            continue
-
-        # 优先使用文档自身记录的生成时间，保持历史语义准确。
-        datetime_generated_at = parse_handoff_generated_at(str_text)  # 可选文档生成时间
-
-        # 旧文档缺少生成时间时，以文件修改时间作为可审计退化依据。
-        datetime_moment = datetime_generated_at or datetime.fromtimestamp(path_entry.stat().st_mtime)  # 命名时间依据
-
-        # 唯一路径生成器避免同一秒历史文件互相覆盖。
-        path_target = unique_handoff_history_path(path_history_dir, datetime_moment)  # 规范历史目标
-
-        # 路径生成结果与当前文件相同表示无需修改。
-        if path_target == path_entry:
-
-            # 显式记录异常但已规范的历史候选。
-            list_skipped.append(str_relative_path)
-
-            # 当前条目已满足目标命名，继续检查其他文件。
-            continue
-
-        # 实际重命名只在调用方明确请求 write 时发生。
-        if write:
-
-            # 同目录 rename 保留文件内容和时间事实。
-            path_entry.rename(path_target)
-
-        # dry-run 与 write 结果使用一致的重命名映射。
-        list_renamed.append(
-            {
-                "from": str_relative_path,  # 原历史路径
-                "to": path_target.relative_to(project).as_posix(),  # 规范历史路径
-            }
-        )
+    # 历史候选独立执行内容与时间戳验证。
+    repair_history_handoff_candidates(
+        project, path_history_dir, write,
+        list_renamed, list_skipped, list_errors,
+    )
 
     # 写入模式审计修复后现场，dry-run 审计仍反映当前未修改现场。
     dict_naming = audit_handoff_naming(project)  # 最终 handoff 命名审计
@@ -1387,6 +1441,54 @@ def rotate_git_changelog(project: Path) -> str | None:
     # 项目相对路径适合写入命令 JSON 结果。
     return path_target.relative_to(project).as_posix()
 
+# Git Manager 版本同步器只更新受管 Current Version 章节。
+def sync_git_manager_version(project: Path, version: str) -> str:
+    """把 changelog 版本同步到 Git Manager 的活动版本章节。
+
+    参数：project 为项目根目录，version 为当前 changelog 版本。
+    返回：已同步 Git Manager 的项目相对路径；空版本时返回空字符串。
+    异常：Current Version 章节缺失或重复时抛出 ValueError。
+    """
+
+    # 空版本保持默认占位语义，不制造无效发布状态。
+    if not version:
+
+        # 空字符串明确表示未写入 Git Manager。
+        return ""
+
+    # scaffold 已保证 Git Manager 位于正式治理路径。
+    path_git_manager = project / "docs" / "git_manager" / "GIT_MANAGER.md"  # Git 管理文档路径
+
+    # 当前正文可能包含默认占位行或上一活动版本。
+    str_current = path_git_manager.read_text(encoding="utf-8")  # Git Manager 当前正文
+
+    # 二级标题边界确保只替换 Current Version 受管章节。
+    pattern_current_version = re.compile(  # Current Version 章节模式
+        r"^## Current Version\s*$.*?(?=^## |\Z)",  # 从目标标题匹配到下一二级标题
+        flags=re.MULTILINE | re.DOTALL,  # 跨行识别完整章节
+    )
+
+    # 活动版本正文保持验证器已公开的稳定格式。
+    str_replacement = (  # 新 Current Version 章节
+        "## Current Version\n"
+        f"- Active version for this release: `{version}`.\n"
+    )
+
+    # 正式模板必须包含唯一 Current Version 章节。
+    str_updated, int_replacements = pattern_current_version.subn(str_replacement, str_current)  # 同步后的正文和命中数
+
+    # 缺失或重复章节代表受管文档结构损坏。
+    if int_replacements != 1:
+
+        # 明确失败避免静默追加第二个版本章节。
+        raise ValueError("> ERR: [Python] GIT_MANAGER.md must contain exactly one Current Version section")
+
+    # UTF-8 原位写入保留其他 Git 治理章节和人工内容。
+    path_git_manager.write_text(str_updated, encoding="utf-8")
+
+    # 返回稳定相对路径供命令结果和测试审计。
+    return path_git_manager.relative_to(project).as_posix()
+
 # 写入当前 Git 变更日志并同步最近版本状态。
 def write_git_changelog(project: Path, input_path: str | None) -> dict[str, Any]:
     """归档旧日志、写入新日志并更新 docs 治理状态。
@@ -1420,6 +1522,9 @@ def write_git_changelog(project: Path, input_path: str | None) -> dict[str, Any]
     # 版本文本去除输入首尾空白后再持久化。
     str_version = str(dict_data.get("version", "")).strip()  # 当前 changelog 版本
 
+    # 同一命令原子同步 Git Manager 的活动版本表面。
+    str_git_manager_written = sync_git_manager_version(project, str_version)  # 已同步 Git Manager 路径
+
     # 状态版本供发布和文档验证流程读取。
     dict_state["last_git_changelog_version"] = str_version  # 最近日志版本
 
@@ -1432,4 +1537,5 @@ def write_git_changelog(project: Path, input_path: str | None) -> dict[str, Any]
         "written": path_target.relative_to(project).as_posix(),  # 当前日志路径
         "archived": str_archived or "",  # 可选历史日志路径
         "version": str_version,  # 本次写入版本
+        "git_manager_written": str_git_manager_written,  # 同步的 Git Manager 路径
     }

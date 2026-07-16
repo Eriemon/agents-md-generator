@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v1.4.6-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v2.0.1-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  Latest release: <strong>v1.4.6</strong> · Released on <strong>2026-07-12</strong>
+  Latest release: <strong>v2.0.1</strong> · Released on <strong>2026-07-16</strong>
 </p>
 
 AGENTS.md Generator helps coding agents produce instruction files that stay grounded in the real repository instead of drifting into guessed policy. It combines trigger metadata, grouped design interviews, deterministic Python scripts, docs-governance helpers, directory-governance gates, and verification checks so an agent can move from repository facts to trustworthy `AGENTS.md` output.
@@ -48,20 +48,41 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 - Repository fact extraction for commands, docs, CI hints, scopes, and governance signals.
 - Strong-control profiles for skill and engineering projects.
 - Docs governance for handoff, memory, development, install, and git-manager records.
+- Progressive-disclosure command registry with JSON sources, a SQLite FTS index, and a read-only query CLI.
 - Directory-governance review and structure gates through `scripts/python/dirs/manage_dirs.py`.
 - Compatibility shim generation for `CLAUDE.md` and `GEMINI.md` when requested.
 - Verification, audit, automated review governance, skill-effectiveness evals, and aggregate confidence checks for release readiness.
 
-## What's New In v1.4.6
+## What's New In v2.0.1
 
-- Keeps the v1.4.1 runtime split and extends it with dedicated worktree, remote-policy, release-installation, command-contract, root-contract, scanning, and runtime-evaluation modules.
-- Makes Python and script-family work pass a dual readable-skill preflight, then preserves final ownership by target language; generated roots and verification reject weakened routing contracts.
-- Blocks additional Git worktrees, `git config core.worktree` redirection, and polluted `.worktrees`-style containers so governance changes stay in the current folder and local branches.
-- Strengthens versioned skill installation with separate release-manifest, sanitization, repository-validation, and rollback-copy helpers, including receipt-backed hashes, content-policy checks, and safe replacement behavior.
-- Expands runtime eval coverage for project, workspace, policy, release, language-routing, token-usage, source-governance, and release-content regressions while keeping governed `evals/` installable and local tests excluded.
-- Adds explicit remote conda-environment and runtime-archive policies, tightens command/path contracts, and keeps Plan Mode language, script-output, and global-baseline rules synchronized across templates and validators.
-- Adds a config-driven Script Output Policy (`> INFO/WARNING/ERR: [kind]`), Python `--quiet` support, and machine-readable stdout exemptions; verification now covers root, remote-server, memory, command, and release-content contracts.
-- Preserves the explicitly declared public author/contact email for open-source attribution while continuing to redact unapproved emails, credentials, and machine-local paths from release copies.
+v2.0.1 is the first public v2 release. It is tuned for using this skill with [GPT-5.6 Sol in Codex](https://developers.openai.com/api/docs/models/gpt-5.6-sol): keep the always-loaded instruction surface compact, move detailed operational knowledge behind deterministic lookups, and make execution evidence easier to verify. These are architecture-level efficiency improvements; the project does not claim an unmeasured wall-clock or token-cost percentage.
+
+### Smaller Agent Context, Richer On-Demand Runtime
+
+- Compresses `SKILL.md` from 44,796 bytes and 202 lines to 12,683 bytes and 119 lines, a 71.7% byte reduction in the primary agent-facing instruction file.
+- Moves detailed command syntax into `config/registry/`, backed by versioned JSON sources, schemas, a manifest, and a SQLite FTS index. `query_registry.py ask` retrieves only the instructions needed for the current task and never executes returned commands.
+- Keeps the reduction honest: deterministic Python modules grow from 89 to 99 files because implementation and validation detail moved out of the prompt-facing document instead of being discarded.
+
+### Runtime And Governance Architecture
+
+- Replaces 26 legacy underscore-prefixed internal modules and decomposition notes with public, responsibility-focused modules for project discovery, profile assembly, persistent memory, release policy, rendering, routing contracts, and eval policy/release cases.
+- Adds first-class codebase-memory integration with explicit full-index, architecture-analysis, persistence, and live-versus-disk parity checks before governed writes.
+- Adds persistent memory storage and bounded retrieval views, while keeping handoff and long-term memory contracts explicit and continuing to reject raw machine-local paths.
+- Adds optional document registration with catalog, knowledge, interface, duplicate-review, and migration records. It remains opt-in: no registry state is created unless the user explicitly requests document registration or migration.
+- Strengthens source governance, content-density checks, semantic review evidence, release packaging, sanitization, provenance receipts, and command/root/routing contract evaluation.
+
+### Compatibility And Migration
+
+- Existing public CLI entry points remain the supported interface; internal module paths are not a compatibility contract. Compatibility wrappers route old public entry points to the new focused modules where applicable.
+- Replace `source_file_limits.max_lines` and `source_governance.max_lines` with byte-based `max_bytes` policies; v2 rejects the retired line-count fields.
+- Replace deprecated confidence-gate switches `--skip-missing-eval-runner` and `--require-eval-runner` with `--eval-runner-policy optional` and `--eval-runner-policy required`.
+- Evolution and experience subsystems remain retired. Compatibility shims for `CLAUDE.md` and `GEMINI.md` remain explicit opt-in operations.
+
+### Release Safety
+
+- The v1.4.6-to-v2.0.1 managed payload comparison contains 50 new files, 52 changed files, 26 retired paths, and 38 unchanged files before the public release receipt is regenerated.
+- Installable assets continue to exclude repo-local tests, smoke runs, reports, caches, nested `dist/`, local authentication files, credentials, private keys, and machine-specific absolute paths.
+- Explicitly approved author/contact email remains public for attribution; unapproved contact data and other sensitive material are still blocked or redacted.
 
 ## Skill Architecture
 
@@ -93,6 +114,7 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 | `SKILL.md` | Agent-facing routing, workflow, constraints, and verification rules. |
 | `agents/openai.yaml` | Skill metadata used by the host UI. |
 | `scripts/python/` | Deterministic inspection, interview, rendering, docs-governance, directory-governance, release-installation, verification, audit, and evaluation helpers. |
+| `config/registry/` | Versioned command sources, schemas, manifest, document-governance records, and the generated SQLite FTS index. |
 | `assets/templates/` | Bundled root and scoped `AGENTS.md` templates used by the current release flow. |
 | `evals/` | Repo-local skill-effectiveness cases and release-safe evaluation data used by the governance tooling. |
 | `references/` | Script guide, review checklist, question bank, capability notes, and AGENTS guidance. |
@@ -139,6 +161,14 @@ python scripts/python/verify/verify_agents.py <project>
 python scripts/python/docs/manage_docs.py verify <project>
 ```
 
+Query detailed operational guidance on demand:
+
+```powershell
+python scripts/python/registry/query_registry.py ask "verify" --limit 3 --json
+```
+
+Use a compact command or policy keyword for FTS queries; add `--category` or `--kind` to narrow results instead of combining many unrelated terms.
+
 Codex token usage review:
 
 ```powershell
@@ -151,9 +181,17 @@ Skill-release validation:
 
 ```powershell
 python scripts/python/verify/quick_validate.py .
-python scripts/python/verify/audit_skill.py .
+python scripts/python/verify/run_skill_evals.py evals/evals.json
 python scripts/python/verify/evaluate_skill.py . <project>
 ```
+
+The self-audit contract applies to the installable runtime before public repository documents are composed, because the canonical runtime intentionally keeps `SKILL.md` as its only root explanation:
+
+```powershell
+python scripts/python/verify/audit_skill.py <runtime-stage>
+```
+
+After `README.md`, `README-CN.md`, `LICENSE`, and `CITATION.cff` are added, validate the final ZIP with the release-package inspection and release gates rather than auditing the public mirror as the canonical runtime.
 
 Source-repository note:
 
@@ -202,8 +240,8 @@ If this skill helps your research, teaching, or engineering workflow, please cit
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {1.4.6},
-  date         = {2026-07-12},
+  version      = {2.0.1},
+  date         = {2026-07-16},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}

@@ -32,8 +32,8 @@ def _load_module_shards(tuple_shard_names: tuple[str, ...]) -> None:
 # 画像组装依赖前置合同和远端策略定义。
 _load_module_shards(
     (
-        "_design_profile_builder_contracts.py",
-        "_design_profile_builder_remote_policies.py",
-        "_design_profile_builder_assembly.py",
+        "profile_contracts.py",
+        "remote_profile_policies.py",
+        "profile_assembly.py",
     )
 )

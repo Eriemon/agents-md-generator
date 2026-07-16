@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "category": "dirs",
+  "commands": [
+    {
+      "id": "dirs.manage", "category": "dirs", "entrypoint": "manage_dirs.py", "subcommand": "<operation>", "title": "审查并验证目录治理变更", "summary": "提供扫描、初始化、变更审查、结构门禁、修复、接管、验证和归档八个子命令。", "when_to_use": "准备创建、移动、删除、重命名目录，或验证严格目录合同前。",
+      "aliases": {"zh": ["目录变更审查", "验证项目结构", "修复目录结构", "归档目录"], "en": ["review directory change", "verify project structure", "fix directory layout", "archive directory"]},
+      "parameters": [{"name": "scan", "required": false, "description": "扫描当前结构"}, {"name": "init", "required": false, "description": "初始化目录治理"}, {"name": "review", "required": false, "description": "审查 create/move/delete/rename"}, {"name": "structure-gate", "required": false, "description": "检查结构门禁"}, {"name": "apply-structure-fix", "required": false, "description": "应用已确认结构修复"}, {"name": "takeover-fix", "required": false, "description": "接管旧目录布局"}, {"name": "verify", "required": false, "description": "验证治理状态"}, {"name": "archive", "required": false, "description": "按合同归档"}, {"name": "--input", "required": false, "description": "变更或修复 JSON"}, {"name": "--dry-run", "required": false, "description": "仅预览"}],
+      "invocation_templates": ["python <skill>/scripts/python/dirs/manage_dirs.py review <project> --input <changes.json> --dry-run", "python <skill>/scripts/python/dirs/manage_dirs.py verify <project>"],
+      "examples": {"valid": ["python skills/agents-md-generator/scripts/python/dirs/manage_dirs.py review . --input .agents/dir-review.json --dry-run"], "invalid": ["目录审查被阻断时不要直接执行文件系统变更"]},
+      "prerequisites": ["变更路径和动作已写入 JSON", "阻断结果需要用户强制确认"], "outputs": {"format": "json", "success_exit_codes": [0], "failure_exit_codes": [1, 2]}, "risk": {"level": "high", "writes": true, "warning": "修复与归档子命令可能移动或删除目录"}, "boundaries": ["review 应先 dry-run", "审查不等于实际执行变更"], "related_command_ids": ["docs.operations", "verify.verify-agents"]
+    }
+  ]
+}

@@ -20,16 +20,21 @@ from typing import Any
 # 设计画像构建器提供最终画像组装和写入合同。
 from design_profile_builder import attach_alignment, build_profile, takeover_required, write_profile
 
+# 画像构建器完成兄弟任务路径引导后再加载共享知识图谱门禁。
+from codebase_memory_mcp import enforce_codebase_memory_write_gate
+
 # 问题模块负责读取调用方提供的 JSON 答案。
 from design_questions import read_json_object
 
 # 状态机模块提供访谈生命周期和所有回答动作。
 from design_interview_state import (
     answer_extra_requirements,
+    answer_codebase_memory_install_confirmation,
     answer_group,
     answer_remote_configuration_confirmation,
     answer_remote_install_confirmation,
     answer_remote_server_route_mapping,
+    advance_after_codebase_memory_gate,
 
     # 审查返工和问题组确认处理访谈的人机确认阶段。
     answer_review_rework,
@@ -49,6 +54,7 @@ from design_interview_state import (
     legacy_question_payload,
     read_state,
     refresh_remote_gate,
+    refresh_codebase_memory_gate,
     state_path,
     submit_design_review,
     write_state,
@@ -63,6 +69,12 @@ REMOTE_REFRESH_STATUSES = {  # 等待远程条件变化的访谈状态
     "awaiting_remote_server_route_mapping",  # 等待远程服务器路由映射
 }
 
+# 知识图谱安装等待态在恢复时重新检测本地二进制和 Codex 配置。
+CODEBASE_MEMORY_REFRESH_STATUSES = {  # 恢复时必须重查本地依赖的知识图谱状态
+    "awaiting_codebase_memory_install_confirmation",  # 等待人工安装确认
+    "awaiting_codebase_memory_install_completion",  # 等待外部安装完成
+}
+
 # 回答处理器按状态路由到同签名的状态机动作。
 ANSWER_HANDLER_BY_STATUS: dict[  # 访谈状态到回答动作的映射
     str,  # 访谈状态标识类型
@@ -70,6 +82,7 @@ ANSWER_HANDLER_BY_STATUS: dict[  # 访谈状态到回答动作的映射
 ] = {
     "collecting_group": answer_group,  # 收集当前问题组答案
     "awaiting_group_confirmation": confirm_group,  # 确认当前问题组答案
+    "awaiting_codebase_memory_install_confirmation": answer_codebase_memory_install_confirmation,  # 知识图谱安装确认动作
     "awaiting_remote_install_confirmation": answer_remote_install_confirmation,  # 确认远程安装
     "awaiting_remote_configuration_confirmation": answer_remote_configuration_confirmation,  # 确认远程配置
     "awaiting_remote_server_route_mapping": answer_remote_server_route_mapping,  # 提交路由映射
@@ -184,10 +197,19 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
 
     # write 明确授权生成治理配置和文档产物。
+    # 显式确认参数只授权解除 Git 索引跟踪，不删除本地产物。
+    # 独立确认参数保护 codebase-memory 的本地持久化副本。
     parser.add_argument(
         "--write",
         action="store_true",
         help="Write .agents/agents-control.json and create docs governance artifacts.",
+    )
+
+    # 确认开关只解除 Git 索引跟踪，不删除根级本地产物。
+    parser.add_argument(
+        "--confirm-codebase-memory-untrack",
+        action="store_true",
+        help="User confirmed removing .codebase-memory from the Git index while keeping local files.",
     )
 
     # start 启动普通分组设计访谈。
@@ -398,6 +420,27 @@ def resume_interview(path_project: Path, bool_takeover: bool) -> None:
             # 避免随后又输出刷新前的交互载荷。
             return
 
+    # 人工安装完成后恢复命令必须先重查依赖，不能相信旧状态。
+    if str_status in CODEBASE_MEMORY_REFRESH_STATUSES:
+
+        # 本轮真实依赖探测决定继续阻断还是恢复后续流程。
+        dict_refreshed = refresh_codebase_memory_gate(path_project, dict_state)  # 知识图谱刷新响应
+
+        # 非空载荷表示二进制或 MCP 配置仍未就绪。
+        if dict_refreshed is not None:
+
+            # 输出最新安装门禁事实而不是旧状态快照。
+            emit_json(dict_refreshed)
+
+            # 未就绪时不得继续远程或问题组状态迁移。
+            return
+
+        # 依赖就绪后恢复知识图谱门禁之后的原有流程。
+        emit_json(advance_after_codebase_memory_gate(path_project, dict_state))
+
+        # 恢复路径已输出唯一交互载荷。
+        return
+
     # 非远程状态或无刷新变化时输出当前交互问题。
     emit_json(interactive_payload(path_project, dict_state))
 
@@ -566,10 +609,13 @@ def write_valid_profile(
     dict_answers: dict[str, Any],
     dict_profile: dict[str, Any],
     dict_result: dict[str, Any],
+    *,
+    confirm_codebase_memory_untrack: bool = False,
 ) -> None:
     """执行写入前审查门禁并持久化设计画像。
 
-    参数：path_project 为项目根；dict_answers 为答案；dict_profile 为画像；dict_result 为输出载荷。
+    参数：path_project 为项目根；dict_answers 为答案；dict_profile 为画像；
+    dict_result 为输出载荷；confirm_codebase_memory_untrack 表示用户是否确认解除产物的 Git 跟踪。
     返回：无；成功时原位补充 ``written`` 字段。
     异常：设计审查未批准时抛出 ``SystemExit(1)``。
     """
@@ -610,7 +656,24 @@ def write_valid_profile(
         # 非零退出码声明画像尚未写入。
         raise SystemExit(1)
 
-    # 审查通过后写入画像并记录实际产物路径。
+    # 审查通过后仍需满足知识图谱依赖、索引和 Git 产物边界。
+    dict_codebase_gate = enforce_codebase_memory_write_gate(  # 画像写入前知识图谱门禁结果
+        path_project,  # 待写入画像的项目根
+        dict_profile,  # 已通过审查的控制画像
+        apply=True,  # 执行必要的忽略规则修复
+        confirm_untrack=confirm_codebase_memory_untrack,  # 用户解除跟踪确认
+    )
+
+    # 门禁失败载荷包含缺依赖、缺索引或 Git 污染的精确诊断。
+    if not dict_codebase_gate.get("ok"):
+
+        # 机器可读诊断供调用方完成恢复动作。
+        emit_json(dict_codebase_gate)
+
+        # 任何知识图谱门禁失败都阻止画像写入。
+        raise SystemExit(1)
+
+    # 全部门禁通过后写入画像并记录实际产物路径。
     dict_result["written"] = str(  # 已写入画像文件路径
         write_profile(path_project, dict_profile)  # 审查通过后的画像产物
     )
@@ -657,7 +720,13 @@ def collect_profile(path_project: Path, namespace_args: argparse.Namespace) -> N
     if namespace_args.write:
 
         # 审查未批准时该调用直接终止，不会修改成功载荷。
-        write_valid_profile(path_project, dict_answers, dict_profile, dict_result)
+        write_valid_profile(
+            path_project,
+            dict_answers,
+            dict_profile,
+            dict_result,
+            confirm_codebase_memory_untrack=namespace_args.confirm_codebase_memory_untrack,
+        )
 
     # 只读验证和成功写入共享同一最终输出结构。
     emit_json(dict_result)
