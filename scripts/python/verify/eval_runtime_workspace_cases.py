@@ -18,8 +18,155 @@ from eval_runtime_core import (
     tempfile,
 )
 
+# 根合同验证器提供工作区边界的正式唯一性与语义检查。
+from verify_workspace_boundary import validate_workspace_boundary_contract
+
 # 技能内评估目录只作为允许存在的发布内容规则证据。
 PATH_SKILL_EVALS = Path("skills") / "demo-skill" / "evals"  # 示例技能评估目录相对路径
+
+# 工作区边界压力场景验证紧急请求、泛化授权和单次确认都不能放宽外部修改门禁。
+def case_workspace_boundary_double_confirmation(
+    case: dict[str, Any],
+    helper: EvalFixtures,
+) -> dict[str, Any]:
+    """评估受管根工作区边界与外部修改双确认合同。
+
+    参数:
+        case: 当前评估用例元数据。
+        helper: 提供完整受管技能项目渲染能力的夹具助手。
+
+    返回:
+        包含压力语义、弱化阻断和重复阻断证据的结构化对比结果。
+    """
+
+    # 隔离项目确保文本变异不影响仓库当前根规则。
+    with tempfile.TemporaryDirectory() as str_temporary_directory:
+
+        # 临时项目承载正式渲染的受管根 AGENTS.md。
+        path_project = Path(str_temporary_directory)  # 双确认评估项目根
+
+        # 项目与安装版本一致，避免无关版本诊断影响边界证据。
+        helper.make_rendered_governed_skill_project(
+            path_project,  # 指定双确认评估项目根
+            name="demo-skill",  # 使用普通受管技能名称
+            project_version="v0.4.3",  # 固定评估项目版本
+            installed_version="v0.4.3",  # 固定评估安装版本
+        )
+
+        # 正式根文本包含生成器实际输出的边界规则。
+        str_agents_text = (path_project / "AGENTS.md").read_text(  # 受管根规则文本
+            encoding="utf-8",  # 根规则统一使用 UTF-8
+            errors="ignore",  # 评估读取不因异常字节终止
+        )
+
+        # 弱化片段覆盖允许根、无副作用、停止、双确认职责和变化失效。
+        tuple_weakened_fragments = (  # 原始保护片段与弱化替换
+            ("current work folder", "project folder"),  # 删除当前允许根语义
+            ("verified remote-server work folder", "remote folder"),  # 弱化远程允许根
+            ("necessary and side-effect free", "when useful"),  # 删除外部只读无副作用限制
+            ("external modification, stop", "external modification"),  # 删除修改前停止要求
+            (
+                "two separate explicit user confirmations",  # 两次独立确认原文
+                "explicit user confirmation",  # 合并成单次确认的弱化文本
+            ),
+            (
+                "first approves the exception in principle and the second approves the exact action",  # 双职责原文
+                "user approves the action",  # 混淆两次确认职责的弱化文本
+            ),
+            (
+                "Any target or scope change invalidates both confirmations.",  # 变化失效原文
+                "",  # 删除变化后重新确认要求
+            ),
+        )
+
+        # 每个弱化版本都调用正式验证器，收集是否稳定产生边界错误。
+        list_weakened_rejections = []  # 各保护层弱化后的阻断结果
+
+        # 独立变异避免某一缺失片段掩盖其他验证结果。
+        for str_original, str_replacement in tuple_weakened_fragments:
+
+            # 当前文本只替换一层保护语义。
+            str_mutated = str_agents_text.replace(str_original, str_replacement)  # 单项弱化根文本
+
+            # 正式验证器把诊断写入独立错误列表。
+            list_errors: list[str] = []  # 当前弱化版本的验证错误
+
+            # 返回值与错误文本共同证明工作区边界被阻断。
+            bool_valid = validate_workspace_boundary_contract(  # 当前弱化版本是否合法
+                str_mutated,  # 单项弱化后的根规则
+                "AGENTS.md",  # 评估诊断使用的根文件标识
+                list_errors,  # 接收正式验证错误
+            )
+
+            # 记录验证失败且错误明确指向工作区边界的完整条件。
+            list_weakened_rejections.append(
+                not bool_valid
+                and any("workspace boundary" in str_error.casefold() for str_error in list_errors)
+            )
+
+        # 提取正式输出中的唯一工作区边界行。
+        str_boundary_rule = next(  # 完整工作区边界规则行
+            str_line  # 保留首次匹配的完整规则文本
+            for str_line in str_agents_text.splitlines()  # 遍历根规则各行
+            if str_line.startswith("- **Workspace boundary:**")  # 固定前缀定位边界规则
+        )
+
+        # 重复规则模拟两个可能产生冲突解释的授权来源。
+        str_duplicate_text = str_agents_text.replace(  # 重复工作区边界的根文本
+            str_boundary_rule,  # 原始唯一边界规则
+            f"{str_boundary_rule}\n{str_boundary_rule}",  # 连续写入两条相同规则
+        )
+
+        # 重复检查使用独立错误列表保留正式诊断。
+        list_duplicate_errors: list[str] = []  # 重复边界验证错误
+
+        # 唯一性验证必须拒绝重复完整规则。
+        bool_duplicate_valid = validate_workspace_boundary_contract(  # 重复规则是否合法
+            str_duplicate_text,  # 包含两条相同边界的根文本
+            "AGENTS.md",  # 固定名称保证诊断文本可复现
+            list_duplicate_errors,  # 接收重复规则诊断
+        )
+
+    # 单独命名长片段，避免字典检查项掩盖只读例外的准确边界。
+    str_read_only_fragment = (  # 外部只读访问必须满足的固定片段
+        "External reads must be necessary and side-effect free"  # 精确匹配生成器拥有的英文合同
+    )
+
+    # 正向检查把用户压力场景映射到固定规则中的不可弱化语义。
+    dict_with_checks = {  # 工作区边界与双确认能力证据
+        "renders_once": str_agents_text.count("- **Workspace boundary:**") == 1,  # 固定规则是否唯一
+        "urgent_external_write_stops": "Before any external modification, stop" in str_agents_text,  # 紧急写入停止线
+        "blanket_approval_is_not_double_confirmation": "two separate explicit user confirmations" in str_agents_text,  # 泛化授权不可替代两次确认
+        "first_confirmation_does_not_execute": "first approves the exception in principle" in str_agents_text,  # 首次确认仅同意原则例外
+        "changed_scope_invalidates_both": "target or scope change invalidates both confirmations" in str_agents_text,  # 范围变化使确认失效
+        "side_effect_free_read_stays_read_only": str_read_only_fragment in str_agents_text,  # 只读例外不得扩大为写权限
+        "weakened_contract_rejected": all(list_weakened_rejections),  # 每层保护弱化是否均被拒绝
+        "duplicate_contract_rejected": not bool_duplicate_valid and bool(list_duplicate_errors),  # 重复规则是否被拒绝
+    }
+
+    # 无技能基线不提供任何可执行工作区边界或双确认保护。
+    dict_without_checks = {  # 缺少生成器时的能力对照
+        str_check_name: False  # 每项边界能力在朴素基线中均缺失
+        for str_check_name in dict_with_checks  # 覆盖全部正向检查键
+    }
+
+    # 统一结果同时保留渲染规则、弱化结果和重复诊断供失败定位。
+    return build_case_result(
+        case,  # 当前评估案例元数据
+        with_skill_checks=dict_with_checks,  # 使用技能时的压力检查结果
+        without_skill_checks=dict_without_checks,  # 无技能历史基线
+        with_skill_detail={
+            "workspace_boundary_rule": str_boundary_rule,  # 正式生成的完整边界规则
+            "weakened_rejections": list_weakened_rejections,  # 各弱化版本阻断结果
+            "duplicate_errors": list_duplicate_errors,  # 重复规则正式诊断
+        },
+        without_skill_detail={
+            "baseline": (
+                "generic workspace guidance does not separate read-only access "
+                "from two-step external modification approval"
+            )
+        },
+    )
 
 # 根级工作产物场景验证允许仓库根产物并阻断技能内嵌套产物。
 def case_root_workspace_artifact_gate(case: dict[str, Any], helper: EvalFixtures) -> dict[str, Any]:

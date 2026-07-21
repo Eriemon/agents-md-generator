@@ -70,6 +70,12 @@ def compact_runtime_policy_gate_line(str_line: str) -> tuple[bool, str | None]:
         是否已处理以及可选的精炼替换文本。
     """
 
+    # 工作区边界已经是验收合同文本，压缩器必须原样保留全部保护层。
+    if str_line.startswith("- **Workspace boundary:**"):
+
+        # 原样返回避免允许根、只读限制、披露或双确认语义被通用压缩削弱。
+        return True, str_line
+
     # worktree 规则保留全部禁止入口和分支替代方案。
     if str_line.startswith("- Do not create or use additional Git worktrees"):
 

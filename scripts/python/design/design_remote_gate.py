@@ -318,12 +318,38 @@ def remote_settings_path(skill_dir: Path) -> Path | None:
     # 两种设置布局均缺失时依赖不完整。
     return None
 
+# 远程 CLI 入口解析与技能身份分离，避免内部目录升级影响安装判定。
+def remote_ssh_entry_path(skill_dir: Path) -> Path | None:
+    """定位远程 SSH skill 支持的命令行入口。
+
+    参数：skill_dir 为已经通过技能身份检查的安装根。
+    返回：首个存在的新版或旧版 CLI 入口；均缺失时为 None。
+    """
+
+    # 新版 runtime 入口优先，旧版根脚本仅作为已发布版本兼容回退。
+    tuple_candidates = (  # 按稳定优先级排列的受支持 CLI 入口
+        skill_dir / "scripts" / "python" / "runtime" / "remote_ssh.py",  # 新版运行入口
+        skill_dir / "scripts" / "remote_ssh.py",  # 已发布旧版兼容入口
+    )
+
+    # 固定顺序检查避免选择结果受目录枚举顺序影响。
+    for path_candidate in tuple_candidates:
+
+        # 只有真实文件可以作为可执行的 Python CLI 入口。
+        if path_candidate.is_file():
+
+            # 返回首个可用入口并停止兼容路径探测。
+            return path_candidate
+
+    # 两个公开入口均缺失时由调用方报告运行能力错误。
+    return None
+
 # 从显式覆盖或 Codex 默认目录发现可用远程 SSH skill。
 def remote_skill_dir() -> Path | None:
     """从 Codex skill 根定位已安装的远程 SSH skill。
 
     参数：无。
-    返回：结构完整的 erie-remote-ssh 目录；未安装或不兼容时为 None。
+    返回：包含根 SKILL.md 的 erie-remote-ssh 目录；未安装时为 None。
     """
 
     # 测试和定制安装可通过显式环境变量提供候选根。
@@ -360,21 +386,16 @@ def remote_skill_dir() -> Path | None:
             (Path.home() / ".codex" / "skills" / REMOTE_SSH_SKILL_NAME).resolve()
         )
 
-    # 每个候选必须同时满足 skill、CLI 和设置文件合同。
+    # 安装身份只由技能目录和根 SKILL.md 决定。
     for candidate in list_candidates:
 
-        # 完整结构验证避免把残缺目录误报为已安装依赖。
-        if (
-            candidate.is_dir()
-            and (candidate / "SKILL.md").is_file()
-            and (candidate / "scripts" / "remote_ssh.py").is_file()
-            and remote_settings_path(candidate) is not None
-        ):
+        # 内部 CLI 与设置布局属于独立能力，不能改写安装事实。
+        if candidate.is_dir() and (candidate / "SKILL.md").is_file():
 
-            # 返回首个结构完整且可调用的候选根。
+            # 返回首个满足技能身份合同的候选根。
             return candidate
 
-    # 所有候选均不完整时视为依赖未安装。
+    # 所有候选均缺少目录或根说明文件时才视为未安装。
     return None
 
 # 汇总远程 SSH 依赖发现结果和可执行安装规格。
@@ -382,17 +403,33 @@ def remote_dependency_summary() -> dict[str, Any]:
     """汇总远程 SSH 依赖的安装状态与安装规格。
 
     参数：无。
-    返回：包含安装状态、目录、名称、仓库和安装规格的摘要。
+    返回：包含安装身份、CLI/设置能力、仓库和安装规格的摘要。
     """
 
     # 目录发现结果同时决定 installed 状态和展示路径。
     path_skill_dir = remote_skill_dir()  # 已验证的远程 SSH skill 根。
 
-    # 摘要供访谈流程选择安装依赖或继续发现服务器。
+    # CLI 和设置路径仅在技能身份成立后独立探测。
+    path_cli = (  # 当前安装副本的可用 CLI 入口
+        remote_ssh_entry_path(path_skill_dir) if path_skill_dir else None  # 身份成立后探测运行能力
+    )
+
+    # 设置能力缺失应进入配置或能力诊断，而不是重新安装分支。
+    path_settings = (  # 当前安装副本的可用默认设置
+        remote_settings_path(path_skill_dir) if path_skill_dir else None  # 身份成立后探测配置能力
+    )
+
+    # 摘要供访谈流程分别处理安装、运行和配置状态。
     return {
-        "installed": path_skill_dir is not None,  # 依赖目录是否通过结构验证。
+        "installed": path_skill_dir is not None,  # 技能身份是否通过目录与 SKILL.md 检查。
         "skill_dir": (  # 已安装目录展示值。
-            str(path_skill_dir) if path_skill_dir else ""
+            str(path_skill_dir) if path_skill_dir else None
+        ),
+        "runtime_available": path_cli is not None,  # 受支持 CLI 入口是否可用。
+        "cli_path": str(path_cli) if path_cli else None,  # 实际选中的 CLI 入口。
+        "settings_available": path_settings is not None,  # 默认设置文件是否可用。
+        "settings_path": (  # 实际选中的设置文件路径。
+            str(path_settings) if path_settings else None
         ),
         "url": REMOTE_SSH_GIT_URL,  # 缺失依赖时使用的仓库地址。
         "install_specs": list(REMOTE_SSH_INSTALL_SPECS),  # skill 安装参数副本。
@@ -404,12 +441,24 @@ def remote_ssh_command(skill_dir: Path, subcommand: str, *extra: str) -> list[st
 
     参数：skill_dir 为 skill 根，subcommand 为子命令，extra 为附加参数。
     返回：可传给 subprocess 的命令参数列表。
+    异常：技能已安装但缺少受支持 CLI 入口时抛出 FileNotFoundError。
     """
+
+    # 入口能力由统一解析器决定，命令和配置提示不得各自猜测路径。
+    path_entry = remote_ssh_entry_path(skill_dir)  # 当前选中的远程 SSH CLI 入口
+
+    # 已安装但缺少公开入口时报告能力错误，不改写为未安装。
+    if path_entry is None:
+
+        # 稳定错误文本供发现和配置流程给出精确恢复建议。
+        raise FileNotFoundError(
+            "> ERR: [Python] erie-remote-ssh is installed but no supported CLI entry was found"
+        )
 
     # 使用当前解释器保证 CLI 与调用方处于同一 Python 环境。
     list_command = [  # subprocess 接收的远程 SSH 命令参数。
         sys.executable,  # 当前进程 Python 解释器。
-        str(skill_dir / "scripts" / "remote_ssh.py"),  # 远程 SSH CLI 入口。
+        str(path_entry),  # 统一解析后的远程 SSH CLI 入口。
         subcommand,  # 本次调用的 CLI 子命令。
     ]
 
@@ -438,9 +487,26 @@ def run_remote_ssh(
     返回：包含退出码、标准输出和标准错误的完成进程。
     """
 
+    # 先构造命令，把入口能力缺失转换到与子进程失败相同的返回通道。
+    try:
+
+        # 无 shell 参数列表由统一 CLI 入口解析器生成。
+        list_command = remote_ssh_command(skill_dir, subcommand, *extra)  # 远程 CLI 参数
+
+    # 入口缺失属于可诊断能力状态，不应向上泄漏文件异常。
+    except FileNotFoundError as object_error:
+
+        # 127 表示命令入口不可用，stderr 保留精确能力错误。
+        return subprocess.CompletedProcess(
+            args=[],
+            returncode=127,
+            stdout="",
+            stderr=str(object_error),
+        )
+
     # 不抛出非零退出码，让发现和检查函数解释领域状态码。
     return subprocess.run(
-        remote_ssh_command(skill_dir, subcommand, *extra),  # 无 shell 的 CLI 参数。
+        list_command,  # 无 shell 的 CLI 参数。
         text=True,  # 标准流按文本解码。
         capture_output=True,  # 调用方需要解析 stdout 与 stderr。
         check=False,  # 领域状态码由上层显式处理。
@@ -833,13 +899,20 @@ def remote_configure_command_hint(skill_dir: Path) -> str:
     """生成远程服务器交互配置命令提示。
 
     参数：skill_dir 为远程 SSH skill 根。
-    返回：调用 remote_ssh.py configure 的完整命令文本。
+    返回：调用已解析远程 CLI configure 的完整命令或能力错误文本。
     """
 
-    # 基础命令指向已验证 skill 内的 CLI 入口。
-    str_command = (  # 远程服务器交互配置命令。
-        f"python {skill_dir / 'scripts' / 'remote_ssh.py'} configure"  # CLI 配置入口。
-    )
+    # 配置提示复用运行命令的入口解析顺序。
+    path_entry = remote_ssh_entry_path(skill_dir)  # 配置提示绑定的 CLI 路径
+
+    # 入口缺失时返回精确能力诊断，不展示不可执行的旧路径。
+    if path_entry is None:
+
+        # 文本与执行链保持一致，便于状态机和用户识别同一问题。
+        return "erie-remote-ssh is installed but no supported CLI entry was found"
+
+    # 基础命令指向统一解析后的 CLI 入口。
+    str_command = f"python {path_entry} configure"  # 远程服务器交互配置命令
 
     # 兼容布局探测结果用于显式传入实际设置文件。
     path_settings = remote_settings_path(skill_dir)  # 当前 skill 设置文件路径。

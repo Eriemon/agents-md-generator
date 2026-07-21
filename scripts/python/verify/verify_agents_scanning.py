@@ -20,6 +20,8 @@ from verify_agents_root_contracts import (
     validate_script_output_policy,
     validate_strong_control,
 )
+# 独立工作区边界模块确保通用根验证不依赖强控制合同体积。
+from verify_workspace_boundary import validate_workspace_boundary_contract
 # 共享运行时提供正则、大小阈值、标记校验和延迟依赖。
 from verify_agents_runtime_shared import (
     COMMAND_RE,
@@ -312,6 +314,16 @@ def validate_root_agents_file(
 
     # 版本元数据与默认语言锁都通过独立 helper 校验，再统一汇总刷新标记。
     bool_repair_required = validate_root_metadata_versions(file, dict_metadata, installed_version, errors)  # 版本元数据链路是否要求刷新根文件
+
+    # 所有受管根都必须通过工作区边界检查，不依赖 strong-control 标记。
+    bool_workspace_boundary_valid = validate_workspace_boundary_contract(  # 工作区边界验证结果
+        text,  # 当前根 AGENTS.md 全文
+        file,  # 当前根文件诊断标识
+        errors,  # 共享错误列表
+    )
+
+    # 工作区边界失配必须进入统一 root sync 修复流程。
+    bool_repair_required = not bool_workspace_boundary_valid or bool_repair_required  # 合并边界修复状态
 
     # 叠加默认语言契约的刷新标记，任一子契约失配都必须统一输出 root sync 指引。
     bool_repair_required = validate_root_default_language_contract(text, dict_metadata, errors) or bool_repair_required  # 汇总后的根文件刷新标记

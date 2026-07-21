@@ -733,6 +733,30 @@ def remote_gate_rules(profile: dict, dict_directory: dict) -> list[Rule]:
     # 返回与当前 profile 匹配的远程规则。
     return list_rules
 
+# 工作区边界由生成器直接拥有，所有受管根都必须继承且不能由画像关闭。
+def workspace_boundary_rule() -> Rule:
+    """构造受管根固定生成的工作区修改边界。
+
+    参数:
+        无外部业务参数；规则不读取项目画像开关。
+
+    返回:
+        包含允许根、外部只读限制、风险披露和双确认职责的根级规则。
+    """
+
+    # 单条规则完整承载最低保护，避免多个画像分支产生不一致授权语义。
+    return Rule(
+        "workspace-boundary",  # 工作区边界稳定规则标识
+        "Task-specific gates",  # 规则归属任务专用门禁章节
+        "- **Workspace boundary:** modify files only inside the current work folder and the verified "
+        "remote-server work folder. External reads must be necessary and side-effect free. Before any "
+        "external modification, stop, disclose the exact normalized target, action, scope, risks, "
+        "alternatives, and recovery limits, then obtain two separate explicit user confirmations; the "
+        "first approves the exception in principle and the second approves the exact action. Any target "
+        "or scope change invalidates both confirmations.",  # 不可弱化的外部修改双确认合同
+        1,  # 最低保护应先于所有画像专用门禁输出
+    )
+
 # 任务专用门禁从完整 profile 中筛选高影响执行入口。
 def task_specific_gates(profile: dict | None, project: Path) -> str:
     """生成会改变执行行为的仓库级阻断入口。
@@ -745,20 +769,34 @@ def task_specific_gates(profile: dict | None, project: Path) -> str:
         按优先级去重后的任务专用门禁文本。
     """
 
-    # 未确认强控制时只保留不能被误解为已完成治理的入口提示。
+    # 固定边界先进入候选集合，任何画像状态都不能关闭最低保护。
+    list_base_rules = [workspace_boundary_rule()]  # 所有受管根共享的基础门禁
+
+    # 未确认强控制时保留边界，并追加不能被误解为已完成治理的入口提示。
     if not profile:
 
-        # 返回未配置 profile 时仍有决策意义的入口规则。
-        return (
-            "- AGENTS generation: collect a confirmed design profile before claiming "
-            "strict controlled output."
+        # 画像收集提示与固定边界通过同一规则渲染器排序和去重。
+        list_base_rules.append(
+            Rule(
+                "agents-generation.profile-required",  # 无画像提示稳定标识
+                "Task-specific gates",  # 提示仍归属于任务专用门禁
+                "- AGENTS generation: collect a confirmed design profile before claiming "
+                "strict controlled output.",  # 未配置画像时的事实停止线
+                50,  # 固定边界之后再输出画像收集提示
+            )
         )
+
+        # 压缩流程必须保留完整固定边界和无画像提示。
+        return compact_task_gate_text(render_rule_list(list_base_rules))
 
     # 目录聚合器同时返回远程规则所需的规范化目录合同。
     tuple_gate_context = directory_gate_rules(profile, project)  # 目录规则与合同二元组
 
     # 二元组首项是已构造的目录规则集合。
-    list_rules = tuple_gate_context[0]  # 当前已聚合的根级规则
+    list_rules = [  # 当前已聚合的根级规则
+        *list_base_rules,  # 不可关闭的基础工作区边界
+        *tuple_gate_context[0],  # 当前画像生成的目录规则
+    ]
 
     # 二元组次项供远程规则读取目录策略。
     dict_directory = tuple_gate_context[1]  # 远程规则复用的目录合同

@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v2.0.1-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v2.0.3-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  最新版本：<strong>v2.0.1</strong> · 发布日期：<strong>2026-07-16</strong>
+  最新版本：<strong>v2.0.3</strong> · 发布日期：<strong>2026-07-21</strong>
 </p>
 
 AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的治理文件，而不是凭记忆拼接规则。它把触发元数据、分组式设计访谈、确定性 Python 脚本、文档治理辅助、目录治理门禁和验证链组合在一起，让 Agent 能从仓库事实稳定走到可信的 `AGENTS.md` 输出。
@@ -52,6 +52,35 @@ AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的�
 - 通过 `scripts/python/dirs/manage_dirs.py` 执行目录治理审查与结构门禁。
 - 在需要时生成 `CLAUDE.md` 与 `GEMINI.md` 兼容 shim。
 - 提供验证、审计、自动 review 治理、skill-effectiveness eval 和 aggregate confidence gate，用于发布前把关。
+
+## v2.0.3 重点更新
+
+v2.0.3 收紧了首个公开 v2 版本中仍然耦合的三类边界：已安装技能身份与运行能力、可编辑注册源与生成索引、当前工作区与外部文件系统目标。这个版本保持现有公开 CLI 表面不变，同时让失败诊断更精确，并降低生成治理规则被意外弱化的风险。
+
+### RemoteSSH 能力发现
+
+- 当 `erie-remote-ssh` 的技能目录和根 `SKILL.md` 存在时，就确认技能已经安装；CLI 与设置发现改为独立能力，不再反向改变安装判定。
+- 优先使用当前 `scripts/python/runtime/remote_ssh.py` 入口，并把 `scripts/remote_ssh.py` 保留为旧版已安装副本的兼容回退。
+- 已安装但没有受支持 CLI 时返回退出码 127 的运行能力错误，不再错误地引导用户重新安装技能。
+
+### 自描述注册表布局
+
+- 将注册表 metadata、治理配置和 JSON Schema 分别迁移到 `metadata/`、`governance/` 与 `schemas/`；`config/registry/` 根目录现在只保留生成的 `registry.sqlite3` 和按职责划分的子目录。
+- 在注册表根目录下发现且只允许一个有效 manifest；缺失、重复、位于根级或越过目录边界的声明都会失败关闭，不再依赖硬编码的 `manifest.json` 路径。
+- 可选文档治理初始化改为使用 manifest 声明的文档角色和 schema 路径。文档注册仍然只能显式启用，不会因为基础设施存在就自动创建注册状态。
+
+### 受管工作区边界
+
+- 每个生成的受管根必须且只能包含一条 `Workspace boundary`：普通修改仅允许发生在当前工作文件夹或已验证的远程服务器工作文件夹内。
+- 外部读取必须必要且无副作用；外部修改前必须披露规范化目标、动作、范围、风险、替代方案和恢复限制，然后分别取得“原则上允许例外”和“批准精确动作”两次独立确认。
+- 验证器会拒绝缺失、重复、弱化、笼统授权、紧急绕过或只完成第一次确认的变体；目标或范围发生变化后，两次确认都会失效。
+
+### 兼容、迁移与验证
+
+- 现有公开命令入口继续受支持。直接读取旧版注册表根级 JSON 路径的集成需要改用 manifest/角色布局或注册表辅助函数。
+- v2.0.3 之前生成的受管根应使用已安装的 v2.0.3 生成器刷新，使新的工作区边界能够被渲染和验证。
+- 公开镜像对最终安装包执行 quick skill validation、无缓存 Python AST 解析、注册表一致性检查、聚焦的 RemoteSSH/注册表/工作区边界场景、发布内容策略检查和脱敏包检查。规范源码仓库的单元测试不存放在本公开镜像中，也不会把上游收据写成本地重跑结果。
+- 下载资产排除 tests、smoke 运行、reports、缓存、嵌套 `dist/`、本地认证材料、凭据、私钥和机器专属绝对路径。仓库保留已批准的公开署名，下载资产中的联系邮箱替换为 `<REDACTED_EMAIL>`。
 
 ## v2.0.1 重点更新
 
@@ -114,7 +143,7 @@ v2.0.1 是首个公开 v2 版本，专门优化了本 skill 与 Codex 中 [GPT-5
 | `SKILL.md` | 面向 Agent 的触发、流程、约束和验证规则。 |
 | `agents/openai.yaml` | 宿主 UI 使用的 skill 元数据。 |
 | `scripts/python/` | 检查、访谈、渲染、文档治理、目录治理、release 安装、验证、审计和评估脚本。 |
-| `config/registry/` | 版本化命令 source、schema、manifest、文档治理记录和生成的 SQLite FTS 索引。 |
+| `config/registry/` | 按职责划分的 JSON source 与 schema 子目录，以及位于注册表根目录的生成 SQLite FTS 索引。 |
 | `assets/templates/` | 当前 release 流程使用的 root/scoped `AGENTS.md` 模板。 |
 | `evals/` | 供治理脚本使用的仓库内 skill-effectiveness 用例与可安全发布的评估数据。 |
 | `references/` | 脚本指南、审查清单、问题库、能力覆盖说明和 AGENTS 指南。 |
@@ -240,8 +269,8 @@ Jiyuan Liu 和 He Li 隶属于东南大学电子科学与工程学院。
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {2.0.1},
-  date         = {2026-07-16},
+  version      = {2.0.3},
+  date         = {2026-07-21},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}

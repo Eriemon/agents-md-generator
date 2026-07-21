@@ -13,6 +13,14 @@ from pathlib import Path
 import re
 from typing import Any
 
+# 注册表共用层提供唯一清单、角色和安全根目录合同。
+from registry_common import (
+    load_document_roles,
+    load_registry_manifest,
+    registry_root,
+    resolve_registry_source,
+)
+
 # 默认相似度阈值在不同技能之间保持同一候选口径。
 FLOAT_DEFAULT_SIMILARITY_THRESHOLD = 0.78  # 模糊重复候选最低相似度。
 
@@ -21,17 +29,6 @@ INT_DEFAULT_MINIMUM_CHARACTERS = 80  # 模糊比较最小规范化字符数。
 
 # 公开长选项模式用于发现需要注册的脚本接口事实。
 OPTION_PATTERN = re.compile(r"--[a-z][a-z0-9-]*")  # CLI 长选项匹配规则。
-
-# 配置文件名是判断技能是否显式启用文档门禁的唯一来源。
-STR_GOVERNANCE_CONFIG_PATH = "config/registry/document-governance.json"  # 文档门禁配置相对路径。
-
-# 初始化会复制这四份可发布 JSON Schema 到目标技能注册根。
-TUPLE_DOCUMENT_SCHEMA_FILES = (  # 文档治理可发布 schema 文件名。
-    "document-governance.schema.json",  # 可选门禁配置 schema。
-    "document.schema.json",  # 文档职责目录 schema。
-    "knowledge.schema.json",  # 知识指针索引 schema。
-    "migration.schema.json",  # 首次迁移复核 schema。
-)
 
 # 统一写入受管 JSON。
 def write_json_file(path_target: Path, dict_payload: dict[str, Any]) -> None:
@@ -56,16 +53,100 @@ def write_json_file(path_target: Path, dict_payload: dict[str, Any]) -> None:
     # 正式路径只接收完整且可解析的临时文件。
     os.replace(path_temporary, path_target)
 
+# 所有者 registry 根提供可发布布局和 schema 模板。
+def owner_registry_root() -> Path:
+    """返回当前控制器所有者的 registry 根目录。
+
+    参数：无外部业务参数。
+    返回：agents-md-generator 所有者技能的 config/registry 路径。
+    """
+
+    # 当前文件向上三级定位技能根，再复用共用目录合同。
+    path_owner_skill_root = Path(__file__).resolve().parents[3]  # 控制器所有者技能根
+
+    # 所有者注册根可由测试替换以验证声明式文件名。
+    return registry_root(path_owner_skill_root)
+
+# 文档布局加载器集中解析所有者清单中的角色和 schema。
+def owner_document_layout() -> dict[str, object]:
+    """读取所有者清单声明的文档治理布局。
+
+    参数：无外部业务参数。
+    返回：包含 roles 映射和 schemas 路径列表的布局对象。
+    异常：清单、角色或 schema 路径容器无效时抛出 ValueError。
+    """
+
+    # 所有者注册根是清单发现和 schema 模板读取的共同锚点。
+    path_owner_registry = owner_registry_root()  # 清单发现边界
+
+    # 共用加载器验证根目录、唯一清单和基础字段。
+    dict_manifest = load_registry_manifest(path_owner_registry)  # 所有者注册清单
+
+    # 共用角色加载器拒绝缺失、额外或根级路径。
+    dict_roles = load_document_roles(path_owner_registry, dict_manifest)  # 文档治理角色映射
+
+    # schema 路径必须保持清单顺序供初始化结果稳定展示。
+    object_schemas = dict_manifest.get("document_schemas")  # 未收窄 schema 路径容器
+
+    # 空值或非字符串条目都破坏可发布模板集合。
+    if (
+        not isinstance(object_schemas, list)
+        or not object_schemas
+        or not all(isinstance(object_path, str) and object_path for object_path in object_schemas)
+    ):
+
+        # 文档控制器将共用领域错误转成稳定 CLI 请求错误。
+        raise ValueError("> ERR: [Python] registry manifest document_schemas must be a string list")
+
+    # schema 也复用共用路径解析器，避免目标初始化写出 registry 边界。
+    list_schema_paths = []  # 已验证的 schema 相对路径
+
+    # 每项声明必须解析为 registry 子目录中的 JSON 文件。
+    for object_schema_path in object_schemas:
+
+        # 上方容器门禁已经把元素收窄为非空字符串。
+        str_schema_path = str(object_schema_path)  # 当前 schema 清单路径
+
+        # 规范绝对路径用于执行根目录边界判定。
+        path_schema = resolve_registry_source(path_owner_registry, str_schema_path)  # 安全 schema 路径
+
+        # 根级 JSON 与单数据库根目录合同冲突。
+        if path_schema.parent == path_owner_registry.resolve():
+
+            # 根级 schema 会破坏仅保留 SQLite 的文件合同。
+            raise ValueError(
+                "> ERR: [Python] registry document schema must be below the root: "
+                f"{str_schema_path}"
+            )
+
+        # 规范相对路径避免平台分隔符渗入初始化结果。
+        list_schema_paths.append(path_schema.relative_to(path_owner_registry.resolve()).as_posix())
+
+    # 调用方只接收完成校验的角色和 schema 声明。
+    return {
+        "roles": dict_roles,  # 四个业务角色路径
+        "schemas": list_schema_paths,  # 可发布 schema 路径
+    }
+
 # 定位文档治理配置。
 def governance_config_path(path_skill_root: Path) -> Path:
     """返回技能内文档治理配置路径。
 
     参数：path_skill_root 为待治理技能根目录。
-    返回：config/registry 下的固定配置路径。
+    返回：所有者清单 governance 角色对应的目标技能路径。
     """
 
-    # POSIX 相对合同通过 Path 在当前平台解析。
-    return path_skill_root / Path(STR_GOVERNANCE_CONFIG_PATH)
+    # 所有者清单是跨技能初始化布局的唯一事实源。
+    dict_layout = owner_document_layout()  # 当前文档治理布局
+
+    # roles 已由共用加载器收窄为字符串映射。
+    dict_roles = dict_layout["roles"]  # 文档角色映射
+
+    # governance 角色路径应用于待治理技能的 registry 根。
+    str_governance_path = str(dict_roles["governance"])  # 文档门禁配置相对路径
+
+    # 目标技能无需预先拥有自己的命令清单。
+    return registry_root(path_skill_root) / Path(str_governance_path)
 
 # 读取文档治理启用状态。
 def document_governance_status(path_skill_root: Path) -> dict[str, Any]:
@@ -239,6 +320,7 @@ def append_document_scan_facts(
 
     参数：path_skill_root 为技能根；path_document 为文档；dict_scan_state 为聚合扫描容器。
     返回：无业务返回值，结果追加到调用方提供的容器。
+    数据：聚合列表 shape=(N,)，dtype=JSON-compatible object，unit=record。
     """
 
     # 相对路径避免扫描报告泄漏本机绝对位置。
@@ -592,24 +674,30 @@ def initial_migration_reviews(dict_scan: dict[str, Any]) -> dict[str, list[dict[
 
 # 加载文档治理 schema。
 def document_schema_payloads() -> dict[str, dict[str, Any]]:
-    """读取控制器自带的四份文档治理 JSON Schema。
+    """读取所有者清单声明的文档治理 JSON Schema。
 
     参数：无外部业务参数。
-    返回：schema 文件名到 JSON 对象的映射。
+    返回：schema 相对路径到 JSON 对象的映射。
     异常：模板缺失、JSON 非法或顶层非对象时抛出 OSError、JSONDecodeError 或 ValueError。
     """
 
-    # 控制器所有者目录是可发布 schema 的权威来源。
-    path_owner_registry_root = Path(__file__).resolve().parents[3] / "config" / "registry"  # 所有者注册根。
+    # 所有者清单提供完整 schema 路径集合。
+    dict_layout = owner_document_layout()  # schema 声明快照
 
-    # 结果映射保留固定文件名。
-    dict_schemas: dict[str, dict[str, Any]] = {}  # schema 文件名到载荷。
+    # schema 字段已由布局加载器验证为非空字符串列表。
+    list_schema_paths = list(dict_layout["schemas"])  # 可发布 schema 相对路径
 
-    # 四份模板逐一读取并验证顶层结构。
-    for str_schema_name in TUPLE_DOCUMENT_SCHEMA_FILES:
+    # 读取锚点与清单解析使用同一个已校验所有者边界。
+    path_owner_registry = owner_registry_root()  # schema 模板读取根
 
-        # 当前模板路径不得从目标技能推导。
-        path_schema_source = path_owner_registry_root / str_schema_name  # 当前 schema 模板路径。
+    # 结果映射保留清单声明的相对路径。
+    dict_schemas: dict[str, dict[str, Any]] = {}  # schema 相对路径到载荷
+
+    # 每份清单模板逐一读取并验证顶层结构。
+    for str_schema_path in list_schema_paths:
+
+        # 当前模板路径由已验证清单声明锚定。
+        path_schema_source = path_owner_registry / str_schema_path  # 当前 schema 模板路径
 
         # UTF-8 JSON 保留 schema 标题和约束。
         object_schema = json.loads(path_schema_source.read_text(encoding="utf-8"))  # 当前 schema 载荷。
@@ -618,10 +706,12 @@ def document_schema_payloads() -> dict[str, dict[str, Any]]:
         if not isinstance(object_schema, dict):
 
             # 错误绑定损坏模板名称。
-            raise ValueError(f"> ERR: [Python] document schema template must be an object: {str_schema_name}")
+            raise ValueError(
+                f"> ERR: [Python] document schema template must be an object: {str_schema_path}"
+            )
 
         # 已验证模板加入初始化文件集合。
-        dict_schemas[str_schema_name] = object_schema  # 当前 schema 文件载荷。
+        dict_schemas[str_schema_path] = object_schema  # 当前 schema 文件载荷
 
     # 完整模板集合交给初始化器写入。
     return dict_schemas
@@ -650,29 +740,47 @@ def initial_governance_payloads(path_skill_root: Path) -> dict[str, dict[str, An
     # 重复和接口事实保持待 Agent 裁决。
     dict_reviews = initial_migration_reviews(dict_scan)  # 首次迁移复核队列。
 
-    # 业务 JSON 文件使用固定相对布局。
+    # 初始化阶段读取一次声明式布局，供全部草案载荷共用。
+    dict_layout = owner_document_layout()  # 草案生成布局快照
+
+    # 角色映射已由清单加载器验证完整。
+    dict_roles = dict(dict_layout["roles"])  # 文档治理角色路径
+
+    # 四个角色变量避免在载荷构造中嵌入具体文件名。
+    str_governance_path = str(dict_roles["governance"])  # 门禁配置相对路径
+
+    # catalog 角色决定职责目录引用和载荷键。
+    str_catalog_path = str(dict_roles["catalog"])  # 文档职责目录相对路径
+
+    # knowledge 角色决定权威指针引用和载荷键。
+    str_knowledge_path = str(dict_roles["knowledge"])  # 知识索引相对路径
+
+    # migration 角色决定首次复核引用和载荷键。
+    str_migration_path = str(dict_roles["migration"])  # 首次迁移证据相对路径
+
+    # 业务 JSON 文件完全使用清单角色路径。
     dict_payloads = {  # 文档治理初始化文件集合。
-        "document-governance.json": {  # 可选门禁主配置。
+        str_governance_path: {  # 可选门禁主配置
             "schema_version": 1,  # 文档治理配置版本。
             "enabled": True,  # 用户显式启用后的状态。
             "status": "draft",  # finalize 前保持草案。
-            "catalog": "documents/catalog.json",  # 主配置引用的职责目录。
-            "knowledge_index": "knowledge/index.json",  # 主配置引用的知识索引。
-            "migration": "migrations/initial-document-registration.json",  # 首次迁移记录。
+            "catalog": str_catalog_path,  # 主配置引用的职责目录
+            "knowledge_index": str_knowledge_path,  # 主配置引用的知识索引
+            "migration": str_migration_path,  # 首次迁移记录
             "similarity_policy": dict_scan["similarity_policy"],  # 固定相似度策略。
             "scan_scope": ["SKILL.md", "references/**/*.md"],  # 受管 Markdown 边界。
         },
-        "documents/catalog.json": {  # 文档唯一职责目录。
+        str_catalog_path: {  # 文档唯一职责目录
             "schema_version": 1,  # 文档目录版本。
             "status": "draft",  # 文档职责目录草案状态。
             "documents": list_catalog_documents,  # 文档职责记录。
         },
-        "knowledge/index.json": {  # 权威 Markdown 知识指针索引。
+        str_knowledge_path: {  # 权威 Markdown 知识指针索引
             "schema_version": 1,  # 知识索引版本。
             "status": "draft",  # 知识指针索引草案状态。
             "records": list_knowledge_records,  # 权威 Markdown 指针。
         },
-        "migrations/initial-document-registration.json": {  # 首次注册的语义复核证据。
+        str_migration_path: {  # 首次注册的语义复核证据
             "schema_version": 1,  # 迁移记录版本。
             "status": "pending_agent_review",  # Agent 尚未裁决。
             "user_confirmation": "not_required",  # 当前无确认请求。
@@ -708,8 +816,8 @@ def initialize_document_governance(path_skill_root: Path) -> dict[str, Any]:
     # 全部草案载荷在任何写入前构造完成。
     dict_payloads = initial_governance_payloads(path_skill_root)  # 初始化 JSON 文件集合。
 
-    # 注册根由固定配置路径的父目录确定。
-    path_registry_root = path_config.parent  # 文档注册治理根目录。
+    # 注册根独立于治理配置所在职责子目录。
+    path_registry_root = registry_root(path_skill_root)  # 文档注册治理根目录
 
     # 每份文件使用独立原子替换并按路径稳定写入。
     for str_relative_path, dict_payload in sorted(dict_payloads.items()):
@@ -717,13 +825,19 @@ def initialize_document_governance(path_skill_root: Path) -> dict[str, Any]:
         # 目标路径始终位于受审查的 config/registry 布局内。
         write_json_file(path_registry_root / str_relative_path, dict_payload)
 
+    # 返回状态中的计数必须沿用实际写入时的声明式角色。
+    dict_roles = dict(owner_document_layout()["roles"])  # 返回计数所用角色快照
+
+    # 计数入口只依赖 catalog 语义，不绑定其 basename。
+    str_catalog_path = str(dict_roles["catalog"])  # 文档计数载荷键
+
     # 初始化只声明草案，未声称通过最终门禁。
     return {
         "ok": True,
         "enabled": True,
         "status": "draft",
         "written_files": sorted(dict_payloads),
-        "document_count": len(dict_payloads["documents/catalog.json"]["documents"]),
+        "document_count": len(dict_payloads[str_catalog_path]["documents"]),
     }
 
 # 读取并校验 JSON 对象。
@@ -801,8 +915,8 @@ def load_governance_documents(path_skill_root: Path) -> dict[str, Any]:
     # 主配置路径来自已验证启用状态。
     path_config = Path(str(dict_status["config"]))  # 已启用主配置的绝对路径。
 
-    # 配置父目录约束所有相对治理文件。
-    path_registry_root = path_config.parent  # 文档治理 registry 根目录。
+    # registry 根独立于 governance 职责子目录。
+    path_registry_root = registry_root(path_skill_root)  # 文档治理 registry 根目录
 
     # 配置对象提供目录、知识和迁移相对路径。
     dict_governance = dict_status["governance"]  # 文档治理配置对象。
@@ -1112,11 +1226,11 @@ def load_registered_commands(path_skill_root: Path) -> dict[str, dict[str, Any]]
     异常：清单、源路径或 commands 容器无效时抛出 ValueError。
     """
 
-    # 命令清单位于文档治理配置同一 registry 根。
-    path_registry_root = governance_config_path(path_skill_root).parent  # 当前注册根目录。
+    # 命令清单和文档配置共享技能 registry 根。
+    path_registry_root = registry_root(path_skill_root)  # 当前注册根目录
 
-    # manifest 是命令源集合的唯一入口。
-    dict_manifest = read_json_object(path_registry_root / "manifest.json", "registry manifest")  # 命令清单。
+    # 共用发现器加载子目录中的唯一清单。
+    dict_manifest = load_registry_manifest(path_registry_root)  # 命令注册清单
 
     # source_files 必须是字符串列表。
     object_source_files = dict_manifest.get("source_files")  # 命令源相对路径容器。

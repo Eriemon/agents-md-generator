@@ -31,6 +31,9 @@ SET_REQUIRED_COMMAND_TEXT_FIELDS = {"category", "entrypoint", "id", "summary", "
 # 列表字段保存可展示文本或命令关系，关系列表允许为空。
 SET_COMMAND_LIST_FIELDS = {"boundaries", "invocation_templates", "prerequisites", "related_command_ids"}  # 列表字段合同
 
+# 文档角色名称是加载器与清单之间的稳定语义接口。
+SET_DOCUMENT_ROLE_NAMES = {"governance", "catalog", "knowledge", "migration"}  # 必需文档源角色
+
 # 专用异常让 CLI 将注册源问题映射到稳定退出码。
 class RegistryError(RuntimeError):
     """表示注册源或检索数据库不满足公开合同。"""
@@ -62,6 +65,130 @@ def registry_root(path_skill_root: Path) -> Path:
 
     # JSON 和生成数据库共同位于固定配置子目录。
     return path_skill_root / "config" / "registry"
+
+# 根目录布局门禁隔离生成数据库与可编辑 JSON 事实源。
+def validate_registry_root_layout(path_registry_root: Path) -> None:
+    """验证 registry 根目录只包含生成数据库。
+
+    参数：path_registry_root 为待检查的 config/registry 目录。
+    返回：无业务返回值，布局合规时直接结束。
+    异常：目录缺失或根级存在数据库之外的文件时抛出 RegistryError。
+    """
+
+    # 缺失目录无法承载清单发现和生成索引。
+    if not path_registry_root.is_dir():
+
+        # 调用方应提供真实技能根，而不是由加载器创建目录。
+        raise RegistryError("> ERR: [Python] registry root must be an existing directory")
+
+    # 违规文件集合按名称排序，确保跨平台诊断稳定。
+    list_invalid_files: list[str] = []  # 根级数据库之外的普通文件名
+
+    # 只检查根级普通文件，职责子目录由清单路径合同继续约束。
+    for path_item in sorted(path_registry_root.iterdir(), key=lambda path_entry: path_entry.name):
+
+        # 子目录和唯一允许的 SQLite 生成物不属于违规项。
+        if not path_item.is_file() or path_item.name == "registry.sqlite3":
+
+            # 当前条目不影响根目录单文件合同。
+            continue
+
+        # 其余根级文件都必须移入对应职责目录。
+        list_invalid_files.append(path_item.name)
+
+    # 任一违规文件都会让构建和查询失败关闭。
+    if list_invalid_files:
+
+        # 文件名列表帮助使用者精确完成受管迁移。
+        str_invalid_files = ", ".join(list_invalid_files)  # 稳定排序的违规文件摘要
+
+        # 公开错误明确唯一允许的根级文件。
+        raise RegistryError(
+            "> ERR: [Python] registry root allows only registry.sqlite3; "
+            f"unexpected files: {str_invalid_files}"
+        )
+
+# 清单候选判定器只识别构建器所需的结构字段。
+def is_registry_manifest_payload(obj_payload: object) -> bool:
+    """判断 JSON 载荷是否具备注册清单基础结构。
+
+    参数：obj_payload 为从 registry 子目录读取的任意 JSON 值。
+    返回：schema 版本和三个引导字段类型匹配时为 True。
+    """
+
+    # 非对象 JSON 不可能表达具名清单字段。
+    if not isinstance(obj_payload, dict):
+
+        # 数组和标量直接排除。
+        return False
+
+    # 基础字段类型用于从业务 JSON 中唯一筛出清单。
+    bool_matches_manifest = (  # 当前载荷是否具备清单引导结构
+        obj_payload.get("schema_version") == INT_SCHEMA_VERSION  # 结构版本匹配
+        and isinstance(obj_payload.get("command_schema"), str)  # 单值 schema 引用
+        and isinstance(obj_payload.get("source_files"), list)  # 命令源列表
+        and isinstance(obj_payload.get("generated_database"), str)  # 生成数据库声明
+    )
+
+    # 完整字段校验仍由 load_registry_manifest 负责。
+    return bool_matches_manifest
+
+# 清单发现器避免把 manifest 的具体文件名固化在 Python 中。
+def discover_registry_manifest(path_registry_root: Path) -> tuple[Path, dict[str, Any]]:
+    """发现 registry 子目录中的唯一合法清单。
+
+    参数：path_registry_root 为受根目录单文件合同约束的注册源目录。
+    返回：规范化清单路径与已解析 JSON 对象组成的二元组。
+    异常：根目录违规、清单缺失或清单不唯一时抛出 RegistryError。
+    """
+
+    # 清单扫描前先拒绝全部根级 JSON 和其他普通文件。
+    validate_registry_root_layout(path_registry_root)
+
+    # 候选集合同时保留路径和载荷，避免后续重复解析。
+    list_manifest_candidates: list[tuple[Path, dict[str, Any]]] = []  # 结构匹配的清单候选
+
+    # 所有职责子目录都可承载清单，具体目录名不进入代码合同。
+    for path_json in sorted(path_registry_root.rglob("*.json")):
+
+        # 根级 JSON 已由布局门禁拒绝，此处只处理子目录文件。
+        if path_json.parent == path_registry_root:
+
+            # 防御性跳过避免未来调用顺序变化绕过布局边界。
+            continue
+
+        # 非清单业务 JSON 的语法由其声明加载阶段负责。
+        try:
+
+            # UTF-8 解析保留中文说明和别名。
+            obj_payload = json.loads(path_json.read_text(encoding="utf-8"))  # 当前候选 JSON 值
+
+        # 无法解析的非清单文件不能冒充引导清单。
+        except (OSError, json.JSONDecodeError):
+
+            # 声明源若损坏会在读取清单后得到绑定路径的领域错误。
+            continue
+
+        # 只有满足基础结构的对象进入唯一性检查。
+        if is_registry_manifest_payload(obj_payload):
+
+            # isinstance 已把载荷收窄为字典。
+            list_manifest_candidates.append((path_json.resolve(), obj_payload))
+
+    # 零个或多个候选都不能提供确定的注册源入口。
+    if len(list_manifest_candidates) != 1:
+
+        # 候选数量直接暴露缺失或歧义状态。
+        int_candidate_count = len(list_manifest_candidates)  # 合法清单候选数量
+
+        # 构建器不按目录顺序猜测入口。
+        raise RegistryError(
+            "> ERR: [Python] registry requires exactly one valid manifest "
+            f"below the root; found {int_candidate_count}"
+        )
+
+    # 唯一候选作为全部后续路径声明的入口。
+    return list_manifest_candidates[0]
 
 # 数据库寻址器隔离生成工件的固定文件名。
 def database_path(path_skill_root: Path) -> Path:
@@ -494,20 +621,11 @@ def load_registry_manifest(path_registry_root: Path) -> dict[str, Any]:
     异常：文件、JSON 或清单字段无效时抛出 RegistryError。
     """
 
-    # manifest 是全部命令、工作流和文档注册源的入口。
-    path_manifest = path_registry_root / "manifest.json"  # 注册源清单路径
+    # 唯一清单路径和载荷由统一布局边界返回。
+    tuple_manifest = discover_registry_manifest(path_registry_root)  # 清单路径与载荷二元组
 
-    # 文件与 JSON 错误统一转换为领域异常。
-    try:
-
-        # UTF-8 读取保留中文说明。
-        object_manifest = json.loads(path_manifest.read_text(encoding="utf-8"))  # 注册清单载荷
-
-    # 清单不可读时保留底层诊断。
-    except (OSError, json.JSONDecodeError) as object_error:
-
-        # 构建器使用稳定索引错误退出码。
-        raise RegistryError(f"> ERR: [Python] cannot load registry manifest: {object_error}") from object_error
+    # 当前校验只消费已解析载荷，路径由摘要器独立复用。
+    object_manifest = tuple_manifest[1]  # 待执行完整字段校验的清单对象
 
     # 顶层必须是 JSON 对象。
     if not isinstance(object_manifest, dict):
@@ -547,6 +665,67 @@ def load_registry_manifest(path_registry_root: Path) -> dict[str, Any]:
 
     # 类型收窄后的清单供后续加载步骤复用。
     return object_manifest
+
+# 文档角色加载器把业务身份与具体 JSON 路径解耦。
+def load_document_roles(
+    path_registry_root: Path,
+    dict_manifest: dict[str, Any],
+) -> dict[str, str]:
+    """读取并校验清单声明的文档源角色映射。
+
+    参数：path_registry_root 为注册源根；dict_manifest 为已验证基础清单。
+    返回：四个稳定角色名称到安全相对 JSON 路径的映射。
+    异常：角色缺失、多余、类型错误或路径违规时抛出 RegistryError。
+    """
+
+    # 清单字段必须使用对象表达角色到路径的一一映射。
+    object_roles = dict_manifest.get("document_roles")  # 未收窄的文档角色字段
+
+    # 列表或标量无法保持具名角色合同。
+    if not isinstance(object_roles, dict):
+
+        # 构建器拒绝从 document_sources 顺序猜测业务身份。
+        raise RegistryError("> ERR: [Python] registry manifest document_roles must be an object")
+
+    # 角色集合必须与当前 schema v2 的四类事实完全一致。
+    if set(object_roles) != SET_DOCUMENT_ROLE_NAMES:
+
+        # 缺失或额外角色都可能让状态校验指向错误源。
+        raise RegistryError("> ERR: [Python] registry manifest document_roles is incomplete")
+
+    # 类型收窄后的角色映射交给路径校验循环。
+    dict_roles: dict[str, str] = {}  # 已验证的文档角色路径
+
+    # 每个角色值都必须是 registry 内的子目录 JSON。
+    for str_role_name in sorted(SET_DOCUMENT_ROLE_NAMES):
+
+        # 当前角色路径保留清单原始文本。
+        object_role_path = object_roles[str_role_name]  # 当前角色未收窄路径
+
+        # 非空字符串是进入路径解析器的前置条件。
+        if not isinstance(object_role_path, str) or not object_role_path:
+
+            # 错误绑定角色名称而不是猜测默认文件。
+            raise RegistryError(
+                f"> ERR: [Python] registry manifest document role must be a string: {str_role_name}"
+            )
+
+        # 共用解析器拒绝绝对路径、逃逸和非 JSON 后缀。
+        path_role = resolve_registry_source(path_registry_root, object_role_path)  # 当前角色规范路径
+
+        # 角色 JSON 不能回到 registry 根目录。
+        if path_role.parent == path_registry_root.resolve():
+
+            # 子目录要求与根目录单数据库合同保持一致。
+            raise RegistryError(
+                f"> ERR: [Python] registry document role must be below the root: {str_role_name}"
+            )
+
+        # 通过全部路径边界后保留 POSIX 相对文本。
+        dict_roles[str_role_name] = object_role_path.replace("\\", "/")  # 规范角色相对路径
+
+    # 调用方只接收完整安全的角色映射。
+    return dict_roles
 
 # 命令 schema 加载器验证可发布结构文件可读取。
 def validate_command_schema(path_registry_root: Path, dict_manifest: dict[str, Any]) -> None:
@@ -797,52 +976,60 @@ def load_document_source_objects(
 # 完成态文档源校验器提取两类 SQLite 记录。
 def finalized_document_records(
     dict_sources: dict[str, dict[str, Any]],
+    dict_roles: dict[str, str],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """验证文档源完成态并返回职责与知识记录。
 
-    参数：dict_sources 为文档治理源对象映射。
+    参数：dict_sources 为文档治理源对象映射；dict_roles 为清单声明的角色路径。
     返回：文档职责记录和知识指针记录两个列表。
     异常：必需源、状态、容器或标识无效时抛出 RegistryError。
     """
 
-    # 四份固定事实源必须全部存在。
-    tuple_required_sources = (  # 文档注册化必需源路径
-        "document-governance.json",  # 可选门禁主配置
-        "documents/catalog.json",  # 文档职责目录
-        "knowledge/index.json",  # 权威 Markdown 知识指针
-        "migrations/initial-document-registration.json",  # 首次迁移复核证据
-    )
-
-    # 缺失源逐项给出可定位诊断。
-    for str_required_path in tuple_required_sources:
+    # 四个角色声明的事实源必须全部出现在 document_sources。
+    for str_role_name, str_required_path in sorted(dict_roles.items()):
 
         # 任一源缺失都破坏完成态闭环。
         if str_required_path not in dict_sources:
 
-            # 诊断命名缺失源。
-            raise RegistryError(f"> ERR: [Python] missing document registry source: {str_required_path}")
+            # 诊断同时命名角色和清单路径。
+            raise RegistryError(
+                f"> ERR: [Python] missing document registry source for {str_role_name}: "
+                f"{str_required_path}"
+            )
+
+    # 角色变量避免后续状态检查重复索引角色映射。
+    str_governance_path = dict_roles["governance"]  # 文档门禁配置路径
+
+    # 文档目录角色定位职责记录容器。
+    str_catalog_path = dict_roles["catalog"]  # 文档职责目录路径
+
+    # 知识角色定位权威指针容器。
+    str_knowledge_path = dict_roles["knowledge"]  # 知识指针索引路径
+
+    # 迁移角色定位首次复核状态。
+    str_migration_path = dict_roles["migration"]  # 首次迁移证据路径
 
     # 主配置必须处于 current。
-    if dict_sources["document-governance.json"].get("status") != "current":
+    if dict_sources[str_governance_path].get("status") != "current":
 
         # 草案不得进入可查询数据库。
         raise RegistryError("> ERR: [Python] document governance is not current")
 
     # 三份附属源必须同步完成。
     if (
-        dict_sources["documents/catalog.json"].get("status") != "current"
-        or dict_sources["knowledge/index.json"].get("status") != "current"
-        or dict_sources["migrations/initial-document-registration.json"].get("status") != "finalized"
+        dict_sources[str_catalog_path].get("status") != "current"
+        or dict_sources[str_knowledge_path].get("status") != "current"
+        or dict_sources[str_migration_path].get("status") != "finalized"
     ):
 
         # 部分完成状态不能生成联合索引。
         raise RegistryError("> ERR: [Python] document registry sources are not finalized")
 
     # 职责与知识记录使用独立列表容器。
-    object_documents = dict_sources["documents/catalog.json"].get("documents")  # 文档职责容器
+    object_documents = dict_sources[str_catalog_path].get("documents")  # 文档职责容器
 
     # 知识记录从权威指针索引提取。
-    object_knowledge = dict_sources["knowledge/index.json"].get("records")  # 知识指针容器
+    object_knowledge = dict_sources[str_knowledge_path].get("records")  # 知识指针容器
 
     # 两个错误容器统一拒绝。
     if not isinstance(object_documents, list) or not isinstance(object_knowledge, list):
@@ -910,6 +1097,9 @@ def load_document_records(
     # 注册根约束全部文档路径。
     path_registry_root = registry_root(path_skill_root)  # 当前注册源根目录
 
+    # 文档源身份由清单角色映射提供。
+    dict_roles = load_document_roles(path_registry_root, dict_manifest)  # 已验证文档角色路径
+
     # 四份可发布 schema 必须是 JSON 对象。
     validate_document_schema_files(path_registry_root, object_document_schemas)
 
@@ -917,7 +1107,7 @@ def load_document_records(
     dict_sources = load_document_source_objects(path_registry_root, object_document_sources)  # 治理源对象
 
     # 完成态校验后返回两类 SQLite 记录。
-    return finalized_document_records(dict_sources)
+    return finalized_document_records(dict_sources, dict_roles)
 
 # 摘要器把清单和全部声明源绑定为一个版本事实。
 def source_digest(path_skill_root: Path, dict_manifest: dict[str, Any]) -> str:
@@ -930,9 +1120,15 @@ def source_digest(path_skill_root: Path, dict_manifest: dict[str, Any]) -> str:
     # 所有相对文件名均以 registry 根为锚点。
     path_registry_root = registry_root(path_skill_root)  # 摘要输入根目录
 
+    # 唯一清单路径参与漂移检测且不依赖具体文件名。
+    path_manifest = discover_registry_manifest(path_registry_root)[0]  # 已验证清单绝对路径
+
+    # 摘要列表使用 registry 相对路径保持安装副本一致。
+    str_manifest_path = path_manifest.relative_to(path_registry_root.resolve()).as_posix()  # 清单相对路径
+
     # manifest 自身也必须参与漂移检测。
     list_relative_paths = [  # 构建数据库摘要的全部事实源
-        "manifest.json",  # 注册源清单
+        str_manifest_path,  # 注册源清单
         str(dict_manifest["command_schema"]),  # 命令记录 schema
         *dict_manifest.get("source_files", []),  # 分类命令与工作流源
         *dict_manifest.get("document_schemas", []),  # 文档治理 JSON Schema

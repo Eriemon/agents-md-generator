@@ -38,6 +38,7 @@ Use registry instruction `design.collect-profile`, resume unfinished state, and 
 - Read-only intent ends with `answers_snapshot` and `profile_preview`; it creates no design review. Write intent requires an approved subagent `design_review` with `reviewer_type="subagent"`, matching `reviewed_answers_hash` and `reviewed_profile_hash`, no unresolved findings, and no required user confirmations.
 - `--answers ... --write` rejects missing mandatory answers, alignment, extra requirements, directory policy, or valid review evidence.
 - If remote servers are enabled, require installed/configured `erie-remote-ssh`, explicit task routes, checked primary/fallback servers, and workspace checks. Resolve the matched route at runtime, automatically try registered fallbacks after primary failure, and stop unmatched tasks until AGENTS.md/profile is updated.
+- Detect an installed skill only from its directory and root `SKILL.md`. Treat CLI entry and settings discovery as separate capabilities; prefer the Python runtime `remote_ssh.py` entry, retain the legacy scripts-level entry only as a compatibility fallback, and never report a present skill as uninstalled because its internal layout changed.
 - Remote structure governance is separate from remote-server enablement and task-route mapping. Validate relative conda/runtime/archive templates and reject traversal, wildcards, unsafe shell characters, empty values, and repeated separators.
 - If codebase-memory MCP is requested but unavailable, provide manual installation guidance, never download or execute the installer automatically, and require restart before resuming.
 
@@ -55,6 +56,7 @@ Managed roots render `coding_behavior.language_skill_routing` exactly as `shared
 ## Safety
 
 - Do not invent commands, paths, owners, frameworks, CI rules, security policies, or coverage targets.
+- Every managed root must render exactly one `Workspace boundary` rule. Modify only inside the current work folder and verified remote-server work folder. External reads must be necessary and side-effect free; before any external modification, stop, disclose the normalized target, action, scope, risks, alternatives, and recovery limits, then obtain two separate explicit confirmations: first for the exception in principle and second for the exact action. A target or scope change invalidates both confirmations.
 - `allowed_root_files` governs root-level exceptions. Root-level files outside the governed primary project root require review; allow the conservative structure-fix attempt only after explicit confirmation, then rerun `structure-gate`.
 - Before local directory create/move/delete/rename, follow registry instruction `dirs.manage` in review mode. A blocked result stops by default; force-confirmed work archives prior governance before mutation.
 - Except for `__init__.py`, functional source and Python test file stems use lowercase English functional words, never start with `_`, contain no digits, and stay within 30 characters. Deterministic checks do not replace the required Agent semantic review evidence.

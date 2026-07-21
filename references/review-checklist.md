@@ -34,6 +34,9 @@ Use this list for generated or edited governance. Check only sections affected b
 
 ## Structure And Remote Safety
 
+- [ ] Every managed root renders exactly one `Workspace boundary`: modifications stay inside the current work folder and verified remote-server work folder; necessary external reads are side-effect free; external modification stops for normalized target/action/scope/risk/alternative/recovery disclosure and two separate confirmations whose first approves the exception in principle and second approves the exact action; target or scope changes invalidate both.
+- [ ] Existing directory review, `force-confirmation`, urgency, blanket approval, or a completed first confirmation is not treated as the second exact-action confirmation.
+- [ ] Installed skill identity uses only the skill directory and root `SKILL.md`; CLI and settings are reported as separate capabilities, with the current remote CLI preferred and the legacy entry used only as fallback.
 - [ ] The root-level file whitelist uses `allowed_root_files`; root work artifacts stay at the work-folder root and skill-local `evals/` remains allowed.
 - [ ] Exactly one root `tests/` exists; Python tests live in one-level `tests/<feature>/` folders, root Python is limited to `tests/__init__.py`, and nested `tests/` directories are absent.
 - [ ] Structure mutations were reviewed; blocked changes stopped unless force-confirmed and archived. `confirm-structure-fix` authorizes only the reviewed conservative repair.

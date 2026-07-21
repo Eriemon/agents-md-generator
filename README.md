@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v2.0.1-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v2.0.3-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  Latest release: <strong>v2.0.1</strong> · Released on <strong>2026-07-16</strong>
+  Latest release: <strong>v2.0.3</strong> · Released on <strong>2026-07-21</strong>
 </p>
 
 AGENTS.md Generator helps coding agents produce instruction files that stay grounded in the real repository instead of drifting into guessed policy. It combines trigger metadata, grouped design interviews, deterministic Python scripts, docs-governance helpers, directory-governance gates, and verification checks so an agent can move from repository facts to trustworthy `AGENTS.md` output.
@@ -52,6 +52,35 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 - Directory-governance review and structure gates through `scripts/python/dirs/manage_dirs.py`.
 - Compatibility shim generation for `CLAUDE.md` and `GEMINI.md` when requested.
 - Verification, audit, automated review governance, skill-effectiveness evals, and aggregate confidence checks for release readiness.
+
+## What's New In v2.0.3
+
+v2.0.3 tightens three boundaries that were still coupled in the first public v2 release: installed-skill identity versus runtime capability, editable registry sources versus their generated index, and the current workspace versus external filesystem targets. The release keeps the existing public CLI surface while making failures more precise and generated governance harder to weaken accidentally.
+
+### RemoteSSH Capability Discovery
+
+- Treats an installed `erie-remote-ssh` skill as present when its directory and root `SKILL.md` exist. CLI and settings discovery are reported as separate capabilities instead of changing the installation result.
+- Prefers the current `scripts/python/runtime/remote_ssh.py` entry point and keeps `scripts/remote_ssh.py` as a compatibility fallback for older installed releases.
+- Reports an installed skill with no supported CLI as a runtime-capability error with exit code 127, rather than incorrectly directing the user to reinstall it.
+
+### Self-Describing Registry Layout
+
+- Moves registry metadata, governance configuration, and JSON Schemas into `metadata/`, `governance/`, and `schemas/`. The `config/registry/` root now contains only the generated `registry.sqlite3` file plus responsibility-specific subdirectories.
+- Discovers exactly one valid manifest below the registry root and rejects missing, duplicate, root-level, or boundary-escaping declarations instead of relying on a hard-coded `manifest.json` path.
+- Uses manifest-defined document roles and schema paths for optional document-governance initialization. Document registration remains opt-in and no registry state is created merely because the infrastructure is available.
+
+### Managed Workspace Boundary
+
+- Every generated managed root now contains exactly one `Workspace boundary` rule. Normal modifications stay inside the current work folder or a verified remote-server work folder.
+- External reads must be necessary and side-effect free. External modifications require the normalized target, action, scope, risks, alternatives, and recovery limits to be disclosed, followed by two separate confirmations: one for the exception in principle and one for the exact action.
+- Verification rejects missing, duplicated, weakened, blanket-approved, urgent, or first-confirmation-only variants. A changed target or scope invalidates both confirmations.
+
+### Compatibility, Migration, And Validation
+
+- Existing public command entry points remain supported. Integrations that read the old flat registry JSON paths must switch to the manifest and role-based layout or use the registry helpers.
+- Managed roots produced before v2.0.3 should be refreshed with the installed v2.0.3 generator so the new workspace boundary is rendered and verified.
+- The public mirror validates the final package with quick skill validation, cache-free Python AST parsing, registry consistency checks, focused RemoteSSH/registry/workspace-boundary scenarios, release-content policy checks, and a sanitized package inspection. Canonical source-repository unit tests are not stored or rerun in this public mirror, and their upstream receipt is not presented as a local test run.
+- The downloadable asset excludes tests, smoke runs, reports, caches, nested `dist/`, local authentication material, credentials, private keys, and machine-specific absolute paths. Approved attribution stays visible in the repository, while contact email values in the downloadable asset are replaced with `<REDACTED_EMAIL>`.
 
 ## What's New In v2.0.1
 
@@ -114,7 +143,7 @@ v2.0.1 is the first public v2 release. It is tuned for using this skill with [GP
 | `SKILL.md` | Agent-facing routing, workflow, constraints, and verification rules. |
 | `agents/openai.yaml` | Skill metadata used by the host UI. |
 | `scripts/python/` | Deterministic inspection, interview, rendering, docs-governance, directory-governance, release-installation, verification, audit, and evaluation helpers. |
-| `config/registry/` | Versioned command sources, schemas, manifest, document-governance records, and the generated SQLite FTS index. |
+| `config/registry/` | Responsibility-specific JSON sources and schemas under subdirectories, plus the generated SQLite FTS index at the registry root. |
 | `assets/templates/` | Bundled root and scoped `AGENTS.md` templates used by the current release flow. |
 | `evals/` | Repo-local skill-effectiveness cases and release-safe evaluation data used by the governance tooling. |
 | `references/` | Script guide, review checklist, question bank, capability notes, and AGENTS guidance. |
@@ -240,8 +269,8 @@ If this skill helps your research, teaching, or engineering workflow, please cit
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {2.0.1},
-  date         = {2026-07-16},
+  version      = {2.0.3},
+  date         = {2026-07-21},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}

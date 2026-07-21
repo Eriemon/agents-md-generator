@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "command_schema": "command.schema.json",
+  "command_schema": "schemas/command.schema.json",
   "source_files": [
     "detect/commands.json",
     "design/commands.json",
@@ -13,17 +13,23 @@
     "workflows/workflows.json"
   ],
   "document_schemas": [
-    "document-governance.schema.json",
-    "document.schema.json",
-    "knowledge.schema.json",
-    "migration.schema.json"
+    "schemas/document-governance.schema.json",
+    "schemas/document.schema.json",
+    "schemas/knowledge.schema.json",
+    "schemas/migration.schema.json"
   ],
   "document_sources": [
-    "document-governance.json",
+    "governance/document-governance.json",
     "documents/catalog.json",
     "knowledge/index.json",
     "migrations/initial-document-registration.json"
   ],
+  "document_roles": {
+    "governance": "governance/document-governance.json",
+    "catalog": "documents/catalog.json",
+    "knowledge": "knowledge/index.json",
+    "migration": "migrations/initial-document-registration.json"
+  },
   "generated_database": "registry.sqlite3",
   "fts_tokenizer": "trigram",
   "public_entrypoint_count": 25

@@ -1,8 +1,8 @@
 {
   "skill_name": "agents-md-generator",
-  "version": "v2.0.1",
+  "version": "v2.0.3",
   "source_path": ".",
-  "generated_at": "2026-07-16T11:41:20+08:00",
+  "generated_at": "2026-07-21T22:37:01+08:00",
   "current_branch": "main",
   "local_branches": [
     "main",
@@ -17,16 +17,16 @@
   "validation_level": "reduced_assurance",
   "provenance_mode": "external-copy",
   "upstream_validation": {
-    "archive_name": "agents-md-generator-v2.0.1.zip",
-    "archive_sha256": "da06b40785093ab79582a6ce1cddb69e33fc0b5404bf07080cf0ed660b6eeb32",
-    "receipt_generated_at": "2026-07-16T10:26:33",
+    "archive_name": "agents-md-generator-v2.0.3.zip",
+    "archive_sha256": "cfbe590430990adf9e3e7ab18fc857df482c27ec2ae2184722b491d5996c937d",
+    "receipt_generated_at": "2026-07-21T20:10:11",
     "validation_level": "strong",
     "phase_results": {
       "pre": true,
       "post": true
     },
-    "declared_core_file_count": 139,
-    "exact_core_file_count": 136,
+    "declared_core_file_count": 140,
+    "exact_core_file_count": 137,
     "formatting_only_core_file_count": 3,
     "formatting_only_paths": [
       "scripts/python/render/render_gate_compaction.py",
@@ -43,9 +43,10 @@
     ],
     "version_metadata_files": [
       "CITATION.cff",
-      "VERSION"
+      "VERSION",
+      "pyproject.toml"
     ],
-    "sensitive_content_scan": "passed-with-one-deliberate-fake-secret-evaluation-fixture",
+    "sensitive_content_scan": "passed",
     "forbidden_release_paths": [],
     "package_manifest_verified": true,
     "note": "The upstream runtime receipt covers the core archive. Public documentation and metadata were composed and verified in the public mirror.",
@@ -64,7 +65,7 @@
         "placeholders": [
           "<REDACTED_EMAIL>"
         ],
-        "sha256": "5c88dfcd5ac7c379e8c27c7faed880042defb40cb0b8caea8ca77007c9d51884"
+        "sha256": "c6072d7987082747f6aceea901c59c3da2397c2c8f36103bd41b3b22fb7079de"
       },
       {
         "path": "README-CN.md",
@@ -74,7 +75,7 @@
         "placeholders": [
           "<REDACTED_EMAIL>"
         ],
-        "sha256": "5312a2f200df7f6f7254fdd9614d7ccc8c288cb416def0fe689584f6616b22ed"
+        "sha256": "a196e8c06caab9a3eea8ea7f0a7e723724febb4dee821c478317fc170f891e6c"
       },
       {
         "path": "README.md",
@@ -84,7 +85,7 @@
         "placeholders": [
           "<REDACTED_EMAIL>"
         ],
-        "sha256": "5b32ee76f98bb419c279ff3b823a214e5895a869b1fc5ea32ec09d66dbcc1b04"
+        "sha256": "d92fecf57de56a7d437207be9894d2c0297949901ccf779c4168c16d6defb193"
       }
     ],
     "receipt_required": true
@@ -125,7 +126,7 @@
       ".pyc",
       ".pyo"
     ],
-    "included_file_count": 143,
+    "included_file_count": 144,
     "included_top_level_entries": [
       "CITATION.cff",
       "LICENSE",
@@ -163,15 +164,11 @@
     },
     {
       "path": "CITATION.cff",
-      "sha256": "5c88dfcd5ac7c379e8c27c7faed880042defb40cb0b8caea8ca77007c9d51884"
+      "sha256": "c6072d7987082747f6aceea901c59c3da2397c2c8f36103bd41b3b22fb7079de"
     },
     {
       "path": "config/content-quality-policy.json",
       "sha256": "fbedefef7342540c51725ec7a0a1be0855c88814940bfca72ebf63d8af0afb7c"
-    },
-    {
-      "path": "config/registry/command.schema.json",
-      "sha256": "0d7f6aeb51d3b8f8848d00ce1de3c8dca6b425eb753fba135431bbae40e81ce6"
     },
     {
       "path": "config/registry/design/commands.json",
@@ -190,36 +187,20 @@
       "sha256": "2bba64530809c2485135179e68d56b87d2b496974e9d54f5fa419ed39b2cf35a"
     },
     {
-      "path": "config/registry/document-governance.json",
-      "sha256": "1b47cbb03dfd7cb3c4e6403bec87a048b61f35a69b14f04d2a659adf8f731db6"
-    },
-    {
-      "path": "config/registry/document-governance.schema.json",
-      "sha256": "2acdb9e17e84fd559101ff2771cbe03326b19970e0c471c50cdc5fb3a6b34ad1"
-    },
-    {
-      "path": "config/registry/document.schema.json",
-      "sha256": "bacb5bcfb17c6f1c9b0df735fe471f7463c0ff4d956af05edd585e8d3a5dec5a"
-    },
-    {
       "path": "config/registry/documents/catalog.json",
-      "sha256": "0980370bb1306dfa3033fa59f482f652e0b7b2e3abb65c127a5100d0258bf65a"
+      "sha256": "31abbbb51ff38a92d20f4a998c1fe4ed437a760d665c6d37d0cf1b526ba1b223"
+    },
+    {
+      "path": "config/registry/governance/document-governance.json",
+      "sha256": "ede63e5a94022098c69563d7e2405ad2cbdccc0ce5e8c335e49b1d57e5ca00c3"
     },
     {
       "path": "config/registry/knowledge/index.json",
-      "sha256": "df0198f8d717f5a323c8c047487c1d59e420d0285ab65ff236c8b268b3ec8023"
+      "sha256": "c5fb1de91974690c9122ec23e396810b15c639b8d4b453319e863fc09a128d22"
     },
     {
-      "path": "config/registry/knowledge.schema.json",
-      "sha256": "99feb5b5d10015144fbb363aece68bc00193fb38787653aa3f2bfab7c41b9fcb"
-    },
-    {
-      "path": "config/registry/manifest.json",
-      "sha256": "98a5d309968341f815df8fbaf778a357425b713ced29ad2b2d06d978cd8d070c"
-    },
-    {
-      "path": "config/registry/migration.schema.json",
-      "sha256": "d1f3353a108aee28c3e705d19912b145d17d329df28787dabb22c0fc3bbb3897"
+      "path": "config/registry/metadata/manifest.json",
+      "sha256": "9a62e284d395d0f121b9aea592e71bb823c9da404433e6ff19ea63d6f816bf4f"
     },
     {
       "path": "config/registry/migrations/initial-document-registration.json",
@@ -231,7 +212,7 @@
     },
     {
       "path": "config/registry/registry.sqlite3",
-      "sha256": "bb818f1d9c99d8d5d287626d58f0b2a8078d85f255678068fc7237794bdff4e4"
+      "sha256": "a8b607aa5050ebb7008cc6d7064b93ad67b19c0d3a5aa45e61f6de49601ddc09"
     },
     {
       "path": "config/registry/release/commands.json",
@@ -240,6 +221,26 @@
     {
       "path": "config/registry/render/commands.json",
       "sha256": "8f7eb6161c260188b04d22f6fdaf9afaa0680cc3ded9b83e5771ff4e9d144845"
+    },
+    {
+      "path": "config/registry/schemas/command.schema.json",
+      "sha256": "32ad4bd0ff366f2b4dc63afdb87c604a6161020fdece83d4dbadf3817a02fb42"
+    },
+    {
+      "path": "config/registry/schemas/document-governance.schema.json",
+      "sha256": "40e31fc4847f60cad0826c22a9e06e9af8a787cf1362909a48baa664468702d7"
+    },
+    {
+      "path": "config/registry/schemas/document.schema.json",
+      "sha256": "8924d65c453b21e83076618b3ba922d43f7e1f794d639467649e334edc0181e2"
+    },
+    {
+      "path": "config/registry/schemas/knowledge.schema.json",
+      "sha256": "8e66431f0f28b562bbd4fed9b1eb89a9d7e5e67f67120d3980128a1045315ab2"
+    },
+    {
+      "path": "config/registry/schemas/migration.schema.json",
+      "sha256": "ef1c499feefc83fec82b1715faf98bd948080c9fef8659b236680ee4aa273694"
     },
     {
       "path": "config/registry/verify/commands.json",
@@ -259,7 +260,7 @@
     },
     {
       "path": "evals/evals.json",
-      "sha256": "4c77d03b18b89c36fefba92dbcdc343e613fa0b61c2b51523816ace41ba8bb24"
+      "sha256": "2e1391fa8aad2db3345b1b06bf4c0f7565674b91e197a1b298a18ce1a58a1a70"
     },
     {
       "path": "LICENSE",
@@ -267,11 +268,11 @@
     },
     {
       "path": "README-CN.md",
-      "sha256": "5312a2f200df7f6f7254fdd9614d7ccc8c288cb416def0fe689584f6616b22ed"
+      "sha256": "a196e8c06caab9a3eea8ea7f0a7e723724febb4dee821c478317fc170f891e6c"
     },
     {
       "path": "README.md",
-      "sha256": "5b32ee76f98bb419c279ff3b823a214e5895a869b1fc5ea32ec09d66dbcc1b04"
+      "sha256": "d92fecf57de56a7d437207be9894d2c0297949901ccf779c4168c16d6defb193"
     },
     {
       "path": "references/agents-md-guidance.md",
@@ -291,7 +292,7 @@
     },
     {
       "path": "references/evaluation-scenarios.md",
-      "sha256": "b57fa8808ef54bda06ac60a46268096ab878ab76358022131c825780d18fc30f"
+      "sha256": "a1b842b08aae614398accade310f15a5eb635ca481be6fdef99da4a63254be4a"
     },
     {
       "path": "references/question-bank.md",
@@ -299,7 +300,7 @@
     },
     {
       "path": "references/review-checklist.md",
-      "sha256": "d5148f0d66f12c3ce3c74349be61cac6262dc80946a6c17b3bff3748042501f4"
+      "sha256": "2ee72261ff9272b476cfeaf858acc7675da22d50eab161f838ebaf7cc75ec821"
     },
     {
       "path": "references/script-guide.md",
@@ -379,7 +380,7 @@
     },
     {
       "path": "scripts/python/design/design_remote_gate.py",
-      "sha256": "5a351aba4891ecc7cf8d3feeb13bc3023f7a82acd3336031cc6633b6ddff5962"
+      "sha256": "7e8e234ec17c84797023aa50417a7e416705452a9d9dc149507f3e0bbf10a05b"
     },
     {
       "path": "scripts/python/design/design_review_gate.py",
@@ -527,11 +528,11 @@
     },
     {
       "path": "scripts/python/registry/build_registry.py",
-      "sha256": "1bd0ae9d5b547ff2dc250bdf8e7ef643ff4e607efef1a45d2adfe98c696941c5"
+      "sha256": "df0d65e9003e526cbb8c900a007a02a1bbf94edf95c86e39d3d3a027596c2a4c"
     },
     {
       "path": "scripts/python/registry/document_registry_common.py",
-      "sha256": "9ace4185b664bc001a84749e2f0b3cc65cd50f8ed65f6322d763271175096e0f"
+      "sha256": "4b1b5f59240b06ffcdcad7ac54e8e7c7537b572730712d1a5b89545f481b4204"
     },
     {
       "path": "scripts/python/registry/manage_document_registry.py",
@@ -543,7 +544,7 @@
     },
     {
       "path": "scripts/python/registry/registry_common.py",
-      "sha256": "09f39a199567749e511bee43f52614c2393d939ddc97299041e7749f270cff31"
+      "sha256": "5ce2867384b07d7bff5f94a4c1ed859a6eb854c89c4ff0e408be675f52d7b4dc"
     },
     {
       "path": "scripts/python/release/install_release_manifest.py",
@@ -587,7 +588,7 @@
     },
     {
       "path": "scripts/python/render/render_contracts.py",
-      "sha256": "40860c4a57686e60f2ae9bb7281ae2a453f04b69d31157ec9ae92cf424695da8"
+      "sha256": "371d415821f4f6ee0646eccd4fd264a66da0c5e289b626d4ad2b5b8d548093f4"
     },
     {
       "path": "scripts/python/render/render_entrypoints.py",
@@ -599,7 +600,7 @@
     },
     {
       "path": "scripts/python/render/render_gate_compaction.py",
-      "sha256": "abd4f5e76b7fa759346a1cb1cd663e2fb3007b5ce36ea63bb5f757901a3977e6"
+      "sha256": "9760bdbb597054286d2c0f947edc2d102a1c58b8c15ff05ee62413aae1fab2da"
     },
     {
       "path": "scripts/python/render/sitecustomize.py",
@@ -615,7 +616,7 @@
     },
     {
       "path": "scripts/python/verify/command_contracts.py",
-      "sha256": "36628e3ff37fd6b2f2e78711c97228d36a4139c09711e0a3dba1505c6eb2c936"
+      "sha256": "3bc07600cf022c9108dc612a8c71d82055b52d084768e83625f9bd5b44e4eabf"
     },
     {
       "path": "scripts/python/verify/eval_policy_cases.py",
@@ -643,7 +644,7 @@
     },
     {
       "path": "scripts/python/verify/eval_runtime_project_cases.py",
-      "sha256": "052a37c80a43191e9faae1799236a5df9e36ec0a19683b26c8d6e96f1ae3bc77"
+      "sha256": "a6da4b29ffed2a97c233d3167612f83e71f916ad96477f8cee34552eb52d1901"
     },
     {
       "path": "scripts/python/verify/eval_runtime_release_cases.py",
@@ -651,7 +652,7 @@
     },
     {
       "path": "scripts/python/verify/eval_runtime_workspace_cases.py",
-      "sha256": "024e85f63d2f1e3a7d1119a9d88d4996e47b45bde89ca2d837d50b080188c7aa"
+      "sha256": "75fb0060323606db8a38f69bb46901ddc9a091c12380b5f249443ebbbf0fcf54"
     },
     {
       "path": "scripts/python/verify/evaluate_skill.py",
@@ -675,7 +676,7 @@
     },
     {
       "path": "scripts/python/verify/run_skill_evals.py",
-      "sha256": "9d8502f73aecc9289f3b284bdf64c77873f7fa82ac9f64a549549763fe7b1c90"
+      "sha256": "34684478a03f886ec0a60db838b417d17f2893eec9095bc616e680df486db315"
     },
     {
       "path": "scripts/python/verify/sitecustomize.py",
@@ -687,7 +688,7 @@
     },
     {
       "path": "scripts/python/verify/source_governance_config.py",
-      "sha256": "aa7cb5afd803cf0458b86929399d75b273f798fe97ea3e1f8f4fb2e1e36ebc97"
+      "sha256": "7bc3737d65d031d2b97e206c000046ecff22dcdc52c0e8dded15a66e866ac598"
     },
     {
       "path": "scripts/python/verify/verify_agents.py",
@@ -699,7 +700,7 @@
     },
     {
       "path": "scripts/python/verify/verify_agents_root_contracts.py",
-      "sha256": "97b98709b404a487ac1208f268a15be207357c733fc186c005f2c2ebcc4f87a3"
+      "sha256": "504ef061d205d1c3d0072f4bd12a544ba8fc2d2ef27e18369b8ec212d361f257"
     },
     {
       "path": "scripts/python/verify/verify_agents_runtime_shared.py",
@@ -707,15 +708,19 @@
     },
     {
       "path": "scripts/python/verify/verify_agents_scanning.py",
-      "sha256": "24de5b3064621527deb8578d63b529fcb53866591218d44a6c1f0c9829359158"
+      "sha256": "dd77f2f709754b01775b764317b22b76c3f084c3155acd506893a6b7eaa7fc98"
+    },
+    {
+      "path": "scripts/python/verify/verify_workspace_boundary.py",
+      "sha256": "f7c2eea4e9ee3d0563eceb727576fe075306f083e9e2542dd16ae76d9f5a787e"
     },
     {
       "path": "SKILL.md",
-      "sha256": "916b517d342b0697c0efda0285c7cf5ec61e745c530707fe4ec1b00594dccd7b"
+      "sha256": "704b708087ecadc9fe280d8098b7c90354544f872d5b4ae4a501b7b288a9ba91"
     },
     {
       "path": "VERSION",
-      "sha256": "c79090088087bf088031457c8a9afc9f5ed8671147e1c9388afbdd7fb99bf102"
+      "sha256": "a269e9befe09681e18b3aaff90c76535c7bf2d2343319718ccdb5cbd836c04e8"
     }
   ],
   "other_version_artifacts": []

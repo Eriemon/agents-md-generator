@@ -11,6 +11,7 @@ import os
 # 数据库、进程、路径和通用映射类型支撑构建编排。
 import sqlite3
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -336,7 +337,7 @@ def build_status_payload(path_skill_root: Path, *, bool_wrote: bool) -> dict[str
         "fts_tokenizer": dict_metadata["fts_tokenizer"],
     }
 
-# 数据库构建器在同目录临时文件中完成全部事务后原子替换。
+# 数据库构建器在同卷临时文件中完成全部事务后原子替换。
 def write_database(path_skill_root: Path) -> dict[str, Any]:
     """从 JSON 注册源原子重建 SQLite 索引。
 
@@ -345,26 +346,57 @@ def write_database(path_skill_root: Path) -> dict[str, Any]:
     异常：文件系统或 SQLite 构建失败时透传原始异常。
     """
 
+    # 正式目标路径来自固定注册表目录合同。
+    path_target = database_path(path_skill_root)  # 正式 SQLite 数据库路径
+
+    # 注册目录可能在新技能夹具中尚未创建完整。
+    path_target.parent.mkdir(parents=True, exist_ok=True)
+
+    # 旧版构建器可能把固定临时数据库及 journal 留在严格注册根目录。
+    path_legacy_temporary = path_target.with_suffix(f"{path_target.suffix}.tmp")  # 旧版临时数据库
+
+    # 两类旧版工件必须作为一个精确清理集合处理。
+    tuple_legacy_artifacts = (  # 仅用于兼容清理的旧版临时工件
+        path_legacy_temporary,  # 中断构建遗留的主文件
+        Path(f"{path_legacy_temporary}-journal"),  # 未提交事务恢复文件
+    )
+
+    # 迁移后不得让旧版临时工件阻塞注册源校验。
+    for path_legacy_artifact in tuple_legacy_artifacts:
+
+        # 删除目标由正式数据库路径派生，不依赖任何 JSON 业务文件名。
+        if path_legacy_artifact.exists():
+
+            # 清除已确认存在的单个旧版工件。
+            path_legacy_artifact.unlink()
+
     # 加载器在任何数据库写入前完成 schema 和关系校验。
     tuple_registry = load_registry(path_skill_root)  # 已校验清单、命令和工作流
 
     # 文档职责和知识指针来自完成态文档注册源。
     tuple_document_records = load_document_records(path_skill_root, tuple_registry[0])  # 文档与知识记录
 
-    # 正式目标路径来自固定注册表目录合同。
-    path_target = database_path(path_skill_root)  # 正式 SQLite 数据库路径
+    # 摘要校验发生在写入之前，临时数据库始终位于严格注册根目录之外。
+    str_source_digest = source_digest(path_skill_root, tuple_registry[0])  # 当前注册源摘要
 
-    # 同目录临时文件使 os.replace 保持原子性。
-    path_temporary = path_target.with_suffix(".sqlite3.tmp")  # 临时 SQLite 数据库路径
+    # 唯一临时文件放在 registry 的父目录，避免构建过程污染严格根目录。
+    int_descriptor, str_temporary_path = tempfile.mkstemp(  # 唯一临时文件句柄和路径
+        prefix=f".{path_target.stem}-",  # 便于诊断的目标派生前缀
+        suffix=f"{path_target.suffix}.tmp",  # 临时数据库后缀
+        dir=path_target.parent.parent,  # registry 外的同卷配置目录
+    )
 
-    # 注册目录可能在新技能夹具中尚未创建完整。
-    path_target.parent.mkdir(parents=True, exist_ok=True)
+    # SQLite 接管路径前先释放低层文件描述符。
+    os.close(int_descriptor)
 
-    # 上次中断留下的临时文件不得参与本轮构建。
-    if path_temporary.exists():
+    # 临时数据库路径用于连接、原子替换与失败清理。
+    path_temporary = Path(str_temporary_path)  # 本次构建独占的临时 SQLite 路径
 
-        # 删除的只是固定临时文件，不触碰 JSON 源或正式数据库。
-        path_temporary.unlink()
+    # journal 路径用于异常路径的成对清理。
+    path_temporary_journal = Path(f"{path_temporary}-journal")  # 临时事务 journal 路径
+
+    # 连接变量允许异常路径先释放 Windows 文件句柄再清理。
+    connection_database: sqlite3.Connection | None = None  # 当前临时数据库连接
 
     # 所有写入在临时数据库连接内完成。
     try:
@@ -378,7 +410,7 @@ def write_database(path_skill_root: Path) -> dict[str, Any]:
         # 元数据把生成数据库绑定到当前源摘要和记录计数。
         dict_metadata = {  # 待写入数据库的可验证元数据
             "schema_version": str(INT_SCHEMA_VERSION),  # 当前结构版本
-            "source_sha256": source_digest(path_skill_root, tuple_registry[0]),  # 当前源摘要
+            "source_sha256": str_source_digest,  # 当前源摘要
             "command_count": str(len(tuple_registry[1])),  # 当前命令数量
             "workflow_count": str(len(tuple_registry[2])),  # 当前工作流数量
             "document_count": str(len(tuple_document_records[0])),  # 当前文档职责数量
@@ -413,17 +445,29 @@ def write_database(path_skill_root: Path) -> dict[str, Any]:
         # Windows 原子替换前必须关闭文件句柄。
         connection_database.close()
 
+        # 空值记录连接已释放，异常路径无需重复关闭。
+        connection_database = None  # 已释放的临时数据库连接
+
         # 只有完整构建成功后才替换正式数据库。
         os.replace(path_temporary, path_target)
 
     # 构建失败时清理临时工件并保留旧正式数据库。
-    except (OSError, sqlite3.Error):
+    except (OSError, sqlite3.Error, RegistryError):
 
-        # 仅在临时文件真实存在时执行清理。
-        if path_temporary.exists():
+        # Windows 必须先关闭连接，之后才能移除临时数据库。
+        if connection_database is not None:
 
-            # 清理不完整数据库，避免下次构建误读。
-            path_temporary.unlink()
+            # 释放仍存活的连接，解除 Windows 文件占用。
+            connection_database.close()
+
+        # 仅清理本次唯一临时数据库及其事务 journal。
+        for path_temporary_artifact in (path_temporary, path_temporary_journal):
+
+            # 只处理本次构建明确派生出的工件。
+            if path_temporary_artifact.exists():
+
+                # 清除已确认存在的不完整工件。
+                path_temporary_artifact.unlink()
 
         # 原始异常由 CLI 主函数转换为退出码 3。
         raise

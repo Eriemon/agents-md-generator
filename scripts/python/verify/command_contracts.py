@@ -24,7 +24,12 @@ def is_path_reference(raw: str) -> bool:
     """
 
     # URL、邮件链接和保留文件名都不应被当成仓库内路径引用。
-    if raw.startswith(("http://", "https://", "mailto:")) or raw in {"AGENTS.md", "CLAUDE.md", "GEMINI.md"}:
+    if raw.startswith(("http://", "https://", "mailto:")) or raw in {
+        "AGENTS.md",
+        "CLAUDE.md",
+        "GEMINI.md",
+        "__init__.py",
+    }:
 
         # 这些外部链接或保留文件名不属于路径引用候选。
         return False

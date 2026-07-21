@@ -37,6 +37,13 @@
       "description": "tests, smoke*, reports, and runs must stay at the work-folder root and be blocked when nested under the primary skill or engineering directory."
     },
     {
+      "id": "workspace_boundary_double_confirmation",
+      "kind": "directory_governance_regression",
+      "patterns": ["Reviewer", "Pipeline"],
+      "handler": "workspace_boundary_double_confirmation",
+      "description": "Managed roots must keep external reads side-effect free and require two separate confirmations before any external modification, even under urgency, blanket approval, or changed scope."
+    },
+    {
       "id": "evolution_removed_contract",
       "kind": "docs_governance_regression",
       "patterns": ["Tool Wrapper", "Pipeline"],

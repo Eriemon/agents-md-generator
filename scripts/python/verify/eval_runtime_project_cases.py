@@ -239,6 +239,7 @@ def prepare_root_whitelist_project(path_project: Path) -> None:
         json.dumps(root_whitelist_control(), ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+
     # 最小 skill 主目录使项目分类与目录合同保持一致。
     path_skill = path_project / "skills" / "demo-skill"  # 模拟 skill 源目录
 
@@ -1010,29 +1011,29 @@ def case_external_generic_health(skill_dir: Path, case: dict[str, Any]) -> dict[
     """评估调用方提供的外部通用 skill 健康状态。
 
     Args:
-        skill_dir: 外部 skill 根目录，同时作为目标项目根。
+        skill_dir: 外部 skill 根目录；受管项目根由目录事实解析。
         case: 当前评估用例元数据。
 
     Returns:
         公共审计和综合评估状态的对比结果。
     """
 
-    # 通用审计只检查 skill 自身结构和引用。
-    dict_audit = run_json_script(  # 外部 skill 公共审计结果
-        "audit_skill.py",  # 外部 skill 公共审计入口
-        skill_dir,  # 外部调用方指定的技能目录
-        cwd=REPO_ROOT,  # 使用仓库公共审计运行时
-    )
-
     # 受管源码技能从仓库根读取治理计划，独立安装保持自身边界。
     path_project_root = managed_project_root(skill_dir)  # 外部技能评估项目根
 
-    # 综合评估使用解析后的真实项目边界。
+    # 综合评估先完成其拥有的瞬态缓存清理生命周期。
     dict_evaluate = run_json_script(  # 外部 skill 综合评估结果
         "evaluate_skill.py",  # 外部 skill 综合评估入口
         skill_dir,  # 外部调用方指定的评估技能
         path_project_root,  # 受管仓库根或独立技能最小边界
         cwd=REPO_ROOT,  # 外部健康检查复用正式综合评估运行时
+    )
+
+    # 严格审计随后检查综合评估留下的最终技能状态。
+    dict_audit = run_json_script(  # 外部 skill 公共审计结果
+        "audit_skill.py",  # 外部 skill 公共审计入口
+        skill_dir,  # 外部调用方指定的技能目录
+        cwd=REPO_ROOT,  # 使用仓库公共审计运行时
     )
 
     # 有技能路径要求两层健康检查同时通过。

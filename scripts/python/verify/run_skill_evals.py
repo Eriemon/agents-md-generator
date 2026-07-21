@@ -98,6 +98,7 @@ def policy_handlers() -> dict[str, EvalHandler]:
         "workspace_settings_gate": release_cases.case_workspace_settings_gate,
         "release_content_evals_install_contract": release_cases.case_release_content_evals_install_contract,
         "release_sanitizer_regex_constant": release_cases.case_release_sanitizer_regex_constant,
+        "workspace_boundary_double_confirmation": workspace_cases.case_workspace_boundary_double_confirmation,
         "root_workspace_artifact_gate": workspace_cases.case_root_workspace_artifact_gate,
         "task_rating_gate_contract": workspace_cases.case_task_rating_gate_contract,
         "memory_governance_gate": workspace_cases.case_memory_governance_gate,

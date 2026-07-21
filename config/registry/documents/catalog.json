@@ -1,12 +1,12 @@
 {
   "documents": [
     {
-      "content_sha256": "83c65f1744a5777c14d145bce6a4d86dafc555fe35786c80de84a3064445d594",
+      "content_sha256": "c4661e6cbe2f5baea997cd90b0f1b0cd47d3bd965007c9db75b9baf2dfd5b9e6",
       "id": "document.skill",
       "path": "SKILL.md",
-      "responsibility": "定义技能触发条件、工作流顺序、停止边界与渐进披露入口。",
+      "responsibility": "定义技能触发条件、工作流顺序、远程技能能力判定、工作区停止边界与渐进披露入口。",
       "status": "reviewed",
-      "summary": "agents-md-generator 的最外层执行合同与资源路由。"
+      "summary": "agents-md-generator 的执行合同、远程能力路由与工作区双确认边界。"
     },
     {
       "content_sha256": "8ac2a9f94f0ff795abe6eab6b8ee13c4ecf47844853c1b0ac8984775a4d640b5",
@@ -41,12 +41,12 @@
       "summary": "编码行为中的 Python 与脚本技能路由合同。"
     },
     {
-      "content_sha256": "e04f892bf3a2303752f50d5bdc2f68edc5ddad97a64c296e9578191863ca976c",
+      "content_sha256": "3db5f6e4c7dc9c5989964031b22e3ff230ea695006719e0e196e543ef256f049",
       "id": "document.references-evaluation-scenarios",
       "path": "references/evaluation-scenarios.md",
       "responsibility": "定义技能变更后的前向测试场景及其预期结果。",
       "status": "reviewed",
-      "summary": "功能、治理、发布与兼容性的前向验证场景。"
+      "summary": "功能、工作区边界、治理、发布与兼容性的前向验证场景。"
     },
     {
       "content_sha256": "ecb4ad440c67754bc0051d1c2b9f3afa3091a17f8c8460622802871147344a6b",
@@ -57,12 +57,12 @@
       "summary": "AGENTS.md 设计访谈问题库与分支合同。"
     },
     {
-      "content_sha256": "494668d0f63c9b0d7a4f0f3dc84c691f09ab2673946a9c57518bda99f38742fb",
+      "content_sha256": "8e13dc050fa16e184ad06a654cce124dc8594658ab71d7821dc88ff94f979508",
       "id": "document.references-review-checklist",
       "path": "references/review-checklist.md",
       "responsibility": "定义生成或修改治理规则时的人工审查证据和发布前检查清单。",
       "status": "reviewed",
-      "summary": "内容、结构、运行时、验证与发布审查清单。"
+      "summary": "内容、结构、运行时、工作区双确认、验证与发布审查清单。"
     },
     {
       "content_sha256": "21ec98d27a72ba441b5017ca58f568bfd710a1de1dbb7ee525c2bc74039eed2a",
