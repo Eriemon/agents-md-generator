@@ -223,6 +223,20 @@ def has_valid_decomposition_plan(project_root: Path, relative_file: str) -> bool
     # 计划位置与超限报告使用同一映射函数。
     path_plan_path = decomposition_plan_path(project_root, relative_file)  # 预期分解计划路径。
 
+    # 安装副本携带发布时核准的计划，使脱离仓库后仍能独立复核超限源码。
+    if not path_plan_path.is_file():
+
+        # Windows 相对路径先归一化，确保安装包内使用统一目录层级。
+        str_bundled_relative = relative_file.replace("\\", "/")  # bundled 计划相对路径。
+
+        # bundled 路径保留源码相对层级，避免文件名碰撞。
+        path_plan_path = (  # 安装副本内的计划候选。
+            project_root  # 安装技能根。
+            / "references"  # 发布参考资料目录。
+            / "decomposition-plans"  # bundled 分解计划根。
+            / f"{str_bundled_relative}.md"  # 当前源码对应计划。
+        )
+
     # 缺失计划不能豁免源码尺寸硬门禁。
     if not path_plan_path.is_file():
 

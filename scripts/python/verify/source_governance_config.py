@@ -1358,18 +1358,21 @@ def append_file_naming_errors(data: dict[str, Any], list_errors: list[str]) -> N
             "source_governance.file_naming_gate.max_stem_chars must be an integer from 1 to 30"
         )
 
-    # 例外只能保留不承担功能摘要职责的包初始化文件。
+    # 例外只覆盖 Python 固定入口文件，不能扩展到任意双下划线名称。
     list_exemptions = dict_gate.get("exemptions")  # 当前配置声明的文件名豁免项
+
+    # 初始化入口与模块执行入口是唯一受管例外。
+    set_allowed_exemptions = {"__init__.py", "__main__.py"}  # 不参与功能词干检查的固定文件名
 
     # 非数组或包含其他文件名都会扩大规则绕过面。
     if (
         not isinstance(list_exemptions, list)  # 豁免项必须使用数组表达
-        or not set(str(item) for item in list_exemptions).issubset({"__init__.py"})  # 只允许初始化文件
+        or not set(str(item) for item in list_exemptions).issubset(set_allowed_exemptions)
     ):
 
-        # 诊断固定列出唯一允许项，便于直接修复配置。
+        # 诊断固定列出完整允许集合，便于直接修复配置。
         list_errors.append(
-            "source_governance.file_naming_gate.exemptions may contain only __init__.py"
+            "source_governance.file_naming_gate.exemptions may contain only __init__.py and __main__.py"
         )
 
     # 受管正则锁住 Python 与其他源码的功能单词结构。

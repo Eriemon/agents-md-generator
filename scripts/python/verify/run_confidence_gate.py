@@ -526,7 +526,8 @@ ConfidenceGateContext = namedtuple(  # 全部门禁命令共享的规范化执�
     (
         "path_project path_skill path_evals path_agents_generator "
         "path_external_skill str_review_base str_eval_runner_policy "
-        "path_eval_runner path_semantic_review str_version str_skill_argument"
+        "path_eval_runner path_semantic_review path_test_evidence "
+        "str_version str_skill_argument"
     ),
 )  # 项目路径、版本和 runner 策略的不可变载体
 
@@ -628,6 +629,19 @@ def confidence_context(
         # 合成仓库内证据的绝对位置供审查子命令使用。
         path_semantic_review = path_project / path_semantic_review  # 项目根下的语义证据绝对路径
 
+    # 测试收据是可选兼容输入；提供后统一锚定项目根。
+    path_test_evidence = (  # 可选不透明测试收据路径。
+        Path(str(dict_options["test_evidence"]))  # 调用方显式收据路径。
+        if dict_options.get("test_evidence")  # 仅解析真实提供的输入。
+        else None  # 开发态不制造默认收据路径。
+    )
+
+    # 相对收据路径不依赖 confidence 启动目录。
+    if path_test_evidence is not None and not path_test_evidence.is_absolute():
+
+        # 项目根是所有发布 CLI 共同的相对路径基准。
+        path_test_evidence = path_project / path_test_evidence  # 项目内收据绝对路径。
+
     # 直接返回不可变上下文，避免构造后发生局部重写。
     return ConfidenceGateContext(
         path_project=path_project,  # 受管项目根
@@ -641,6 +655,9 @@ def confidence_context(
         path_eval_runner=path_eval_runner,  # 可选显式评估入口
         # 下列字段绑定文件名审查、发布版本和子命令路径语义。
         path_semantic_review=path_semantic_review.resolve(),  # 文件名功能摘要证据
+        path_test_evidence=(
+            path_test_evidence.resolve() if path_test_evidence is not None else None
+        ),  # 可选不透明测试收据
         str_version=current_version(path_skill),  # 待发布技能当前版本
         str_skill_argument=str_skill_argument,  # 治理子命令使用的技能路径参数
     ), None
@@ -720,17 +737,26 @@ def release_gate_argv(context: ConfidenceGateContext, str_phase: str) -> list[st
     """
 
     # pre 与 post 阶段除阶段值外必须使用相同发布参数。
-    return [
-        *manage_docs_argv("release-gate", context.path_project),
-        "--version",
-        context.str_version,
-        "--skill-dir",
-        context.str_skill_argument,
-        "--phase",
-        str_phase,
-        "--install-intent",
-        "requested",
+    list_argv = [  # 当前阶段发布门禁参数。
+        *manage_docs_argv("release-gate", context.path_project),  # release-gate 基础入口。
+        "--version",  # 发布版本参数名。
+        context.str_version,  # 当前技能版本。
+        "--skill-dir",  # 技能源目录参数名。
+        context.str_skill_argument,  # 当前技能路径参数。
+        "--phase",  # 发布阶段参数名。
+        str_phase,  # 当前 pre 或 post 阶段。
+        "--install-intent",  # 安装意图参数名。
+        "requested",  # confidence 固定请求安装验证。
     ]
+
+    # 提供收据时 pre/post 必须传入同一规范化路径。
+    if context.path_test_evidence is not None:
+
+        # 参数值不随阶段变化。
+        list_argv.extend(["--test-evidence", str(context.path_test_evidence)])
+
+    # 返回当前阶段完整命令。
+    return list_argv
 
 # 自动审查固定比较基线与 HEAD，覆盖全部治理类别。
 def review_governance_argv(context: ConfidenceGateContext) -> list[str]:
@@ -1402,6 +1428,9 @@ def main() -> int:
     # 文件名语义复核证据默认位于项目治理目录。
     parser.add_argument("--semantic-review", default=None)
 
+    # 发布态 confidence 把同一收据传给内部 pre/post 门禁。
+    parser.add_argument("--test-evidence", default=None)
+
     # 旧 optional 开关继续解析但会产生弃用警告。
     parser.add_argument("--skip-missing-eval-runner", action="store_true")
 
@@ -1471,6 +1500,7 @@ def main() -> int:
         eval_runner_policy=str_eval_runner_policy,  # 缺失 runner 的处理策略
         eval_runner=path_eval_runner,  # 调用方锁定的评估脚本路径
         semantic_review=args.semantic_review,  # 文件名功能摘要证据路径
+        test_evidence=args.test_evidence,  # 内部 release pre/post 共用测试收据
         # 兼容开关和警告统一进入最终机器报告。
         require_eval_runner=args.require_eval_runner,  # 旧强制 runner 兼容标志
         deprecation_warnings=list_deprecation_warnings,  # 写入机器报告的兼容参数警告

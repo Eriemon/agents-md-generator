@@ -1,5 +1,82 @@
 """发布打包。"""
 
+# 延迟解析分片注解，使该模块既可聚合加载也可独立导入。
+from __future__ import annotations
+
+# 独立导入时显式提供结果路径格式化函数。
+from agents_common import display_path
+from release_content_policy import POLICY_VERSION
+
+# 聚合加载时保存已注入的真实 hook，独立加载时记录为空。
+func_aggregate_release_gate = globals().get("release_gate")  # 分片加载前已有的发布门禁。
+
+# 独立模块公开可替换入口，聚合运行时继续复用原始实现。
+def release_gate(
+    project: Path,
+    version: str,
+    skill_dir_raw: str,
+    phase: str,
+    install_intent: str,
+    test_evidence_raw: str = "",
+    bool_require_test_evidence: bool = False,
+) -> dict[str, Any]:
+    """把独立模块调用转交给聚合发布门禁。
+
+    参数：project、version 和 skill_dir_raw 定位发布目标。
+    参数：phase 与 install_intent 描述门禁阶段和安装意图。
+    参数：test_evidence_raw 非空时启用发布态测试收据透传。
+    参数：bool_require_test_evidence 为 True 时拒绝缺失收据。
+    返回：聚合发布门禁的结构化验证结果。
+    """
+
+    # 分片聚合加载已经提供真实实现时避免重新进入聚合器。
+    if callable(func_aggregate_release_gate):
+
+        # 参数原样转发到分片加载前保存的实现。
+        if test_evidence_raw or bool_require_test_evidence:
+
+            # 发布态调用透传同一不透明测试收据。
+            return func_aggregate_release_gate(
+                project,  # 聚合门禁所属仓库。
+                version,  # 待验证发布版本。
+
+                # 下组参数固定发布源和阶段语义。
+                skill_dir_raw,  # 聚合门禁技能目录。
+                phase,  # 聚合门禁 pre/post 阶段。
+
+                # 安装与测试证据状态必须共同透传。
+                install_intent,  # 聚合门禁安装意图。
+                test_evidence_raw,  # 聚合门禁收据输入。
+                bool_require_test_evidence,  # 聚合门禁收据必需状态。
+            )
+
+        # 无收据调用保持既有开发态 hook 合同。
+        return func_aggregate_release_gate(project, version, skill_dir_raw, phase, install_intent)
+
+    # 独立真实调用才加载完整聚合运行时，导入阶段保持无副作用。
+    from manage_docs_release import release_gate as func_release_gate
+
+    # 参数原样转发，保持模块级 hook 的可替换合同。
+    if test_evidence_raw or bool_require_test_evidence:
+
+        # 独立模块的发布态调用同样透传收据。
+        return func_release_gate(
+            project,  # 独立门禁所属仓库。
+            version,  # 独立门禁发布版本。
+
+            # 下组参数固定独立门禁的源码和阶段。
+            skill_dir_raw,  # 独立门禁技能目录。
+            phase,  # 独立门禁 pre/post 阶段。
+
+            # 安装与测试证据保持和聚合入口相同。
+            install_intent,  # 独立门禁安装意图。
+            test_evidence_raw,  # 独立门禁收据输入。
+            bool_require_test_evidence,  # 独立门禁收据必需状态。
+        )
+
+    # 无收据调用保持旧五参数入口。
+    return func_release_gate(project, version, skill_dir_raw, phase, install_intent)
+
 # 失败结果助手统一发布准备的机器协议。
 def prepare_failure(list_errors: list[str], dict_checks: dict[str, Any]) -> dict[str, Any]:
     """构造发布准备失败结果。
@@ -331,11 +408,19 @@ def finish_release_prepare(
     return list_errors
 
 # 公共入口编排硬门禁、同步、提交、合并和收尾检查。
-def release_prepare(project: Path, version: str, skill_dir_raw: str) -> dict[str, Any]:
+def release_prepare(
+    project: Path,
+    version: str,
+    skill_dir_raw: str,
+    test_evidence_raw: str = "",
+    bool_require_test_evidence: bool = False,
+) -> dict[str, Any]:
     """准备临时开发分支进入受管发布状态。
 
     参数：project 为仓库根，version 为目标版本。
     参数：skill_dir_raw 为相对或绝对技能目录。
+    参数：test_evidence_raw 非空时在暂存前验证远程测试收据。
+    参数：bool_require_test_evidence 为 True 时拒绝缺失收据。
     返回：包含 Git 证据和错误列表的准备结果。
     """
 
@@ -403,6 +488,27 @@ def release_prepare(project: Path, version: str, skill_dir_raw: str) -> dict[str
     # master 已就绪或拓扑不安全时直接返回。
     if dict_branch_result is not None:
 
+        # 已处于完成态时仍不能绕过显式提供的发布测试收据。
+        if dict_branch_result.get("ok") and (
+            test_evidence_raw or bool_require_test_evidence
+        ):
+
+            # 当前状态只读验证，不在 master 上执行同步或提交。
+            dict_test_evidence = validate_project_test_evidence(  # 当前不透明测试证据结果。
+                project,  # 当前发布仓库。
+                test_evidence_raw,  # 调用方收据输入。
+                bool_required=bool_require_test_evidence,  # CLI 准备命令拒绝缺失收据。
+            )
+
+            # 提前结果只公开脱敏测试统计和错误码。
+            dict_checks["test_evidence"] = dict_test_evidence  # 已完成态的测试证据。
+
+            # 无效收据覆盖提前成功结论。
+            if dict_test_evidence["errors"]:
+
+                # 保留分支事实和脱敏测试证据。
+                return prepare_failure(dict_test_evidence["errors"], dict_checks)
+
         # 分支检查已形成完整机器载荷。
         return dict_branch_result
 
@@ -414,6 +520,22 @@ def release_prepare(project: Path, version: str, skill_dir_raw: str) -> dict[str
 
         # 返回同步阶段证据。
         return prepare_failure(list_errors, dict_checks)
+
+    # 根同步完成后、任何 Git 暂存前验证当前源码与远程测试证据绑定。
+    dict_test_evidence = validate_project_test_evidence(  # 同步后测试证据。
+        project,  # 根同步发生的候选仓库。
+        test_evidence_raw,  # 待重新绑定同步结果的收据。
+        bool_required=bool_require_test_evidence,  # 暂存前采用调用方必需策略。
+    )
+
+    # 准备结果记录脱敏测试统计和稳定错误码。
+    dict_checks["test_evidence"] = dict_test_evidence  # 发布准备脱敏证据。
+
+    # 同步导致 manifest 漂移或收据本身无效时禁止暂存。
+    if dict_test_evidence["errors"]:
+
+        # TESTER 必须基于同步后的源码重新远程验证并重签。
+        return prepare_failure(dict_test_evidence["errors"], dict_checks)
 
     # 暂存并提交受管路径改动。
     list_errors = commit_prepare_changes(  # 提交阶段错误。
@@ -588,12 +710,16 @@ def package_preflight(
     path_project: Path,
     str_version: str,
     str_skill_dir_raw: str,
+    str_test_evidence_raw: str = "",
+    bool_require_test_evidence: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """收集打包上下文，并在写入 dist 前执行失败快速返回。
 
     参数：path_project 为仓库根。
     参数：str_version 为请求发布版本。
     参数：str_skill_dir_raw 为绝对或项目相对的技能源码目录。
+    参数：str_test_evidence_raw 为 pre 门禁使用的不透明测试收据。
+    参数：bool_require_test_evidence 为 True 时拒绝缺失收据。
     返回：上下文与可选失败载荷；失败载荷非空时不得继续写入。
     """
 
@@ -646,6 +772,8 @@ def package_preflight(
         str_skill_dir_raw,  # 待验证源码目录。
         "pre",  # 发布前阶段。
         "unspecified",  # 打包时尚未选择安装目标。
+        str_test_evidence_raw,  # 与 post 阶段相同的不透明测试收据。
+        bool_require_test_evidence,  # CLI 打包路径的收据必需状态。
     )
 
     # pre 门禁错误必须在创建版本目录前返回。
@@ -883,17 +1011,33 @@ def create_package_artifacts(
     ), None
 
 # package_release 编排前检、产物生成、提交和 post 门禁。
-def package_release(project: Path, version: str, skill_dir_raw: str) -> dict[str, Any]:
+def package_release(
+    project: Path,
+    version: str,
+    skill_dir_raw: str,
+    install_intent: str = "unspecified",
+    test_evidence_raw: str = "",
+    bool_require_test_evidence: bool = False,
+) -> dict[str, Any]:
     """生成、提交并验证仓库内的版本化技能发布包。
 
     参数：project 为仓库根。
     参数：version 为请求发布版本。
     参数：skill_dir_raw 为绝对或项目相对的技能源码目录。
+    参数：install_intent 为调用者声明的发布后安装意图。
+    参数：test_evidence_raw 为 pre/post 共用的不透明测试收据。
+    参数：bool_require_test_evidence 为 True 时拒绝缺失收据。
     返回：包含前后门禁、产物位置和内容策略证据的打包结果。
     """
 
     # 前检返回可信上下文或可直接透传的失败合同。
-    tuple_preflight = package_preflight(project, version, skill_dir_raw)  # 前检二元结果。
+    tuple_preflight = package_preflight(  # 打包前检二元结果。
+        project,  # 本次打包产物所属仓库。
+        version,  # 请求打包版本。
+        skill_dir_raw,  # 技能源目录。
+        test_evidence_raw,  # pre/post 共用收据。
+        bool_require_test_evidence,  # 将 CLI 收据约束传入前检。
+    )
 
     # 二元结果分别提供可信上下文和可选失败载荷。
     dict_context, dict_failure = tuple_preflight  # 前检上下文与失败合同。
@@ -934,7 +1078,15 @@ def package_release(project: Path, version: str, skill_dir_raw: str) -> dict[str
         }
 
     # 提交完成后 post 门禁验证收据、ZIP、Git 状态和内容策略。
-    dict_post_gate = release_gate(project, version, skill_dir_raw, "post", "unspecified")  # 发布后门禁证据.
+    dict_post_gate = release_gate(  # 发布后门禁证据。
+        project,  # 已提交 dist 产物的仓库。
+        version,  # 已生成产物的版本。
+        skill_dir_raw,  # 发布源码目录。
+        "post",  # 发布后验证阶段。
+        install_intent,  # 调用方安装意图。
+        test_evidence_raw,  # 与 pre 阶段相同的测试收据。
+        bool_require_test_evidence,  # 与 pre 阶段相同的必需状态。
+    )
 
     # 便于表达最终内容策略结论的发布树分析。
     dict_release_content = dict_artifacts["release_content"]  # post 结果使用的内容分析。

@@ -942,6 +942,8 @@ def structure_fix_facts(root: Path, profile: dict[str, Any]) -> tuple[bool, list
                 ".gitignore",  # Git 忽略规则属于标准根文件。
                 ".gitattributes",  # Git 属性合同属于标准根文件。
                 ".editorconfig",  # 编辑器格式合同属于标准根文件。
+                "README.md",  # 仓库入口说明无需触发结构修复确认。
+                "LICENSE",  # 根级许可证无需触发结构修复确认。
             ],
         )
         if str(item).strip()  # 排除空白配置项。

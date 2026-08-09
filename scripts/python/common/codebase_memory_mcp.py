@@ -10,9 +10,15 @@ import re
 import shutil
 import subprocess
 
+# 时间类型用于把跨平台进程年龄转换为稳定 UTC 启动时间。
+from datetime import datetime, timedelta, timezone
+
 # 路径和集合类型用于声明跨平台文件与命令边界。
 from pathlib import Path
 from typing import Any, Mapping, Sequence
+
+# 纯健康模块提供范围、WAL 基线和最终分类 hook。
+from codebase_memory_health import classify_index_scope, collect_wal_baseline, inspect_cbmignore
 
 # 上游仓库地址是安装说明与发布入口的共同来源。
 REPOSITORY_URL = "https://github.com/DeusData/codebase-memory-mcp"  # 官方上游仓库地址
@@ -61,6 +67,46 @@ def codebase_memory_contract(enabled: bool) -> dict[str, Any]:
         "debug_policy": "graph-first" if enabled else "disabled",
         "git_policy": "ignored-untracked",
         "releases_url": RELEASES_URL,
+        "scope_policy": {
+            "cbmignore_path": ".cbmignore",
+            "managed_start": "# codebase-memory-scope:start",
+            "managed_end": "# codebase-memory-scope:end",
+            "max_governance_ratio": 0.05,
+            "required_excludes": [
+                ".agents/",
+                ".codebase-memory/",
+                "docs/development/history_development/",
+                "docs/dir_manager/history_dir_manager/",
+                "docs/experience/history_experience/",
+                "docs/git_manager/history_git_manager/",
+                "docs/handoff/history_handoff/",
+                "docs/memory/",
+                "dist/",
+                "*.zip",
+                "*.tar*",
+                "*.whl",
+                "*.db*",
+                "*.sqlite*",
+                "*.zst",
+            ],
+            "protected_paths": [
+                "skills/agents-md-generator/",
+                "tests/",
+                "AGENTS.md",
+                "README.md",
+                "docs/superpowers/plans/",
+            ],
+        },
+        "wal_health": {
+            "sample_count": 3,
+            "sample_interval_seconds": 2,
+            "absolute_limit_bytes": 1073741824,
+            "database_ratio_limit": 8,
+            "long_process_seconds": 1800,
+            "long_process_count": 2,
+            "long_wal_absolute_bytes": 268435456,
+            "long_wal_ratio_limit": 2,
+        },
     }
 
 # 安装说明仅提供官方人工路径，不在治理脚本内下载或执行安装包。
@@ -205,6 +251,73 @@ def _toml_command(path_config: Path) -> str:
     # 扫描器负责目标节定位与字符串解码。
     return _command_from_toml_lines(list_config_lines)
 
+# 缓存根扫描器只读取目标 MCP 的 env 子节。
+def _cache_root_from_toml_lines(list_lines: Sequence[str]) -> str:
+    """从 TOML 行序列提取 codebase-memory-mcp 缓存根。
+
+    参数：list_lines 为 Codex 配置逐行文本。
+    返回：目标 env 子节中的 CBM_CACHE_DIR；缺失或无效时为空字符串。
+    """
+
+    # 当前节名称确保同名环境键不会从其他 MCP 泄漏进来。
+    str_section = ""  # 缓存根扫描所在节。
+
+    # 逐行状态机与 command 解析使用相同的窄范围策略。
+    for str_line in list_lines:
+
+        # 去除布局空白后再识别节头和目标键。
+        str_stripped = str_line.strip()  # 缓存配置候选行。
+
+        # 新节头切换后续键值所属上下文。
+        if str_stripped.startswith("[") and str_stripped.endswith("]"):
+
+            # 完整节名用于精确匹配目标 MCP 的 env 子节。
+            str_section = str_stripped[1:-1].strip()  # 缓存扫描节标识。
+
+            # 节头本身不含缓存根值。
+            continue
+
+        # 其他 MCP 或普通配置节中的同名键不得参与绑定。
+        if str_section != "mcp_servers.codebase-memory-mcp.env":
+
+            # 继续扫描后续目标节。
+            continue
+
+        # 缓存根只接受安全字符串形式，复用 TOML 字符串解码合同。
+        match_cache_root = re.match(  # 缓存环境键解析结果。
+            r"CBM_CACHE_DIR\s*=\s*(.+?)\s*$",  # 缓存根键与完整右值。
+            str_stripped,  # 当前目标 env 配置行。
+        )
+
+        # 首个合法声明是 Codex 为该 MCP 注入的运行时缓存根。
+        if match_cache_root:
+
+            # 字符串解码失败时稳定返回空值并触发后续 fail-closed。
+            return _decode_toml_command_value(match_cache_root.group(1))
+
+    # 目标 env 子节缺少缓存根时返回稳定空值。
+    return ""
+
+# TOML 缓存根读取器不扫描其他配置文件或外部目录。
+def _toml_cache_root(path_config: Path) -> str:
+    """读取 Codex MCP 配置中的 CBM_CACHE_DIR。
+
+    参数：path_config 为 Codex config.toml 路径。
+    返回：配置缓存根；文件缺失时为空字符串。
+    """
+
+    # 缺少配置文件时无法建立运行时数据库绑定。
+    if not path_config.is_file():
+
+        # 空值由 WAL 门禁解释为证据不可用。
+        return ""
+
+    # 只读取一次配置文本并交给窄范围行扫描器。
+    list_config_lines = path_config.read_text(encoding="utf-8").splitlines()  # 配置逐行文本。
+
+    # 返回目标 env 子节的缓存根。
+    return _cache_root_from_toml_lines(list_config_lines)
+
 # 版本探测隔离外部二进制异常，调用方只消费规范化字符串。
 def _binary_version(str_command: str) -> str:
     """执行轻量版本探测并返回规范化版本号。
@@ -279,7 +392,13 @@ def detect_codebase_memory_mcp(
     str_override = dict_environment.get(ENVIRONMENT_BINARY_KEY, "").strip()  # 环境指定命令
 
     # Codex MCP 配置是持久化安装声明的主要来源。
-    str_configured = _toml_command(path_codex_home / "config.toml")  # 配置文件指定命令
+    path_config = path_codex_home / "config.toml"  # Codex 主配置路径。
+
+    # 目标 MCP 节中的命令决定 Codex 配置态。
+    str_configured = _toml_command(path_config)  # 配置文件指定命令
+
+    # 显式进程环境优先于配置 env 子节，保持受控部署可覆盖。
+    str_cache_root = dict_environment.get("CBM_CACHE_DIR", "").strip() or _toml_cache_root(path_config)  # WAL 绑定缓存根。
 
     # PATH 仅作为最后回退，不代表 Codex 已经配置该 MCP。
     str_path_command = shutil.which(  # PATH 发现的候选命令
@@ -316,7 +435,9 @@ def detect_codebase_memory_mcp(
         "command": str_command,
         "source": str_source,
         "version": str_version,
-        "config_path": str(path_codex_home / "config.toml"),
+        "config_path": str(path_config),
+        "cache_root": str_cache_root,
+        "environment": {"CBM_CACHE_DIR": str_cache_root} if str_cache_root else {},
     }
 
 # Git 调用统一禁用 shell，避免项目路径或参数被二次解释。
@@ -452,17 +573,32 @@ def _parse_cli_json(str_stdout: str) -> dict[str, Any]:
     return {}
 
 # MCP CLI 包装器保留结构化响应并把进程失败折叠进同一载荷。
-def _run_tool(str_command: str, str_tool: str, payload: dict[str, Any]) -> dict[str, Any]:
+def _run_tool(
+    str_command: str,
+    str_tool: str,
+    payload: dict[str, Any],
+    environment: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
     """调用 codebase-memory-mcp CLI 并保留失败证据。
 
     参数:
         str_command: 已验证可执行的 MCP 命令。
         str_tool: MCP CLI 工具名称。
         payload: 传给工具的 JSON 对象。
+        environment: 必须显式传播给 CLI 子进程的 MCP 环境。
 
     返回:
         工具响应以及稳定的进程退出码和可选错误文本。
     """
+
+    # 子进程环境从当前进程复制，再只覆盖已验证的 MCP 专用键。
+    dict_process_environment = dict(os.environ)  # CLI 子进程基础环境。
+
+    # 配置中的 CBM_CACHE_DIR 必须与依赖证据一致传递给所有官方调用。
+    if environment:
+
+        # 显式 MCP 环境覆盖当前进程中的同名默认值。
+        dict_process_environment.update(environment)
 
     # 索引可能耗时较长，但仍设置有限超时避免永久挂起。
     completed_process_tool = subprocess.run(  # 汇集工具响应解析与故障诊断所需的完整进程状态
@@ -471,6 +607,7 @@ def _run_tool(str_command: str, str_tool: str, payload: dict[str, Any]) -> dict[
         text=True,  # 将命令输出转换为可逐行扫描的字符串
         encoding="utf-8",  # 按工具约定编码解析响应与日志文本
         errors="replace",  # 用替代字符保留含异常字节的诊断上下文
+        env=dict_process_environment,  # 固定 CLI 与 MCP 服务使用相同缓存根。
         timeout=1800,  # 防止全量索引无限占用治理写入流程
         check=False,  # 保留非零退出以构造结构化失败载荷
     )
@@ -492,6 +629,338 @@ def _run_tool(str_command: str, str_tool: str, payload: dict[str, Any]) -> dict[
 
     # 调用方在统一映射上判断成功、失败和业务字段。
     return dict_result
+
+# Windows 进程采集使用系统 CIM 接口精确比较可执行路径。
+def _windows_mcp_processes(str_command: str) -> list[dict[str, Any]]:
+    """采集与目标 MCP 可执行路径一致的 Windows 进程。
+
+    参数：str_command 为已验证的 MCP 可执行入口。
+    返回：原始匹配进程证据；调用方负责匿名化。
+    """
+
+    # 目标路径通过子进程环境传递，避免拼接进 PowerShell 表达式。
+    dict_environment = dict(os.environ)  # 进程枚举子进程环境。
+
+    # 专用键只服务本次只读进程匹配。
+    dict_environment["AGENTS_MD_MCP_PROCESS_PATH"] = str(Path(str_command).resolve())  # CIM 精确匹配目标。
+
+    # PowerShell 只读取 CIM 进程元数据并输出压缩 JSON。
+    str_command_text = (
+        "$target=[IO.Path]::GetFullPath($env:AGENTS_MD_MCP_PROCESS_PATH);"
+        "$now=Get-Date;"
+        "@(Get-CimInstance Win32_Process | Where-Object {"
+        "$_.ExecutablePath -and [IO.Path]::GetFullPath($_.ExecutablePath) -eq $target"
+        "} | ForEach-Object {"
+        "[pscustomobject]@{pid=[int]$_.ProcessId;"
+        "start_time=$_.CreationDate.ToUniversalTime().ToString('o');"
+        "age_seconds=[int]($now-$_.CreationDate).TotalSeconds;"
+        "command_line=$_.CommandLine;path=$_.ExecutablePath}"
+        "}) | ConvertTo-Json -Compress"
+    )  # 只读 CIM 查询表达式。
+
+    # 禁用交互配置并限制枚举耗时。
+    completed_process = subprocess.run(  # Windows MCP 进程枚举结果。
+        ["powershell", "-NoProfile", "-Command", str_command_text],  # 无配置文件的只读 CIM 命令。
+        capture_output=True,  # 捕获 CIM JSON 与诊断。
+        text=True,  # 按文本协议读取输出。
+        encoding="utf-8",  # 固定 JSON 解码字符集。
+        errors="replace",  # 保留异常字符而不中断诊断。
+        env=dict_environment,  # 传递精确匹配目标路径。
+        timeout=10,  # 限制只读枚举耗时。
+        check=False,  # 由本函数解释退出码。
+    )
+
+    # 枚举失败或空输出按无可用进程证据处理。
+    if completed_process.returncode != 0 or not completed_process.stdout.strip():
+
+        # WAL 容量门仍独立生效，进程条件不使用猜测值。
+        return []
+
+    # PowerShell 数组输出始终应为 JSON 列表。
+    try:
+
+        # 解码结果先保留为未知对象，再执行列表类型收窄。
+        object_processes = json.loads(completed_process.stdout)  # Windows 原始进程载荷。
+
+    # 损坏输出不能进入健康评估。
+    except json.JSONDecodeError:
+
+        # 稳定回退为空证据。
+        return []
+
+    # 单进程输出可能是对象，多进程输出才是数组。
+    if isinstance(object_processes, dict):
+
+        # 规范化为统一列表供调用方匿名化。
+        return [object_processes]
+
+    # 多进程数组只保留映射项，过滤异常标量。
+    return [item for item in object_processes if isinstance(item, dict)] if isinstance(object_processes, list) else []
+
+# POSIX 进程采集通过 ps 的稳定字段匹配可执行名称。
+def _posix_mcp_processes(str_command: str) -> list[dict[str, Any]]:
+    """采集与目标 MCP 入口同名的 POSIX 进程。
+
+    参数：str_command 为已验证的 MCP 可执行入口。
+    返回：带 PID、启动时间、年龄和原始命令行的匹配证据。
+    """
+
+    # etimes 提供无需区域解析的进程年龄秒数。
+    completed_process = subprocess.run(  # ps 字段采集进程结果。
+        ["ps", "-eo", "pid=,etimes=,comm=,args="],  # 稳定机器字段与原始参数。
+        capture_output=True,  # 捕获 ps 字段与诊断。
+        text=True,  # 按文本行解析进程记录。
+        encoding="utf-8",  # 固定跨平台输出字符集。
+        errors="replace",  # 保留异常命令字符。
+        timeout=10,  # 限制系统进程枚举耗时。
+        check=False,  # 由本函数处理 ps 退出码。
+    )
+
+    # ps 不可用或失败时返回空证据。
+    if completed_process.returncode != 0:
+
+        # 不根据错误文本猜测运行中进程。
+        return []
+
+    # 可执行文件名用于过滤无关系统进程。
+    str_target_name = Path(str_command).name  # MCP 可执行文件名。
+
+    # 当前 UTC 时间用于从 age_seconds 计算稳定启动时间。
+    datetime_now = datetime.now(timezone.utc)  # 进程采集时间。
+
+    # 匹配结果保留原始命令行，随后由编排器统一匿名化。
+    list_processes: list[dict[str, Any]] = []  # POSIX 匹配进程证据。
+
+    # 每行最多拆分四段，命令参数中的空格保留在末段。
+    for str_line in completed_process.stdout.splitlines():
+
+        # 空行不属于进程记录。
+        list_parts = str_line.strip().split(maxsplit=3)  # 当前 ps 字段。
+
+        # 缺少任一稳定字段时跳过损坏记录。
+        if len(list_parts) != 4 or Path(list_parts[2]).name != str_target_name:
+
+            # 忽略当前损坏数值行并继续扫描。
+            continue
+
+        # PID 与年龄必须可转换为整数。
+        try:
+
+            # 数值转换结果用于构造匿名化前证据。
+            int_pid = int(list_parts[0])  # 匹配进程 PID。
+
+            # etimes 是进程自启动后的完整秒数。
+            int_age_seconds = int(list_parts[1])  # 匹配进程年龄。
+
+        # 损坏数值字段不进入结果。
+        except ValueError:
+
+            # 继续检查下一进程。
+            continue
+
+        # 启动时间由同一采集时刻和年龄推导。
+        str_start_time = (datetime_now - timedelta(seconds=int_age_seconds)).isoformat()  # UTC 启动时间。
+
+        # 原始命令行仅用于证明匹配来源，编排器不会向外返回。
+        list_processes.append(
+            {
+                "pid": int_pid,
+                "start_time": str_start_time,
+                "age_seconds": int_age_seconds,
+                "command_line": list_parts[3],
+                "path": list_parts[2],
+            }
+        )
+
+    # 返回全部同名可执行进程供调用方进一步收窄。
+    return list_processes
+
+# 平台路由器提供单一可替换 hook，便于测试隔离系统进程。
+def _collect_matching_mcp_processes(str_command: str) -> list[dict[str, Any]]:
+    """采集与 MCP 可执行入口匹配的本机进程。
+
+    参数：str_command 为已验证的 MCP 可执行入口。
+    返回：平台采集的原始进程证据。
+    """
+
+    # Windows 需要按完整可执行路径匹配。
+    if os.name == "nt":
+
+        # CIM 结果保留平台提供的真实启动时间。
+        return _windows_mcp_processes(str_command)
+
+    # 其他受支持平台使用 POSIX ps 字段。
+    return _posix_mcp_processes(str_command)
+
+# 官方项目列表中的任一损坏记录都会使根路径匹配证据失效。
+def _collect_official_root_matches(
+    project: Path,
+    list_projects: list[Any],
+) -> list[dict[str, Any]] | None:
+    """收集与当前根精确匹配的官方项目记录。
+
+    参数：project 为当前受管根，list_projects 为官方项目记录列表。
+    返回：匹配记录列表；任一记录损坏时返回 None，要求调用方 fail-closed。
+    """
+
+    # 当前项目根统一解析后用于跨分隔符精确比较。
+    path_resolved_project = project.resolve()  # 当前受管项目规范路径。
+
+    # 匹配集合保持官方记录顺序供后续唯一性判断。
+    list_matches: list[dict[str, Any]] = []  # 当前根匹配项目记录。
+
+    # 每个官方记录都必须可安全解析，损坏项不能被忽略为 absent。
+    for item in list_projects:
+
+        # 非映射项或空根路径破坏官方身份证据完整性。
+        if not isinstance(item, dict) or not str(item.get("root_path", "")).strip():
+
+            # 损坏记录使整个官方身份列表不可用。
+            return None
+
+        # 路径解析可能因嵌入空字符或平台非法值失败。
+        try:
+
+            # 规范路径用于与当前项目执行精确比较。
+            path_record_root = Path(str(item["root_path"])).resolve()  # 官方记录规范根。
+
+        # 任一损坏根路径使整个项目列表证据不可用。
+        except (OSError, ValueError):
+
+            # 不把解析失败误判为目标项目不存在。
+            return None
+
+        # 只有规范根完全相同的记录进入唯一性判断。
+        if path_record_root == path_resolved_project:
+
+            # 保留完整官方记录供名称与数据库映射使用。
+            list_matches.append(item)
+
+    # 返回全部精确根匹配供调用方判断唯一性。
+    return list_matches
+
+# 根清单只在无官方根匹配时证明首次索引或身份冲突。
+def _resolve_unmatched_project_state(project: Path, list_projects: list[Any]) -> dict[str, Any]:
+    """解析当前根没有官方匹配记录时的索引状态。
+
+    参数：project 为当前受管根，list_projects 为已验证结构的官方项目列表。
+    返回：仅包含 absent 或 unavailable 的状态映射。
+    """
+
+    # 只有根持久化清单可以提供当前项目的既有显式身份。
+    path_artifact = project / ARTIFACT_DIRECTORY / "artifact.json"  # 当前根索引清单。
+
+    # 无清单且官方列表为空时，才能证明缓存中尚无任何身份冲突。
+    if not path_artifact.is_file():
+
+        # 其他项目存在时缺少可信 canonical id，必须阻止同名覆盖风险。
+        return {"state": "unavailable" if list_projects else "absent"}
+
+    # 清单损坏时不能把查找失败误判为首次索引。
+    try:
+
+        # 只读取显式 project 字段，不按目录名称推导身份。
+        dict_artifact = json.loads(path_artifact.read_text(encoding="utf-8"))  # 根清单载荷。
+
+    # 无效 JSON 无法提供可信项目身份。
+    except (OSError, json.JSONDecodeError):
+
+        # 保持 fail-closed，等待清单恢复。
+        return {"state": "unavailable"}
+
+    # 清单必须是映射并含非空 project 字段。
+    str_artifact_project = str(dict_artifact.get("project", "")).strip() if isinstance(dict_artifact, dict) else ""  # 当前根显式项目身份。
+
+    # 缺少项目字段不能作为 absent 证据。
+    if not str_artifact_project:
+
+        # 防止损坏清单触发错误首次索引。
+        return {"state": "unavailable"}
+
+    # 同一显式项目身份出现在其他根时属于身份冲突。
+    bool_identity_conflict = any(  # 显式项目身份冲突结论。
+        isinstance(item, dict)  # 官方记录必须保持映射结构。
+        and str(item.get("name", "")).strip() == str_artifact_project  # 名称匹配根清单身份。
+        for item in list_projects  # 遍历全部官方项目记录。
+    )
+
+    # 冲突身份保持不可用，其他显式身份允许首次建立索引。
+    return {"state": "unavailable" if bool_identity_conflict else "absent"}
+
+# 官方项目列表解析器只接受根路径唯一匹配的索引记录。
+def _resolve_indexed_project_binding(
+    project: Path,
+    dict_dependency: dict[str, Any],
+) -> dict[str, Any]:
+    """把官方项目记录唯一绑定到缓存根中的数据库。
+
+    参数：project 为当前受管根，dict_dependency 为 MCP 命令与缓存根证据。
+    返回：indexed、absent 或 unavailable 状态；仅 indexed 包含数据库路径。
+    """
+
+    # 项目身份必须来自官方 list_projects，不能从工作目录名猜测。
+    dict_projects = _run_tool(  # 项目身份查询载荷。
+        dict_dependency["command"],  # 项目枚举所用可执行入口。
+        "list_projects",  # 官方项目枚举工具。
+        {},  # 项目枚举不接受路径猜测过滤。
+        dict_dependency.get("environment"),  # 枚举使用的缓存隔离环境。
+    )  # 当前缓存中的官方项目列表响应。
+
+    # 工具失败或载荷损坏时不允许推导数据库路径。
+    if dict_projects.get("returncode") != 0 or not isinstance(dict_projects.get("projects"), list):
+
+        # unavailable 会让 WAL 收集器稳定 fail-closed。
+        return {"state": "unavailable"}
+
+    # 独立解析官方根记录，避免损坏项被误判为当前项目不存在。
+    list_matches = _collect_official_root_matches(project, dict_projects["projects"])  # 当前根匹配的官方项目记录。
+
+    # 损坏记录或重复根都无法提供唯一身份绑定。
+    if list_matches is None or len(list_matches) > 1:
+
+        # unavailable 阻止错配项目继续索引。
+        return {"state": "unavailable"}
+
+    # 零根匹配可能是合法首次索引，也可能是旧项目身份指向其他根。
+    if not list_matches:
+
+        # 根清单和官方名称共同决定 absent 或 unavailable。
+        return _resolve_unmatched_project_state(project, dict_projects["projects"])
+
+    # 唯一记录名称决定 MCP 官方缓存文件名。
+    str_project_name = str(list_matches[0].get("name", "")).strip()  # 官方项目名称。
+
+    # 名称必须是单个安全文件名，禁止路径分隔符逃逸缓存根。
+    if not str_project_name or Path(str_project_name).name != str_project_name:
+
+        # 非法名称不能用于构造数据库路径。
+        return {"state": "unavailable"}
+
+    # 缓存根必须由 Codex MCP env 合同显式提供。
+    str_cache_root = str(dict_dependency.get("cache_root", "")).strip()  # 已配置缓存根文本。
+
+    # 缺少缓存根时即使项目匹配也无法唯一定位数据库。
+    if not str_cache_root:
+
+        # 保持 fail-closed，不回退扫描外部目录。
+        return {"state": "unavailable"}
+
+    # 官方缓存布局使用项目名加 .db，并要求文件直接位于缓存根。
+    path_database = (Path(str_cache_root).resolve() / f"{str_project_name}.db").resolve()  # 项目数据库路径。
+
+    # 父目录复核防止异常项目名绕出缓存根。
+    if path_database.parent != Path(str_cache_root).resolve():
+
+        # 路径逃逸按不可用证据处理。
+        return {"state": "unavailable"}
+
+    # 最小绑定载荷只提供 WAL 健康所需事实。
+    return {
+        "state": "indexed",
+        "name": str_project_name,
+        "project_path": str(project.resolve()),
+        "database_path": str(path_database),
+    }
 
 # 持久化产物校验把磁盘事实与实时索引计数交叉核对。
 def _artifact_errors(project: Path, dict_status: dict[str, Any]) -> list[str]:
@@ -741,6 +1210,7 @@ def _index_evidence_gate(project: Path, dict_dependency: dict[str, Any]) -> dict
         dict_dependency["command"],  # 已验证的 MCP 命令
         "index_repository",  # 全量索引工具名称
         {"repo_path": str(project.resolve()), "mode": "full", "persistence": True},  # 索引参数
+        dict_dependency.get("environment"),  # 全量索引的缓存隔离环境。
     )
 
     # 索引命令失败时保留原始工具载荷，禁止继续查询派生状态。
@@ -782,6 +1252,7 @@ def _index_evidence_gate(project: Path, dict_dependency: dict[str, Any]) -> dict
         dict_dependency["command"],  # 状态查询使用的 MCP 命令
         "index_status",  # 实时状态工具名称
         {"project": str_indexed_project},  # 目标索引项目身份
+        dict_dependency.get("environment"),  # 状态查询的缓存隔离环境。
     )
 
     # 架构查询证明知识图谱不仅落盘，而且能够提供项目结构分析。
@@ -792,6 +1263,7 @@ def _index_evidence_gate(project: Path, dict_dependency: dict[str, Any]) -> dict
             "project": str_indexed_project,  # 目标架构项目身份
             "aspects": ["packages", "dependencies", "clusters"],  # 必查架构维度
         },
+        dict_dependency.get("environment"),  # 架构查询的缓存隔离环境。
     )
 
     # 磁盘产物与实时状态的交叉验证错误形成最终阻断集合基础。
@@ -823,7 +1295,7 @@ def enforce_codebase_memory_write_gate(
     apply: bool,
     confirm_untrack: bool = False,
 ) -> dict[str, Any]:
-    """在受管写入前编排知识图谱四阶段门禁。
+    """在受管写入前编排知识图谱七阶段门禁。
 
     参数:
         project: 待写入治理文件的项目根目录。
@@ -876,7 +1348,22 @@ def enforce_codebase_memory_write_gate(
         # 禁用结果明确标记未索引，避免调用方误解为空图成功。
         return {"ok": True, "enabled": False, "indexed": False}
 
-    # 第三阶段元组同时返回依赖证据和可选安装或预检载荷。
+    # 第三阶段验证或更新根 .cbmignore 受管范围。
+    dict_contract = codebase_memory_contract(bool_enabled)  # 当前启用选择对应完整合同。
+
+    # scope_policy 是范围纯函数的唯一规则来源。
+    dict_scope_policy = dict_contract["scope_policy"]  # 根索引范围合同。
+
+    # apply 只允许修改 marker 内或追加唯一受管区。
+    dict_scope_result = inspect_cbmignore(project, dict_scope_policy, apply)  # 范围阶段证据。
+
+    # 范围失败时不得探测依赖或写入索引。
+    if not dict_scope_result.get("ok", False):
+
+        # 原样返回固定范围错误码和修复边界。
+        return dict_scope_result
+
+    # 第四阶段元组同时返回依赖证据和可选安装或预检载荷。
     tuple_dependency_gate = _dependency_gate(apply)  # 依赖证据与提前结束二元组
 
     # 首个元素始终保留依赖发现事实，供索引阶段调用命令。
@@ -891,5 +1378,67 @@ def enforce_codebase_memory_write_gate(
         # 提前结束载荷已经区分失败安装门禁与成功只读预检。
         return dict_dependency_end
 
-    # 第四阶段执行索引并返回完整证据链。
-    return _index_evidence_gate(project, dict_dependency)
+    # 第五阶段先用官方项目列表建立当前根的唯一数据库绑定。
+    dict_indexed_project = _resolve_indexed_project_binding(project, dict_dependency)  # 已有项目绑定证据。
+
+    # 只有唯一绑定项目需要采集同一 MCP 可执行入口的进程年龄证据。
+    if dict_indexed_project.get("state") == "indexed":
+
+        # 原始进程证据可能包含命令行、环境或可执行路径。
+        list_raw_processes = _collect_matching_mcp_processes(dict_dependency["command"])  # 原始匹配进程。
+
+        # WAL 纯函数只接收 PID、启动时间和年龄，敏感字段在边界处剥离。
+        list_safe_processes = [
+            {
+                "pid": int(item.get("pid", 0)),  # 匿名进程标识。
+                "start_time": str(item.get("start_time", "")),  # 公开 UTC 启动时间。
+                "age_seconds": int(item.get("age_seconds", 0)),  # 阈值所需进程年龄。
+            }  # 当前匿名化进程记录。
+            for item in list_raw_processes  # 遍历平台采集原始证据。
+            if isinstance(item, dict)  # 丢弃损坏的非映射项。
+        ]  # 匿名化进程证据。
+
+        # 新映射避免修改项目绑定 helper 的返回对象。
+        dict_indexed_project = {**dict_indexed_project, "processes": list_safe_processes}  # WAL 输入证据。
+
+    # 缺少唯一绑定时基线 helper 固定 fail closed。
+    dict_wal_baseline = collect_wal_baseline(  # 索引前 WAL 与进程证据。
+        project,  # 当前受管项目根。
+        dict_dependency,  # 已验证 MCP 依赖与缓存根。
+        dict_indexed_project,  # 官方项目列表绑定证据。
+        dict_contract["wal_health"],  # 固定 WAL 阈值合同。
+    )
+
+    # WAL 证据缺失或异常时不得启动 full index。
+    if not dict_wal_baseline.get("ok", False):
+
+        # 原样返回基线固定错误码。
+        return dict_wal_baseline
+
+    # 第六阶段执行 full persistent index 并核对基础证据。
+    dict_index_result = _index_evidence_gate(project, dict_dependency)  # full index 阶段证据。
+
+    # 索引失败时不得用范围分类覆盖原始诊断。
+    if not dict_index_result.get("ok", False):
+
+        # 原样返回索引器错误。
+        return dict_index_result
+
+    # 第七阶段以真实项目树和最终 .cbmignore 复核索引范围。
+    dict_final_verification = classify_index_scope(project, dict_scope_policy)  # 最终范围完整性证据。
+
+    # 最终范围或治理比例失败时不允许写入治理文件。
+    if not dict_final_verification.get("ok", False):
+
+        # 原样返回最终验证错误。
+        return dict_final_verification
+
+    # 全绿报告明确 evidence_complete，避免 ok 单独被误读。
+    return {
+        **dict_index_result,
+        "ok": True,
+        "evidence_complete": True,
+        "scope": dict_scope_result,
+        "wal_baseline": dict_wal_baseline,
+        "final_verification": dict_final_verification,
+    }

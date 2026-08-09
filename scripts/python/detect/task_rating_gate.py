@@ -532,6 +532,8 @@ def rating_recommendations(
 
     参数：str_difficulty 为最终难度，str_scale 为最终规模，
     bool_user_rating 为用户参与状态，tuple_signal_hits 为信号计数。
+    数据合同：tuple_signal_hits 的 shape=(3,)，dtype=int，unit=命中次数；
+    三个元素依次表示复杂、不清晰和简单任务信号数量。
     返回：是否询问用户、置信度和稳定顺序动作列表。
     """
 

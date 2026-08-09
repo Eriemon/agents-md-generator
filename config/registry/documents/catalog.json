@@ -1,15 +1,15 @@
 {
   "documents": [
     {
-      "content_sha256": "c4661e6cbe2f5baea997cd90b0f1b0cd47d3bd965007c9db75b9baf2dfd5b9e6",
+      "content_sha256": "1a16a25a5d0c822afecb7b140bfc3741c7dcfc47ea4518b86a8dd6d64058aed8",
       "id": "document.skill",
       "path": "SKILL.md",
       "responsibility": "定义技能触发条件、工作流顺序、远程技能能力判定、工作区停止边界与渐进披露入口。",
       "status": "reviewed",
-      "summary": "agents-md-generator 的执行合同、远程能力路由与工作区双确认边界。"
+      "summary": "agents-md-generator 的执行合同、非测试智能体授权、远程能力路由与工作区单次确认边界。"
     },
     {
-      "content_sha256": "8ac2a9f94f0ff795abe6eab6b8ee13c4ecf47844853c1b0ac8984775a4d640b5",
+      "content_sha256": "984656e3bf4f5045c6d6a9123be6f5946b29a58f6202047da7235e79e65ada44",
       "id": "document.references-agents-md-guidance",
       "path": "references/agents-md-guidance.md",
       "responsibility": "定义 AGENTS.md 的内容组织原则、根与作用域章节设计以及兼容性边界。",
@@ -41,7 +41,79 @@
       "summary": "编码行为中的 Python 与脚本技能路由合同。"
     },
     {
-      "content_sha256": "3db5f6e4c7dc9c5989964031b22e3ff230ea695006719e0e196e543ef256f049",
+      "content_sha256": "1fa360a5ca2d25818e19ec6aa21b83a7e833427a44fa84b242872624268bf6c2",
+      "id": "document.references-decomposition-common-project-facts-discovery",
+      "path": "references/decomposition-plans/scripts/python/common/project_facts_discovery.py.md",
+      "responsibility": "记录项目事实发现模块超过源码大小门禁时的拆分边界与保持不变的事实键合同。",
+      "status": "reviewed",
+      "summary": "项目事实发现模块的临时拆分计划与退出条件。"
+    },
+    {
+      "content_sha256": "94b8a164eec163ca5f7d2b38a37824d485b4d5abea118cf87760b63c72ed995c",
+      "id": "document.references-decomposition-design-design-questions",
+      "path": "references/decomposition-plans/scripts/python/design/design_questions.py.md",
+      "responsibility": "记录设计问题合同模块的拆分边界，并保护问题标识、顺序和答案归一化语义。",
+      "status": "reviewed",
+      "summary": "设计问题模块的临时拆分计划与退出条件。"
+    },
+    {
+      "content_sha256": "b883452b6fa7187e1871b580a1c12b64c93de5703e5c50a76276235cfca7cc0f",
+      "id": "document.references-decomposition-dirs-manage-dirs-state",
+      "path": "references/decomposition-plans/scripts/python/dirs/manage_dirs_state.py.md",
+      "responsibility": "记录目录状态模块的扫描、规划、归档和持久化拆分边界及兼容性要求。",
+      "status": "reviewed",
+      "summary": "目录状态模块的临时拆分计划与退出条件。"
+    },
+    {
+      "content_sha256": "fa6d1b3399c979a0dc0ff141c4c703ebc2b987fb98d6f70512e5acb47cffaacf",
+      "id": "document.references-decomposition-docs-manage-docs-scaffold-session",
+      "path": "references/decomposition-plans/scripts/python/docs/manage_docs_scaffold_session.py.md",
+      "responsibility": "记录文档治理脚手架与会话生命周期模块的拆分边界及状态文件兼容性要求。",
+      "status": "reviewed",
+      "summary": "文档脚手架会话模块的临时拆分计划与退出条件。"
+    },
+    {
+      "content_sha256": "bba39630a5203ba1b9461d7fed236a6a2ced3710107fa13f0d025536858591c0",
+      "id": "document.references-decomposition-docs-manage-docs-sync-verify",
+      "path": "references/decomposition-plans/scripts/python/docs/manage_docs_sync_verify.py.md",
+      "responsibility": "记录根同步、全局基线同步与文档验证模块的拆分边界及受管块保留合同。",
+      "status": "reviewed",
+      "summary": "文档同步验证模块的临时拆分计划与退出条件。"
+    },
+    {
+      "content_sha256": "34a9f728ea50633838c8ba4d2a3bd483eeed23d945e9703dee25b00668ae8b58",
+      "id": "document.references-decomposition-docs-release-package",
+      "path": "references/decomposition-plans/scripts/python/docs/release_package.py.md",
+      "responsibility": "记录发布准备、打包、分支清理和发布成员发现模块的拆分边界及收据合同。",
+      "status": "reviewed",
+      "summary": "发布聚合模块的临时拆分计划与退出条件。"
+    },
+    {
+      "content_sha256": "76394e3a6a6a00760a3431fedcbe3bd342d4498e662a4a8e6901f544c1cf6d33",
+      "id": "document.references-decomposition-registry-document-registry-common",
+      "path": "references/decomposition-plans/scripts/python/registry/document_registry_common.py.md",
+      "responsibility": "记录文档注册公共兼容模块的扫描、布局、迁移和初始化拆分边界。",
+      "status": "reviewed",
+      "summary": "文档注册公共模块的临时拆分计划与退出条件。"
+    },
+    {
+      "content_sha256": "7cf64afb1c03591bbbd9235f12578473ea9e0b69a74255de0abb97a618d65f1d",
+      "id": "document.references-decomposition-verify-audit-skill",
+      "path": "references/decomposition-plans/scripts/python/verify/audit_skill.py.md",
+      "responsibility": "记录技能审计模块的结构、评估、编译和源码治理职责拆分边界。",
+      "status": "reviewed",
+      "summary": "技能审计模块的临时拆分计划与退出条件。"
+    },
+    {
+      "content_sha256": "64788d5d9a689b2f6f12aad8e16aee380f5bb0272af5bcda17082e38ec032ee0",
+      "id": "document.references-decomposition-verify-source-governance-config",
+      "path": "references/decomposition-plans/scripts/python/verify/source_governance_config.py.md",
+      "responsibility": "记录源码治理配置兼容门面的默认值、验证、迁移和约束投影拆分边界。",
+      "status": "reviewed",
+      "summary": "源码治理配置模块的临时拆分计划与退出条件。"
+    },
+    {
+      "content_sha256": "5c47fa7adbfb979af6a7a144c6a11522403aee6441443c13e7eedfed24791b30",
       "id": "document.references-evaluation-scenarios",
       "path": "references/evaluation-scenarios.md",
       "responsibility": "定义技能变更后的前向测试场景及其预期结果。",
@@ -57,15 +129,15 @@
       "summary": "AGENTS.md 设计访谈问题库与分支合同。"
     },
     {
-      "content_sha256": "8e13dc050fa16e184ad06a654cce124dc8594658ab71d7821dc88ff94f979508",
+      "content_sha256": "5ed95e9329f1c39d7de549db73272c186f5552686bfc5f335b5e433d6bb41b7c",
       "id": "document.references-review-checklist",
       "path": "references/review-checklist.md",
       "responsibility": "定义生成或修改治理规则时的人工审查证据和发布前检查清单。",
       "status": "reviewed",
-      "summary": "内容、结构、运行时、工作区双确认、验证与发布审查清单。"
+      "summary": "内容、结构、运行时、工作区单次确认、验证与发布审查清单。"
     },
     {
-      "content_sha256": "21ec98d27a72ba441b5017ca58f568bfd710a1de1dbb7ee525c2bc74039eed2a",
+      "content_sha256": "49e3e041a35e949efcf8fbd000fd54e581bd6bb317a27a0ce01f21198965078b",
       "id": "document.references-script-guide",
       "path": "references/script-guide.md",
       "responsibility": "定义核心脚本生命周期、验证链和命令注册表问询入口。",
@@ -81,7 +153,7 @@
       "summary": "脚本 INFO、WARNING、ERR 与机器输出政策。"
     },
     {
-      "content_sha256": "e138ff6bdda1bff43711401a381a0ab69702bbb006b7f629a7fd1c7b37f86680",
+      "content_sha256": "838aacdd8b9232277bb1440b205412a20509694d403728e601e84a0c1482286a",
       "id": "document.references-skill-design-coverage",
       "path": "references/skill-design-coverage.md",
       "responsibility": "映射 Skill 设计模式到权威实现，并定义渐进披露与设计合同覆盖。",

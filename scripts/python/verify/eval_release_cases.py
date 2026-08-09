@@ -9,6 +9,7 @@ from eval_runtime_core import (
     EvalFixtures,
     Path,
     REPO_ROOT,
+    SCRIPTS_PYTHON_DIR,
     SKILL_DIR,
 
     # 结果构建、序列化和环境模块服务结构化评估证据。
@@ -24,6 +25,99 @@ from eval_runtime_core import (
     sys,
     tempfile,
 )
+
+# 开发态评估复用真实发布实现，但不伪造正式远程测试收据。
+def load_development_release_runtime() -> Any:
+    """加载开发态发布 API 所需的任务模块。
+
+    Args:
+        None: 模块位置由当前技能 Python 任务根推导。
+
+    Returns:
+        已加载的 manage_docs_release 模块。
+    """
+
+    # 文档发布聚合器依赖 common、release 和 verify 等兄弟任务目录。
+    for path_task_directory in SCRIPTS_PYTHON_DIR.iterdir():
+
+        # 普通文件不能成为 Python 模块搜索根。
+        if not path_task_directory.is_dir():
+
+            # 继续检查其余任务分类目录。
+            continue
+
+        # 字符串路径用于与解释器搜索列表精确比较。
+        str_task_directory = str(path_task_directory)  # 当前任务目录绝对路径。
+
+        # 已登记目录保持原搜索优先级。
+        if str_task_directory in sys.path:
+
+            # 避免重复插入同一路径。
+            continue
+
+        # 当前源码任务目录优先于环境中的同名模块。
+        sys.path.insert(0, str_task_directory)
+
+    # 动态导入避免模块加载阶段提前修改 sys.path。
+    return __import__("manage_docs_release")
+
+# 隔离评估通过底层兼容 API 构建临时发布包。
+def run_development_package_release(
+    path_project: Path,
+    str_version: str,
+    path_skill_relative: Path,
+) -> dict[str, Any]:
+    """在隔离评估仓库执行开发态发布打包。
+
+    Args:
+        path_project: 临时受管项目根。
+        str_version: 临时发布版本。
+        path_skill_relative: 项目内技能相对路径。
+
+    Returns:
+        与正式 package-release 相同的结构化结果。
+    """
+
+    # 聚合模块公开真实发布实现，默认参数保留开发态兼容。
+    module_release_runtime = load_development_release_runtime()  # 文档发布聚合运行时。
+
+    # 评估不声明正式发布态，因此不制造远程 pytest receipt。
+    return module_release_runtime.package_release(
+        path_project,  # 临时发布仓库。
+        str_version,  # 临时发布版本。
+        str(path_skill_relative),  # 项目内技能相对路径文本。
+    )
+
+# 污染场景通过底层兼容 API 复核开发态发布产物。
+def run_development_release_gate(
+    path_project: Path,
+    str_version: str,
+    path_skill_relative: Path,
+    str_phase: str,
+) -> dict[str, Any]:
+    """在隔离评估仓库执行开发态发布门禁。
+
+    Args:
+        path_project: 临时受管项目根。
+        str_version: 临时发布版本。
+        path_skill_relative: 项目内技能相对路径。
+        str_phase: pre 或 post 发布阶段。
+
+    Returns:
+        与正式 release-gate 相同的结构化结果。
+    """
+
+    # 污染复核与打包共享同一实现来源，避免算法分叉。
+    module_release_runtime = load_development_release_runtime()  # 污染复核使用的发布运行时。
+
+    # 未声明 required 时底层 API 保持隔离评估所需的开发态语义。
+    return module_release_runtime.release_gate(
+        path_project,  # 已注入禁止内容的隔离仓库。
+        str_version,  # 待复核污染产物的版本。
+        str(path_skill_relative),  # 污染产物对应的源码路径。
+        str_phase,  # 当前评估复核阶段。
+        "unspecified",  # 评估不产生真实安装意图。
+    )
 
 # 外部项目运行时场景验证治理命令只引用已安装技能。
 def workspace_settings_checks(
@@ -586,16 +680,11 @@ def collect_release_content_evidence(
     # 第二项提供发布命令的源码相对路径参数。
     path_skill_relative = tuple_fixture[1]  # 技能源码相对路径
 
-    # 首次命令生成版本化发布目录及收据。
-    dict_initial_package = run_json_script(  # 首次打包生成的成功标记和发布收据用于对照后续人工污染门禁诊断
-        "manage_docs.py",  # 调用文档治理入口以执行真实发布流程
-        "package-release",  # 选择生成版本化目录和收据的发布动作
-        path_project,  # 指向承载技能源码与发布目录的所有者项目根
-        "--version",  # 声明后续发布目录采用显式版本参数
-        str_version,  # 固定隔离夹具版本以稳定目录名称和收据内容
-        "--skill-dir",  # 声明所有者项目内技能源码位置参数
-        path_skill_relative,  # 指向待复制进版本化发布目录的技能源码根
-        cwd=REPO_ROOT,  # 从仓库根加载当前待验证的发布治理运行时
+    # 开发态 API 生成版本化发布目录及收据，不伪造远程测试证据。
+    dict_initial_package = run_development_package_release(  # 首次发布包与收据结果。
+        path_project,  # 承载技能源码与发布目录的所有者项目根。
+        str_version,  # 固定隔离夹具版本。
+        path_skill_relative,  # 待复制进版本化目录的技能源码根。
     )
 
     # 安装预检只验证版本化发布目录，不写入真实技能安装位置。
@@ -626,17 +715,11 @@ def collect_release_content_evidence(
     path_blocked.write_text("# tests\n", encoding="utf-8")
 
     # post 阶段复核必须发现发布目录已偏离收据和内容合同。
-    dict_release_gate = run_json_script(  # 注入测试内容后的发布门禁结果
-        "manage_docs.py",  # 发布门禁所属文档治理入口
-        "release-gate",  # 请求执行发布闭环检查
-        path_project,  # 含受污染发布目录的项目
-        "--version",  # 指定待复核发布版本
-        str_version,  # 与打包阶段保持同一版本
-        "--skill-dir",  # 指定所有者技能源码根
-        path_skill_relative,  # agents-md-generator 相对路径
-        "--phase",  # 指定发布门禁阶段
-        "post",  # 检查已生成发布目录
-        cwd=REPO_ROOT,  # 从仓库根加载发布门禁运行时
+    dict_release_gate = run_development_release_gate(  # 注入测试内容后的发布门禁结果。
+        path_project,  # 含受污染发布目录的项目。
+        str_version,  # 与打包阶段保持同一版本。
+        path_skill_relative,  # agents-md-generator 相对路径。
+        "post",  # 检查已生成发布目录。
     )
 
     # 统一映射供断言和详情复用。
@@ -801,16 +884,11 @@ def collect_sanitizer_evidence(path_project: Path, helper: EvalFixtures) -> dict
     # 所有者技能路径作为 package-release 的显式输入。
     path_skill_relative = Path("skills") / "agents-md-generator"  # 所有者技能相对路径
 
-    # 发布命令生成后续净化与安装验证所需的版本目录。
-    dict_package = run_json_script(  # 净化场景发布包生成结果
-        "manage_docs.py",  # 文档治理命令入口
-        "package-release",  # 版本化发布动作
-        path_project,  # 隔离所有者项目根
-        "--version",  # 发布版本参数
-        str_version,  # 固定净化场景版本
-        "--skill-dir",  # 技能源目录参数
-        path_skill_relative,  # 净化夹具中的发布源目录
-        cwd=REPO_ROOT,  # 从仓库根调用真实治理入口
+    # 开发态 API 生成净化与安装验证所需的版本目录。
+    dict_package = run_development_package_release(  # 净化场景发布包生成结果。
+        path_project,  # 隔离所有者项目根。
+        str_version,  # 固定净化场景版本。
+        path_skill_relative,  # 净化夹具中的发布源目录。
     )
 
     # 打包结果所在目录是安装与取证的共同输入。

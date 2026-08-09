@@ -24,12 +24,162 @@ from verify_workspace_boundary import validate_workspace_boundary_contract
 # 技能内评估目录只作为允许存在的发布内容规则证据。
 PATH_SKILL_EVALS = Path("skills") / "demo-skill" / "evals"  # 示例技能评估目录相对路径
 
-# 工作区边界压力场景验证紧急请求、泛化授权和单次确认都不能放宽外部修改门禁。
-def case_workspace_boundary_double_confirmation(
+# 工作区边界变异表逐层删除一个授权保护条件。
+def workspace_boundary_weakened_fragments() -> tuple[tuple[str, str], ...]:
+    """构建工作区边界压力评估使用的有序变异表。
+
+    参数:
+        无。
+    返回:
+        原始保护片段与弱化替换组成的稳定有序元组。
+    """
+
+    # 固定顺序使失败位置能够直接映射到被删除的保护层。
+    return (
+        ("current work folder", "project folder"),
+        ("verified remote-server work folder", "remote folder"),
+        ("Changes inside either work folder require no additional confirmation", "Changes may proceed"),
+        (
+            "remote changes remain allowed only when the configured task route matches that folder",
+            "remote changes are allowed",
+        ),
+        (
+            "Official codebase-memory start, index refresh, rebuild, or recovery "
+            "for the project bound to either work folder",
+            "codebase-memory changes",
+        ),
+        ("including its configured runtime cache and root persistence artifact", "including related files"),
+        ("beyond those boundaries must be necessary and side-effect free", "may be useful"),
+        ("Every other external write is prohibited by default", "Other external writes are allowed"),
+        (
+            "only after the user proactively and explicitly requests the exact action",
+            "after the action is considered useful",
+        ),
+        ("obtain exactly one explicit user confirmation", "obtain user confirmation"),
+        ("Any target or scope change invalidates that confirmation.", ""),
+        (
+            "installed skill always requires exactly one explicit user confirmation",
+            "installed skill may proceed",
+        ),
+    )
+
+# 每个变异必须独立触发正式工作区边界验证器。
+def evaluate_workspace_boundary_mutations(str_agents_text: str) -> list[bool]:
+    """验证全部工作区边界弱化变异均被正式门禁拒绝。
+
+    参数:
+        str_agents_text: 正式渲染的完整根 AGENTS.md 文本。
+    返回:
+        与有序变异表一一对应的拒绝结论列表。
+    """
+
+    # 拒绝列表与变异表保持一一对应关系。
+    list_rejections: list[bool] = []  # 每层保护弱化后的阻断结果。
+
+    # 每轮只替换一个保护片段，避免复合变异掩盖失败来源。
+    for str_original, str_replacement in workspace_boundary_weakened_fragments():
+
+        # 当前文本仅弱化本轮指定的保护语义。
+        str_mutated = str_agents_text.replace(str_original, str_replacement)  # 单项弱化根文本。
+
+        # 正式验证器把当前变异诊断写入独立列表。
+        list_errors: list[str] = []  # 当前弱化版本的正式诊断。
+
+        # 返回值与诊断文本共同证明工作区边界被阻断。
+        bool_valid = validate_workspace_boundary_contract(str_mutated, "AGENTS.md", list_errors)  # 当前弱化版本是否合法。
+
+        # 只接受明确指向工作区边界的正式拒绝结果。
+        list_rejections.append(
+            not bool_valid
+            and any("workspace boundary" in str_error.casefold() for str_error in list_errors)
+        )
+
+    # 返回完整有序结论供能力映射聚合。
+    return list_rejections
+
+# 正向能力映射保持评估结果键和历史 JSON 合同稳定。
+def workspace_boundary_positive_checks(
+    str_agents_text: str,
+    list_weakened_rejections: list[bool],
+    bool_duplicate_valid: bool,
+    list_duplicate_errors: list[str],
+) -> dict[str, bool]:
+    """构建工作区边界与单次确认能力证据。
+
+    参数：str_agents_text 为正式渲染的完整根规则文本。
+    参数：list_weakened_rejections 为有序变异拒绝结论。
+    参数：bool_duplicate_valid 为重复边界规则的验证返回值。
+    参数：list_duplicate_errors 为重复边界规则的正式诊断。
+    返回：键集合稳定的正向能力检查映射。
+    """
+
+    # 长片段单独命名，避免能力映射掩盖只读例外的准确边界。
+    str_read_only_fragment = "External reads beyond those boundaries must be necessary and side-effect free"  # 边界外只读访问固定片段。
+
+    # 固定键集合维持历史评估 JSON 结构和断言接口。
+    return {
+        "renders_once": str_agents_text.count("- **Workspace boundary:**") == 1,
+        "governed_work_folders_skip_repeat_confirmation": (
+            "Changes inside either work folder require no additional confirmation" in str_agents_text
+        ),
+        "remote_route_must_match": "configured task route matches that folder" in str_agents_text,
+        "bound_codebase_memory_operations_skip_confirmation": (
+            "Official codebase-memory start, index refresh, rebuild, or recovery" in str_agents_text
+            and "also requires no additional confirmation" in str_agents_text
+        ),
+        "other_external_write_prohibited_by_default": (
+            "Every other external write is prohibited by default" in str_agents_text
+        ),
+        "exact_proactive_request_required": (
+            "only after the user proactively and explicitly requests the exact action" in str_agents_text
+        ),
+        "single_confirmation_after_disclosure": (
+            "exact normalized target, action, scope, risks, alternatives, and recovery limits"
+            in str_agents_text
+            and "obtain exactly one explicit user confirmation" in str_agents_text
+        ),
+        "changed_scope_invalidates_confirmation": (
+            "target or scope change invalidates that confirmation" in str_agents_text
+        ),
+        "installed_skill_always_confirmed_once": (
+            "installed skill always requires exactly one explicit user confirmation" in str_agents_text
+        ),
+        "authoritative_test_hash_agreement_auto_confirms": (
+            "Routine test-hash confirmation is prohibited." in str_agents_text
+            and (
+                "Agent autonomously confirms when the canonical tester result agrees "
+                "with the authoritative current tests tree or receipt."
+            ) in str_agents_text
+        ),
+        "report_only_hash_mismatch_corrected": (
+            "A report-only hash mismatch is corrected to the authoritative value." in str_agents_text
+        ),
+        "conflicting_or_insufficient_provenance_requires_user_review": (
+            (
+                "Conflicting or insufficient provenance stops for user review "
+                "without an autonomous rerun."
+            ) in str_agents_text
+        ),
+        "no_autonomous_rerun_after_provenance_stop": (
+            "without an autonomous rerun" in str_agents_text
+        ),
+        "double_confirmation_removed": (
+            "two separate explicit user confirmations" not in str_agents_text
+            and "first approves the exception in principle" not in str_agents_text
+            and "second approves the exact action" not in str_agents_text
+            and "invalidates both confirmations" not in str_agents_text
+        ),
+        "side_effect_free_read_stays_read_only": str_read_only_fragment in str_agents_text,
+        "weakened_contract_rejected": all(list_weakened_rejections),
+        "duplicate_contract_rejected": not bool_duplicate_valid and bool(list_duplicate_errors),
+    }
+
+# 工作区边界压力场景验证治理内直行不会放宽其他外部写入门禁。
+def case_workspace_boundary_authorization_contract(
     case: dict[str, Any],
     helper: EvalFixtures,
 ) -> dict[str, Any]:
-    """评估受管根工作区边界与外部修改双确认合同。
+    """评估治理内直行与其他外部写入单次确认合同。
 
     参数:
         case: 当前评估用例元数据。
@@ -43,11 +193,11 @@ def case_workspace_boundary_double_confirmation(
     with tempfile.TemporaryDirectory() as str_temporary_directory:
 
         # 临时项目承载正式渲染的受管根 AGENTS.md。
-        path_project = Path(str_temporary_directory)  # 双确认评估项目根
+        path_project = Path(str_temporary_directory)  # 外部写入授权评估项目根
 
         # 项目与安装版本一致，避免无关版本诊断影响边界证据。
         helper.make_rendered_governed_skill_project(
-            path_project,  # 指定双确认评估项目根
+            path_project,  # 指定外部写入授权评估项目根
             name="demo-skill",  # 使用普通受管技能名称
             project_version="v0.4.3",  # 固定评估项目版本
             installed_version="v0.4.3",  # 固定评估安装版本
@@ -59,50 +209,8 @@ def case_workspace_boundary_double_confirmation(
             errors="ignore",  # 评估读取不因异常字节终止
         )
 
-        # 弱化片段覆盖允许根、无副作用、停止、双确认职责和变化失效。
-        tuple_weakened_fragments = (  # 原始保护片段与弱化替换
-            ("current work folder", "project folder"),  # 删除当前允许根语义
-            ("verified remote-server work folder", "remote folder"),  # 弱化远程允许根
-            ("necessary and side-effect free", "when useful"),  # 删除外部只读无副作用限制
-            ("external modification, stop", "external modification"),  # 删除修改前停止要求
-            (
-                "two separate explicit user confirmations",  # 两次独立确认原文
-                "explicit user confirmation",  # 合并成单次确认的弱化文本
-            ),
-            (
-                "first approves the exception in principle and the second approves the exact action",  # 双职责原文
-                "user approves the action",  # 混淆两次确认职责的弱化文本
-            ),
-            (
-                "Any target or scope change invalidates both confirmations.",  # 变化失效原文
-                "",  # 删除变化后重新确认要求
-            ),
-        )
-
-        # 每个弱化版本都调用正式验证器，收集是否稳定产生边界错误。
-        list_weakened_rejections = []  # 各保护层弱化后的阻断结果
-
-        # 独立变异避免某一缺失片段掩盖其他验证结果。
-        for str_original, str_replacement in tuple_weakened_fragments:
-
-            # 当前文本只替换一层保护语义。
-            str_mutated = str_agents_text.replace(str_original, str_replacement)  # 单项弱化根文本
-
-            # 正式验证器把诊断写入独立错误列表。
-            list_errors: list[str] = []  # 当前弱化版本的验证错误
-
-            # 返回值与错误文本共同证明工作区边界被阻断。
-            bool_valid = validate_workspace_boundary_contract(  # 当前弱化版本是否合法
-                str_mutated,  # 单项弱化后的根规则
-                "AGENTS.md",  # 评估诊断使用的根文件标识
-                list_errors,  # 接收正式验证错误
-            )
-
-            # 记录验证失败且错误明确指向工作区边界的完整条件。
-            list_weakened_rejections.append(
-                not bool_valid
-                and any("workspace boundary" in str_error.casefold() for str_error in list_errors)
-            )
+        # 每个弱化版本独立调用正式验证器，保持变异顺序与历史证据一致。
+        list_weakened_rejections = evaluate_workspace_boundary_mutations(str_agents_text)  # 各保护层弱化阻断结果。
 
         # 提取正式输出中的唯一工作区边界行。
         str_boundary_rule = next(  # 完整工作区边界规则行
@@ -127,24 +235,15 @@ def case_workspace_boundary_double_confirmation(
             list_duplicate_errors,  # 接收重复规则诊断
         )
 
-    # 单独命名长片段，避免字典检查项掩盖只读例外的准确边界。
-    str_read_only_fragment = (  # 外部只读访问必须满足的固定片段
-        "External reads must be necessary and side-effect free"  # 精确匹配生成器拥有的英文合同
+    # 正向能力映射由独立构建器保持键集合与语义稳定。
+    dict_with_checks = workspace_boundary_positive_checks(  # 工作区边界与单次确认能力证据。
+        str_agents_text,  # 正式渲染的完整根规则文本。
+        list_weakened_rejections,  # 各保护层弱化后的拒绝结论。
+        bool_duplicate_valid,  # 重复边界规则的正式验证返回值。
+        list_duplicate_errors,  # 重复边界规则的正式诊断。
     )
 
-    # 正向检查把用户压力场景映射到固定规则中的不可弱化语义。
-    dict_with_checks = {  # 工作区边界与双确认能力证据
-        "renders_once": str_agents_text.count("- **Workspace boundary:**") == 1,  # 固定规则是否唯一
-        "urgent_external_write_stops": "Before any external modification, stop" in str_agents_text,  # 紧急写入停止线
-        "blanket_approval_is_not_double_confirmation": "two separate explicit user confirmations" in str_agents_text,  # 泛化授权不可替代两次确认
-        "first_confirmation_does_not_execute": "first approves the exception in principle" in str_agents_text,  # 首次确认仅同意原则例外
-        "changed_scope_invalidates_both": "target or scope change invalidates both confirmations" in str_agents_text,  # 范围变化使确认失效
-        "side_effect_free_read_stays_read_only": str_read_only_fragment in str_agents_text,  # 只读例外不得扩大为写权限
-        "weakened_contract_rejected": all(list_weakened_rejections),  # 每层保护弱化是否均被拒绝
-        "duplicate_contract_rejected": not bool_duplicate_valid and bool(list_duplicate_errors),  # 重复规则是否被拒绝
-    }
-
-    # 无技能基线不提供任何可执行工作区边界或双确认保护。
+    # 无技能基线不提供任何可执行工作区边界或外部写入保护。
     dict_without_checks = {  # 缺少生成器时的能力对照
         str_check_name: False  # 每项边界能力在朴素基线中均缺失
         for str_check_name in dict_with_checks  # 覆盖全部正向检查键
@@ -163,7 +262,7 @@ def case_workspace_boundary_double_confirmation(
         without_skill_detail={
             "baseline": (
                 "generic workspace guidance does not separate read-only access "
-                "from two-step external modification approval"
+                "from exact-request single-confirmation external-write approval"
             )
         },
     )
@@ -340,7 +439,7 @@ def task_rating_reports(path_project: Path) -> dict[str, dict[str, Any]]:
         "rating_order": dict_rating_order,  # 评级顺序文本报告
     }
 
-# 全局模板检查助手验证编码、注释、环境和安装安全基线。
+# 全局模板检查助手验证编码、范围、计划、测试和环境安全基线。
 def global_template_checks(str_template: str) -> dict[str, bool]:
     """检查全局 Codex AGENTS 模板关键合同。
 
@@ -386,12 +485,56 @@ def global_template_checks(str_template: str) -> dict[str, bool]:
         and "pip install --user" in str_template  # 是否禁止用户站点安装
     )
 
-    # 调用方将四个复合合同与其他直接文本断言合并。
+    # 范围纪律冻结目标并阻止审查者把未请求能力带入计划。
+    bool_scope_discipline = (  # 目标收紧合同完整性
+        "## Scope Discipline" in str_template  # 是否包含范围纪律章节
+        and "freeze `Goal`, `Success Criteria`, `In Scope`, and `Out of Scope`" in str_template  # 是否冻结四类范围事实
+        and "Treat every other feature, refactor, abstraction" in str_template  # 是否排除未请求功能
+        and "Reviewers may identify omissions, contradictions, risks, or unverifiable steps" in str_template  # 是否限制审查职责
+    )
+
+    # 非测试智能体默认禁用，只能由当前任务中的用户按角色或目的显式启用。
+    bool_review_agent_opt_in = (  # 非测试智能体显式启用合同完整性
+        "## Governed Planning And Testing" in str_template  # 是否包含计划与测试章节
+        and "Do not use non-testing subagents by default" in str_template  # 是否默认禁用非测试智能体
+        and "request in the current task authorizes non-testing subagents" in str_template  # 是否要求当前任务授权
+        and "request must name the role or purpose" in str_template  # 是否要求角色或目的
+        and "generic request to \"use multi-agent\"" in str_template  # 泛称不得授权
+        and "task complexity, ratings, risk, or agent judgment" in str_template  # 推断来源不得授权
+        and "use exactly three" in str_template  # 未给数量时默认三个
+        and "explicit user-provided count overrides" in str_template  # 显式数量覆盖
+        and "Authorization is task-local and does not carry over" in str_template  # 授权不跨任务
+    )
+
+    # 测试目录只能由同一隔离测试者操作并形成反馈修复复验循环。
+    bool_isolated_testing = (  # 独立测试闭环合同完整性
+        "When requested work has an executable test surface" in str_template  # 是否按测试面触发
+        and "exactly one isolated `TESTER`" in str_template  # 是否只有一个测试智能体
+        and "Pure read-only or planning work" in str_template  # 是否排除无测试面工作
+        and "Only that `TESTER` may list, read, create, modify, or run anything under `tests/**`" in str_template  # 是否独占测试目录
+        and "The implementing agent must not inspect tests or execute test commands" in str_template  # 是否隔离实现者
+        and "problem feedback, and suggested fixes" in str_template  # 是否要求问题反馈
+        and "same `TESTER` to re-run verification" in str_template  # 是否要求同一测试者复验
+        and "Routine test-hash confirmation is prohibited." in str_template  # 是否禁止常规哈希确认
+    )
+
+    # 文档按理解收益选择表现形式，计划同时消除执行期设计决策。
+    bool_document_design = (  # 文档与决策完备合同
+        "Choose prose, tables, Mermaid flowcharts, or a combination" in str_template  # 是否允许多样表现形式
+        and "decision-complete" in str_template  # 是否要求计划决策完备
+        and "execution needs no new design choice" in str_template  # 是否排除执行期临时设计
+    )
+
+    # 调用方将全部复合合同与其他直接文本断言合并。
     return {  # 全局模板复合检查
         "comments": bool_comments,  # 注释与文档治理合同
         "language_routing": bool_language_routing,  # 双语言技能路由合同
         "markdown_math": bool_markdown_math,  # Markdown 公式合同
         "environment": bool_environment,  # Python 环境隔离合同
+        "scope_discipline": bool_scope_discipline,  # 目标收紧合同
+        "review_agent_opt_in": bool_review_agent_opt_in,  # 审查智能体显式启用合同
+        "isolated_testing": bool_isolated_testing,  # 独立测试闭环合同
+        "document_design": bool_document_design,  # 文档与计划完备合同
     }
 
 # 任务评级断言助手比较四份报告和全局模板合同。
@@ -438,8 +581,8 @@ def task_rating_contract_checks(
     # 评级范围片段约束仅对会影响执行模式的任务启用门禁。
     str_rating_scope = "non-trivial enough for rating to affect execution mode"  # 评级适用范围片段
 
-    # 安装例外片段确保仅用户明确要求时允许触碰安装目录。
-    str_install_safety = "explicitly requests installation, replacement, or direct modification"  # 安装保护例外片段
+    # 安装保护片段确保触碰已安装技能前始终单次确认。
+    str_install_safety = "Always obtain exactly one explicit user confirmation"  # 安装保护单次确认片段
 
     # 编码基线必须同时包含思考、最小实现、证据和追溯要求。
     list_coding_rules = [  # 编码行为模板关键片段
@@ -479,6 +622,10 @@ def task_rating_contract_checks(
         "global_template_installed_skill_safety": "installed skill directories" in str_template
         and "$CODEX_HOME/skills" in str_template
         and str_install_safety in str_template,  # 已安装技能保护完整
+        "global_template_scope_discipline": dict_template_checks["scope_discipline"],  # 目标收紧合同是否完整
+        "global_template_review_agent_opt_in": dict_template_checks["review_agent_opt_in"],  # 审查智能体显式启用合同是否完整
+        "global_template_isolated_testing": dict_template_checks["isolated_testing"],  # 独立测试闭环是否完整
+        "global_template_document_design": dict_template_checks["document_design"],  # 文档与计划完备合同是否完整
     }
 
 # 任务评级场景验证轻量任务、复杂任务和全局规则模板合同。
@@ -536,6 +683,84 @@ def case_task_rating_gate_contract(case: dict[str, Any], helper: EvalFixtures) -
                 "or treats rating vocabulary as confirmed difficulty"
             )
         },
+    )
+
+# 非测试智能体案例固定验证显式授权、数量默认值和测试面例外。
+def case_global_review_agent_opt_in_contract(
+    case: dict[str, Any],
+    helper: EvalFixtures,
+) -> dict[str, Any]:
+    """评估非测试智能体显式启用与独立测试者触发合同。
+
+    参数：case 为当前评估用例元数据，helper 为统一夹具接口。
+    返回：非测试智能体授权与测试职责断言的结构化对比结果。
+    """
+
+    # 全局模板提供跨仓库的审查智能体和测试者合同。
+    path_template = SKILL_DIR / "assets" / "templates" / "global-codex-agents.md"  # 全局模板路径。
+
+    # 技能入口提供 write intent 的默认审查策略。
+    path_skill = SKILL_DIR / "SKILL.md"  # 技能入口路径。
+
+    # 写入门禁源码证明缺失审查证据不再阻断默认写入。
+    path_completion = (  # 写入完成器路径。
+        SKILL_DIR / "scripts" / "python" / "design" / "interview_completion.py"  # 写入完成器源码。
+    )
+
+    # 三份文本分别覆盖生成规则、技能路由和确定性写入行为。
+    str_template = path_template.read_text(encoding="utf-8")  # 全局规则模板正文。
+
+    # 技能正文用于确认 write intent 不自动派发审查智能体。
+    str_skill = path_skill.read_text(encoding="utf-8")  # 当前技能入口正文。
+
+    # 写入完成器源码用于确认审查证据只在显式提供时验证。
+    str_completion = path_completion.read_text(encoding="utf-8")  # 设计写入门禁源码。
+
+    # 固定键完整覆盖用户授权、数量、生命周期和隔离 TESTER 合同。
+    dict_with_checks = {  # 非测试智能体显式启用断言。
+        "default_non_testing_agents_forbidden": (  # 默认非测试智能体禁用能力。
+            "Do not use non-testing subagents by default"  # 默认禁用固定语义
+            in str_template  # 检查默认禁用规则是否保留在全局模板
+        ),
+        "current_task_role_or_purpose_required": (  # 当前任务用户显式启用能力。
+            "request in the current task authorizes non-testing subagents" in str_template  # 当前任务授权语义
+            and "request must name the role or purpose" in str_template  # 角色或目的限定语义
+        ),
+        "generic_or_inferred_need_not_authorization": (  # 非授权来源排除能力。
+            "generic request to \"use multi-agent\"" in str_template  # 泛化多智能体请求语义
+            and "task complexity, ratings, risk, or agent judgment" in str_template  # 禁止推断授权语义
+        ),
+        "omitted_count_defaults_to_three": "use exactly three" in str_template,  # 缺省数量规则
+        "explicit_count_overrides_default": "explicit user-provided count overrides" in str_template,  # 显式数量覆盖规则
+        "authorization_is_task_local": "Authorization is task-local and does not carry over" in str_template,  # 单任务授权规则
+        "isolated_tester_for_executable_surface": (  # 独立测试者触发能力。
+            "When requested work has an executable test surface" in str_template  # 可执行测试面触发语义
+            and "exactly one isolated `TESTER`" in str_template  # 唯一测试者语义
+            and "fork_turns=none" in str_template  # 隔离上下文语义
+        ),
+        "no_surface_work_skips_tester": (  # 无测试面工作不派发测试者。
+            "Pure read-only or planning work and documentation-only changes "  # 无测试面工作类型
+            "without a test surface" in str_template  # 检查无测试面时是否跳过测试者
+        ),
+        "write_intent_skips_default_subagent_design_review": (  # 写入默认跳过审查能力。
+            "Write intent also defaults to no review subagent" in str_skill  # 技能路由默认不审查。
+            and "if DESIGN_REVIEW_KEY in answers" in str_completion  # 仅显式证据进入审查门禁。
+        ),
+    }
+
+    # 无治理基线不能证明任何显式启用或测试职责边界。
+    dict_without_checks = {  # 无技能对照断言。
+        str_key: False  # 无治理基线缺少当前能力。
+        for str_key in dict_with_checks  # 遍历七项固定能力键。
+    }
+
+    # 返回固定七项断言，供正式 eval 与回归测试共同消费。
+    return build_case_result(
+        case,
+        with_skill_checks=dict_with_checks,
+        without_skill_checks=dict_without_checks,
+        with_skill_detail={"contract": "non-testing agents opt in; TESTER follows executable surface"},
+        without_skill_detail={"baseline": "subagents may be dispatched without explicit role authorization"},
     )
 
 # 记忆治理夹具助手创建未启用记忆的受管项目。

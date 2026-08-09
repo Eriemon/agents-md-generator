@@ -108,21 +108,28 @@ def command_entry(name: str, argv: list[str], cwd: Path, result: subprocess.Comp
         包含文本输出、退出码和可选 JSON 的命令记录。
     """
 
+    # Windows 子进程可能使用本地代码页，评估链统一要求 UTF-8 输出。
+    # 缺失标准输出时保持可序列化空文本。
+    str_stdout = result.stdout or ""  # 可序列化标准输出
+
+    # 缺失标准错误时保持可序列化空文本。
+    str_stderr = result.stderr or ""  # 可序列化标准错误
+
     # 原始输出必须保留，以便非 JSON 命令仍可诊断。
     dict_entry: dict[str, Any] = {  # 标准命令执行记录
         "name": name,  # 评估步骤名称
         "argv": argv,  # 实际命令参数
         "cwd": str(cwd),  # 执行工作目录
         "returncode": result.returncode,  # 子进程退出码
-        "stdout": result.stdout,  # 标准输出正文
-        "stderr": result.stderr,  # 标准错误正文
+        "stdout": str_stdout,  # 标准输出正文
+        "stderr": str_stderr,  # 标准错误正文
     }
 
     # 结构化输出存在时供各门禁提取详细错误。
     try:
 
         # 成功解析后保存原始 JSON 载荷。
-        dict_entry["json"] = json.loads(result.stdout)  # 结构化命令输出
+        dict_entry["json"] = json.loads(str_stdout)  # 结构化命令输出
 
     # 非 JSON 输出仍需保留为合法命令记录。
     except json.JSONDecodeError:
@@ -153,11 +160,19 @@ def run_command(name: str, argv: list[str], cwd: Path, env: dict[str, str] | Non
     # 评估过程不得在被测技能中留下缓存目录。
     dict_command_env["PYTHONDONTWRITEBYTECODE"] = "1"  # 禁止写入 Python 字节码
 
+    # Python 子进程输出模式固定为 UTF-8，避免系统 locale 改变 JSON 文本。
+    dict_command_env["PYTHONUTF8"] = "1"  # 强制 Python UTF-8 模式
+
+    # Python 标准流与上述模式保持同一编码，保留中文诊断原文。
+    dict_command_env["PYTHONIOENCODING"] = "utf-8"  # 渲染输出编码
+
     # 保留失败结果而不抛异常，交由分类器生成稳定诊断。
     completed_process_command_result: subprocess.CompletedProcess[str] = subprocess.run(  # 子进程完成结果
         argv,  # 通用运行器收到的参数
         cwd=cwd,  # 调用方指定的工作目录
         text=True,  # 文本模式输出
+        encoding="utf-8",  # 命令记录按 UTF-8 解码
+        errors="replace",  # 非法字节替换后仍可收集诊断
         capture_output=True,  # 捕获标准输出和错误
         check=False,  # 非零退出交给错误分类器
         env=dict_command_env,  # 隔离后的子进程环境
@@ -166,26 +181,43 @@ def run_command(name: str, argv: list[str], cwd: Path, env: dict[str, str] | Non
     # 所有命令都通过同一序列化边界返回。
     return command_entry(name, argv, cwd, completed_process_command_result)
 
-# 快速校验器优先使用当前工具技能中的受管实现。
-def quick_validate_script() -> Path:
+# 快速校验器按目标类型选择专用实现或通用系统实现。
+def quick_validate_script(bool_self_skill: bool = False, skill_dir: Path | None = None) -> Path:
     """查找可用的 skill-creator 快速校验脚本。
 
     Args:
-        None: 候选位置由当前工具技能与 Codex 安装根确定。
+        bool_self_skill: 目标是否为当前 agents-md-generator 技能。
+        skill_dir: 可选目标技能根，用于无系统 helper 时的最后回退。
 
     Returns:
-        首个存在的 quick_validate.py 路径。
+        首个存在且适用于目标类型的 quick_validate.py 路径。
 
     Raises:
         FileNotFoundError: 所有受支持位置均缺少校验脚本。
     """
 
-    # 候选顺序保证仓库实现优先于系统安装回退。
-    list_candidates = [  # 快速校验脚本候选路径
-        tool_script_path("quick_validate.py"),  # 当前工具技能实现
-        TOOL_SKILL_DIR.parent / ".system" / "skill-creator" / "scripts" / "quick_validate.py",  # 同级系统技能
-        Path.home() / ".codex" / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py",  # 用户安装回退
-    ]
+    # 当前工具技能只有自评估时才能使用其专用预检包装器。
+    list_candidates: list[Path] = []  # 快速校验脚本候选路径
+
+    # 通用目标不得经过 agents-md-generator 专用预检。
+    if bool_self_skill:
+
+        # 自评估保留本技能的入口一致性门禁。
+        list_candidates.append(tool_script_path("quick_validate.py"))
+
+    # 系统 skill-creator 校验器负责所有通用目标及自评估回退。
+    list_candidates.extend(
+        [
+            TOOL_SKILL_DIR.parent / ".system" / "skill-creator" / "scripts" / "quick_validate.py",  # 同级系统技能
+            Path.home() / ".codex" / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py",  # 用户安装回退
+        ]
+    )
+
+    # 通用目标若没有系统 helper，可使用自身明确提供的入口。
+    if not bool_self_skill and skill_dir is not None:
+
+        # 目标入口排在系统候选之后，避免绕过系统校验器。
+        list_candidates.append(skill_dir / "scripts" / "quick_validate.py")
 
     # 首个真实文件即为本次评估使用的校验器。
     for path_candidate in list_candidates:
@@ -262,10 +294,10 @@ def preferred_settings_path(skill_dir: Path) -> Path | None:
     """
 
     # 资产目录是当前布局，config 目录保留向后兼容。
-    for str_relative in ("assets/defaults.json", "config/defaults.json"):
+    for path_relative in (Path("assets") / "defaults.json", Path("config") / "defaults.json"):
 
         # 每个候选都相对于目标技能根解析。
-        path_settings = skill_dir / str_relative  # 当前默认设置候选
+        path_settings = skill_dir / path_relative  # 当前默认设置候选
 
         # 只有普通文件可以传给验证脚本。
         if path_settings.is_file():
@@ -406,11 +438,19 @@ def render_entry(project: Path, env: dict[str, str] | None = None) -> dict[str, 
     # 渲染过程不得向项目写入 Python 缓存。
     dict_command_env["PYTHONDONTWRITEBYTECODE"] = "1"  # 禁止渲染子进程写字节码
 
+    # AGENTS 正文的中文内容要求渲染进程开启 UTF-8 模式。
+    dict_command_env["PYTHONUTF8"] = "1"  # 渲染进程的 UTF-8 模式
+
+    # 渲染器的标准流与父进程解码合同保持一致。
+    dict_command_env["PYTHONIOENCODING"] = "utf-8"  # 强制标准流编码
+
     # 渲染失败也要捕获输出供统一错误分类。
     completed_process_command_result: subprocess.CompletedProcess[str] = subprocess.run(  # 渲染完成结果
         list_argv,  # 专用渲染参数
         cwd=project,  # 项目根作为渲染工作目录
         text=True,  # 渲染输出按文本读取
+        encoding="utf-8",  # AGENTS 渲染正文按 UTF-8 解码
+        errors="replace",  # 非法字节替换后仍可检查占位符
         capture_output=True,  # 捕获渲染正文和诊断
         check=False,  # 保留非零退出供统一处理
         env=dict_command_env,  # 禁止字节码的渲染环境
@@ -425,7 +465,7 @@ def render_entry(project: Path, env: dict[str, str] | None = None) -> dict[str, 
     )
 
     # 内容检查只分析渲染器标准输出。
-    str_output = completed_process_command_result.stdout  # 待检查的渲染正文
+    str_output = completed_process_command_result.stdout or ""  # 待检查的渲染正文
 
     # 两类泄露事实覆盖普通命令 JSON 载荷。
     dict_entry["json"] = {
@@ -880,45 +920,28 @@ def evaluation_environment(bool_self_skill: bool) -> dict[str, str]:
     # 调用方将环境传给所有命令运行器。
     return dict_base_env
 
-# 主评估器按固定顺序执行工具、行为和治理门禁。
-def evaluate(skill_dir: Path, project: Path) -> dict[str, Any]:
-    """运行目标技能的事实级验证链。
+# 追加技能源码相关的编译、快速校验和专用验证命令。
+def append_skill_validation_commands(
+    skill_dir: Path,
+    path_repo_root: Path,
+    dict_base_env: dict[str, str],
+    bool_self_skill: bool,
+    list_commands: list[dict[str, Any]],
+    list_warnings: list[str],
+) -> None:
+    """把技能本身的运行时验证步骤追加到统一命令列表。
 
     Args:
         skill_dir: 待评估技能目录。
-        project: AGENTS 与治理命令使用的项目根。
+        path_repo_root: 技能所属仓库根目录。
+        dict_base_env: 子进程共享环境。
+        bool_self_skill: 是否正在评估当前工具技能。
+        list_commands: 待追加的命令证据列表。
+        list_warnings: 待追加的非阻断警告列表。
 
     Returns:
-        命令证据、错误分类、计数和警告组成的评估结果。
+        None: 结果通过两个列表参数回传。
     """
-
-    # 子命令统一在包含测试的仓库根执行。
-    path_repo_root = repo_root_for(skill_dir)  # 目标技能所属仓库根
-
-    # 自评估需要启用安装技能覆盖和额外治理步骤。
-    bool_self_skill = skill_dir.name == "agents-md-generator"  # 是否评估当前工具技能
-
-    # 共享环境统一处理递归保护和源码覆盖。
-    dict_base_env = evaluation_environment(bool_self_skill)  # 评估子进程基础环境
-
-    # 命令证据按实际执行顺序保存。
-    list_commands: list[dict[str, Any]] = []  # 已执行评估命令记录
-
-    # 可选工具缺失只形成警告，不伪造命令失败。
-    list_warnings: list[str] = []  # 非阻断评估警告
-
-    # 运行门禁前移除旧缓存，避免扫描历史产物。
-    cleanup_transient_artifacts(skill_dir)
-
-    # 技能审计始终是验证链的首个工具门禁。
-    list_commands.append(
-        run_command(
-            "audit_skill",  # 审计步骤名称
-            [sys.executable, str(tool_script_path("audit_skill.py")), str(skill_dir)],  # 审计参数
-            path_repo_root,  # 仓库工作目录
-            dict_base_env,  # 评估基础环境
-        )
-    )
 
     # Python 根存在时追加真实编译门禁。
     list_python_roots = existing_python_roots(skill_dir)  # 当前技能 Python 源码根
@@ -936,7 +959,7 @@ def evaluate(skill_dir: Path, project: Path) -> dict[str, Any]:
     try:
 
         # 发现成功后在 else 分支执行，避免捕获运行错误。
-        path_validator = quick_validate_script()  # 快速校验脚本路径
+        path_validator = quick_validate_script(bool_self_skill=bool_self_skill, skill_dir=skill_dir)  # 目标类型与技能根共同决定回退顺序
 
     # 候选全部缺失时转成可见但非阻断警告。
     except FileNotFoundError as exc:
@@ -972,6 +995,120 @@ def evaluate(skill_dir: Path, project: Path) -> dict[str, Any]:
                 validate_script_env(dict_base_env, skill_dir),  # 技能专用环境
             )
         )
+
+# 追加首个审计命令并保持统一命令证据格式。
+def append_audit_command(
+    skill_dir: Path,
+    path_repo_root: Path,
+    dict_base_env: dict[str, str],
+    list_commands: list[dict[str, Any]],
+) -> None:
+    """把技能审计命令追加到评估证据列表。
+
+    Args:
+        skill_dir: 待评估技能目录。
+        path_repo_root: 技能所属仓库根目录。
+        dict_base_env: 子进程共享环境。
+        list_commands: 待追加的命令证据列表。
+
+    Returns:
+        None: 结果通过列表参数回传。
+    """
+
+    # 技能审计始终是验证链的首个工具门禁。
+    list_commands.append(
+        run_command(
+            "audit_skill",  # 审计步骤名称
+            [sys.executable, str(tool_script_path("audit_skill.py")), str(skill_dir)],  # 审计参数
+            path_repo_root,  # 仓库工作目录
+            dict_base_env,  # 评估基础环境
+        )
+    )
+
+# 汇总命令证据并清理评估过程产生的瞬态文件。
+def finish_evaluation(
+    skill_dir: Path,
+    project: Path,
+    bool_self_skill: bool,
+    list_commands: list[dict[str, Any]],
+    list_warnings: list[str],
+) -> dict[str, Any]:
+    """清理评估现场并构造公开结果载荷。
+
+    Args:
+        skill_dir: 待评估技能目录。
+        project: AGENTS 与治理命令使用的项目根。
+        bool_self_skill: 是否正在评估当前工具技能。
+        list_commands: 已执行的命令证据列表。
+        list_warnings: 非阻断工具警告列表。
+
+    Returns:
+        包含命令、错误分类和警告的评估结果。
+    """
+
+    # 所有命令完成后再次清理缓存，保证工作树无瞬态污染。
+    cleanup_transient_artifacts(skill_dir)
+
+    # 字符串错误维持既有公开输出合同。
+    list_errors = collect_errors(list_commands)  # 扁平评估错误
+
+    # 结构化错误为每条诊断补充责任类别。
+    list_structured_errors = classified_errors(list_commands, self_skill=bool_self_skill)  # 分类评估结果
+
+    # 汇总结果保留所有命令证据和非阻断警告。
+    return {
+        "ok": not list_errors,  # 没有阻断错误时评估成功
+        "skill_dir": str(skill_dir),  # 被评估技能目录
+        "project": str(project),  # 被评估项目根
+        "commands": list_commands,  # 完整命令证据
+        "errors": list_errors,  # 向后兼容错误文本
+        "classified_errors": list_structured_errors,  # 责任分类记录
+        "category_counts": category_counts(list_structured_errors),  # 分类计数
+        "warnings": list_warnings,  # 非阻断工具警告
+    }
+
+# 主评估器按固定顺序执行工具、行为和治理门禁。
+def evaluate(skill_dir: Path, project: Path) -> dict[str, Any]:
+    """运行目标技能的事实级验证链。
+
+    Args:
+        skill_dir: 待评估技能目录。
+        project: AGENTS 与治理命令使用的项目根。
+
+    Returns:
+        命令证据、错误分类、计数和警告组成的评估结果。
+    """
+
+    # 子命令统一在包含测试的仓库根执行。
+    path_repo_root = repo_root_for(skill_dir)  # 目标技能所属仓库根
+
+    # 自评估需要启用安装技能覆盖和额外治理步骤。
+    bool_self_skill = skill_dir.name == "agents-md-generator"  # 是否评估当前工具技能
+
+    # 共享环境统一处理递归保护和源码覆盖。
+    dict_base_env = evaluation_environment(bool_self_skill)  # 评估子进程基础环境
+
+    # 命令证据按实际执行顺序保存。
+    list_commands: list[dict[str, Any]] = []  # 已执行评估命令记录
+
+    # 可选工具缺失只形成警告，不伪造命令失败。
+    list_warnings: list[str] = []  # 非阻断评估警告
+
+    # 运行门禁前移除旧缓存，避免扫描历史产物。
+    cleanup_transient_artifacts(skill_dir)
+
+    # 审计保持验证链中的第一个命令。
+    append_audit_command(skill_dir, path_repo_root, dict_base_env, list_commands)
+
+    # 编译、快速校验和专用验证共享同一命令顺序。
+    append_skill_validation_commands(
+        skill_dir,
+        path_repo_root,
+        dict_base_env,
+        bool_self_skill,
+        list_commands,
+        list_warnings,
+    )
 
     # 文档治理只对具有受管控制文件的项目启用。
     path_manage_docs_script = tool_script_path("manage_docs.py")  # 文档治理脚本
@@ -1035,29 +1172,8 @@ def evaluate(skill_dir: Path, project: Path) -> dict[str, Any]:
         # 渲染内容检查补充占位符和本地路径泄露证据。
         list_commands.append(render_entry(project, dict_base_env))
 
-    # 所有命令完成后再次清理缓存，保证工作树无瞬态污染。
-    cleanup_transient_artifacts(skill_dir)
-
-    # 字符串错误维持既有公开输出合同。
-    list_errors = collect_errors(list_commands)  # 扁平评估错误
-
-    # 结构化错误为每条诊断补充责任类别。
-    list_structured_errors = classified_errors(  # 分类评估错误
-        list_commands,  # 已完成的全部命令记录
-        self_skill=bool_self_skill,  # 当前目标的自检状态
-    )
-
-    # 汇总结果保留所有命令证据和非阻断警告。
-    return {
-        "ok": not list_errors,  # 没有阻断错误时评估成功
-        "skill_dir": str(skill_dir),  # 被评估技能目录
-        "project": str(project),  # 被评估项目根
-        "commands": list_commands,  # 完整命令证据
-        "errors": list_errors,  # 向后兼容错误文本
-        "classified_errors": list_structured_errors,  # 责任分类记录
-        "category_counts": category_counts(list_structured_errors),  # 分类计数
-        "warnings": list_warnings,  # 非阻断工具警告
-    }
+    # 统一出口负责清理现场并构造结果载荷。
+    return finish_evaluation(skill_dir, project, bool_self_skill, list_commands, list_warnings)
 
 # 命令行入口解析目标路径并输出机器可读评估结果。
 def main() -> int:

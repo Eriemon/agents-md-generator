@@ -570,7 +570,7 @@ REQUIRED_LANGUAGE_ROUTING_SNIPPETS = (  # 生成根规则必须包含的路由�
     "严禁把代码压缩到一行",  # 禁止压缩代码
     "炫技代码",  # 禁止不可读技巧
     "语言技能共同门禁：",  # 共同门禁标题
-    "必须先思考并同时加载",  # 双技能共同门禁
+    "两个技能组成当前可执行的语言门禁",  # 双技能共同门禁
     "语言技能路由（Python）：",  # Python 路由标题
     "readable-python-generator",  # Python 最终责任技能
     "语言技能路由（脚本）：",  # 脚本路由标题
@@ -610,23 +610,28 @@ def verify_missing_language_routing(
     path_agents: Path,
     str_agents_text: str,
     path_project: Path,
+    dict_environment: dict[str, str],
 ) -> dict[str, Any]:
-    """验证删除脚本技能名称后根规则会被拒绝。
+    """验证删除脚本路由整行后根规则会被拒绝。
 
     Args:
         path_agents: 待篡改的根 AGENTS 文件。
         str_agents_text: 渲染器生成的完整原始规则文本。
         path_project: verify_agents 检查的隔离项目根。
+        dict_environment: 固定 readable 技能安装态的子进程环境。
 
     Returns:
-        删除路由语义后的结构化验证报告。
+        删除脚本路由整行后的结构化验证报告。
     """
 
-    # 只替换脚本技能名称，保留其他治理文本以定位单一缺失原因。
-    str_missing_text = str_agents_text.replace(  # 缺少脚本技能路由的根规则文本
-        "readable-script-generator",  # 必需脚本技能名称
-        "script helper",  # 不满足治理合同的泛化替代文本
+    # 只删除脚本路由整行，保留共同门禁和 Python 路由以定位单一缺失原因。
+    str_script_route = rendered_language_route(  # 待删除的脚本路由整行
+        str_agents_text,  # 渲染器生成的完整根规则
+        "- 语言技能路由（脚本）：",  # 脚本路由行前缀
     )
+
+    # 单次替换确保其他位置的脚本技能名称继续保留为独立治理证据。
+    str_missing_text = str_agents_text.replace(str_script_route, "", 1)  # 缺少脚本路由的根规则文本
 
     # 写入单点篡改文本供真实验证器检查。
     path_agents.write_text(str_missing_text, encoding="utf-8")
@@ -636,6 +641,7 @@ def verify_missing_language_routing(
         "verify_agents.py",  # 根规则验证入口
         path_project,  # 已篡改规则的隔离项目
         cwd=REPO_ROOT,  # 使用当前验证实现
+        env=dict_environment,  # 缺失路由进程固定为双 owner 探测环境
     )
 
     # 统一解析函数保留 JSON 报告或 stderr 回退诊断。
@@ -648,6 +654,7 @@ def verify_weakened_language_config(
     path_config: Path,
     dict_config: dict[str, Any],
     path_project: Path,
+    dict_environment: dict[str, str],
 ) -> dict[str, Any]:
     """验证把 Python 路由弱化为通用助手后配置会被拒绝。
 
@@ -657,6 +664,7 @@ def verify_weakened_language_config(
         path_config: 语言技能路由配置源路径。
         dict_config: 渲染器写出的原始配置载荷。
         path_project: verify_agents 检查的隔离项目根。
+        dict_environment: 固定 readable 技能安装态的子进程环境。
 
     Returns:
         弱化 Python 路由配置后的结构化验证报告。
@@ -686,6 +694,7 @@ def verify_weakened_language_config(
         "verify_agents.py",  # 根规则与配置验证入口
         path_project,  # 含弱化配置的隔离项目
         cwd=REPO_ROOT,  # 以当前验证器检查配置源弱化
+        env=dict_environment,  # 弱化配置进程固定为双 owner 探测环境
     )
 
     # 统一解析函数保留结构化错误供案例断言。
@@ -704,6 +713,21 @@ def collect_language_routing_evidence() -> dict[str, Any]:
 
     # 临时工作区隔离生成规则与两次故意篡改。
     with tempfile.TemporaryDirectory() as str_temporary_directory:
+
+        # 独立 Codex 主目录使评测不依赖执行机器的用户级技能安装状态。
+        path_codex_home = Path(str_temporary_directory) / "codex-home"  # 语言路由评测专用 Codex 根
+
+        # 标准 skills 目录承载两个路由 owner 的最小存在性证据。
+        path_skills_home = path_codex_home / "skills"  # readable 技能探测根目录
+
+        # 两个 owner 目录必须在渲染前存在，才能稳定生成双技能共同门禁。
+        (path_skills_home / "readable-python-generator").mkdir(parents=True)
+
+        # 脚本 owner 独立建目录，避免只覆盖 Python 单 owner 分支。
+        (path_skills_home / "readable-script-generator").mkdir()
+
+        # 所有评测子进程共享同一 CODEX_HOME，保证生成与验证观察一致。
+        dict_environment = {"CODEX_HOME": str(path_codex_home)}  # 双 owner 安装态环境覆盖
 
         # workspace 子目录模拟包含 Python 源码的普通项目。
         path_project = Path(str_temporary_directory) / "workspace"  # 语言路由评估项目根
@@ -726,6 +750,7 @@ def collect_language_routing_evidence() -> dict[str, Any]:
             path_project,  # 含 Python 源码的隔离项目
             "--write",  # 将规则与配置写入项目
             cwd=REPO_ROOT,  # 使用当前渲染实现
+            env=dict_environment,  # 使用评测自建的双 owner 技能目录
         )
 
         # 根规则路径用于读取原文并执行单点篡改。
@@ -743,6 +768,7 @@ def collect_language_routing_evidence() -> dict[str, Any]:
             "verify_agents.py",  # 未篡改规则的公开验证入口
             path_project,  # 未篡改的隔离项目
             cwd=REPO_ROOT,  # 以当前实现确认完整输出政策可被接受
+            env=dict_environment,  # 验证阶段复用同一技能安装态
         )
 
         # 删除脚本技能名称后验证器必须拒绝缺失路由语义。
@@ -750,6 +776,7 @@ def collect_language_routing_evidence() -> dict[str, Any]:
             path_agents,  # 待篡改根规则路径
             str_agents_text,  # 原始规则文本
             path_project,  # 删除路由文本后的验证目标
+            dict_environment,  # 缺失路由验证沿用双 owner 安装态
         )
 
         # 配置源路径承载渲染器写出的语言技能路由合同。
@@ -769,6 +796,7 @@ def collect_language_routing_evidence() -> dict[str, Any]:
             path_config,  # 语言路由配置源路径
             dict_config,  # 原始配置证据
             path_project,  # 弱化配置后的验证目标
+            dict_environment,  # 弱化配置验证沿用双 owner 安装态
         )
 
     # 临时目录释放后仅返回纯文本和结构化证据。
@@ -836,10 +864,10 @@ def build_language_routing_checks(dict_evidence: dict[str, Any]) -> dict[str, bo
     bool_routes_present = bool(str_python_route and str_script_route)  # 两条所有权路由存在性
 
     # Python 路由只保留自身范围与所有权，不得复制 shared 加载句。
-    bool_python_route_clean = "必须先思考并同时加载" not in str_python_route  # Python 路由未复制共同句
+    bool_python_route_clean = "两个技能组成当前可执行的语言门禁" not in str_python_route  # Python 路由未复制共同句
 
     # 脚本路由同样排除 shared 加载句，避免跨语言正文重复。
-    bool_script_route_clean = "必须先思考并同时加载" not in str_script_route  # 脚本路由未复制共同句
+    bool_script_route_clean = "两个技能组成当前可执行的语言门禁" not in str_script_route  # 脚本路由未复制共同句
 
     # 返回值覆盖生成、配置、正向接受和两种负向拒绝。
     return {

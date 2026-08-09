@@ -330,6 +330,15 @@ def review_local_change(
     # 可选目标只对移动和重命名动作生效。
     target = facts["target"]  # 可选本地目标。
 
+    # 精确点号只在远程合同中表示配置的工作区根。
+    if normalize_rel(str_path) == ".":
+
+        # 本地审查不得批准以项目根为源的目录操作。
+        list_reasons.append("local path `.` cannot target the project root")
+
+        # 独立规则标识让审查证据明确指出根保护边界。
+        list_matched_rules.append("local-project-root-protected")
+
     # 源目标都必须遵守工作区设置文件的位置约束。
     for candidate in [str_path, target] if target else [str_path]:
 

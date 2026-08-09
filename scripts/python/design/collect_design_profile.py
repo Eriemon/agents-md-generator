@@ -191,8 +191,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
         choices=["write", "read_only"],
         default="write",
         help=(
-            "Intent for interactive interviews: write keeps the existing review gate, "
-            "read_only completes without subagent review."
+            "Intent for interactive interviews: write completes without default subagent review, "
+            "read_only completes without writes; use --enter-write-review for explicit design review."
         ),
     )
 

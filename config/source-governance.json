@@ -77,7 +77,8 @@
     "enabled": true,
     "max_stem_chars": 30,
     "exemptions": [
-      "__init__.py"
+      "__init__.py",
+      "__main__.py"
     ],
     "python_pattern": "^[a-z]+(?:_[a-z]+)*$",
     "source_pattern": "^[a-z]+(?:[_-][a-z]+)*$",

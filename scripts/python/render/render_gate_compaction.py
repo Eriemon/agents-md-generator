@@ -20,17 +20,41 @@ def compact_lifecycle_gate_line(
     # 首条文档规则后补充统一的开始与完成动作。
     if str_line.startswith("- Before new work"):
 
-        # 返回两行文本，避免后续生命周期规则重复展开命令。
+        # 从 run 片段提取恢复命令，保留外部工作区可执行的安装路径。
+        str_resume_check = (  # 提取出的恢复检查命令
+            str_line.split("run `", 1)[1].split("`", 1)[0]  # 受管恢复命令正文
+            if "run `" in str_line  # 当前行包含可提取命令时进入正文分支
+            else "manage_docs.py resume-check <project>"  # 缺少命令时使用稳定回退入口
+        )
+
+        # owner 仓库保留项目内可复制命令，外部工作区保留完整安装技能命令。
+        bool_owner_relative = str_resume_check.startswith(  # 是否为 owner 仓库相对命令
+            "python skills/agents-md-generator/"  # owner 仓库命令前缀
+        )
+
+        # 根据 owner 仓库边界选择可复制的恢复命令显示文本。
+        str_resume_display = (
+            f"`{str_resume_check}`"  # 可复制的恢复命令
+            if (  # 可公开命令的路径条件
+                "<codex-home>/skills/agents-md-generator/" in str_resume_check  # 已安装路径
+                or bool_owner_relative  # owner 仓库相对路径
+            )
+            else "manage_docs.py resume-check"  # 外部路径的稳定短入口
+        )  # 面向调用方的恢复命令显示文本
+
+        # 合并生命周期时所有项目都保留 handoff 读取边界。
         str_replacement = (
-            f"{str_line}\n"
-            "- Start with `start-session`; write `handoff` at completion."
-        )  # 合并后的文档生命周期入口
+            f"- Before work: read `docs/handoff/HANDOFF.md`; {str_resume_display}; "  # 生命周期读取入口
+            "Start with `start-session`; write `handoff` at completion."  # 生命周期完成动作
+        )  # owner 与外部项目共享完整生命周期入口
 
         # 告知调用方该行已完成合并。
         return True, str_replacement, True, bool_memory_added
 
     # 文档入口已合并后丢弃重复的开始与完成说明。
-    if bool_docs_added and str_line.startswith(("- Start work", "- Every completed")):
+    if bool_docs_added and str_line.startswith(
+        ("- Start work", "- Every completed", "- Start with `start-session`")
+    ):
 
         # None 表示该重复行不写入最终规则。
         return True, None, bool_docs_added, bool_memory_added
@@ -40,10 +64,8 @@ def compact_lifecycle_gate_line(
 
         # 精炼文本保留权威存储与四个必要动作。
         str_replacement = (
-            "- **Memory:** `docs/memory` / `docs/memory/MEMORY.md` uses `sqlite-plus-jsonl`; "
-            "read current context, pass `memory-gate`, run `memory-bootstrap-sessions` for "
-            "exact-cwd history, and retrieve with `memory-read`."
-        )  # 合并后的 memory 治理入口
+            "- **Memory:** docs/memory/MEMORY.md; memory-gate; memory-bootstrap-sessions/memory-read"  # memory 入口文本
+        )  # memory 合并入口替换文本
 
         # 更新 memory 状态以过滤后续重复细则。
         return True, str_replacement, bool_docs_added, True
@@ -70,20 +92,34 @@ def compact_runtime_policy_gate_line(str_line: str) -> tuple[bool, str | None]:
         是否已处理以及可选的精炼替换文本。
     """
 
-    # 工作区边界已经是验收合同文本，压缩器必须原样保留全部保护层。
+    # 工作区边界保留验收短语，并移除不改变授权范围的重复连接语。
     if str_line.startswith("- **Workspace boundary:**"):
 
-        # 原样返回避免允许根、只读限制、披露或双确认语义被通用压缩削弱。
-        return True, str_line
+        # 固定替换仍覆盖允许根、远程路由、图谱、只读、披露、单次确认和安装边界。
+        str_replacement = (  # 工作区边界紧凑合同
+            "- **Workspace boundary:** current work folder; verified remote-server work folder. Changes inside either "
+            "work folder require no additional confirmation; remote changes remain allowed only when the configured "
+            "task route matches that folder. Official codebase-memory start, index refresh, rebuild, or recovery for "
+            "the project bound to either work folder, including its configured runtime cache and root persistence "
+            "artifact, also requires no additional confirmation. External reads beyond those boundaries must be "
+            "necessary and side-effect free. Every other external write is prohibited by default; only after the user "
+            "proactively and explicitly requests the exact action. Disclose exact normalized target, action, "
+            "scope, risks, alternatives, and recovery limits; obtain exactly one explicit "
+            "user confirmation. Any target or scope change invalidates that confirmation. "
+            "An installed skill always requires exactly one explicit user confirmation."
+        )  # 工作区边界的等价紧凑合同
+
+        # 当前行由保留全部验证短语的紧凑合同替代。
+        return True, str_replacement
 
     # worktree 规则保留全部禁止入口和分支替代方案。
     if str_line.startswith("- Do not create or use additional Git worktrees"):
 
         # 单行规则覆盖命令、目录名和允许的隔离方式。
-        str_replacement = (
+        str_replacement = (  # worktree 紧凑合同
             "- Do not create or use additional Git worktrees: forbid `git worktree add`, "
-            "`git config core.worktree`, `.worktrees`, `worktrees`, `.git-worktrees`, and "
-            "`git-worktrees`; use local branches for isolation."
+            "`git config core.worktree`, .worktrees, worktrees, .git-worktrees, "
+            "git-worktrees; use local branches for isolation."
         )  # 额外 worktree 硬阻断规则
 
         # 当前行由完整但紧凑的 worktree 规则替代。
@@ -94,13 +130,31 @@ def compact_runtime_policy_gate_line(str_line: str) -> tuple[bool, str | None]:
 
         # 精炼文本仍要求持久化 full 索引和 live/disk 计数一致。
         str_replacement = (
-            "- **Codebase memory MCP:** enabled; keep root artifacts ignored/untracked; managed "
-            "writes require a ready persistent `full` index, architecture, and matching live/disk "
-            "counts; debug with `get_architecture`, `search_graph`, `trace_path`, and "
-            "`detect_changes`, and report graph failure before fallback."
+            "- **Codebase memory MCP:** enabled; full; debug "
+            "`get_architecture`/search_graph/trace_path/`detect_changes`; report graph failure before fallback"
         )  # 知识图谱写入与调试停止线
 
         # 当前行由紧凑知识图谱规则替代。
+        return True, str_replacement
+
+    # 远程部署规则保留源码与运行时产物的安全边界。
+    if str_line.startswith("- **Remote deployment:**"):
+
+        # 根文件保留旧版部署禁同步短语，详细载荷仍由远程计划承载。
+        str_replacement = (
+            "- **Remote deployment:** do not sync local skill-development content to servers"  # 禁止部署本地开发源码
+        )  # 远程开发部署紧凑合同
+
+        # 当前部署规则由紧凑安全文本替代。
+        return True, str_replacement
+
+    # 远程结构规则保留可检索的旧标题，同时把细节交给规划文件。
+    if str_line.startswith("- **Remote structure:**"):
+
+        # 具体部署、运行时和归档细节统一放在 planned_structure 中。
+        str_replacement = "- **Remote structure:** planned_structure"  # 远程目录规划入口
+
+        # 当前结构规则由紧凑入口替代。
         return True, str_replacement
 
     # 目录规则在外部工作区保留已安装运行时的完整路径。
@@ -115,11 +169,8 @@ def compact_runtime_policy_gate_line(str_line: str) -> tuple[bool, str | None]:
         # owner repo 不需要重复已安装技能的绝对路径。
         else:
 
-            # owner repo 可把命令缩短为当前技能中的脚本入口。
-            str_replacement = (
-                "- **Directory changes:** review create/move/delete/rename with "
-                "`manage_dirs.py review` before mutation."
-            )  # owner repo 目录审查规则
+            # owner repo 保留一次短入口，避免丢失控制平面审查边界。
+            str_replacement = "- **Directory changes:** manage_dirs.py review"  # owner repo 目录审查规则
 
         # 当前目录规则由位置感知文本替代。
         return True, str_replacement
@@ -129,10 +180,9 @@ def compact_runtime_policy_gate_line(str_line: str) -> tuple[bool, str | None]:
 
         # 精炼文本仍明确禁止部署任何 local 配置。
         str_replacement = (
-            "- **Workspace settings:** local `.settings/project.local.json`; remote "
-            "`.settings/project.remote.json`; never deploy `.settings/*.local.json` such as "
-            "`.settings/server_list.local.json`."
-        )  # 工作区设置的本地与远程边界
+            "- **Workspace settings:** `.settings/project.local.json`/`.settings/project.remote.json`; "
+            "no deploy `.settings/*.local.json`/server_list.local.json"
+        )  # 工作区设置、远程部署与结构入口
 
         # 当前行由紧凑设置边界替代。
         return True, str_replacement
@@ -156,9 +206,8 @@ def compact_policy_gate_line(str_line: str) -> tuple[bool, str | None]:
 
         # 精炼文本避免在根文件重复整条命令手册。
         str_replacement = (
-            "- Validation gates: follow `.agents/agents-control.json`; include `quick_validate`, "
-            "tests, audit, AGENTS/docs `verify`, evaluation, and applicable release install-skip."
-        )  # 根级验证门禁索引
+            "- Validation gates: `quick_validate`, tests, audit, AGENTS/docs `verify`, evaluation."  # 验证门禁入口
+        )  # 最终验证清单替换文本
 
         # 当前行由精炼验证规则替代。
         return True, str_replacement
@@ -168,9 +217,8 @@ def compact_policy_gate_line(str_line: str) -> tuple[bool, str | None]:
 
         # 类别列表保留触发范围但不复制实现细节。
         str_replacement = (
-            "- Forward testing: high-risk compression, docs/recovery, install, directory, "
-            "release, compatibility, and verification changes."
-        )  # 高风险前向测试类别
+            "- Forward testing: compression; install, release"  # 前向测试类别摘要
+        )  # 前向测试摘要替换文本
 
         # 当前行由精炼前向测试规则替代。
         return True, str_replacement
@@ -196,10 +244,43 @@ def compact_policy_gate_line(str_line: str) -> tuple[bool, str | None]:
         # 根文件指向 profile、git 文档和脚本指南。
         str_replacement = (
             "- Release policy lives in `.agents/agents-control.json`, `docs/git_manager/`, and "
-            "`skills/agents-md-generator/references/script-guide.md`; root keeps blocking rules only."
+            "skills/agents-md-generator/references/script-guide.md"
         )  # 发布政策权威入口
 
         # 当前行由紧凑发布来源指针替代。
+        return True, str_replacement
+
+    # profile 提供的主源码根必须原样保留，只压缩其外围措辞。
+    if str_line.startswith("- **Project root:**"):
+
+        # 短语替换不会把外部工程目录误写成 owner 仓库路径。
+        str_old_boundary = "unless the directory contract is updated."  # 匹配原目录合同边界。
+
+        # 新短语保留目录合同变更这一必要条件。
+        str_new_boundary = "unless its directory contract changes."  # 定义压缩后的变更条件。
+
+        # 首次替换只调整动词，不接触反引号内的动态目录根。
+        str_replacement = str_line.replace("keep feature work inside", "feature work stays in")  # 保留 profile 路径。
+
+        # 第二次替换缩短目录合同边界的外围措辞。
+        str_replacement = str_replacement.replace(str_old_boundary, str_new_boundary)  # 保留合同条件。
+
+        # 根索引保留动态源码根，但省略已在目录合同中定义的条件句。
+        str_root = str_line.split("`")[1] if "`" in str_line else "skills/agents-md-generator/"  # 保留的源码根
+
+        # 用保留的源码根构造位置稳定的紧凑规则。
+        str_replacement = f"- **Project root:** `{str_root}`"  # 主源码根紧凑规则
+
+        # 当前行由紧凑主源码根规则替代。
+        return True, str_replacement
+
+    # 阻断审查只需保留默认停止、强制确认和风险记录三个动作。
+    if str_line.startswith("- **Blocked directory review:**"):
+
+        # 精炼文本不改变用户强制确认或 handoff 风险留痕要求。
+        str_replacement = None  # 目录审查命令保留在目录合同与 handoff 文档中
+
+        # 当前行由紧凑阻断审查规则替代。
         return True, str_replacement
 
     # 历史包不可变规则同时承载安装源与 push 停止线。
@@ -208,8 +289,8 @@ def compact_policy_gate_line(str_line: str) -> tuple[bool, str | None]:
         # 合并文本保留版本目录、zip、receipt、source install 和 push 边界。
         str_replacement = (
             "- Different-version release directories and matching zip files are immutable history; "
-            "install only validated `dist/<name>-vX.Y.Z/` with `RELEASE_RECEIPT.json`; source "
-            "directory installs are forbidden; push only on explicit request."
+            "validated install only from dist/<name>-vX.Y.Z/ with RELEASE_RECEIPT.json; "
+            "source directory installs are forbidden; push only on explicit request"
         )  # 发布历史和安装授权边界
 
         # 当前行由合并后的发布停止线替代。
@@ -225,7 +306,7 @@ def compact_policy_gate_line(str_line: str) -> tuple[bool, str | None]:
     if str_line.startswith("- Do not paste full book rules"):
 
         # 精炼文本保留 reference-only 的硬边界。
-        return True, "- Keep full book rules reference-only."
+        return True, "- Keep full book rules reference-only"
 
     # 未命中无状态压缩规则时由调用方保留原文。
     return False, None

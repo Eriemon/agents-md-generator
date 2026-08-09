@@ -105,6 +105,7 @@ SCRIPT_TASK_BY_NAME = {  # 被测脚本名称到任务目录的索引。
             "agents_common.py",  # AGENTS 共同运行时。
             "agents_decisions.py",  # 结构化决策载荷模块。
             "agents_project_facts.py",  # 项目事实发现模块。
+            "tester_worker_profile.py",  # 唯一隔离测试智能体配置模块。
             "workspace_settings_policy.py",  # 工作区配置策略模块。
             "git_worktree_policy.py",  # worktree 硬门禁模块。
         ],

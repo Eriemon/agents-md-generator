@@ -207,11 +207,13 @@ def dispatch_manage_docs_command(path_project: Path, namespace_args: argparse.Na
             installed_skill_dir_override=namespace_args.installed_skill_dir,  # 可选安装技能覆盖。
             mark_verified=namespace_args.mark_verified,  # 是否登记验证时间。
             confirm_codebase_memory_untrack=namespace_args.confirm_codebase_memory_untrack,  # 知识图谱解除跟踪确认。
+            confirm_tester_worker_update=namespace_args.confirm_tester_worker_update,  # tester_worker 刷新确认。
         ),
         "sync-global-codex-agents": lambda: docs_function("sync_global_codex_agents")(  # 全局基线同步动作。
             path_project,  # 治理规则来源项目。
             write=namespace_args.write,  # 是否修改全局规则文件。
             codex_home=namespace_args.codex_home,  # 可选 Codex 主目录。
+            confirm_tester_worker_update=namespace_args.confirm_tester_worker_update,  # 全局 baseline 刷新沿用同一授权收据。
         ),
         "release-gate": lambda: docs_function("release_gate")(  # 发布阶段检查动作。
             path_project,  # 发布准备记录所属仓库。
@@ -219,16 +221,22 @@ def dispatch_manage_docs_command(path_project: Path, namespace_args: argparse.Na
             namespace_args.skill_dir,  # 待发布技能目录。
             namespace_args.phase,  # 发布前或发布后阶段。
             namespace_args.install_intent,  # 发布后的安装意图。
+            namespace_args.test_evidence,  # 不透明远程测试收据。
+            bool_require_test_evidence=True,  # CLI release-gate 属于明确发布态。
         ),
         "release-prepare": lambda: docs_function("release_prepare")(  # 发布前准备动作。
             path_project,  # 发布归属项目。
             namespace_args.version,  # 待准备版本。
             namespace_args.skill_dir,  # 技能源码目录。
+            namespace_args.test_evidence,  # 同步后、暂存前验证的测试收据。
+            bool_require_test_evidence=True,  # 准备命令在暂存前强制收据。
         ),  # 准备发布分支与记录。
         "package-release": lambda: docs_function("package_release")(  # 版本化发布包生成动作。
             path_project,  # 发布包所属项目。
             namespace_args.version,  # 打包版本号。
             namespace_args.skill_dir,  # 发布内容来源目录。
+            test_evidence_raw=namespace_args.test_evidence,  # pre/post 共用测试收据。
+            bool_require_test_evidence=True,  # 打包命令强制 pre/post 收据一致。
         ),  # 生成版本发布包。
         "branch-gate": lambda: branch_gate(path_project),  # 检查当前分支合同。
         "work-folder-gate": lambda: docs_function("work_folder_gate")(  # 工作目录边界检查动作。
@@ -452,6 +460,12 @@ def build_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
     )
 
+    # tester_worker 刷新沿用同一任务授权收据并保留备份证据。
+    argument_parser_sync_root.add_argument(
+        "--confirm-tester-worker-update",
+        action="store_true",
+    )
+
     # 全局规则同步接受写入标志和 Codex 主目录覆盖。
     argument_parser_sync_global = add_project_parser(object_subparsers_commands, "sync-global-codex-agents")  # 全局同步解析器。
 
@@ -460,6 +474,12 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
     # 自定义主目录支持隔离测试和多用户环境。
     argument_parser_sync_global.add_argument("--codex-home", default=None)
+
+    # 全局同步与根同步共享 tester_worker 刷新确认字段。
+    argument_parser_sync_global.add_argument(
+        "--confirm-tester-worker-update",
+        action="store_true",
+    )
 
     # 发布门禁需要版本、技能目录、阶段和安装意图。
     argument_parser_release_gate = add_project_parser(object_subparsers_commands, "release-gate")  # 发布门禁解析器。
@@ -480,6 +500,9 @@ def build_argument_parser() -> argparse.ArgumentParser:
         default="unspecified",  # 未声明时的兼容值。
     )
 
+    # 提供收据时启用发布态不透明远程测试证据门禁。
+    argument_parser_release_gate.add_argument("--test-evidence", default="")
+
     # 发布准备和打包共享版本与技能目录参数。
     for str_command in ("release-prepare", "package-release"):
 
@@ -491,6 +514,9 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
         # 技能目录是发布内容来源。
         argument_parser_command.add_argument("--skill-dir", required=True)
+
+        # 发布准备与打包使用同一不透明测试收据。
+        argument_parser_command.add_argument("--test-evidence", default="")
 
     # 工作目录门禁检查技能位置和执行模式。
     argument_parser_work_folder = add_project_parser(object_subparsers_commands, "work-folder-gate")  # 工作目录门禁解析器。

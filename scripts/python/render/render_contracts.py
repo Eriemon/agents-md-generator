@@ -2,6 +2,143 @@
 
 # 根级门禁压缩已拆分到同目录模块，避免合同聚合分片超过源码尺寸门禁。
 from render_gate_compaction import compact_task_gate_text
+from tester_worker_profile import SINGLE_TASK_AUTHORIZATION_RECEIPT
+
+# 远程工作文件夹状态从画像字段推导为稳定可审计标签。
+def _remote_workspace_state(profile: dict | None) -> str:
+    """从画像状态推导可审计的远程工作文件夹状态标签。
+
+    参数：profile 为可选项目设计画像。
+    返回：profile-missing、disabled、enabled 或 takeover-compressed。
+    """
+
+    # 未提供画像时必须显式显示配置缺失，而不是假设本地或远程已就绪。
+    if not profile:
+
+        # 缺失画像保持 fail-closed 状态标签。
+        return "profile-missing"
+
+    # 远程合同缺失或关闭都归入 fail-closed 的禁用状态。
+    value_contract = profile.get("remote_server_contract", {})  # 原始远程合同
+
+    # 非映射合同按空映射处理，避免读取异常字段。
+    dict_contract = value_contract if isinstance(value_contract, dict) else {}  # 规范化远程合同
+
+    # 关闭状态不允许继续假设远程工作区已验证。
+    if not dict_contract.get("enabled"):
+
+        # 禁用画像保持本地可审计状态。
+        return "disabled"
+
+    # 读取画像提供的显式接管模式值。
+    value_takeover_mode = profile.get("takeover_mode")  # 画像接管模式原始值
+
+    # 读取远程合同提供的显式接管模式值。
+    value_contract_takeover_mode = dict_contract.get("takeover_mode")  # 合同接管模式原始值
+
+    # 合并两个来源的严格布尔接管开关。
+    bool_takeover_mode = (  # 显式接管开关
+        isinstance(value_takeover_mode, bool) and bool(value_takeover_mode)  # 画像布尔接管开关
+        or isinstance(value_contract_takeover_mode, bool) and bool(value_contract_takeover_mode)  # 合同布尔接管开关
+    )  # 是否显式启用接管模式
+
+    # 接管模式配合压缩策略时必须显示压缩接管状态。
+    str_compression_policy = str(profile.get("compression_policy", "")).lower()  # 画像压缩策略文本
+
+    # 该组合是接管压缩的明确画像信号，不会误判普通 enabled。
+    if bool_takeover_mode and "compression" in str_compression_policy:
+
+        # 兼容状态字段命中时保留 fail-closed 远程工作区入口。
+        return "takeover-compressed"
+
+    # 兼容其他字符串或布尔状态字段。
+    list_state_values = [  # 远程状态候选值
+        profile.get("remote_workspace_state"),  # 画像远程工作区状态
+        profile.get("remote_state"),  # 兼容远程状态字段
+        profile.get("mode"),  # 画像运行模式
+        profile.get("takeover"),  # 接管开关
+        profile.get("takeover_mode"),  # 接管模式字段
+        profile.get("takeover_required"),  # 接管要求字段
+        profile.get("compressed"),  # 压缩状态字段
+        profile.get("compression_state"),  # 压缩状态枚举
+        profile.get("takeover_compressed"),  # 接管压缩字段
+        dict_contract.get("workspace_state"),  # 合同远程工作区状态
+        dict_contract.get("mode"),  # 合同运行模式
+        dict_contract.get("takeover"),  # 合同接管开关
+        dict_contract.get("takeover_mode"),  # 合同接管模式
+        dict_contract.get("takeover_required"),  # 合同接管要求
+        dict_contract.get("compressed"),  # 合同压缩状态
+        dict_contract.get("compression_state"),  # 合同压缩状态枚举
+        dict_contract.get("takeover_compressed"),  # 合同接管压缩
+    ]  # 兼容状态字段集合
+
+    # 字符串状态用于识别接管或压缩模式，普通 compression_policy 不在候选中。
+    str_state = " ".join(  # 规范化远程状态文本
+        str(value).strip().lower()  # 单个状态标准化
+        for value in list_state_values  # 遍历状态候选
+        if value is not None  # 排除缺失状态
+    )  # 远程状态文本
+
+    # 接管或压缩状态必须明确显示专用标签。
+    if "takeover" in str_state or "compressed" in str_state:
+
+        # 接管压缩状态保留 fail-closed 远程工作区入口。
+        return "takeover-compressed"
+
+    # 其余启用状态继续要求运行时检查 verified workspace。
+    return "enabled"
+
+# 远程工作文件夹合同在所有画像状态下都保留。
+def remote_workspace_management_rule(profile: dict | None) -> Rule:
+    """渲染所有画像状态都必须保留的远程工作文件夹合同。
+
+    参数：profile 为可选项目设计画像。
+    返回：可写入 Task-specific gates 的 Rule 对象。
+    """
+
+    # 固定三句同时覆盖状态感知、精确路由和规划结构生命周期。
+    str_state = _remote_workspace_state(profile)  # 可审计远程状态标签
+
+    # 规则正文保持固定句子，避免四种画像状态出现语义漂移。
+    str_text = (  # 远程工作文件夹合同正文
+        "- **Remote workspace management:** Remote workspace management is state-aware "
+        "and fail-closed.\n"
+        "- Before remote file operations, resolve the exact task route and require a "
+        "verified workspace; unmatched or unverified states stop.\n"
+        "- Keep deployment, conda/runtime, backup, and archive artifact lifecycle details "
+        "in `docs/dir_manager/planned_structure.json`.\n"
+        f"- Remote workspace state: {str_state}"
+    )  # 远程合同固定正文
+
+    # 低优先级让工作区和唯一测试智能体规则先于普通合同输出。
+    return Rule("remote.workspace-management", "Task-specific gates", str_text, 8)
+
+# 唯一 tester_worker 合同同时声明树哈希、命名和单次授权收据。
+def tester_worker_rule() -> Rule:
+    """渲染唯一 tester_worker、哈希自主确认和命名合同。
+
+    参数：无。
+    返回：可写入 Task-specific gates 的 Rule 对象。
+    """
+
+    # 根 AGENTS 必须指向唯一 TOML，不允许调用方临时替换测试智能体。
+    str_text = (  # 唯一测试智能体合同正文
+        "- **Unique TESTER:** Only the canonical `tester_worker` may own tests/**; "
+        "`~/.codex/agents/tester_worker.toml`. "
+        "Do not delegate tests/** to a generic or second test agent. "
+        "Routine test-hash confirmation is prohibited. "
+        "Agent autonomously confirms when the canonical tester result agrees "
+        "with the authoritative current tests tree or receipt. "
+        "A report-only hash mismatch is corrected to the authoritative value. "
+        "Conflicting or insufficient provenance stops for user review without "
+        "an autonomous rerun. New test files use functional or behavioral "
+        "semantic names; filename stems must not contain digits, including v1, "
+        "v2, 1, 2, part1, and part2.\n"
+        f"- **Task authorization:** {SINGLE_TASK_AUTHORIZATION_RECEIPT}"
+    )  # 唯一测试智能体合同文本
+
+    # 唯一 worker 规则应紧随远程状态合同输出。
+    return Rule("testing.unique-worker", "Task-specific gates", str_text, 9)
 
 # 远程服务器合同只渲染路由入口与失败回退边界。
 def remote_server_contract(profile: dict | None) -> str:
@@ -284,9 +421,8 @@ def conversation_completion_contract(profile: dict | None) -> str:
     # 三条规则覆盖完成、语言和证据，不重复全局执行基线。
     return "\n".join([
         (
-            f"- Natural-language replies, including `<proposed_plan>` content, use "
-            f"`{default_language}` unless the user switches language; keep tags, code, "
-            "commands, logs, errors, and proper nouns unchanged."
+            f"- Natural-language replies, including `<proposed_plan>` content, use `{default_language}` "
+            "unless the user switches languages; keep technical literals unchanged."
         ),
         "- Finish feasible requested work; preserve user changes and the directory contract.",
         (
@@ -466,10 +602,8 @@ def documentation_governance_contract(profile: dict | None, project: Path) -> st
         f"- Docs root: `{contract.get('root', 'docs')}`; latest handoff is "
         f"`{str_handoff_path}`.",
         (
-            f"- Before new work, read "
-            f"`{str_handoff_path}`, run `{str_resume_check}`, and use "
-            f"`{str_resume_repair}` "
-            f"if interrupted."
+            f"- Before new work: read `{str_handoff_path}`; run `{str_resume_check}`. "
+            f"If interrupted: `{str_resume_repair}`."
         ),
         f"- Start work with `{str_start_session}`.",  # 会话登记规则
         (
@@ -741,19 +875,20 @@ def workspace_boundary_rule() -> Rule:
         无外部业务参数；规则不读取项目画像开关。
 
     返回:
-        包含允许根、外部只读限制、风险披露和双确认职责的根级规则。
+        包含工作区与外部写入授权边界的根级规则。
     """
 
     # 单条规则完整承载最低保护，避免多个画像分支产生不一致授权语义。
     return Rule(
         "workspace-boundary",  # 工作区边界稳定规则标识
         "Task-specific gates",  # 规则归属任务专用门禁章节
-        "- **Workspace boundary:** modify files only inside the current work folder and the verified "
-        "remote-server work folder. External reads must be necessary and side-effect free. Before any "
-        "external modification, stop, disclose the exact normalized target, action, scope, risks, "
-        "alternatives, and recovery limits, then obtain two separate explicit user confirmations; the "
-        "first approves the exception in principle and the second approves the exact action. Any target "
-        "or scope change invalidates both confirmations.",  # 不可弱化的外部修改双确认合同
+        "- **Workspace boundary:** current work folder; verified remote-server work folder. "
+        "Changes inside either work folder require no additional confirmation; remote changes require the "
+        "configured task route. Codebase-memory start, index refresh, rebuild, or recovery for either folder and "
+        "its project cache/artifact also needs no additional confirmation. Necessary external reads are "
+        "side-effect-free; every other external write requires one explicit confirmation naming the normalized "
+        "target, action, scope, risks, alternatives, and recovery limits. Target/scope changes invalidate "
+        "confirmation; installed-skill writes always need one.",  # 外部写入单次确认
         1,  # 最低保护应先于所有画像专用门禁输出
     )
 
@@ -770,7 +905,11 @@ def task_specific_gates(profile: dict | None, project: Path) -> str:
     """
 
     # 固定边界先进入候选集合，任何画像状态都不能关闭最低保护。
-    list_base_rules = [workspace_boundary_rule()]  # 所有受管根共享的基础门禁
+    list_base_rules = [
+        workspace_boundary_rule(),  # 所有受管根共享的基础门禁
+        remote_workspace_management_rule(profile),  # 所有状态共享的远程工作文件夹合同
+        tester_worker_rule(),  # 唯一隔离测试智能体和单次授权合同
+    ]
 
     # 未确认强控制时保留边界，并追加不能被误解为已完成治理的入口提示。
     if not profile:
@@ -1008,38 +1147,50 @@ def coding_behavior_baseline(project: Path, profile: dict | None, facts: dict | 
     # 编码行为与源码治理从同一规则覆盖文件读取。
     dict_overrides = load_global_rule_overrides(project, profile)["data"]  # 当前项目规则覆盖
 
-    # 编码行为字段提供注释、格式和语言技能路由。
+    # 读取注释、格式和语言路由策略。
     policy = dict_overrides.get(  # 编码行为策略
         "coding_behavior", {}  # 编码行为策略字段
     )  # 编码行为策略映射
 
-    # 文件命名配置提供长度、字符和语义复核合同。
+    # 读取文件命名合同。
     dict_naming = dict_overrides.get("source_governance", {}).get(  # 文件命名治理配置
         "file_naming_gate", {}  # 文件命名门禁字段
     )
 
-    # 注释策略约束允许保留的语义说明类型。
+    # 保留注释质量规则。
     comment_quality = str(policy.get("comment_quality", "")).strip()  # 注释质量规则
 
-    # 格式策略约束换行、空白和可读性。
+    # 保留源码格式规则。
     formatting = str(policy.get("formatting", "")).strip()  # 源码格式规则
 
-    # 非映射路由配置按空配置处理。
+    # 读取原始语言路由。
     value_routing = policy.get("language_skill_routing", {})  # 原始语言技能路由
 
-    # 路由映射类型异常时不输出语言专属规则。
+    # 非映射路由按空配置处理。
     routing = value_routing if isinstance(value_routing, dict) else {}  # 最终语言路由映射
 
-    # 共同门禁集中保存跨语言的修改前思考和过程内验证要求。
+    # 读取跨语言共同门禁。
     shared_route = str(routing.get("shared", "")).strip()  # 语言技能共同门禁
 
-    # Python 路由只保留目标范围和最终语言所有权。
+    # 读取 Python 最终所有权。
     python_route = str(routing.get("python", "")).strip()  # Python 技能路由规则
 
-    # 脚本路由覆盖仓库支持的 bat、shell、PowerShell 和 Tcl。
+    # 读取脚本语言路由。
     script_route = str(routing.get("script", "")).strip()  # 脚本技能路由规则
 
-    # 汇总 lines，作为 AGENTS 编码行为输出。
+    # 从 canonical routing contract 读取当前进程真实的四态安装路由。
+    from routing_contract import build_language_skill_routes, readable_skill_is_installed
+
+    # 配置文件保存默认合同，运行时安装事实决定实际可执行 owner。
+    tuple_runtime_routes = build_language_skill_routes(  # 调用运行时路由构造器
+        readable_skill_is_installed("readable-python-generator"),  # Python 技能安装事实
+        readable_skill_is_installed("readable-script-generator"),  # 脚本技能安装事实
+    )  # 当前进程的语言技能路由元组
+
+    # 运行时路由覆盖配置默认值，供后续渲染保留真实所有权。
+    shared_route, python_route, script_route = tuple_runtime_routes  # 当前安装路由
+
+    # 初始化 AGENTS 编码行为行。
     list_lines = [
         f"- 编码行为配置来源：`{str_config_path}`；用户可手动修改该 JSON 后重新渲染。",  # 配置来源
         f"- 注释质量：{comment_quality}",  # 注释语义边界
@@ -1052,9 +1203,14 @@ def coding_behavior_baseline(project: Path, profile: dict | None, facts: dict | 
         # 长度值只从已验证配置读取，避免渲染器复制治理阈值。
         int_max_chars = dict_naming.get("max_stem_chars", 30)  # 文件名词干长度上限
 
+        # 固定入口按配置顺序渲染为行内代码。
+        str_exemptions = "、".join(  # Markdown 文件名列表
+            f"`{str(item)}`" for item in dict_naming.get("exemptions", [])  # 按配置遍历例外。
+        )
+
         # 命名语法规则追加到编码行为段落。
         list_lines.append(
-            f"- 文件命名：除 `__init__.py` 外，禁止数字和下划线开头；名称必须总结文件功能，"
+            f"- 文件命名：除 {str_exemptions} 外，禁止数字和下划线开头；名称必须总结文件功能，"
             f"不超过 {int_max_chars} 个英文字符。"
         )
 
@@ -1082,7 +1238,7 @@ def coding_behavior_baseline(project: Path, profile: dict | None, facts: dict | 
         # 脚本路由作为编码行为段落的最后一项。
         list_lines.append(f"- 语言技能路由（脚本）：{script_route}")
 
-    # 所有编码行为规则按配置顺序连接。
+    # 按配置顺序连接规则。
     return "\n".join(list_lines)
 
 # 脚本输出合同统一 INFO、WARNING、ERR 与 quiet 行为。
@@ -1141,253 +1297,3 @@ def script_output_policy(project: Path, profile: dict | None) -> str:
             f"INFO/progress，WARNING 和 ERR 继续可见；机器可读输出不套前缀。"
         ),
     ])
-
-# 模板值聚合器集中生成各受管 AGENTS.md 段落。
-def template_values(project: Path, profile: dict | None = None, template_dir: Path | None = None) -> dict[str, str]:
-    """构建 AGENTS.md 模板渲染所需的全部命名值。
-
-    参数:
-        project: 当前项目根目录。
-        profile: 可选项目设计配置；缺失时从项目加载。
-        template_dir: 可选模板目录，保留给兼容调用方。
-
-    返回:
-        模板占位符名称到已渲染文本的映射。
-    """
-
-    # 项目事实驱动概览、文件映射和仓库设置渲染。
-    facts = inspect_project(project)  # 当前项目探测事实
-
-    # 命令事实用于命令表和来源摘要。
-    commands = extract_commands(project)["commands"]  # 已发现项目命令
-
-    # 作用域事实用于生成局部 AGENTS 索引。
-    scopes = detect_scopes(project)["scopes"]  # 已发现规则作用域
-
-    # 上下文事实为阅读清单和仓库治理段落提供输入。
-    context = extract_context(project)  # 文档、工具和治理上下文
-
-    # 命令来源按字典序去重，确保模板输出稳定。
-    command_source = (
-        ", ".join(sorted({item["source"] for item in commands}))  # 非空命令来源集合
-        if commands  # 仅在发现命令时生成来源摘要
-        else ""  # 未发现命令时不输出来源
-    )  # 命令发现来源摘要
-
-    # profile 缺失时沿用项目的中文会话缺省值。
-    default_language = (
-        profile.get("default_conversation_language", "中文")  # profile 语言配置
-        if profile  # 仅在配置存在时读取语言字段
-        else "中文"  # 未提供 profile 时使用中文
-    )  # 模板默认会话语言
-
-    # 未能解析项目版本时显式标记 unknown。
-    project_version = resolved_project_version(project, profile) or "unknown"  # 项目版本
-
-    # 生成器版本同时写入 AGENTS 与 generator 元数据字段。
-    str_generator_version = resolved_generator_version(  # 解析后的生成器版本
-        project, profile, project_version  # 生成器版本解析上下文
-    )  # 当前生成器版本
-
-    # 所有模板占位符在单一映射中构造，避免调用方二次推断。
-    return {
-        "TIMESTAMP": current_timestamp(),  # 本次渲染时间
-        "VERIFIED_TIMESTAMP": "never",  # 尚未执行验证的缺省标记
-        "AGENTS_VERSION": str_generator_version,  # AGENTS 元数据版本
-        "GENERATOR_VERSION": str_generator_version,  # 生成器实现版本
-        "DEFAULT_LANGUAGE": default_language,  # 自然语言默认值
-        "PROJECT_OVERVIEW": project_overview(facts, str_generator_version),  # 项目概览
-        "CONTROL_PROFILE": control_profile(profile, project, project_version),  # 强控制配置
-        "DIRECTORY_CONTRACT": directory_contract(profile, project),  # 目录治理合同
-        "REMOTE_SERVER_CONTRACT": remote_server_contract(profile),  # 远程路由合同
-        "RELEASE_CONTRACT": release_contract(profile, project),  # 发布与 Git 合同
-        "ENGINEERING_RULE_CONTRACT": engineering_rule_contract(profile),  # 工程规则合同
-        "SKILL_DESIGN_CONTRACT": skill_design_contract(profile, project),  # Skill 设计合同
-        "CONVERSATION_COMPLETION_CONTRACT": conversation_completion_contract(profile),  # 会话完成合同
-        "TASK_SPECIFIC_GATES": task_specific_gates(profile, project),  # 高影响任务门禁
-        "CODING_BEHAVIOR_BASELINE": coding_behavior_baseline(project, profile, facts),  # 编码行为规则
-        "SCRIPT_OUTPUT_POLICY": script_output_policy(project, profile),  # 脚本输出规则
-        "MEMORY_CONTRACT": memory_contract(profile, project),  # 持久记忆合同
-        "DOCUMENTATION_GOVERNANCE_CONTRACT": documentation_governance_contract(profile, project),  # 文档生命周期合同
-        "VERIFICATION_STATUS": "unverified",  # 新渲染结果验证状态
-        "COMMAND_SOURCE": command_source,  # 命令探测来源
-        "COMMAND_ROWS": command_rows(commands),  # 命令表格行
-        "FILE_MAP": file_map(facts).rstrip(),  # 项目文件映射
-        "GOLDEN_SAMPLE_ROWS": golden_sample_rows_from_context(context),  # 黄金样例行
-        "UTILITY_ROWS": utility_rows(context),  # 工具入口行
-        "HEURISTIC_ROWS": heuristic_rows(),  # 启发式说明行
-        "REPOSITORY_SETTINGS": "\n".join(
-            line
-            for line in [
-                f"- CI: {', '.join(facts['ci'])}" if facts["ci"] else "",
-                f"- Package manager: {facts['package_manager']}" if facts["package_manager"] != "unknown" else "",
-            ]
-            if line
-        ),
-        "READ_BEFORE_CHANGING": read_before_changing(context),  # 修改前阅读入口
-        "HOOK_POLICY": hook_policy(context),  # Git 钩子策略
-        "CI_RULES": ci_rules(context),  # 持续集成规则
-        "GITHUB_SETTINGS": github_settings(context),  # GitHub 仓库设置
-        "DIRECTORY_COVERAGE": directory_coverage(context),  # 局部规则覆盖提示
-        "KEY_DECISIONS": key_decisions(context),  # 架构与政策决策
-        "ALWAYS_RULES": bullet_lines([
-            "Preserve user changes and hand-written guidance.",
-            "Add tests or verification for changed behavior.",
-            "Show verification output before claiming completion.",
-        ]),
-        "ASK_FIRST_RULES": bullet_lines([
-            "Adding dependencies.",
-            "Changing CI/CD, public APIs, schemas, migrations, or security-sensitive code.",
-            "Running destructive or expensive commands.",
-        ]),
-        "NEVER_RULES": bullet_lines([
-            "Sync local skill-development content to remote servers during deployment "
-            "unless the user explicitly overrides.",
-            "Commit secrets, credentials, or sensitive data.",
-            "Modify generated/vendor files unless explicitly requested.",
-            "Fabricate commands, files, owners, branches, or policies.",
-        ]),
-        "CODEBASE_STATE": codebase_state(context),  # 当前代码库治理状态
-        "TERMINOLOGY_ROWS": "",  # 兼容旧模板的空术语表
-        "SCOPE_INDEX": scope_index(scopes).rstrip(),  # 局部规则作用域索引
-    }
-
-# 手工内容提取器保护生成块之外的用户维护文本。
-def manual_content(existing: str) -> str:
-    """从既有 AGENTS.md 中提取不受生成器管理的手工内容。
-
-    参数:
-        existing: 当前 AGENTS.md 的完整文本。
-
-    返回:
-        移除受管生成块并清理旧兼容段后的手工文本。
-    """
-
-    # 空文件没有可保留的手工内容。
-    if not existing.strip():
-
-        # 返回空文本，避免生成空 Human Notes 标题。
-        return ""
-
-    # 固定模板标题和边界句不属于用户手工内容。
-    set_generated_boilerplate = {
-        "# AGENTS.md",  # 根 AGENTS 标题模板
-        "**Precedence:** the closest `AGENTS.md` to the files being changed wins. "
-        "Explicit user prompts override this file.",
-        "### Always Do",  # Always Do 边界标题
-        "### Ask First",  # 旧版操作确认标题
-        "### Never Do",  # 旧版禁止操作标题
-        "Use this order: explicit user prompt, closest AGENTS.md, parent AGENTS.md, general repository docs.",  # 旧版冲突优先级句
-    }
-
-    # 这些旧版普通段落整体由当前生成器替代。
-    set_generated_plain_blocks = {
-        "## Agent Work Loop",  # 根 AGENTS 固定工作循环段
-        "## Boundaries",  # 根 AGENTS 边界段
-        "## When Instructions Conflict",  # 根 AGENTS 冲突处理段
-    }
-
-    # 元数据注释通过前缀识别，兼容动态时间和版本内容。
-    tuple_generated_prefixes = (
-        "<!-- Last updated:", "<!-- AGENTS-METADATA:"  # 动态时间与版本元数据
-    )  # 动态生成元数据前缀
-
-    # 保留行按原文件顺序累积。
-    list_kept: list[str] = []  # 用户维护的手工内容行
-
-    # 标记块状态用于跳过当前生成器管理的显式区域。
-    bool_skipping_marker = False  # 是否位于生成标记块内
-
-    # 普通块状态兼容迁移前没有显式标记的旧段落。
-    bool_skipping_plain_block = False  # 是否位于旧版固定段落内
-
-    # 逐项检查 manual_content 渲染候选。
-    for line in existing.splitlines():
-
-        # 去除外围空白后匹配标题和模板固定句。
-        stripped = line.strip()  # 当前行的规范匹配文本
-
-        # 进入显式生成块后跳过直至结束标记。
-        if line.startswith(GENERATED_START):
-
-            # 开始标记后的文本属于生成器管理范围。
-            bool_skipping_marker = True  # 开始跳过受管生成块
-
-            # 显式标记出现后清除旧版普通块状态。
-            bool_skipping_plain_block = False  # 显式标记优先于旧版块状态
-
-            # 分隔 manual_content 的控制流边界。
-            continue
-
-        # 结束标记恢复对后续手工文本的采集。
-        if line.startswith(GENERATED_END):
-
-            # 结束标记恢复后续手工内容采集。
-            bool_skipping_marker = False  # 离开受管生成块
-
-            # 结束标记自身不属于手工内容。
-            continue
-
-        # 受管标记块内部的所有行都直接跳过。
-        if bool_skipping_marker:
-
-            # 继续扫描以寻找对应结束标记。
-            continue
-
-        # 生成器身份和动态元数据注释不能进入 Human Notes。
-        if (
-            line.startswith("<!-- FOR AI")
-            or line.startswith("<!-- Managed by agent:")
-            or line.startswith(tuple_generated_prefixes)
-        ):
-
-            # 元数据由下一次渲染重新生成。
-            continue
-
-        # Human Notes 标题是容器，不是用户正文。
-        if stripped == "## Human Notes":
-
-            # Human Notes 标题明确恢复手工正文采集。
-            bool_skipping_plain_block = False  # 从旧版块跳过状态恢复
-
-            # 避免重复输出 Human Notes 标题。
-            continue
-
-        # 遇到旧版固定段落标题时开始整体跳过。
-        if stripped in set_generated_plain_blocks:
-
-            # 固定标题后的内容由当前模板重新生成。
-            bool_skipping_plain_block = True  # 进入旧版固定段落
-
-            # 固定标题由当前模板重新生成。
-            continue
-
-        # 新的二级标题代表旧版固定段落结束。
-        if bool_skipping_plain_block and stripped.startswith("## "):
-
-            # 新二级标题结束旧版固定段落范围。
-            bool_skipping_plain_block = False  # 恢复普通手工内容采集
-
-        # 仍处于旧版固定段落时跳过当前行。
-        if bool_skipping_plain_block:
-
-            # 继续寻找下一个二级标题边界。
-            continue
-
-        # 只有非模板固定句才被保留为用户内容。
-        if stripped not in set_generated_boilerplate:
-
-            # 原始行保留缩进和内部空白。
-            list_kept.append(line)
-
-    # 合并后只清理整体首尾空白，不改变正文布局。
-    text = "\n".join(list_kept).strip()  # 最终手工正文
-
-    # 全部内容均属于模板时不生成 Human Notes。
-    if not text:
-
-        # 空字符串让上层跳过手工段落。
-        return ""
-
-    # 非空手工内容统一放回 Human Notes 容器。
-    return f"\n## Human Notes\n\n{text}\n"

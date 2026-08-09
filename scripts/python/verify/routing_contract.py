@@ -59,6 +59,7 @@ def build_language_skill_routes(
         str_shared_route = (  # 双技能共同前置门禁
             "创建或修改 Python、bat/cmd、shell/bash、PowerShell、Tcl 代码时，"
             "必须先思考并同时加载 `readable-python-generator` 与 `readable-script-generator`；"
+            "两个技能组成当前可执行的语言门禁；"
             "两个技能的门禁必须在过程中满足，全部通过后才能继续，不得事后补做。"
         )
 
@@ -102,7 +103,10 @@ def build_language_skill_routes(
         if python_installed:
 
             # Python 目标必须回到自己的 readable owner。
-            str_python_boundary = "Python 目标继续使用 `readable-python-generator`；"  # Python owner 移交边界
+            str_python_boundary = (  # Python owner 移交边界
+                "Python 目标不属于本脚本路由，"
+                "Python 目标继续使用 `readable-python-generator`；"
+            )
 
         # Python owner 缺失时只声明脚本路由不拥有 Python 目标。
         else:
@@ -119,7 +123,8 @@ def build_language_skill_routes(
 
         # 脚本路由组合目标语言、最终 owner、跨语言移交与包装器边界。
         str_script_route = (  # 完整脚本所有权路由
-            "bat/cmd、shell/bash、PowerShell、Tcl 脚本目标最终由 `readable-script-generator` 负责；"
+            "bat/cmd、shell/bash、PowerShell、Tcl 脚本目标最终由 "
+            "`readable-script-generator` 负责；"
             f"{str_python_boundary}调用 Python 外部命令的脚本包装器仍按脚本目标处理；"
             f"{str_script_loading}"
         )

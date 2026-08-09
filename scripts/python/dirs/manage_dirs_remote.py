@@ -70,6 +70,12 @@ def join_remote_workspace_path(str_workspace: str, str_relative: str) -> str:
         # 根目录不需要追加路径分隔符。
         return str_workspace
 
+    # 精确点号由目录审查合同保留为工作区根标识。
+    if str_relative_norm == ".":
+
+        # 根标识必须解析为配置路径，不能保留尾部点号。
+        return str_workspace
+
     # 单个分隔符连接根目录和非空规划项。
     return f"{str_workspace.rstrip('/')}/{str_relative_norm}"
 
@@ -225,7 +231,11 @@ def remote_path_classes(
     )  # 归档运行稳定根目录。
 
     # 工作区根目录单独标记，供破坏性操作保护规则使用。
-    if not str_path or str_normalized == remote_workspace_root(dict_remote_plan):
+    if (
+        str_normalized == "."
+        or not str_path
+        or str_normalized == remote_workspace_root(dict_remote_plan)
+    ):
 
         # 根目录类别比通用 remote 类别具有更高风险语义。
         list_classes.append("workspace-root")
@@ -358,11 +368,13 @@ def remote_runtime_reasons(
         str_backup_root.split("/", 1)[0] if str_backup_root else "",  # 备份顶层目录。
         ".conda",  # 远程隔离环境目录。
         SETTINGS_FOLDER,  # 受治理的工作区设置目录。
+        ".",  # 精确根标识只用于创建配置的远程工作区。
     }  # 不按活动运行制品处理的顶层目录。
 
-    # 活动模板存在时才执行运行制品位置约束。
+    # 活动模板根及其运行实例属于同一受管位置边界。
     if (
         str_active_root
+        and str_normalized != str_active_root
         and not str_normalized.startswith(str_active_root + "/")
         and str_normalized.split("/", 1)[0] not in set_exempt_roots
     ):

@@ -252,8 +252,8 @@ def prepare_root_whitelist_project(path_project: Path) -> None:
         encoding="utf-8",
     )
 
-    # README.md 不在根白名单内，代表需要治理确认的漂移。
-    (path_project / "README.md").write_text("# Drift\n", encoding="utf-8")
+    # PROJECT-NOTES.md 不在根白名单内，代表需要治理确认的漂移。
+    (path_project / "PROJECT-NOTES.md").write_text("# Drift\n", encoding="utf-8")
 
 # 根级白名单场景验证目录漂移会被阻断并要求确认修复。
 def case_root_whitelist(case: dict[str, Any], helper: EvalFixtures) -> dict[str, Any]:
@@ -270,17 +270,17 @@ def case_root_whitelist(case: dict[str, Any], helper: EvalFixtures) -> dict[str,
     # 临时项目承载刻意制造的根目录漂移。
     with tempfile.TemporaryDirectory() as tmp:
 
-        # 项目根包含目录合同、标准 skill 与刻意越界的 README。
+        # 项目根包含目录合同、标准 skill 与刻意越界的说明文件。
         path_project = Path(tmp)  # 根白名单场景项目
 
-        # 专用助手准备目录合同和刻意越界的 README。
+        # 专用助手准备目录合同和刻意越界的说明文件。
         prepare_root_whitelist_project(path_project)
 
         # 结构门禁给出阻断决定和具体越界路径。
         dict_gate = run_json_script(  # 根目录结构门禁结果
             "manage_dirs.py",  # 目录结构门禁入口
             "structure-gate",  # 请求执行根目录结构门禁
-            path_project,  # 包含越界 README 的示例项目
+            path_project,  # 包含越界说明文件的示例项目
             cwd=REPO_ROOT,  # 使用仓库目录结构治理运行时
         )
 
@@ -293,9 +293,9 @@ def case_root_whitelist(case: dict[str, Any], helper: EvalFixtures) -> dict[str,
 
         # 有技能路径要求门禁阻断、原因可定位且修复需确认。
         dict_with_checks = {  # 根白名单治理断言
-            "blocked": not bool(dict_gate.get("approved")),  # 越界 README 是否被阻断
-            "readme_reason": any(  # 阻断原因是否准确定位 README 漂移
-                "README.md" in str_item  # 当前原因是否指向越界文件
+            "blocked": not bool(dict_gate.get("approved")),  # 越界说明文件是否被阻断
+            "unexpected_file_reason": any(  # 阻断原因是否准确定位未知文件
+                "PROJECT-NOTES.md" in str_item  # 当前原因是否指向越界文件
                 for str_item in dict_gate.get("reasons", [])  # 目录门禁返回的全部阻断原因
             ),
             "confirmation_required": bool(dict_facts.get("structure_fix_confirmation_required")),  # 修复是否要求确认
@@ -304,7 +304,7 @@ def case_root_whitelist(case: dict[str, Any], helper: EvalFixtures) -> dict[str,
         # 无技能基线缺少白名单与确认门禁能力。
         dict_without_checks = {  # 无治理工具的目录基线
             "blocked": False,  # 基线允许根目录漂移
-            "readme_reason": False,  # 基线不定位越界 README
+            "unexpected_file_reason": False,  # 基线不定位越界文件
             "confirmation_required": False,  # 基线不要求修复确认
         }
 

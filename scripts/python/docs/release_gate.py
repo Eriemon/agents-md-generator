@@ -591,11 +591,15 @@ def release_gate(
     skill_dir_raw: str,
     phase: str,
     install_intent: str,
+    test_evidence_raw: str = "",
+    bool_require_test_evidence: bool = False,
 ) -> dict[str, Any]:
     """执行发布前或发布后强治理门禁。
 
     参数：project、version 和 skill_dir_raw 定位目标发布。
     参数：phase 为 pre/post，install_intent 为用户安装意图。
+    参数：test_evidence_raw 非空时启用发布态远程测试收据验证。
+    参数：bool_require_test_evidence 为 True 时拒绝缺失收据。
     返回：包含检查证据、错误和可安装状态的结果。
     """
 
@@ -618,6 +622,19 @@ def release_gate(
 
     # 所有阶段共享有序错误列表。
     list_errors: list[str] = []  # 发布门禁阻断诊断。
+
+    # 提供收据时必须与当前 Git tests 树、非测试源码和 freshness 一致。
+    dict_test_evidence = validate_project_test_evidence(  # 不透明测试证据结果。
+        project,  # 当前发布仓库。
+        test_evidence_raw,  # 调用方收据输入。
+        bool_required=bool_require_test_evidence,  # CLI 发布态拒绝缺失收据。
+    )
+
+    # 门禁结果只公开脱敏统计和稳定错误码。
+    dict_checks["test_evidence"] = dict_test_evidence  # 门禁公开脱敏验证结论。
+
+    # 任一证据错误都必须阻断后续可安装结论。
+    list_errors.extend(dict_test_evidence["errors"])  # 任一证据错误均 fail closed。
 
     # 执行版本、文档、源码、内容和 Git 共同检查。
     list_forbidden_source_paths = validate_common_release_checks(  # 共同检查返回的源码策略路径。

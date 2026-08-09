@@ -5,6 +5,7 @@ AGENTS.md is an operational context file for AI coding agents. Human readability
 ## Table of Contents
 
 - [Core Principles](#core-principles)
+- [Global Planning And Testing Governance](#global-planning-and-testing-governance)
 - [Skill Design Patterns](#skill-design-patterns)
 - [Engineering Rule Essence](#engineering-rule-essence)
 - [Root AGENTS.md Sections](#root-agentsmd-sections)
@@ -21,9 +22,31 @@ AGENTS.md is an operational context file for AI coding agents. Human readability
 | Pointer principle | Link to README, docs, ADRs, configs, and examples instead of copying them |
 | Verified commands | Mark commands unverified until they were actually run or dry-run checked |
 | Thin root | Keep global defaults in root; move stack-specific rules into scoped files |
+| Frozen scope | Record Goal, Success Criteria, In Scope, and Out of Scope; review defects without inventing features |
+| Decision-complete planning | Specify execution inputs, outputs, files, failure handling, checks, and stop conditions before approval |
 | Golden samples | One real reference file beats generic style advice |
 | Heuristics | Encode quick decisions as `When / Do` tables |
 | Preserve judgment | Keep human-curated boundaries, terminology, and codebase state outside generated blocks |
+
+## Global Planning And Testing Governance
+
+Use the global v4 contract only for cross-repository behavior. A formal solution or implementation plan freezes the requested goal and passes one bounded approval path:
+
+```mermaid
+flowchart LR
+    A["Freeze goal and scope"] --> B["Write decision-complete plan"]
+    B --> C{"User explicitly named a non-testing role or purpose?"}
+    C -->|"Yes"| D["Dispatch explicit count, or exactly 3 if omitted"]
+    C -->|"No"| E["Mother handles the task"]
+    D --> E
+    E --> F{"Executable test surface?"}
+    F -->|"Yes"| G["One isolated TESTER owns tests/**"]
+    F -->|"No"| H["Report verified outcome"]
+    G -->|"feedback"| E
+    G -->|"pass"| H
+```
+
+All non-testing subagents are disabled by default, including solution/design/plan reviewers, implementation agents, and parallel workers. Only a proactive, explicit user request in the current task that names the role or purpose may enable them; a generic multi-agent request, complexity, ratings, risk, and agent judgment do not count as authorization. When the user omits the count, use exactly three; an explicit count overrides it, and authorization does not carry over. Work with an executable test surface still uses exactly one isolated TESTER. Pure read-only/planning work and documentation-only changes without a test surface do not require one. The mother agent never lists, reads, changes, or runs `tests/**`. Documents and plans may combine prose, tables, and Mermaid when the combination improves understanding; no format is mandatory by itself.
 
 ## Skill Design Patterns
 

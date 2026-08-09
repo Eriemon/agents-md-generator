@@ -622,6 +622,8 @@ def remote_installation_step(
     """构造远程技能安装阶段载荷。
 
     参数：state 为状态，status 为阶段，kind 为类型，list_confirmed_keys 为确认键，remote_gate 为门禁。
+    数据合同：list_confirmed_keys 的 shape=(n,)，dtype=str，unit=无量纲；
+    state 与 remote_gate 是字段映射，不适用数值 shape、dtype 或 unit。
     返回：安装阶段五元组。
     """
 
@@ -695,6 +697,8 @@ def remote_configuration_step(
     """构造远程服务器配置阶段载荷。
 
     参数：state 为状态，status 为阶段，kind 为类型，list_confirmed_keys 为确认键，remote_gate 为门禁。
+    数据合同：list_confirmed_keys 的 shape=(n,)，dtype=str，unit=无量纲；
+    state 与 remote_gate 是字段映射，不适用数值 shape、dtype 或 unit。
     返回：配置阶段五元组。
     """
 

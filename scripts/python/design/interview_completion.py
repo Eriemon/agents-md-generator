@@ -207,6 +207,8 @@ def confirm_regular_group(
     """处理纯确认提交并推进分组、远程门禁或附加需求。
 
     参数：project 为项目根，state 为访谈状态，list_correction_keys 为额外修正键。
+    数据合同：list_correction_keys 的 shape=(n,)，dtype=str，unit=无量纲；
+    state 是字段到访谈值的映射，不适用数值 shape、dtype 或 unit。
     返回：下一问题组、远程门禁、附加需求或 takeover 完成载荷。
     异常：确认提交混入修正字段时抛出 SystemExit(1)。
     """
@@ -300,6 +302,8 @@ def revise_regular_group(
 
     参数：project 为项目根，state 为访谈状态，payload 为提交载荷，
     list_correction_keys 为本组修正键。
+    数据合同：list_correction_keys 的 shape=(n,)，dtype=str，unit=无量纲；
+    state 与 payload 是字段映射，不适用数值 shape、dtype 或 unit。
     返回：更新后的当前问题组交互载荷。
     异常：修正值不符合问题合同时抛出 SystemExit(1)。
     """
@@ -603,6 +607,53 @@ def complete_read_only(
     # 返回无需进一步审查的只读结果。
     return dict_payload_out
 
+# 默认写入完成器在用户未请求方案审查时直接关闭访谈。
+def complete_without_review(
+    project: Path,
+    state: dict[str, Any],
+    final_answers: dict[str, Any],
+    profile: dict[str, Any],
+) -> dict[str, Any]:
+    """完成默认写入访谈，不创建方案审查智能体请求。
+
+    参数：project 为项目根，state 为访谈状态，final_answers 为对齐答案，profile 为待写入画像。
+    返回：标记写入访谈完成且包含画像预览的交互载荷。
+    数组契约：shape 由答案与画像字段决定，dtype 为 JSON 兼容业务值，unit 不适用。
+    """
+
+    # 默认流程移除旧审查证据，防止历史请求被误当作本轮授权。
+    final_answers.pop(DESIGN_REVIEW_KEY, None)
+
+    # 保存用户已经完成最终对齐的写入答案。
+    state["answers"] = final_answers  # 当前写入访谈的最终答案。
+
+    # 写入意图保持不变，供后续受管生成流程识别。
+    state["intent"] = "write"  # 当前访谈允许执行受管写入。
+
+    # 完成态表示无需等待任何方案审查智能体。
+    state["status"] = "completed"  # 默认无审查写入访谈已完成。
+
+    # 保留最终画像供写入命令和用户核对。
+    state["profile_preview"] = profile  # 已确认的项目画像预览。
+
+    # 清除旧方案审查请求，避免默认流程继续提示派发智能体。
+    state.pop("design_review_request", None)
+
+    # 清除尚未提交的审查结果，避免跨任务继承授权。
+    state.pop("pending_design_review", None)
+
+    # 持久化无需方案审查的完成状态。
+    write_state(project, state)
+
+    # 构建包含完成状态和对齐摘要的响应。
+    dict_payload_out = interactive_payload(project, state)  # 默认写入完成响应。
+
+    # 将已确认画像直接附加到外部响应。
+    dict_payload_out["profile_preview"] = profile  # 供调用方继续受管写入。
+
+    # 返回不含审查派发请求的完成结果。
+    return dict_payload_out
+
 # 最终对齐处理器接受纯确认或将修正路由回对应问题组。
 def finalize_alignment(project: Path, state: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
     """处理最终答案摘要的确认或字段修正。
@@ -691,8 +742,8 @@ def finalize_alignment(project: Path, state: dict[str, Any], payload: dict[str, 
             # 专用完成器持久化只读完成证据。
             return complete_read_only(project, state, dict_final_answers, profile)
 
-        # 写入意图必须进入设计审查后才能完成。
-        return enter_design_review(project, state, dict_final_answers, profile)
+        # 默认写入不创建方案审查智能体，显式审查仍由专用入口触发。
+        return complete_without_review(project, state, dict_final_answers, profile)
 
     # 否认最终对齐时必须说明至少一个需要修正的字段。
     if not correction_keys:
@@ -1198,26 +1249,20 @@ def ensure_design_review_approved_on_write(
         # 未确认对齐时禁止生成受管项目规则。
         list_errors.append("alignment_confirmed must be true before --write")
 
-    # 设计审查记录是写入阶段的必需证据。
-    if DESIGN_REVIEW_KEY not in answers:
+    # 用户显式提供设计审查证据时才进入子智能体审查门禁。
+    if DESIGN_REVIEW_KEY in answers:
 
-        # 缺失审查对象时提供直接可执行的阻断原因。
-        list_errors.append("design_review must be provided before --write")
+        # 已有审查载荷时验证其内容、批准状态和项目一致性。
+        review_errors = validate_design_review(  # 写入前设计审查诊断。
+            project,  # 将审查证据绑定到当前项目。
+            answers,  # 提供完整访谈答案供交叉校验。
+            answers.get(DESIGN_REVIEW_KEY),  # 读取待验证的审查载荷。
+            profile,  # 对照最终设计画像检查一致性。
+            require_approval=True,  # 显式请求审查时必须具有批准结论。
+        )
 
-        # 没有审查载荷时无法继续调用结构校验器。
-        return list_errors
-
-    # 已有审查载荷时验证其内容、批准状态和项目一致性。
-    review_errors = validate_design_review(  # 写入前设计审查诊断。
-        project,  # 将审查证据绑定到当前项目。
-        answers,  # 提供完整访谈答案供交叉校验。
-        answers.get(DESIGN_REVIEW_KEY),  # 读取待验证的审查载荷。
-        profile,  # 对照最终设计画像检查一致性。
-        require_approval=True,  # 写入阶段必须具有批准结论。
-    )
-
-    # 将审查诊断并入其他写入门禁错误。
-    list_errors.extend(review_errors)
+        # 将显式审查诊断并入其他写入门禁错误。
+        list_errors.extend(review_errors)
 
     # 调用方统一决定如何展示或终止这些诊断。
     return list_errors

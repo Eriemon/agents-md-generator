@@ -222,11 +222,29 @@ def quick_validate_path() -> Path:
     """定位已安装 skill-creator 的 quick_validate.py。
 
     参数：无。
-    返回：当前用户 Codex 主目录下的验证器路径。
+    返回：源码旁隔离系统技能或当前用户 Codex 主目录下的验证器路径。
     """
 
-    # 系统技能使用 Codex 固定的 .system/skill-creator 安装位置。
-    return Path.home() / ".codex" / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py"
+    # 源码旁的系统技能目录支持隔离评估和发布前自检。
+    path_skill_root = Path(__file__).resolve().parents[3]  # 当前 agents-md-generator 技能根
+
+    # 候选顺序先保证 source-bound 验证可复现，再回退用户安装位置。
+    list_candidates = [  # 系统 quick_validate 候选路径
+        path_skill_root.parent / ".system" / "skill-creator" / "scripts" / "quick_validate.py",  # 源码旁隔离系统技能
+        Path.home() / ".codex" / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py",  # 用户 Codex 安装
+    ]
+
+    # 首个真实文件成为当前评估使用的通用校验器。
+    for path_candidate in list_candidates:
+
+        # 缺失候选不能阻断后续回退位置的检查。
+        if path_candidate.is_file():
+
+            # 返回可执行的系统校验器路径。
+            return path_candidate
+
+    # 保留用户目录路径以生成既有的缺失诊断。
+    return list_candidates[-1]
 
 # 外部验证器输出逐行添加项目固定级别和 Kind 前缀。
 def write_prefixed_lines(str_text: str, *, bool_error: bool) -> None:

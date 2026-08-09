@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v2.0.3-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v2.0.8-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  Latest release: <strong>v2.0.3</strong> · Released on <strong>2026-07-21</strong>
+  Latest release: <strong>v2.0.8</strong> · Released on <strong>2026-08-09</strong>
 </p>
 
 AGENTS.md Generator helps coding agents produce instruction files that stay grounded in the real repository instead of drifting into guessed policy. It combines trigger metadata, grouped design interviews, deterministic Python scripts, docs-governance helpers, directory-governance gates, and verification checks so an agent can move from repository facts to trustworthy `AGENTS.md` output.
@@ -52,6 +52,34 @@ Handwritten agent rule files become stale quickly. Commands stop matching the re
 - Directory-governance review and structure gates through `scripts/python/dirs/manage_dirs.py`.
 - Compatibility shim generation for `CLAUDE.md` and `GEMINI.md` when requested.
 - Verification, audit, automated review governance, skill-effectiveness evals, and aggregate confidence checks for release readiness.
+
+## What's New In v2.0.8
+
+v2.0.8 synchronizes the public skill payload with the latest governed runtime. It keeps the existing public entrypoints, but makes the global instruction baseline, test-agent boundary, remote work-folder contract, and release evidence more explicit and fail-closed.
+
+### Global v4 governance baseline
+
+- Updates the generated global baseline to v4: every plan now freezes the goal, success criteria, in-scope and out-of-scope boundaries, and formal plans must name inputs, outputs, affected files or interfaces, preconditions, failure handling, verification, and stop conditions.
+- Removes the assumption that read-only, design, write, or governance-high-risk modes authorize extra agents. Non-testing agents require a proactive user request that names their purpose; executable test surfaces use exactly one isolated `tester_worker` that owns `tests/**`.
+- Adds the single-task authorization receipt contract so the skill, root `AGENTS.md`, and CLI reuse one authorization for the same target and scope, while changes to target, scope, or material risk require renewed confirmation.
+
+### Workspace and remote-operation boundaries
+
+- Generated roots now carry a state-aware, fail-closed remote work-folder contract. It resolves the configured route and verified workspace before allowing remote work and keeps deployment, runtime, backup, and archive lifecycle details in the planned structure record.
+- Official codebase-memory indexing, refresh, rebuild, recovery, and the configured cache/root artifact are treated as part of the governed project boundary; other external writes remain prohibited until the exact action is explicitly requested and confirmed.
+- The Python source-name rule now exempts `__main__.py` alongside `__init__.py`, preserving executable module entrypoints without weakening the no-digit functional-name rule for other modules.
+
+### New evidence and rendering helpers
+
+- Adds `scripts/python/common/codebase_memory_health.py` for live-versus-disk codebase-memory health checks and `scripts/python/common/tester_worker_profile.py` for the canonical tester contract.
+- Adds `scripts/python/render/render_contract_templates.py` and `scripts/python/verify/test_evidence.py`, plus decomposition-plan references for the new responsibility boundaries. These helpers make contract rendering and test-evidence provenance inspectable instead of relying on prose-only claims.
+- The managed payload comparison against v2.0.3 contains 13 added files, 57 changed files, 84 unchanged files, and no removals in the synchronized public payload directories. The public repository shell is preserved and the final release ZIP includes both bilingual READMEs and `docs/`.
+
+### Compatibility, migration, validation, and limits
+
+- Existing public CLI entrypoints remain supported. Existing generated roots should be refreshed with v2.0.8 when they need the v4 baseline, the explicit tester contract, or the state-aware remote work-folder rules; internal helper paths remain implementation details.
+- The v2.0.8 archive receipt declares strong pre/post release validation and 153 included skill files. This public checkout continues to exclude repo-local tests, smoke runs, reports, caches, authentication material, credentials, private keys, and machine-specific absolute paths from public release assets.
+- This release does not claim a real remote-server or installed-skill run. Consumers who need those boundaries must run the documented opt-in remote or installation checks in their own environment.
 
 ## What's New In v2.0.3
 
@@ -258,7 +286,7 @@ They are affiliated with the Heterogeneous Intelligence and Quantum Computing La
 
 ## Contact
 
-For questions, collaboration, or academic use, contact: [erie@seu.edu.cn](mailto:erie@seu.edu.cn).
+For questions, collaboration, or academic use, contact: `<REDACTED_EMAIL>`.
 
 ## Citation
 
@@ -269,8 +297,8 @@ If this skill helps your research, teaching, or engineering workflow, please cit
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {2.0.3},
-  date         = {2026-07-21},
+  version      = {2.0.8},
+  date         = {2026-08-09},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}

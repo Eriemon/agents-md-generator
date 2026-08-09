@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v2.0.3-7c3aed">
+  <img alt="Version" src="https://img.shields.io/badge/version-v2.0.8-7c3aed">
   <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
   <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
 </p>
@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  最新版本：<strong>v2.0.3</strong> · 发布日期：<strong>2026-07-21</strong>
+  最新版本：<strong>v2.0.8</strong> · 发布日期：<strong>2026-08-09</strong>
 </p>
 
 AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的治理文件，而不是凭记忆拼接规则。它把触发元数据、分组式设计访谈、确定性 Python 脚本、文档治理辅助、目录治理门禁和验证链组合在一起，让 Agent 能从仓库事实稳定走到可信的 `AGENTS.md` 输出。
@@ -52,6 +52,34 @@ AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的�
 - 通过 `scripts/python/dirs/manage_dirs.py` 执行目录治理审查与结构门禁。
 - 在需要时生成 `CLAUDE.md` 与 `GEMINI.md` 兼容 shim。
 - 提供验证、审计、自动 review 治理、skill-effectiveness eval 和 aggregate confidence gate，用于发布前把关。
+
+## v2.0.8 重点更新
+
+v2.0.8 同步了最新的受治理 skill payload。它保持现有公开入口不变，同时把全局指令基线、测试智能体边界、远程工作文件夹合同和发布证据做得更明确、更偏向失败关闭。
+
+### 全局 v4 治理基线
+
+- 将生成的全局基线更新到 v4：每份计划都必须冻结目标、成功标准、范围内和范围外事项；正式计划还必须写明输入、输出、受影响文件或接口、前置条件、失败处理、验证方式和停止条件。
+- 不再把 read-only、design、write 或 governance-high-risk 模式默认视为可以创建额外智能体。非测试智能体必须由用户主动请求并说明用途；存在可执行测试面时，只使用一个隔离的 `tester_worker`，由它拥有 `tests/**`。
+- 新增单任务授权收据合同：skill、根 `AGENTS.md` 和 CLI 对同一目标与范围复用一次授权；目标、范围或重大风险变化时必须重新确认。
+
+### 工作区与远程操作边界
+
+- 生成的根规则现在包含有状态、失败关闭的远程工作文件夹合同：先解析配置路由并验证 workspace，再允许远程工作；部署、运行时、备份和归档生命周期细节写入计划结构记录。
+- 正式的 codebase-memory 索引、刷新、重建、恢复以及配置的缓存/根持久化产物被视为受治理项目边界的一部分；其他外部写入仍必须在明确请求并确认精确动作后才允许。
+- Python 源文件命名规则在 `__init__.py` 之外新增 `__main__.py` 豁免，保留可执行模块入口，同时不放宽其他功能模块不得含数字的规则。
+
+### 新增证据与渲染辅助工具
+
+- 新增 `scripts/python/common/codebase_memory_health.py`，用于检查 codebase-memory 的 live/disk 健康状态；新增 `scripts/python/common/tester_worker_profile.py`，用于固定 canonical tester 合同。
+- 新增 `scripts/python/render/render_contract_templates.py` 与 `scripts/python/verify/test_evidence.py`，并补充新职责边界对应的 decomposition-plan 文档，使合同渲染和测试证据来源可以被检查，而不是只依赖 prose 声明。
+- 与 v2.0.3 对比，同步后的公开 payload 目录新增 13 个文件、更新 57 个文件、保持 84 个文件不变，没有删除项。公共仓库外壳保持不变，最终 release ZIP 会同时包含双语 README 和 `docs/`。
+
+### 兼容、迁移、验证与限制
+
+- 现有公开 CLI 入口继续受支持。需要 v4 基线、显式 tester 合同或有状态远程工作文件夹规则的旧生成根，应使用 v2.0.8 刷新；内部辅助模块路径仍不属于兼容合同。
+- v2.0.8 归档收据声明了 strong 的 pre/post 发布验证，并登记 153 个 skill 文件。本公开 checkout 继续把 repo-local tests、smoke 运行、reports、缓存、认证材料、凭据、私钥和机器专属绝对路径排除在公开发布资产之外。
+- 本版本不宣称已经在真实远程服务器或已安装 skill 上运行。需要这些边界的使用者，应在自己的环境中执行文档中的显式远程或安装检查。
 
 ## v2.0.3 重点更新
 
@@ -258,7 +286,7 @@ Jiyuan Liu 和 He Li 隶属于东南大学电子科学与工程学院。
 
 ## 联系方式
 
-问题、合作或学术使用，请联系：[erie@seu.edu.cn](mailto:erie@seu.edu.cn)。
+问题、合作或学术使用，请联系：`<REDACTED_EMAIL>`。
 
 ## 引用
 
@@ -269,8 +297,8 @@ Jiyuan Liu 和 He Li 隶属于东南大学电子科学与工程学院。
   author       = {Jiyuan Liu and He Li},
   title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
   year         = {2026},
-  version      = {2.0.3},
-  date         = {2026-07-21},
+  version      = {2.0.8},
+  date         = {2026-08-09},
   url          = {https://github.com/Eriemon/agents-md-generator},
   license      = {Apache-2.0},
   note         = {Agent skill package for generating and verifying AGENTS.md files}

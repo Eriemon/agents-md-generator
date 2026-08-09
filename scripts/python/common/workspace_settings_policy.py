@@ -180,11 +180,19 @@ def workspace_settings_location_reason(str_path: str) -> str | None:
     # 只有设置目录成员需要继续检查层级和后缀。
     if str_normalized_path.startswith(f"{SETTINGS_FOLDER}/"):
 
-        # 设置文件必须直接位于隐藏目录下，不能继续嵌套。
+        # 只有显式采用设置后缀的嵌套文件才违反配置层级合同。
         if str_normalized_path.count("/") != 1:
 
-            # 稳定诊断指明允许的直属目录边界。
-            return f"workspace config `{str_normalized_path}` must live directly under `{SETTINGS_FOLDER}/`"
+            # 验证归档和质量证据可放在 .settings 子目录，但真实设置文件不可嵌套。
+            if str_normalized_path.lower().endswith(
+                (LOCAL_SETTINGS_SUFFIX, REMOTE_SETTINGS_SUFFIX)
+            ):
+
+                # 稳定诊断指明允许的直属目录边界。
+                return f"workspace config `{str_normalized_path}` must live directly under `{SETTINGS_FOLDER}/`"
+
+            # 非配置证据不参与 workspace settings 位置约束。
+            return None
 
         # 单层 JSON 路径仍需满足合法文件名形状。
         if (

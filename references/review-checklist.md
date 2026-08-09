@@ -8,8 +8,13 @@ Use this list for generated or edited governance. Check only sections affected b
 - [ ] Explicit AGENTS work continued past a healthy-root check; planning-only triggers stopped after the check.
 - [ ] `default_conversation_language` is explicit, and natural-language responses stay in that configured language unless the user explicitly switches languages; Plan Mode follows the same rule.
 - [ ] `use_remote_server`, `use_codebase_memory_mcp`, directory policy, and `extra_requirements` are explicit.
-- [ ] Every interview group was confirmed. Write intent has approved `design_review`, `reviewer_type="subagent"`, matching `reviewed_answers_hash` / profile hash, and no pending confirmations.
+- [ ] Every interview group was confirmed. Write intent defaults to no review subagent; supplied or explicitly requested `design_review` evidence has `reviewer_type="subagent"`, matching `reviewed_answers_hash` / profile hash, and no pending confirmations.
 - [ ] Read-only intent did not dispatch a reviewer.
+- [ ] All non-testing subagents default to disabled. Authorization is a proactive, explicit current-task user request that names the role or purpose; generic multi-agent wording, complexity, ratings, risk, and agent judgment do not authorize dispatch.
+- [ ] When authorized non-testing roles have no count, dispatch exactly three; honor an explicit count and do not carry authorization into another task.
+- [ ] Work with an executable test surface uses one isolated `TESTER` with exclusive ownership of `tests/**`; pure read-only/planning work and documentation-only changes without a test surface do not require one.
+- [ ] Routine test-hash confirmation is prohibited: the Agent autonomously confirms only authoritative agreement, corrects report-only mismatches, and stops for user review without autonomous rerun when provenance conflicts or is insufficient.
+- [ ] New test files use functional or behavioral semantic names with digit-free stems, including no `v1`, `v2`, `1`, `2`, `part1`, or `part2`; existing tests are not bulk-renamed.
 
 ## Content
 
@@ -34,8 +39,8 @@ Use this list for generated or edited governance. Check only sections affected b
 
 ## Structure And Remote Safety
 
-- [ ] Every managed root renders exactly one `Workspace boundary`: modifications stay inside the current work folder and verified remote-server work folder; necessary external reads are side-effect free; external modification stops for normalized target/action/scope/risk/alternative/recovery disclosure and two separate confirmations whose first approves the exception in principle and second approves the exact action; target or scope changes invalidate both.
-- [ ] Existing directory review, `force-confirmation`, urgency, blanket approval, or a completed first confirmation is not treated as the second exact-action confirmation.
+- [ ] Every managed root renders exactly one `Workspace boundary`: current and exact-routed verified remote work-folder changes need no additional confirmation; official codebase-memory start/refresh/rebuild/recovery is exempt only for the bound project and configured runtime cache/root persistence artifact; necessary side-effect-free reads remain allowed outside those boundaries; every other external write is prohibited until the user proactively requests the exact action, after which full disclosure and exactly one confirmation are required; target or scope changes invalidate it.
+- [ ] Installed-skill installation, replacement, or direct modification always obtains exactly one explicit confirmation, even when it appears necessary for the task; no old double-confirmation language remains.
 - [ ] Installed skill identity uses only the skill directory and root `SKILL.md`; CLI and settings are reported as separate capabilities, with the current remote CLI preferred and the legacy entry used only as fallback.
 - [ ] The root-level file whitelist uses `allowed_root_files`; root work artifacts stay at the work-folder root and skill-local `evals/` remains allowed.
 - [ ] Exactly one root `tests/` exists; Python tests live in one-level `tests/<feature>/` folders, root Python is limited to `tests/__init__.py`, and nested `tests/` directories are absent.
@@ -48,9 +53,11 @@ Use this list for generated or edited governance. Check only sections affected b
 
 ## Source And Runtime Gates
 
-- [ ] Except for `__init__.py`, functional source and Python test names contain no digits, do not start with `_`, summarize the file function in lowercase English words, and keep the stem within 30 characters.
+- [ ] Except for `__init__.py` and `__main__.py`, functional source and Python test names contain no digits, do not start with `_`, summarize the file function in lowercase English words, and keep the stem within 30 characters.
 - [ ] Changed functional source and Python tests have current Agent semantic-review evidence whose revisions, path hash, summaries, and pass verdicts match the reviewed diff.
 - [ ] Handwritten source over the configured 64KB UTF-8 limit has a valid decomposition plan.
+- [ ] An installed skill copy with an oversized governed source resolves a complete bundled decomposition plan under `references/decomposition-plans/`, and an incomplete bundled plan still blocks validation.
+- [ ] Opaque source evidence excludes root and scoped `AGENTS.md` governance metadata, so freshness-only updates do not invalidate runtime source evidence.
 - [ ] Readability rejects compressed, minified, overlong, or obfuscated source.
 - [ ] Non-GUI script layout follows project config; exceptions are explicit.
 - [ ] Long tasks follow the configured thread heartbeat policy only when supported and approved.

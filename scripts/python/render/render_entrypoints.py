@@ -3,6 +3,7 @@
 # 共享忽略目录保证 scoped 扫描与项目发现一致。
 from agents_common import SKIP_DIRS
 from codebase_memory_mcp import enforce_codebase_memory_write_gate
+from tester_worker_profile import ensure_tester_worker_profile
 
 # 根正文按稳定顺序连接项目事实、命令和局部约束。
 def generated_root_body(
@@ -72,6 +73,21 @@ def project_section(dict_values: dict[str, str]) -> str:
         # 去除缩进后再判断空行和重复字段。
         str_stripped = str_line.strip()  # 当前项目概览行。
 
+        # 根摘要只保留身份、基线和版本的决策信息，详细画像仍在 profile 中。
+        if str_stripped.startswith("Primary language:"):
+
+            # 根摘要不重复固定的主语言字段。
+            continue
+
+        # 全局基线状态需要统一为当前工作文件夹的读取提示。
+        elif str_stripped.startswith("Global .codex/AGENTS.md:"):
+
+            # 统一后的状态行避免把完整全局文件正文复制到项目摘要。
+            str_stripped = (
+                "Global .codex/AGENTS.md: present with a managed baseline; "
+                "read the current work folder root AGENTS.md first."
+            )  # 规范化后的全局基线行
+
         # 仅保留非空且非根 AGENTS 状态的事实。
         if str_stripped and "Root AGENTS.md:" not in str_stripped:
 
@@ -81,12 +97,9 @@ def project_section(dict_values: dict[str, str]) -> str:
     # 强控制摘要只公开允许进入根规则的稳定字段。
     tuple_allowed_prefixes = (
         "- Strong control:",  # 强控制完成状态。
-        "- Development type:",  # 项目开发类别。
         "- Name:",  # 项目标识名称。
         "- Version:",  # 项目声明版本。
         "- Default conversation language:",  # 默认对话语言。
-        "- Purpose/reason:",  # 项目用途说明。
-        "- Additional user requirements:",  # 用户补充约束。
     )  # 可公开控制字段前缀。
 
     # 控制配置逐行筛选，避免把完整 profile 复制进 AGENTS.md。
@@ -103,6 +116,12 @@ def project_section(dict_values: dict[str, str]) -> str:
 
         # 只有白名单字段能够进入生成段落。
         if str_stripped.startswith(tuple_allowed_prefixes):
+
+            # 用短用途说明代替会与完整文档重复的解释段。
+            if str_stripped.startswith("- Purpose/reason:"):
+
+                # 用短用途说明代替重复的设计解释。
+                str_stripped = "- Purpose: govern AGENTS.md rules and reduce drift."  # 精简用途说明
 
             # 控制摘要保持 profile 原始措辞。
             list_lines.append(str_stripped)
@@ -139,7 +158,175 @@ def commands_section(dict_values: dict[str, str]) -> str:
         ]
     )
 
-# 本地约定合并会改变日常编码和对话行为的三个合同。
+# 单行本地约定压缩保留 verifier 所需的固定短语。
+def _compact_local_convention_line(str_line: str) -> str | None:
+    """压缩一条本地约定，保留机器校验所需的固定短语。
+
+    参数：str_line 为已经去除空白合同块中的一行。
+    返回：压缩后的规则行；被上层合同吸收的行返回 None。
+    """
+
+    # 会话合同压缩为语言、完成和证据三条可执行规则。
+    if str_line.startswith("- Natural-language replies"):
+
+        # 技术字面量保持不变，只修正当前项目要求的语言表述。
+        str_line = (
+            str_line.replace(  # 先替换会话语言规则中的旧表述
+                "unless the user switches languages",  # 待替换的旧语言短语
+                "unless the user switches language",  # 当前项目的语言短语
+            ).replace(
+                "; keep technical literals unchanged",  # 被移除的冗余后缀
+                "",  # 后缀删除结果
+            )
+        )  # 修正后的会话语言规则
+
+        # 当前分支已完成会话规则压缩。
+        return str_line
+
+    # 已被完成规则覆盖的解释行不再进入根级文件。
+    if str_line.startswith("- Finish feasible requested work"):
+
+        # None 表示当前行由完成合同的权威入口承载。
+        return None
+
+    # 完成检查规则保留阻断、跳过和用户修改保护。
+    if str_line.startswith("- Run narrow then final checks"):
+
+        # 压缩文本保留交付后仍需公开的证据边界。
+        str_line = (  # 精简后的完成检查规则
+            "- Run narrow then final checks; report blockers, skipped checks, next steps; "
+            "preserve user changes"
+        )
+
+        # 当前分支已完成完成检查规则压缩。
+        return str_line
+
+    # 注释规则保留硬门禁，省略不会改变执行的解释性修饰语。
+    if str_line.startswith("- 注释质量："):
+
+        # 根级规则必须直接暴露注释的允许范围和禁止行为。
+        str_line = (  # 精简后的注释质量规则
+            "- 注释质量：只允许非显然意图、不变量、风险、生成边界或公共 API 行为注释；"
+            "禁止复述代码；禁止未经明确要求的批量 AI 注释；不能把语句、注释、函数粘连到一起；"
+            "严禁把代码压缩到一行；炫技代码"
+        )
+
+        # 当前分支已完成注释规则压缩。
+        return str_line
+
+    # 输出格式规则保留人读前缀与机器输出边界。
+    if str_line.startswith("- 格式："):
+
+        # 根级规则必须保留三类消息级别和 quiet 行为。
+        str_line = (  # 精简后的输出格式规则
+            "- 格式：`> INFO: [{kind}]`/`> WARNING: [{kind}]`/`> ERR: [{kind}]`；"
+            "Python 过程性 INFO 默认打印，`--quiet` 关闭，WARNING 和 ERR 继续可见；"
+            "机器可读输出不套前缀。"
+        )
+
+        # 当前分支已完成输出格式规则压缩。
+        return str_line
+
+    # 已被更高层的生成合同覆盖的行不再重复输出。
+    if str_line.startswith("- 生成代码须"):
+
+        # 生成合同已经在上层负责该行的执行语义。
+        return None
+
+    # 文件命名规则只保留长度与语义复核这两个硬条件。
+    if str_line.startswith("- 文件命名："):
+
+        # 根级摘要不复制完整命名治理说明。
+        str_line = "- 文件命名：不超过 30 个英文字符；Agent 语义复核。"  # 精简后的文件命名规则
+
+        # 当前行已经转换为根级可执行的命名摘要。
+        return str_line
+
+    # 已被文件命名规则吸收的语义细则不再重复输出。
+    if str_line.startswith("- 文件命名语义："):
+
+        # None 表示当前行由上一条命名规则承载。
+        return None
+
+    # 双技能共同门禁必须仍能被逐行校验器识别。
+    if str_line.startswith("- 语言技能共同门禁："):
+
+        # 共同门禁正文用于判断是否已同时安装两个语言技能。
+        str_route_body = str_line.split("：", 1)[1].strip()  # 当前语言共同门禁正文
+
+        # 共同门禁仅在两个语言技能都可用时替换。
+        bool_both_skills = (
+            "readable-python-generator" in str_route_body  # Python 技能共同门禁标记
+            and "readable-script-generator" in str_route_body  # 脚本技能共同门禁标记
+        )  # 共同门禁双技能可用状态
+
+        # 双技能已安装时投影完整共同门禁，否则保留原始配置行。
+        if bool_both_skills:
+
+            # 共同门禁文本必须保留先思考、同时加载和不得事后补做。
+            str_line = (  # 固定的双技能共同门禁
+                "- 语言技能共同门禁：创建或修改 Python、bat/cmd、shell/bash、PowerShell、Tcl 代码时必须先思考并同时加载 "
+                "`readable-python-generator` 与 `readable-script-generator`；两个技能组成当前可执行的语言门禁，"
+                "两个技能的门禁必须在过程中满足，全部通过后才能继续，不得事后补做。"
+            )
+
+        # 共同门禁分支已经决定当前规则的最终文本。
+        return str_line
+
+    # Python 路由必须保留最终所有权和共同门禁边界。
+    if str_line.startswith("- 语言技能路由（Python）："):
+
+        # Python 路由正文用于判断是否已同时安装两个语言技能。
+        str_route_body = str_line.split("：", 1)[1].strip()  # 当前 Python 路由正文
+
+        # Python 路由仅在两个语言技能都可用时替换。
+        bool_both_skills = (
+            "readable-python-generator" in str_route_body  # Python 路由安装标记
+            and "readable-script-generator" in str_route_body  # 脚本路由安装标记
+        )  # Python 路由双技能可用状态
+
+        # 双技能已安装时投影 Python 的最终所有权。
+        if bool_both_skills:
+
+            # Python 仍由 Python 技能负责，脚本技能不能接管。
+            str_line = (  # 固定的 Python 路由门禁
+                "- 语言技能路由（Python）：进行 Python 代码生成、修改、注释和规范化时，Python 最终仍由 "
+                "`readable-python-generator` 负责；任务分类、注释质量、变量命名、质量门禁；"
+                "创建或修改时必须加载该技能；不得由 `readable-script-generator` 接管。"
+            )
+
+        # Python 路由分支已经决定当前规则的最终文本。
+        return str_line
+
+    # 脚本路由必须保留脚本技能的最终所有权和 Python 边界。
+    if str_line.startswith("- 语言技能路由（脚本）："):
+
+        # 脚本分支先剥离规则前缀，再判断双技能是否齐全。
+        str_route_body = str_line.split("：", 1)[1].strip()  # 当前脚本路由正文
+
+        # 脚本目标的双技能判定决定是否投影脚本所有权。
+        bool_both_skills = (
+            "readable-python-generator" in str_route_body  # 脚本分支的 Python 安装标记
+            and "readable-script-generator" in str_route_body  # 脚本分支的脚本安装标记
+        )  # 脚本路由双技能可用状态
+
+        # 双技能已安装时投影脚本语言的最终所有权。
+        if bool_both_skills:
+
+            # 脚本包装器按脚本目标路由，不能被 Python 技能接管。
+            str_line = (  # 固定的脚本路由门禁
+                "- 语言技能路由（脚本）：bat/cmd、shell/bash、PowerShell、Tcl 脚本目标最终由 "
+                "`readable-script-generator` 负责；Python 目标继续使用 `readable-python-generator`；"
+                "Python 专属技能边界：调用 Python 外部命令的脚本包装器仍按脚本目标处理。"
+            )
+
+        # 脚本路由输出在此返回，避免回落到默认规则。
+        return str_line
+
+    # 未命中特殊合同时保留原始规则行。
+    return str_line
+
+# 本地约定段落只负责组合合同和稳定去重。
 def local_conventions_section(dict_values: dict[str, str]) -> str:
     """合并本仓库的执行约定。
 
@@ -154,8 +341,41 @@ def local_conventions_section(dict_values: dict[str, str]) -> str:
         dict_values["SCRIPT_OUTPUT_POLICY"],  # 脚本输出合同。
     ]  # 本地约定候选块。
 
-    # 空合同被过滤，非空合同去除边缘空白后连接。
-    return "\n".join(str_block.strip() for str_block in list_blocks if str_block.strip())
+    # 根 AGENTS 只携带可执行的最小合同，详细解释仍由 JSON 和参考文档承载。
+    list_compact_lines: list[str] = []  # 精简后的本地约定行。
+
+    # 按稳定顺序压缩每条合同，保留 verifier 所需的固定短语。
+    for str_block in list_blocks:
+
+        # 空合同不进入输出，避免预算被占位内容消耗。
+        if not str_block.strip():
+
+            # 当前块没有可执行规则时继续读取下一块。
+            continue
+
+        # 逐行处理时保留原始顺序，便于受管块稳定更新。
+        for str_line in str_block.splitlines():
+
+            # 空行只承担源码格式，不需要复制到根级索引。
+            if not str_line.strip():
+
+                # 受管根统一由 compact_section 负责段落分隔。
+                continue
+
+            # 单行 helper 统一处理固定文本和路由分支。
+            str_compact_line = _compact_local_convention_line(str_line)  # 单行压缩结果
+
+            # 被更高层合同吸收的行不进入结果。
+            if str_compact_line is None:
+
+                # 当前行没有独立执行价值。
+                continue
+
+            # 压缩后的行仍保持一行一个规则，避免改变机器读取边界。
+            list_compact_lines.append(str_compact_line)
+
+    # 非空合同去除边缘空白后连接，避免重复生成解释段落。
+    return "\n".join(str_line.strip() for str_line in list_compact_lines if str_line.strip())
 
 # scoped 索引只包含已有且具有真实局部覆盖的文件。
 def scoped_instructions(project: Path) -> str:
@@ -495,6 +715,13 @@ def build_render_parser() -> argparse.ArgumentParser:
         "--migrate-redundant-scopes",
         action="store_true",
         help="Report generated-only scoped AGENTS.md files; combine with --write to remove them.",
+    )
+
+    # 已有 tester_worker 配置刷新时保留显式调用方意图字段。
+    parser.add_argument(
+        "--confirm-tester-worker-update",
+        action="store_true",
+        help="Confirm refreshing an existing tester_worker profile after its backup is shown.",
     )
 
     # 调用方负责执行 parse_args，便于测试解析器合同。
@@ -871,6 +1098,7 @@ def main() -> None:
 
     参数：无；从当前进程读取命令行。
     返回：无；只读模式写标准输出，写入模式更新规则文件。
+    异常：配置或治理门禁失败时抛出 SystemExit(1)。
     """
 
     # 参数解析器公开稳定 CLI 合同。
@@ -890,6 +1118,26 @@ def main() -> None:
 
         # 独立迁移完成后停止进入普通渲染流程。
         return
+
+    # 每次受管生成写入前都检查并自动引导唯一 tester_worker 配置。
+    if args.write:
+
+        # 生成前确保唯一 tester_worker 配置可用并记录结果。
+        dict_tester_result = ensure_tester_worker_profile(  # tester_worker 配置结果。
+            write=True,  # 写入或刷新 tester_worker 配置。
+            confirm_update=args.confirm_tester_worker_update,  # 复用单次授权收据。
+        )
+
+        # 写回验证失败必须阻止 AGENTS 落盘，保留明确失败证据。
+        dict_final_validation = dict_tester_result.get("final_validation", {})  # 最终 TOML 验证。
+
+        # 无效配置不得进入 AGENTS.md 写入流程。
+        if isinstance(dict_final_validation, dict) and not dict_final_validation.get("valid", False):
+
+            # 以稳定错误前缀报告配置验证失败。
+            raise SystemExit(
+                "> ERR: [Python] tester_worker.toml failed TOML or role validation"
+            )
 
     # 自定义模板目录转换为绝对位置。
     path_template_dir = (

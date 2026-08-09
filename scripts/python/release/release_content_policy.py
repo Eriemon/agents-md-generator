@@ -30,6 +30,7 @@ ALLOWED_TOP_LEVEL_DIRS = {  # 非白名单根目录会写入意外顶层项并�
     "agents",  # 安装后供 Codex 发现的代理元数据
     "assets",  # 技能运行时读取的模板与静态资源
     "config",  # 控制正式运行行为的配置文件
+    "docs",  # 完整仓库 ZIP 中的公开治理与交接文档
     "evals",  # 随包交付的技能评估用例
     "integration",  # 对接外部工具所需的集成资产
     "references",  # Agent 执行任务时查阅的治理参考

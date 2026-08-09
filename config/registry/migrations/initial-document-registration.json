@@ -48,12 +48,12 @@
       "evidence": {
         "locations": [
           {
-            "block_index": "22",
+            "block_index": "26",
             "path": "references/agents-md-guidance.md",
             "preview": "## Compatibility"
           },
           {
-            "block_index": "24",
+            "block_index": "26",
             "path": "references/script-guide.md",
             "preview": "## Compatibility"
           }
@@ -116,7 +116,7 @@
             "preview": "```text python skills/agents-md-generator/scripts/python/registry/query_registry.py ask \"<question>\" [--kind <kind>] [--category <name>] [--limit 1..10] [--json] ```"
           },
           {
-            "block_index": "19",
+            "block_index": "21",
             "path": "references/script-guide.md",
             "preview": "```text python skills/agents-md-generator/scripts/python/registry/query_registry.py ask \"<question>\" [--kind <kind>] [--category <name>] [--limit 1..10] [--json] ```"
           }
@@ -148,7 +148,74 @@
       "rationale": "Verify 是两个不同层级文档的结构标题，不包含重复知识正文。"
     }
   ],
-  "fuzzy_reviews": [],
+  "fuzzy_reviews": [
+    {
+      "authoritative_location": "",
+      "decision": "keep",
+      "evidence": {
+        "left": {
+          "block_index": 3,
+          "path": "references/decomposition-plans/scripts/python/docs/manage_docs_scaffold_session.py.md",
+          "preview": "## Target Files - `skills/agents-md-generator/scripts/python/docs/manage_docs_scaffold_session.py` - `skills/agents-md-generator/scripts/python/docs/manage_docs_scaffold.py` - `skills/agents-md-generator/scripts/python/docs/manage_docs_sess",
+          "sha256": "c0e6884f8739281c3d37d4e08678c8aaa228620506b75216c6c6ef0070160a2d"
+        },
+        "right": {
+          "block_index": 3,
+          "path": "references/decomposition-plans/scripts/python/docs/manage_docs_sync_verify.py.md",
+          "preview": "## Target Files - `skills/agents-md-generator/scripts/python/docs/manage_docs_sync_verify.py` - `skills/agents-md-generator/scripts/python/docs/manage_docs_root_sync.py` - `skills/agents-md-generator/scripts/python/docs/manage_docs_global_s",
+          "sha256": "24c503b3d6e8bbc4829f361c07fd65cee4213ba102535cd9cebe9b84493fad6a"
+        },
+        "similarity": 0.896
+      },
+      "id": "fuzzy.0001",
+      "needs_user_confirmation": false,
+      "rationale": "两份计划分别描述脚手架会话与同步验证职责，目标文件和退出条件不同，保留为独立分解计划。"
+    },
+    {
+      "authoritative_location": "",
+      "decision": "keep",
+      "evidence": {
+        "left": {
+          "block_index": 3,
+          "path": "references/decomposition-plans/scripts/python/docs/manage_docs_scaffold_session.py.md",
+          "preview": "## Target Files - `skills/agents-md-generator/scripts/python/docs/manage_docs_scaffold_session.py` - `skills/agents-md-generator/scripts/python/docs/manage_docs_scaffold.py` - `skills/agents-md-generator/scripts/python/docs/manage_docs_sess",
+          "sha256": "c0e6884f8739281c3d37d4e08678c8aaa228620506b75216c6c6ef0070160a2d"
+        },
+        "right": {
+          "block_index": 3,
+          "path": "references/decomposition-plans/scripts/python/docs/release_package.py.md",
+          "preview": "## Target Files - `skills/agents-md-generator/scripts/python/docs/release_package.py` - `skills/agents-md-generator/scripts/python/docs/release_branch_gate.py` - `skills/agents-md-generator/scripts/python/docs/release_layout.py`",
+          "sha256": "9508742de083d8e3894067d53ca74ff0c1549ea167c4a277a989a14a03afc135"
+        },
+        "similarity": 0.802495
+      },
+      "id": "fuzzy.0002",
+      "needs_user_confirmation": false,
+      "rationale": "脚手架会话与发布打包虽共享计划结构，目标文件、发布收据和会话状态职责不同，保留为独立计划。"
+    },
+    {
+      "authoritative_location": "",
+      "decision": "keep",
+      "evidence": {
+        "left": {
+          "block_index": 3,
+          "path": "references/decomposition-plans/scripts/python/docs/manage_docs_sync_verify.py.md",
+          "preview": "## Target Files - `skills/agents-md-generator/scripts/python/docs/manage_docs_sync_verify.py` - `skills/agents-md-generator/scripts/python/docs/manage_docs_root_sync.py` - `skills/agents-md-generator/scripts/python/docs/manage_docs_global_s",
+          "sha256": "24c503b3d6e8bbc4829f361c07fd65cee4213ba102535cd9cebe9b84493fad6a"
+        },
+        "right": {
+          "block_index": 3,
+          "path": "references/decomposition-plans/scripts/python/docs/release_package.py.md",
+          "preview": "## Target Files - `skills/agents-md-generator/scripts/python/docs/release_package.py` - `skills/agents-md-generator/scripts/python/docs/release_branch_gate.py` - `skills/agents-md-generator/scripts/python/docs/release_layout.py`",
+          "sha256": "9508742de083d8e3894067d53ca74ff0c1549ea167c4a277a989a14a03afc135"
+        },
+        "similarity": 0.808421
+      },
+      "id": "fuzzy.0003",
+      "needs_user_confirmation": false,
+      "rationale": "同步验证与发布打包由不同入口和收据链负责，虽然章节模板相似，功能边界不可合并，保留为独立计划。"
+    }
+  ],
   "interface_reviews": [
     {
       "command_ids": [
@@ -247,22 +314,11 @@
       "rationale": "",
       "sources": [
         "SKILL.md",
+        "references/decomposition-plans/scripts/python/verify/source_governance_config.py.md",
         "references/review-checklist.md",
         "references/script-guide.md"
       ],
       "value": "--installed-skill-dir"
-    },
-    {
-      "command_ids": [
-        "design.collect-profile"
-      ],
-      "decision": "mapped",
-      "kind": "option",
-      "rationale": "",
-      "sources": [
-        "references/evaluation-scenarios.md"
-      ],
-      "value": "--intent"
     },
     {
       "command_ids": [
@@ -407,6 +463,31 @@
     },
     {
       "command_ids": [
+        "release.install-skill"
+      ],
+      "decision": "mapped",
+      "kind": "option",
+      "rationale": "版本化安装脚本用目标选项区分 codex、custom 与 skip 验证路径。",
+      "sources": [
+        "references/script-guide.md"
+      ],
+      "value": "--target"
+    },
+    {
+      "command_ids": [
+        "docs.operations",
+        "verify.confidence-gate"
+      ],
+      "decision": "mapped",
+      "kind": "option",
+      "rationale": "发布与置信度门禁通过不透明远程测试收据传递已验证证据。",
+      "sources": [
+        "references/script-guide.md"
+      ],
+      "value": "--test-evidence"
+    },
+    {
+      "command_ids": [
         "design.collect-profile",
         "render.render-agents",
         "verify.review-governance",
@@ -429,11 +510,11 @@
   "source_documents": [
     {
       "path": "SKILL.md",
-      "sha256": "83c65f1744a5777c14d145bce6a4d86dafc555fe35786c80de84a3064445d594"
+      "sha256": "5285c6a5e359507036e755117157c2da2a33fa2685da5031efa4adb547c11c17"
     },
     {
       "path": "references/agents-md-guidance.md",
-      "sha256": "8ac2a9f94f0ff795abe6eab6b8ee13c4ecf47844853c1b0ac8984775a4d640b5"
+      "sha256": "984656e3bf4f5045c6d6a9123be6f5946b29a58f6202047da7235e79e65ada44"
     },
     {
       "path": "references/book-rules-coverage.md",
@@ -448,8 +529,44 @@
       "sha256": "3d9f32ccc40dc19127a77386f4c07c215e2f2ea5fdc29f03000008995d406b30"
     },
     {
+      "path": "references/decomposition-plans/scripts/python/common/project_facts_discovery.py.md",
+      "sha256": "1fa360a5ca2d25818e19ec6aa21b83a7e833427a44fa84b242872624268bf6c2"
+    },
+    {
+      "path": "references/decomposition-plans/scripts/python/design/design_questions.py.md",
+      "sha256": "94b8a164eec163ca5f7d2b38a37824d485b4d5abea118cf87760b63c72ed995c"
+    },
+    {
+      "path": "references/decomposition-plans/scripts/python/dirs/manage_dirs_state.py.md",
+      "sha256": "b883452b6fa7187e1871b580a1c12b64c93de5703e5c50a76276235cfca7cc0f"
+    },
+    {
+      "path": "references/decomposition-plans/scripts/python/docs/manage_docs_scaffold_session.py.md",
+      "sha256": "fa6d1b3399c979a0dc0ff141c4c703ebc2b987fb98d6f70512e5acb47cffaacf"
+    },
+    {
+      "path": "references/decomposition-plans/scripts/python/docs/manage_docs_sync_verify.py.md",
+      "sha256": "bba39630a5203ba1b9461d7fed236a6a2ced3710107fa13f0d025536858591c0"
+    },
+    {
+      "path": "references/decomposition-plans/scripts/python/docs/release_package.py.md",
+      "sha256": "34a9f728ea50633838c8ba4d2a3bd483eeed23d945e9703dee25b00668ae8b58"
+    },
+    {
+      "path": "references/decomposition-plans/scripts/python/registry/document_registry_common.py.md",
+      "sha256": "76394e3a6a6a00760a3431fedcbe3bd342d4498e662a4a8e6901f544c1cf6d33"
+    },
+    {
+      "path": "references/decomposition-plans/scripts/python/verify/audit_skill.py.md",
+      "sha256": "7cf64afb1c03591bbbd9235f12578473ea9e0b69a74255de0abb97a618d65f1d"
+    },
+    {
+      "path": "references/decomposition-plans/scripts/python/verify/source_governance_config.py.md",
+      "sha256": "64788d5d9a689b2f6f12aad8e16aee380f5bb0272af5bcda17082e38ec032ee0"
+    },
+    {
       "path": "references/evaluation-scenarios.md",
-      "sha256": "e04f892bf3a2303752f50d5bdc2f68edc5ddad97a64c296e9578191863ca976c"
+      "sha256": "e88fec95f6a6f959da5c40c66a5cf287d3333bbe0a7fba2e3ab0581cdd0f5e3a"
     },
     {
       "path": "references/question-bank.md",
@@ -457,11 +574,11 @@
     },
     {
       "path": "references/review-checklist.md",
-      "sha256": "494668d0f63c9b0d7a4f0f3dc84c691f09ab2673946a9c57518bda99f38742fb"
+      "sha256": "8eda0db717d1d09f199e72f3020862306857c79816687e8fef5070a91b030607"
     },
     {
       "path": "references/script-guide.md",
-      "sha256": "21ec98d27a72ba441b5017ca58f568bfd710a1de1dbb7ee525c2bc74039eed2a"
+      "sha256": "49e3e041a35e949efcf8fbd000fd54e581bd6bb317a27a0ce01f21198965078b"
     },
     {
       "path": "references/script-output-policy.md",
@@ -469,9 +586,9 @@
     },
     {
       "path": "references/skill-design-coverage.md",
-      "sha256": "e138ff6bdda1bff43711401a381a0ab69702bbb006b7f629a7fd1c7b37f86680"
+      "sha256": "838aacdd8b9232277bb1440b205412a20509694d403728e601e84a0c1482286a"
     }
   ],
   "status": "finalized",
-  "user_confirmation": "not_required"
+  "user_confirmation": "confirmed"
 }

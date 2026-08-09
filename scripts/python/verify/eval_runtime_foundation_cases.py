@@ -425,8 +425,8 @@ def case_design_review_gate(case: dict[str, Any], helper: EvalFixtures) -> dict[
         # 答案映射在首次阻断后追加复核证据。
         dict_answers: dict[str, Any] = tuple_fixture[1]  # 未复核设计答案
 
-        # 首次 --write 应因缺少 design_review 被拒绝。
-        tuple_blocked_result = run_script(  # 未复核写入命令结果
+        # 首次 --write 未携带 design_review 时应按默认无审查流程通过。
+        dict_default_write = run_json_script(  # 默认无审查写入结果
             "collect_design_profile.py",  # 未复核设计写入入口
             path_project,  # 接受未复核答案的隔离项目
             "--answers",  # 指定未复核答案文件
@@ -435,10 +435,7 @@ def case_design_review_gate(case: dict[str, Any], helper: EvalFixtures) -> dict[
             cwd=REPO_ROOT,  # 复核通过路径复用正式设计运行时
         )
 
-        # 分解结果字段用于阻断状态和机器错误解析。
-        int_blocked_returncode, str_blocked_stdout, str_blocked_stderr = tuple_blocked_result  # 未复核命令结果字段
-
-        # 夹具追加 subagent 复核结论与签名字段。
+        # 用户显式请求审查时，夹具追加 subagent 复核结论与签名字段。
         helper.write_reviewed_answers(path_project, path_answers, dict_answers)
 
         # 第二次写入应接受已复核答案并生成设计画像。
@@ -451,18 +448,11 @@ def case_design_review_gate(case: dict[str, Any], helper: EvalFixtures) -> dict[
             cwd=REPO_ROOT,  # 使用正式设计收集运行时
         )
 
-        # 未复核命令只有在输出非空时才尝试解析 JSON 错误。
-        list_blocked_errors = (
-            json.loads(str_blocked_stdout).get("errors", [])  # 机器可读阻断错误
-            if str_blocked_stdout.strip()  # 标准输出存在时解析机器错误
-            else []  # 无机器输出时保留空错误集合
-        )  # 未复核写入的机器错误列表
-
-        # 有技能路径要求拒绝未复核写入并接受 subagent 复核写入。
-        dict_with_checks = {  # 设计复核门禁断言
-            "unreviewed_write_blocked": int_blocked_returncode != 0,  # 未复核写入是否失败
-            "review_error_reported": "design_review must be provided before --write"  # 是否报告复核缺失
-            in list_blocked_errors,  # 阻断错误是否准确指出缺失复核
+        # 有技能路径默认不派发审查智能体，但仍验证显式提交的审查证据。
+        dict_with_checks = {  # 设计复核显式启用断言
+            "default_write_passed_without_review": dict_default_write.get("errors") == [],  # 默认写入是否通过
+            "default_profile_has_no_review": "design_review"  # 默认画像是否没有审查证据
+            not in dict_default_write.get("profile", {}),  # 默认流程不得伪造审查记录
             "approved_subagent_write_passed": dict_approved.get("errors") == [],  # 复核通过后是否允许写入
             "review_persisted": dict_approved.get("profile", {})  # 写入结果中的设计档案
             .get("design_review", {})  # 持久化的复核记录
@@ -470,12 +460,12 @@ def case_design_review_gate(case: dict[str, Any], helper: EvalFixtures) -> dict[
             == "subagent",  # 是否持久化批准的子代理复核
         }
 
-        # 旧写入路径接受未复核答案且不持久化 reviewer_type。
-        dict_without_checks = {  # 缺少设计复核门禁的历史基线
-            "unreviewed_write_blocked": False,  # 旧路径接受未复核答案
-            "review_error_reported": False,  # 旧路径不报告复核缺失
-            "approved_subagent_write_passed": True,  # 旧路径同样允许写入
-            "review_persisted": False,  # 旧路径不持久化结构化复核证据
+        # 旧规则默认阻断未复核写入，并强迫调用方创建审查智能体。
+        dict_without_checks = {  # 默认强制方案审查的历史基线
+            "default_write_passed_without_review": False,  # 旧路径拒绝默认写入
+            "default_profile_has_no_review": False,  # 旧路径无法生成默认画像
+            "approved_subagent_write_passed": True,  # 旧路径只允许已复核写入
+            "review_persisted": True,  # 旧路径依赖结构化复核证据
         }
 
         # 阻断错误和批准画像共同形成门禁前后证据。
@@ -484,13 +474,13 @@ def case_design_review_gate(case: dict[str, Any], helper: EvalFixtures) -> dict[
             with_skill_checks=dict_with_checks,
             without_skill_checks=dict_without_checks,
             with_skill_detail={
-                "blocked_errors": list_blocked_errors,
+                "default_write": dict_default_write,
                 "approved": dict_approved,
             },
             without_skill_detail={
                 "baseline": (
-                    "old write path accepted aligned answer sets without a final "
-                    "extra-requirements prompt or subagent design-review evidence"
+                    "old write path forced subagent design-review evidence even when "
+                    "the user requested only the governed write"
                 )
             },
         )

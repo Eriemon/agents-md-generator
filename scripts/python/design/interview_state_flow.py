@@ -149,11 +149,23 @@ def review_policy_for_state(state: dict[str, Any], status: str | None = None) ->
         # 返回 review_policy_for_state 的访谈状态载荷。
         return "read_only_no_subagent_review"
 
-    # 进入设计复核后的写入流程必须保留子代理复核边界。
-    if resolved_status in {"awaiting_design_review", "awaiting_review_rework", "completed"}:
+    # 只有显式进入设计复核的状态才要求子智能体审查。
+    if resolved_status in {"awaiting_design_review", "awaiting_review_rework"}:
 
-        # 审查策略选择：为写入型状态选择子代理审查
+        # 审查策略选择：为用户显式请求的复核状态选择子智能体审查。
         return "subagent_review_required"
+
+    # 已完成写入仅在携带本轮设计审查证据时标记为显式审查流程。
+    if resolved_status == "completed" and DESIGN_REVIEW_KEY in state.get("answers", {}):
+
+        # 审查策略选择：保留用户显式请求审查的完成证据。
+        return "user_requested_subagent_review"
+
+    # 默认完成态不因任务复杂度或写入意图自动要求审查智能体。
+    if resolved_status == "completed":
+
+        # 审查策略选择：写入已完成且未请求子智能体审查。
+        return "write_no_subagent_review"
 
     # 只读意图在未进入写入复核前始终走轻量确认策略。
     if normalize_intent(state.get("intent")) == "read_only":

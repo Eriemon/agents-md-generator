@@ -1,7 +1,7 @@
 {
   "records": [
     {
-      "content_sha256": "c4661e6cbe2f5baea997cd90b0f1b0cd47d3bd965007c9db75b9baf2dfd5b9e6",
+      "content_sha256": "1a16a25a5d0c822afecb7b140bfc3741c7dcfc47ea4518b86a8dd6d64058aed8",
       "id": "knowledge.skill",
       "keywords": [
         "route",
@@ -15,11 +15,11 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "SKILL.md",
-      "summary": "技能触发条件、远程技能身份与能力路由、工作区双确认停止边界。",
+      "summary": "技能触发条件、非测试智能体授权、远程技能能力路由与工作区单次确认边界。",
       "title": "AGENTS.md Generator"
     },
     {
-      "content_sha256": "8ac2a9f94f0ff795abe6eab6b8ee13c4ecf47844853c1b0ac8984775a4d640b5",
+      "content_sha256": "984656e3bf4f5045c6d6a9123be6f5946b29a58f6202047da7235e79e65ada44",
       "id": "knowledge.references-agents-md-guidance",
       "keywords": [
         "AGENTS.md",
@@ -82,7 +82,142 @@
       "title": "Coding Behavior Language Skill Routing"
     },
     {
-      "content_sha256": "3db5f6e4c7dc9c5989964031b22e3ff230ea695006719e0e196e543ef256f049",
+      "content_sha256": "1fa360a5ca2d25818e19ec6aa21b83a7e833427a44fa84b242872624268bf6c2",
+      "id": "knowledge.references-decomposition-common-project-facts-discovery",
+      "keywords": [
+        "decomposition plan",
+        "project facts",
+        "source governance",
+        "size gate"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/decomposition-plans/scripts/python/common/project_facts_discovery.py.md",
+      "summary": "项目事实发现模块的临时拆分计划、事实键合同与退出条件。",
+      "title": "Project Facts Discovery Decomposition Plan"
+    },
+    {
+      "content_sha256": "94b8a164eec163ca5f7d2b38a37824d485b4d5abea118cf87760b63c72ed995c",
+      "id": "knowledge.references-decomposition-design-design-questions",
+      "keywords": [
+        "decomposition plan",
+        "design questions",
+        "question contract",
+        "normalization"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/decomposition-plans/scripts/python/design/design_questions.py.md",
+      "summary": "设计问题模块的临时拆分计划、问题标识顺序与答案归一化合同。",
+      "title": "Design Questions Decomposition Plan"
+    },
+    {
+      "content_sha256": "b883452b6fa7187e1871b580a1c12b64c93de5703e5c50a76276235cfca7cc0f",
+      "id": "knowledge.references-decomposition-dirs-manage-dirs-state",
+      "keywords": [
+        "decomposition plan",
+        "directory state",
+        "scan",
+        "persistence"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/decomposition-plans/scripts/python/dirs/manage_dirs_state.py.md",
+      "summary": "目录状态模块的临时拆分计划、扫描与持久化边界及兼容性要求。",
+      "title": "Directory State Decomposition Plan"
+    },
+    {
+      "content_sha256": "fa6d1b3399c979a0dc0ff141c4c703ebc2b987fb98d6f70512e5acb47cffaacf",
+      "id": "knowledge.references-decomposition-docs-manage-docs-scaffold-session",
+      "keywords": [
+        "decomposition plan",
+        "documentation governance",
+        "scaffold",
+        "session state"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/decomposition-plans/scripts/python/docs/manage_docs_scaffold_session.py.md",
+      "summary": "文档脚手架会话模块的临时拆分计划、状态文件与会话生命周期合同。",
+      "title": "Documentation Scaffold Session Decomposition Plan"
+    },
+    {
+      "content_sha256": "bba39630a5203ba1b9461d7fed236a6a2ced3710107fa13f0d025536858591c0",
+      "id": "knowledge.references-decomposition-docs-manage-docs-sync-verify",
+      "keywords": [
+        "decomposition plan",
+        "document sync",
+        "managed blocks",
+        "verification"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/decomposition-plans/scripts/python/docs/manage_docs_sync_verify.py.md",
+      "summary": "文档同步验证模块的临时拆分计划、根同步与受管块保留合同。",
+      "title": "Documentation Sync Verify Decomposition Plan"
+    },
+    {
+      "content_sha256": "34a9f728ea50633838c8ba4d2a3bd483eeed23d945e9703dee25b00668ae8b58",
+      "id": "knowledge.references-decomposition-docs-release-package",
+      "keywords": [
+        "decomposition plan",
+        "release package",
+        "release receipt",
+        "packaging"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/decomposition-plans/scripts/python/docs/release_package.py.md",
+      "summary": "发布聚合模块的临时拆分计划、发布收据合同与成员发现边界。",
+      "title": "Release Package Decomposition Plan"
+    },
+    {
+      "content_sha256": "76394e3a6a6a00760a3431fedcbe3bd342d4498e662a4a8e6901f544c1cf6d33",
+      "id": "knowledge.references-decomposition-registry-document-registry-common",
+      "keywords": [
+        "decomposition plan",
+        "document registry",
+        "migration",
+        "compatibility"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/decomposition-plans/scripts/python/registry/document_registry_common.py.md",
+      "summary": "文档注册公共模块的临时拆分计划、扫描布局与迁移初始化边界。",
+      "title": "Document Registry Common Decomposition Plan"
+    },
+    {
+      "content_sha256": "7cf64afb1c03591bbbd9235f12578473ea9e0b69a74255de0abb97a618d65f1d",
+      "id": "knowledge.references-decomposition-verify-audit-skill",
+      "keywords": [
+        "decomposition plan",
+        "skill audit",
+        "evaluation",
+        "source governance"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/decomposition-plans/scripts/python/verify/audit_skill.py.md",
+      "summary": "技能审计模块的临时拆分计划、评估与源码治理职责边界。",
+      "title": "Skill Audit Decomposition Plan"
+    },
+    {
+      "content_sha256": "64788d5d9a689b2f6f12aad8e16aee380f5bb0272af5bcda17082e38ec032ee0",
+      "id": "knowledge.references-decomposition-verify-source-governance-config",
+      "keywords": [
+        "decomposition plan",
+        "source governance",
+        "configuration",
+        "compatibility facade"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/decomposition-plans/scripts/python/verify/source_governance_config.py.md",
+      "summary": "源码治理配置门面的临时拆分计划、默认值验证与约束投影边界。",
+      "title": "Source Governance Config Decomposition Plan"
+    },
+    {
+      "content_sha256": "5c47fa7adbfb979af6a7a144c6a11522403aee6441443c13e7eedfed24791b30",
       "id": "knowledge.references-evaluation-scenarios",
       "keywords": [
         "evaluation",
@@ -94,7 +229,7 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/evaluation-scenarios.md",
-      "summary": "技能功能、工作区双确认、治理、运行时、发布与兼容性的前向测试场景。",
+      "summary": "技能功能、非测试智能体授权、工作区单次确认、治理、运行时、发布与兼容性的前向测试场景。",
       "title": "Evaluation Scenarios"
     },
     {
@@ -113,23 +248,23 @@
       "title": "AGENTS.md Question Bank"
     },
     {
-      "content_sha256": "8e13dc050fa16e184ad06a654cce124dc8594658ab71d7821dc88ff94f979508",
+      "content_sha256": "5ed95e9329f1c39d7de549db73272c186f5552686bfc5f335b5e433d6bb41b7c",
       "id": "knowledge.references-review-checklist",
       "keywords": [
         "review",
         "checklist",
         "evidence",
         "release",
-        "double confirmation"
+        "single confirmation"
       ],
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/review-checklist.md",
-      "summary": "内容、结构、工作区双确认、运行时、验证与发布所需人工审查证据。",
+      "summary": "内容、结构、工作区单次确认、运行时、验证与发布所需人工审查证据。",
       "title": "AGENTS.md Review Checklist"
     },
     {
-      "content_sha256": "21ec98d27a72ba441b5017ca58f568bfd710a1de1dbb7ee525c2bc74039eed2a",
+      "content_sha256": "49e3e041a35e949efcf8fbd000fd54e581bd6bb317a27a0ce01f21198965078b",
       "id": "knowledge.references-script-guide",
       "keywords": [
         "script",
@@ -161,7 +296,7 @@
       "title": "Script Output Policy"
     },
     {
-      "content_sha256": "e138ff6bdda1bff43711401a381a0ab69702bbb006b7f629a7fd1c7b37f86680",
+      "content_sha256": "838aacdd8b9232277bb1440b205412a20509694d403728e601e84a0c1482286a",
       "id": "knowledge.references-skill-design-coverage",
       "keywords": [
         "Tool Wrapper",

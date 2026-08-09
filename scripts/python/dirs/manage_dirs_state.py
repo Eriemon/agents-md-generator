@@ -66,12 +66,15 @@ GOVERNANCE_PREFIXES = {
 
 # 接管既有项目时保留常见根级代理说明和工具配置。
 TAKEOVER_PRESERVE_ROOT_FILES = {
+    ".cbmignore",  # 知识图谱范围合同必须保留在项目根。
     "AGENTS.md",  # 项目根代理规则在接管时必须保留。
     "CLAUDE.md",  # Claude 项目代理说明保持原位置。
     "GEMINI.md",  # Gemini 项目代理说明避免接管丢失。
     ".gitignore",  # 既有忽略规则不能被初始化覆盖。
     ".gitattributes",  # 行尾与合并属性属于仓库合同。
     ".editorconfig",  # 编辑器格式配置在接管时保留。
+    "README.md",  # 仓库入口说明在生命周期重渲染后仍需保留。
+    "LICENSE",  # 仓库许可证属于必须持续保留的根级元数据。
 }
 
 # 默认允许的根文件沿用接管保留集合并稳定排序。
@@ -180,6 +183,14 @@ def invalid_path_reason(raw: str) -> str | None:
 
         # 明确指出父级穿越风险，而非静默改写用户路径。
         return f"path must not contain parent traversal: {raw_value}"
+
+    # 精确点号只代表远程工作区根，其他点号或空片段会模糊目标边界。
+    if normalized != "." and any(
+        str_part in {"", "."} for str_part in normalized.split("/")
+    ):
+
+        # 拒绝可被路径归一化静默折叠的非精确写法。
+        return f"path must not contain dot or empty segments: {raw_value}"
 
     # 通配符和 shell 特殊字符会让单一路径审查变成范围操作。
     if any(char in raw_value for char in "*?<>|"):

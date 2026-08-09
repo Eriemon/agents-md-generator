@@ -51,6 +51,7 @@ from manage_docs_shared import (
 )
 from source_governance import format_source_governance_errors, source_governance_report
 from codebase_memory_mcp import enforce_codebase_memory_write_gate
+from tester_worker_profile import ensure_tester_worker_profile
 
 # 版本表达式用于对齐 AGENTS、开发记录和发布文档。
 VERSION_RE = re.compile(r"\bv\d+\.\d+\.\d+\b")  # 语义版本匹配器
@@ -944,19 +945,47 @@ def root_agents_sync_version_context(
 
 # 检查并按需同步根 AGENTS 的受管元数据。
 def sync_root_agents(
-    project: Path,
-    write: bool = False,
+    project: Path, write: bool = False,
     installed_skill_dir_override: str | Path | None = None,
     *,
     mark_verified: bool = False,
     confirm_codebase_memory_untrack: bool = False,
+    confirm_tester_worker_update: bool = False,
 ) -> dict[str, Any]:
     """检查或写入根 AGENTS 的版本、语言和验证时间。
 
-    参数：project 为项目根，write 控制写入。
-    参数：installed_skill_dir_override 指定安装副本，mark_verified 刷新验证时间，confirm_codebase_memory_untrack 表示用户是否确认解除本地产物的 Git 跟踪。
+    参数：project 为项目根，write 控制写入，installed_skill_dir_override 指定安装副本，
+    mark_verified 刷新验证时间，confirm_codebase_memory_untrack 表示解除本地产物跟踪的确认，
+    confirm_tester_worker_update 表示刷新唯一 tester_worker 配置的同一任务授权。
     返回：同步需求、实际更新、版本来源和修复命令。
     """
+
+    # 生成或刷新根 AGENTS 前先确保唯一 tester_worker 配置存在且可读回。
+    dict_tester_worker = ensure_tester_worker_profile(  # 根同步使用的 tester_worker 结果
+        write=write,  # 是否允许自动创建或刷新配置。
+        confirm_update=confirm_tester_worker_update,  # 复用当前任务授权收据。
+    )
+
+    # TOML 合同失败时停止根规则同步，避免产生没有测试隔离的 AGENTS。
+    dict_tester_validation = dict_tester_worker.get("final_validation", {})  # 根同步前的最终验证
+
+    # 无效配置不能继续写入根 AGENTS。
+    bool_tester_invalid = (
+        write  # 只在写入路径阻断无效配置。
+        and isinstance(dict_tester_validation, dict)  # 验证报告必须是映射。
+        and bool(dict_tester_validation)  # 空报告不改变旧的只读语义。
+        and not dict_tester_validation.get("valid", False)  # 角色或 TOML 校验失败。
+    )  # 根 AGENTS 是否必须停止写入
+
+    # 验证失败返回机器可读错误和完整 tester_worker 报告。
+    if bool_tester_invalid:
+
+        # 保留目标和配置证据，避免根规则半更新。
+        return {
+            "project": str(project),
+            "errors": ["tester_worker.toml failed TOML or role validation"],
+            "tester_worker": dict_tester_worker,
+        }
 
     # 根文件是所有受管元数据更新的唯一写入目标。
     agents_path = project / "AGENTS.md"  # 本次同步唯一允许写入的根规则文件
@@ -1060,13 +1089,19 @@ def sync_root_agents(
         "mark_verified": mark_verified,  # 调用方复核刷新请求
     }
 
-    # 成功报告构造器保持既有字段顺序和值来源。
-    return root_agents_sync_report(
-        project,  # 完成同步检查的项目
-        agents_path,  # 根 AGENTS 目标
-        repair_command,  # 报告复用的同步命令
-        dict_report_context,  # 聚合后的成功路径证据
+    # 聚合根 AGENTS 的版本来源、治理状态和目标路径。
+    dict_report = root_agents_sync_report(  # 将根 AGENTS 版本、治理门禁和写入状态交给 CLI 返回
+        project,  # 根同步使用的项目根路径。
+        agents_path,  # 受管根 AGENTS 的唯一落盘路径。
+        repair_command,  # 失败时提示用户复用的修复命令。
+        dict_report_context,  # 版本、治理、写入状态的汇总证据。
     )
+
+    # 成功报告携带唯一 tester_worker 的最终验证和备份证据。
+    dict_report["tester_worker"] = dict_tester_worker  # 根同步关联的 tester_worker 证据
+
+    # 返回聚合后的根同步结果。
+    return dict_report
 
 # 判断全局 baseline 前方是否只含可随区块替换的受管元数据。
 def global_codex_between_is_replaceable_meta(text: str) -> bool:
@@ -1163,12 +1198,47 @@ def replace_global_codex_block(text: str, rendered: str) -> str:
     return (current[:start] + rendered + current[end:]).rstrip() + "\n"
 
 # 检查或写入用户 Codex 全局 AGENTS baseline。
-def sync_global_codex_agents(project: Path, write: bool = False, codex_home: str | None = None) -> dict[str, Any]:
+def sync_global_codex_agents(
+    project: Path,
+    write: bool = False,
+    codex_home: str | None = None,
+    *,
+    confirm_tester_worker_update: bool = False,
+) -> dict[str, Any]:
     """同步全局 Codex AGENTS 中的受管 baseline。
 
-    参数：project 为当前项目根，write 控制写入，codex_home 可覆盖用户目录。
+    参数：project 为当前项目根，write 控制写入，codex_home 可覆盖用户目录，
+    confirm_tester_worker_update 表示刷新唯一 tester_worker 配置的同一任务授权。
     返回：同步前后状态、确认要求、目标路径和实际更新标志。
     """
+
+    # 生成或刷新全局 AGENTS 前先确保同一 Codex 主目录中的唯一 tester_worker 存在。
+    dict_tester_worker = ensure_tester_worker_profile(  # 全局同步使用的 tester_worker 结果
+        codex_home=codex_home,  # 全局配置所在的 Codex 主目录。
+        write=write,  # 全局 baseline 是否允许配置落盘。
+        confirm_update=confirm_tester_worker_update,  # 全局同步沿用同一授权收据。
+    )
+
+    # TOML 合同失败时停止全局 baseline 同步。
+    dict_tester_validation = dict_tester_worker.get("final_validation", {})  # 全局同步前的最终验证
+
+    # 无效配置不能继续写入全局 baseline。
+    bool_tester_invalid = (
+        write  # 全局落盘分支才需要阻断。
+        and isinstance(dict_tester_validation, dict)  # 全局校验载荷的容器类型。
+        and bool(dict_tester_validation)  # 只有有内容的校验载荷才触发。
+        and not dict_tester_validation.get("valid", False)  # 全局角色配置未通过最终有效性检查。
+    )  # 全局规则是否需要拒绝写入
+
+    # 全局 baseline 返回目标路径和 tester_worker 失败证据。
+    if bool_tester_invalid:
+
+        # 保留目标和配置证据，避免全局规则半更新。
+        return {
+            "project": str(project),
+            "errors": ["tester_worker.toml failed TOML or role validation"],
+            "tester_worker": dict_tester_worker,
+        }
 
     # 全局目标路径由共享规则统一解析。
     target = global_codex_agents_path(codex_home)  # 用户全局 AGENTS 路径
@@ -1195,6 +1265,7 @@ def sync_global_codex_agents(project: Path, write: bool = False, codex_home: str
         "requires_user_confirmation": status["requires_user_confirmation"],  # 是否需授权
         "user_message": status["user_message"],  # 面向用户的状态说明
         "repair_command": repair_command,  # 可执行修复命令
+        "tester_worker": dict_tester_worker,  # 唯一测试智能体配置证据
         **status,  # 完整共享状态字段
     }
 

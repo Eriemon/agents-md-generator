@@ -29,6 +29,7 @@ def is_path_reference(raw: str) -> bool:
         "CLAUDE.md",
         "GEMINI.md",
         "__init__.py",
+        "__main__.py",
     }:
 
         # 这些外部链接或保留文件名不属于路径引用候选。

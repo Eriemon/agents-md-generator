@@ -88,6 +88,9 @@ DATE_RE = re.compile(r"Last updated:\s*(\d{4}-\d{2}-\d{2})")  # 根规则旧版�
 # 验证时间独立于更新时间，证明同步后的规则已通过复核。
 VERIFIED_RE = re.compile(r"Last verified:\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})")  # 根规则完整验证时间格式
 
+# 远程测试收据是自更新证据，不代表根规则发生变化。
+FRESHNESS_IGNORED_PATHS = frozenset({"docs/git_manager/test-evidence-v204.json"})  # 新鲜度忽略的证据路径
+
 # 时间解析器把元数据文本转换为可比较值。
 def parse_datetime(raw: str) -> datetime | None:
     """解析 ISO 时间文本。
@@ -107,6 +110,24 @@ def parse_datetime(raw: str) -> datetime | None:
 
         # 可空返回值保留兼容旧元数据的降级路径。
         return None
+
+# Git 变更路径过滤器集中维护根规则新鲜度的排除语义。
+def is_relevant_change_path(str_line: str) -> bool:
+    """判断 Git 输出行是否代表会使根规则变旧的路径。
+
+    参数：str_line 为 Git 日志或状态输出中的原始路径行。
+    返回：路径非空、不是根 AGENTS 自身且不是自更新收据时返回 True。
+    """
+
+    # Git 输出可能携带空白，先形成稳定的仓库相对路径文本。
+    str_normalized_path = str_line.strip()  # 当前 Git 变更路径
+
+    # 根规则自身与自更新收据都不代表规则正文发生变化。
+    return bool(
+        str_normalized_path
+        and not str_normalized_path.endswith("AGENTS.md")
+        and str_normalized_path not in FRESHNESS_IGNORED_PATHS
+    )
 
 # Git 时间查询器提供旧日期元数据的精确比较基准。
 def git_commit_time_for_file(project: Path, path: Path) -> datetime | None:
@@ -365,7 +386,7 @@ def freshness_report(project: Path, agents: Path) -> dict[str, Any]:
             {  # 去重后的变更路径集合
                 str_line.strip()  # 去除 Git 输出前后空白
                 for str_line in command_result.stdout.splitlines()  # 遍历日志或状态行
-                if str_line.strip() and not str_line.strip().endswith("AGENTS.md")  # 排除空行和规则自身
+                if is_relevant_change_path(str_line)  # 排除空行、规则自身和自更新收据
             }
         )
 

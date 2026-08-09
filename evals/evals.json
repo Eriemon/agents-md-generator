@@ -37,11 +37,11 @@
       "description": "tests, smoke*, reports, and runs must stay at the work-folder root and be blocked when nested under the primary skill or engineering directory."
     },
     {
-      "id": "workspace_boundary_double_confirmation",
+      "id": "workspace_boundary_authorization_contract",
       "kind": "directory_governance_regression",
       "patterns": ["Reviewer", "Pipeline"],
-      "handler": "workspace_boundary_double_confirmation",
-      "description": "Managed roots must keep external reads side-effect free and require two separate confirmations before any external modification, even under urgency, blanket approval, or changed scope."
+      "handler": "workspace_boundary_authorization_contract",
+      "description": "Managed roots must allow current or exact-routed verified remote work-folder changes and bound-project official codebase-memory start, refresh, rebuild, or recovery without confirmation; prohibit every other external write until an exact proactive user request; then require full disclosure and exactly one confirmation, with installed-skill mutation always confirmed once."
     },
     {
       "id": "evolution_removed_contract",
@@ -104,7 +104,7 @@
       "kind": "design_interview_regression",
       "patterns": ["Generator", "Reviewer", "Pipeline"],
       "handler": "design_review_gate",
-      "description": "Strong-control profile writes must block until final extra requirements are recorded and approved subagent design-review evidence with matching hashes is supplied, but read_only interviews must complete without reviewer dispatch until explicitly escalated."
+      "description": "Strong-control profile writes must require final extra requirements and alignment but default to no review subagent; explicitly supplied design-review evidence must still have matching hashes, and read_only interviews must complete without reviewer dispatch until explicitly escalated."
     },
     {
       "id": "source_governance_test_boundary",
@@ -118,7 +118,7 @@
       "kind": "source_governance_regression",
       "patterns": ["Tool Wrapper", "Reviewer", "Pipeline"],
       "handler": "source_governance_size_readability_contract",
-      "description": "After internal readability helper decomposition, source governance must preserve its public JSON contract, enforce the 64KB UTF-8 size limit, preserve decomposition-plan exceptions, skip excluded roots, and block one-line or minified unreadable source."
+      "description": "After internal readability helper decomposition, source governance must preserve its public JSON contract, enforce the 64KB UTF-8 size limit, accept complete repository-local or bundled decomposition plans, reject incomplete bundled plans, skip excluded roots and root/scoped AGENTS.md governance metadata in opaque source evidence, and block one-line or minified unreadable source."
     },
     {
       "id": "root_version_sync_contract",
@@ -202,7 +202,14 @@
       "kind": "global_entry_regression",
       "patterns": ["Tool Wrapper", "Generator", "Reviewer", "Inversion", "Pipeline"],
       "handler": "task_rating_gate_contract",
-      "description": "Global task-entry governance must prefer reuse, include v3 Coding Behavior Baseline, Comments And Documentation, Environment And Dependency Safety, Markdown documentation formulas, and installed skill protection, avoid asking difficulty/scale for every task, preserve explicit or contextual user ratings, and trigger stricter planning/reuse research for hell or nightmare work."
+      "description": "Global task-entry governance must prefer reuse, include v4 scope discipline, decision-complete plans, user-opt-in-only non-testing subagents, executable-test-surface routing to one isolated TESTER that owns tests, comprehension-driven document forms, Coding Behavior Baseline, environment safety, and installed skill protection without expanding the requested goal."
+    },
+    {
+      "id": "global_review_agent_opt_in_contract",
+      "kind": "global_entry_regression",
+      "patterns": ["Tool Wrapper", "Generator", "Reviewer", "Inversion", "Pipeline"],
+      "handler": "global_review_agent_opt_in_contract",
+      "description": "Global governance must keep every non-testing subagent disabled unless the user proactively and explicitly names a current-task role or purpose; generic multi-agent wording and inferred need do not authorize dispatch, omitted count defaults to three, and one isolated TESTER is used only for work with an executable test surface."
     },
     {
       "id": "memory_governance_gate",

@@ -226,7 +226,7 @@ COMMON_GROUP_LABELS = (  # 可识别的公共分组标签
 )
 
 # Markdown 内容预算防止入口和生成模板重新膨胀。
-GLOBAL_TEMPLATE_MAX_BYTES = 5 * 1024  # 全局受管基线预算。
+GLOBAL_TEMPLATE_MAX_BYTES = 8 * 1024  # 全局受管基线预算。
 
 # 技能简介遵循标准 UI 元数据字符边界。
 OPENAI_SHORT_DESCRIPTION_MIN_CHARS = 25  # 技能简介最少字符数。
@@ -310,6 +310,8 @@ REQUIRED_EVAL_CASE_IDS = {  # 必需效果测试案例标识
     "language_skill_routing_contract",  # 语言技能路由合同案例
     "codex_token_usage_review_contract",  # Codex Token 统计合同案例
     "task_rating_gate_contract",  # 任务评级门禁合同案例
+    "global_review_agent_opt_in_contract",  # 审查智能体显式启用合同案例
+    "workspace_boundary_authorization_contract",  # 工作区外部写入授权合同案例
     "memory_governance_gate",  # 项目记忆治理门禁案例
     "governance_cli_entrypoint_smoke",  # 治理命令入口冒烟案例
     "openai_metadata_standard_contract",  # OpenAI 技能元数据标准合同案例
@@ -1011,14 +1013,14 @@ def validate_global_baseline_template(path: Path, errors: list[str]) -> None:
 
         # 固定预算写入错误，便于测试和维护者理解边界。
         errors.append(
-            "assets/templates/global-codex-agents.md: exceeds 5120 UTF-8 bytes "
+            "assets/templates/global-codex-agents.md: exceeds 8192 UTF-8 bytes "
             f"({int_template_bytes})"
         )
 
     # 必需片段覆盖元数据、执行模式、编码纪律和环境安全合同。
     tuple_required_snippets = (  # 全局基线必需规则片段
         "AGENTS-GENERATED:META generator=agents-md-generator schema=1 "
-        "baseline=global-codex-baseline baseline_version=3",
+        "baseline=global-codex-baseline baseline_version=4",
         "## Instruction Scope",  # 指令作用域章节
         "## Managed Repository Entry",  # 受管仓库入口章节
         "## Execution Mode",  # 执行模式章节
@@ -1055,7 +1057,24 @@ def validate_global_baseline_template(path: Path, errors: list[str]) -> None:
         "pip install --user",  # 禁止用户级全局安装
         "installed skill directories",  # 已安装技能目录边界
         "$CODEX_HOME/skills",  # Codex 已安装技能根目录
-        "explicitly requests installation, replacement, or direct modification",  # 已安装目录修改授权边界
+        "Always obtain exactly one explicit user confirmation",  # 已安装目录修改单次确认边界
+        "## Scope Discipline",  # 目标收紧章节
+        "freeze `Goal`, `Success Criteria`, `In Scope`, and `Out of Scope`",  # 冻结范围合同
+        "Treat every other feature, refactor, abstraction",  # 禁止未请求外扩
+        "Reviewers may identify omissions, contradictions, risks, or unverifiable steps",  # 审查职责边界
+        "## Governed Planning And Testing",  # 方案审查与隔离测试章节
+        "Do not use non-testing subagents by default",  # 非测试智能体默认禁用
+        "request in the current task authorizes non-testing subagents",  # 当前任务用户显式启用
+        "generic request to \"use multi-agent\"",  # 泛称多智能体不构成授权
+        "use exactly three",  # 未指定数量时默认三个
+        "explicit user-provided count overrides",  # 显式数量覆盖默认值
+        "When requested work has an executable test surface",  # 测试智能体触发边界
+        "fork_turns=none",  # 测试智能体的记忆隔离标记
+        "Only that `TESTER` may list, read, create, modify, or run anything under `tests/**`",  # 测试目录所有权
+        "same `TESTER` to re-run verification",  # 同一测试者复验
+        "Routine test-hash confirmation is prohibited.",  # 测试树哈希无需常规确认
+        "Choose prose, tables, Mermaid flowcharts, or a combination",  # 文档表现形式选择
+        "execution needs no new design choice",  # 决策完备计划要求
     )
 
     # 逐项报告缺失片段，便于维护者直接定位基线合同缺口。

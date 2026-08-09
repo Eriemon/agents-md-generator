@@ -44,6 +44,10 @@ The registered verification instructions are `verify.quick-validate`, `verify.au
 
 Use the validation chain above for ordinary completion. `verify/check_source_governance.py` enforces deterministic file-name syntax; `verify/review_governance.py --semantic-review <evidence.json>` owns the complementary functional-summary judgment plus dirty-worktree and committed-diff review. Registry instructions provide detailed parameters. Global baseline repair is registered under `docs.operations` as `sync-global-codex-agents`, and its advisory rating entry remains `detect/task_rating_gate.py`.
 
+Source-governance validation also accepts a validated plan bundled at `references/decomposition-plans/<relative source path>.md` when a repository-local plan is unavailable. This keeps installed skill copies self-governing without weakening the 64KB source limit or the required plan headings.
+
+Release validation passes the opaque remote receipt through `manage_docs.py release-prepare`, `release-gate`, and `package-release` with `--test-evidence docs/git_manager/test-evidence-v<version>.json`; the release gate also checks AGENTS freshness, governance-metadata exclusion from the source manifest, source-cache exclusion, versioned dist parity, and the versioned `install_skill.py --target skip` path.
+
 ## Ask For More Usage
 
 Use the read-only local query command for detailed syntax, examples, prerequisites, outputs, exit codes, relations, and risk warnings:
