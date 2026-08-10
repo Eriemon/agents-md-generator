@@ -2,9 +2,57 @@
 
 # 标准库提供命令行解析、进程调用、路径和载荷类型。
 import argparse
+import sys
 import subprocess
 from pathlib import Path
 from typing import Any, cast
+
+# 直接执行安装入口时禁止导入期模块生成字节码缓存。
+sys.dont_write_bytecode = True  # 防止发布源码树出现 __pycache__
+
+# importlib 可能在执行当前入口前已经写入自身的字节码缓存。
+def _remove_entry_bytecode_cache() -> None:
+    """删除当前入口在执行前生成的 importlib 字节码缓存。
+
+    参数：无。
+    返回：无。
+    """
+
+    # 当前模块的缓存路径由 importlib 写入模块元数据。
+    object_cached_path = globals().get("__cached__")  # 当前入口缓存路径。
+
+    # 直接执行入口时通常没有可删除的当前模块缓存。
+    if not object_cached_path:
+
+        # 没有缓存路径时保持入口的正常启动流程。
+        return
+
+    # 缓存清理只针对当前入口，不触碰其他模块的运行时文件。
+    path_cached_file = Path(str(object_cached_path))  # 当前入口字节码文件。
+
+    # 缓存文件删除失败时仍保持安装入口可用。
+    try:
+
+        # 删除 importlib 在执行入口前写入的自身缓存。
+        path_cached_file.unlink(missing_ok=True)
+
+        # 自身缓存删除后，空的缓存目录也不应留在发布源码树中。
+        path_cached_directory = path_cached_file.parent  # 当前入口缓存目录。
+
+        # 仅空的标准缓存目录允许被清理。
+        if path_cached_directory.name == "__pycache__" and not any(path_cached_directory.iterdir()):
+
+            # 仅删除确认为空的标准缓存目录。
+            path_cached_directory.rmdir()
+
+    # 文件系统拒绝清理时不能阻断已验证发布包的安装业务。
+    except OSError:
+
+        # 缓存清理失败不能阻断已验证发布包的安装业务。
+        return
+
+# 入口模块加载完成后立即移除可能产生的自身缓存。
+_remove_entry_bytecode_cache()
 
 # 发布清单模块提供共同运行时、决策载荷和 worktree 检查入口。
 from install_release_manifest import (
@@ -16,7 +64,6 @@ from install_release_manifest import (
 
     # 发布内容路径提取和项目规范化属于安装入口的输入处理能力。
     referenced_release_paths,
-    resolve_project,
     sha256_file,
     validate_release_completeness,
 )
@@ -242,7 +289,8 @@ def main() -> None:
     object_arguments = build_argument_parser().parse_args()  # 当前安装命令行参数。
 
     # 发布目录规范化后作为验证和复制的统一来源。
-    path_release_directory = resolve_project(object_arguments.release_dir)  # 待验证版本化发布目录。
+    # absolute 保留发布根的符号链接形态，供安装验证器在读取前拒绝。
+    path_release_directory = Path(object_arguments.release_dir).expanduser().absolute()  # 待验证版本化发布目录。
 
     # 发布验证覆盖收据、内容策略、源码状态和完整性。
     dict_validation = validate_release_dir(path_release_directory)  # 当前发布包验证结果。

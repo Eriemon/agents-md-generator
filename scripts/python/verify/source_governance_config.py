@@ -437,7 +437,7 @@ def legacy_global_rule_overrides(profile: dict[str, Any] | None) -> dict[str, An
             },
         },
     )
-
+ 
 # 旧版注释位置合同单独校验，避免主策略校验器同时承担枚举和正文职责。
 def validate_code_comment_positions(
     comment_policy: dict[str, Any],

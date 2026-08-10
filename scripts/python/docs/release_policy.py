@@ -56,6 +56,26 @@ from release_content_policy import (
 from version_policy import parse_historical_version_tuple, parse_version_tuple, version_policy_error
 from git_worktree_policy import inspect_worktree_policy
 
+# 路径边界助手拒绝根路径或祖先通过链接改写发布目标。
+def path_has_symbolic_component(path_candidate: Path) -> bool:
+    """判断路径本身或其祖先是否包含符号链接。
+
+    参数：path_candidate 为发布源、发布根或归档输出路径。
+    返回：路径无法规范化或包含链接时返回 True，否则返回 False。
+    """
+
+    # absolute 保留链接形态，resolve 用于发现祖先目录链接。
+    try:
+
+        # 路径身份变化即表示实际访问边界与声明路径不一致。
+        return path_candidate.absolute() != path_candidate.resolve()
+
+    # 无法判断路径身份时必须按不安全边界处理。
+    except (OSError, RuntimeError):
+
+        # 保守返回 True，阻断后续发布文件系统操作。
+        return True
+
 # 安装侧清理原语确保发布生成与安装验证使用同一算法。
 from install_release_sanitization import (
     detect_binary_sensitive_matches,
@@ -389,6 +409,12 @@ def build_release_file_manifest(root: Path, *, exclude: set[str] | None = None) 
         按路径排序的文件摘要记录。
     """
 
+    # 根目录或祖先链接不能被清单遍历器当作普通发布树读取。
+    if path_has_symbolic_component(root):
+
+        # 上层发布内容策略负责给出阻断诊断。
+        return []
+
     # 排除集用于跳过收据自身或调用方明确忽略的文件。
     set_excluded = exclude or set()  # release 清单排除路径
 
@@ -397,6 +423,12 @@ def build_release_file_manifest(root: Path, *, exclude: set[str] | None = None) 
 
     # 排序遍历保证跨平台收据顺序稳定。
     for path in sorted(root.rglob("*")):
+
+        # 符号链接不得被摘要器跟随到发布根之外。
+        if path.is_symlink():
+
+            # 内容策略负责在更早阶段报告链接违规。
+            continue
 
         # 目录自身没有内容摘要，清单只记录普通文件。
         if not path.is_file():
@@ -429,7 +461,15 @@ def write_release_zip(release_dir: Path, zip_path: Path) -> None:
 
     Returns:
         无；成功时压缩包完整落盘。
+
+    异常：发布目录含符号链接时抛出 RuntimeError。
     """
+
+    # ZIP 根和输出路径不能通过链接改变发布边界。
+    if path_has_symbolic_component(release_dir) or path_has_symbolic_component(zip_path):
+
+        # 在创建归档或遍历内容前阻断链接路径。
+        raise RuntimeError("> ERR: [Python] release or ZIP output path must not be a symbolic link")
 
     # zip 目录可能是首次创建的 dist 输出目录。
     zip_path.parent.mkdir(parents=True, exist_ok=True)
@@ -439,6 +479,12 @@ def write_release_zip(release_dir: Path, zip_path: Path) -> None:
 
         # 包内路径保留 dist/<release-name>/ 前缀，匹配安装包布局。
         for path in sorted(release_dir.rglob("*")):
+
+            # ZIP 写入不能跟随发布树中的符号链接读取外部内容。
+            if path.is_symlink():
+
+                # 失败保持发布包和归档包的一致安全边界。
+                raise RuntimeError(f"> ERR: [Python] release directory contains symbolic link: {path}")
 
             # 仅文件成为 ZIP 成员，空目录无需单独记录。
             if path.is_file():
@@ -533,6 +579,12 @@ def dist_artifact_snapshot(project: Path, excluded: set[str] | None = None) -> l
     # 排序遍历保证快照顺序稳定。
     for path in sorted(path_dist_root.rglob("*")):
 
+        # 历史快照不能因链接而读取 dist 外部目标。
+        if path.is_symlink():
+
+            # 当前链接由内容策略或后续发布门禁报告，不计入文件摘要。
+            continue
+
         # 快照只覆盖实际文件，目录结构由文件路径隐式表达。
         if not path.is_file():
 
@@ -564,6 +616,12 @@ def read_release_receipt(path: Path) -> dict[str, Any]:
     Returns:
         有效对象映射；读取失败或非对象内容返回空字典。
     """
+
+    # 收据路径或其祖先链接可能把读取动作导向发布根之外。
+    if path_has_symbolic_component(path):
+
+        # 返回空对象交给调用方生成稳定的无效收据诊断。
+        return {}
 
     # 文件缺失、编码损坏和 JSON 损坏统一视为无效收据。
     try:
@@ -707,6 +765,12 @@ def sanitize_release_tree(
         # 安装验证器据此要求 files 证据。
         dict_result["receipt_required"] = True  # 声明安装端必须验证逐文件记录
 
+    # 清洗根或祖先链接不能被读取或改写。
+    if path_has_symbolic_component(skill_dir) or path_has_symbolic_component(release_dir):
+
+        # 返回稳定错误，避免后续 rglob 或 write_text 跟随链接。
+        return dict_result, ["release source or release root must not be a symbolic link"]
+
     # 非 skill 或未启用策略时不扫描文件树。
     if not dict_settings["required"]:
 
@@ -721,6 +785,18 @@ def sanitize_release_tree(
 
     # 源码树限制发布成员范围，并保证遍历顺序稳定。
     for path_source_file in sorted(skill_dir.rglob("*")):
+
+        # 源码链接不得进入清洗器并被读取其目标内容。
+        if path_source_file.is_symlink():
+
+            # 先计算链接相对路径，诊断不依赖链接目标。
+            str_relative_path = path_source_file.relative_to(skill_dir).as_posix()  # 链接相对路径。
+
+            # 统一记录为发布清洗阻断错误。
+            list_errors.append(f"release source contains symbolic link: {str_relative_path}")
+
+            # 不对链接执行 is_file 或内容读取。
+            continue
 
         # 目录不对应可清洗发布成员。
         if not path_source_file.is_file():
@@ -741,6 +817,16 @@ def sanitize_release_tree(
         path_release_file = release_dir / str_relative_path  # 对应发布成员。
 
         # 只处理实际复制到发布树的文件。
+        # 发布副本链接不能进入单文件清洗流程。
+        if path_release_file.is_symlink():
+
+            # 清洗阶段的链接诊断必须先于任何正文 helper。
+            list_errors.append(f"release directory contains symbolic link: {str_relative_path}")
+
+            # 直接进入下一源码成员，避免触发普通文件分支。
+            continue
+
+        # 源码存在但发布树没有对应文件时，跳过清洗操作。
         if not path_release_file.is_file():
 
             # 源码专用成员可能被发布策略排除。

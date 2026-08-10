@@ -1,26 +1,14 @@
 cff-version: 1.2.0
-message: "If you use this agent skill, please cite it using the metadata below."
-title: "AGENTS.md Generator: An Agent Skill for Coding-Agent Context Files"
+title: "AGENTS.md Generator"
+version: 2.1.0
 type: software
+message: "If you use this skill, cite the repository and the released version."
 authors:
-  - family-names: "Liu"
-    given-names: "Jiyuan"
-    email: "<REDACTED_EMAIL>"
-    affiliation: "Southeast University"
-  - family-names: "Li"
-    given-names: "He"
-    affiliation: "Southeast University"
-abstract: "AGENTS.md Generator is a Codex-ready agent skill package for generating and verifying AGENTS.md files from repository facts, design profiles, templates, and validation evidence."
-keywords:
-  - agent skill
-  - Codex
-  - AGENTS.md
-  - coding agents
-  - repository onboarding
-  - documentation
+  - family-names: "Eriemon"
+    given-names: "Codex Maintainers"
 repository-code: "https://github.com/Eriemon/agents-md-generator"
-url: "https://github.com/Eriemon/agents-md-generator"
-version: "2.0.8"
-date-released: "2026-08-09"
-year: 2026
 license: "Apache-2.0"
+keywords:
+  - "Codex skill"
+  - "AGENTS.md"
+  - "repository governance"

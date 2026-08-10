@@ -18,7 +18,12 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 # 纯健康模块提供范围、WAL 基线和最终分类 hook。
-from codebase_memory_health import classify_index_scope, collect_wal_baseline, inspect_cbmignore
+from codebase_memory_health import (
+    classify_index_scope,
+    collect_wal_baseline,
+    inspect_cbmignore,
+    path_is_ignored,
+)
 
 # 上游仓库地址是安装说明与发布入口的共同来源。
 REPOSITORY_URL = "https://github.com/DeusData/codebase-memory-mcp"  # 官方上游仓库地址
@@ -75,6 +80,7 @@ def codebase_memory_contract(enabled: bool) -> dict[str, Any]:
             "required_excludes": [
                 ".agents/",
                 ".codebase-memory/",
+                ".settings/remote-validation/",
                 "docs/development/history_development/",
                 "docs/dir_manager/history_dir_manager/",
                 "docs/experience/history_experience/",
@@ -108,6 +114,41 @@ def codebase_memory_contract(enabled: bool) -> dict[str, Any]:
             "long_wal_ratio_limit": 2,
         },
     }
+
+# 根合同和图谱健康检查共享同一 .cbmignore 路径判定。
+def is_path_excluded_by_cbmignore(path_project: Path, path_candidate: Path) -> bool:
+    """判断候选路径是否落在项目最终生效的 codebase-memory 排除范围内。
+
+    参数：path_project 为项目根；path_candidate 为待判断的绝对或相对路径。
+    返回：候选路径被根 `.cbmignore` 排除时为 True，否则为 False。
+    """
+
+    # 缺少范围文件时不猜测排除状态，交由上层合同报告配置缺失。
+    path_ignore = path_project / ".cbmignore"  # 根范围规则文件
+
+    # 没有规则文件不能安全地跳过嵌套产物。
+    if not path_ignore.is_file():
+
+        # 保守保留嵌套产物阻断行为。
+        return False
+
+    # 候选路径必须位于当前项目根下才能参与相对规则匹配。
+    try:
+
+        # 统一使用项目相对 POSIX 路径匹配目录排除规则。
+        str_relative_path = path_candidate.relative_to(path_project).as_posix()  # 候选相对路径
+
+    # 项目外路径不应被范围规则静默放行。
+    except ValueError:
+
+        # 项目外路径保持未排除状态，由调用方继续按安全合同处理。
+        return False
+
+    # 读取最终有序规则，让后续 allow 规则覆盖早期排除规则。
+    list_rules = path_ignore.read_text(encoding="utf-8").splitlines()  # 根范围规则正文
+
+    # 复用健康模块的 gitignore 语义实现，避免两个扫描器漂移。
+    return path_is_ignored(str_relative_path, list_rules)
 
 # 安装说明仅提供官方人工路径，不在治理脚本内下载或执行安装包。
 def installation_guidance() -> dict[str, Any]:
@@ -1023,6 +1064,12 @@ def _artifact_errors(project: Path, dict_status: dict[str, Any]) -> list[str]:
 
     # 全仓扫描同名清单，阻止子目录产生第二套知识图谱真值。
     for path_nested in project.glob(ARTIFACT_MANIFEST_GLOB):
+
+        # 根范围明确排除的授权快照不属于当前项目扫描树。
+        if is_path_excluded_by_cbmignore(project, path_nested):
+
+            # 继续检查其他未被范围规则排除的候选清单。
+            continue
 
         # 根级清单是唯一合法位置，其余路径均形成嵌套污染。
         if path_nested.parent != path_artifact_directory:

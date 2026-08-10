@@ -6,7 +6,11 @@ import re
 from typing import Any
 
 # 发布清单模块提供安全路径解析和文件摘要。
-from install_release_manifest import resolve_release_member_path, sha256_file
+from install_release_manifest import (
+    path_has_symbolic_component,
+    resolve_release_member_path,
+    sha256_file,
+)
 
 # 每类敏感信息使用稳定占位符，便于收据记录和内容复核。
 SANITIZED_PLACEHOLDERS = {
@@ -48,7 +52,15 @@ SANITIZED_INLINE_RULES = [
 SANITIZED_BINARY_PATTERNS = [
     ("api_key", re.compile(br"sk-(?:live|proj|test)-[A-Za-z0-9_-]+")),  # OpenAI 风格密钥字节模式。
     ("password", re.compile(br"password", flags=re.IGNORECASE)),  # 密码关键词字节模式。
-    ("email", re.compile(br"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")),  # 邮箱字节模式。
+    (
+        "email",  # 邮箱敏感类别名称。
+        re.compile(  # 规范邮箱的边界和域名层级。
+            br"(?<![A-Za-z0-9._%+-])[A-Za-z0-9][A-Za-z0-9._%+-]*@"  # 限定本地部分首字符和分隔边界。
+            br"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"  # 限定首级域名的合法首尾字符。
+            br"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*"  # 支持多级域名并排除悬空连字符。
+            br"\.[A-Za-z]{2,63}(?![A-Za-z0-9])"  # 要求字母顶级域名和结束边界。
+        ),  # 只接受结构完整且边界明确的邮箱字节序列。
+    ),
 ]
 
 # 文本识别器要求无 NUL 且可完整 UTF-8 解码。
@@ -480,11 +492,32 @@ def validate_against_source(
     返回：无，所有差异写入 list_errors。
     """
 
+    # 源码根或发布根链接都不能进入逐文件对照。
+    if path_has_symbolic_component(path_source_skill) or path_has_symbolic_component(path_release_dir):
+
+        # 记录根边界错误并跳过所有内容读取。
+        list_errors.append("release source or release root must not be a symbolic link")
+
+        # 结束源码对照，避免继续触碰任一根路径。
+        return
+
     # 记录源码中实际需要清洗的文件集合。
     set_expected_declared: set[str] = set()  # 根据源码计算的清洗声明路径。
 
     # 排序遍历确保诊断顺序稳定。
     for path_source_file in sorted(path_source_skill.rglob("*")):
+
+        # 源码链接不能被对照器跟随读取外部目标。
+        if path_source_file.is_symlink():
+
+            # 先计算源码链接相对路径，诊断不依赖链接目标。
+            str_relative_path = path_source_file.relative_to(path_source_skill).as_posix()  # 源码链接相对路径。
+
+            # 记录链接相对路径并跳过内容比较。
+            list_errors.append(f"release source contains symbolic link: {str_relative_path}")
+
+            # 当前成员不再进入发布副本读取分支。
+            continue
 
         # 目录不参与内容比较。
         if not path_source_file.is_file():
@@ -503,6 +536,15 @@ def validate_against_source(
 
         # 对照文件必须存在于发布包中才执行字节比较。
         path_release_file = path_release_dir / str_relative_path  # 对应发布成员路径。
+
+        # 发布副本链接不能被对照器跟随读取外部目标。
+        if path_release_file.is_symlink():
+
+            # 将安装前来源对照中的链接事实留在诊断列表。
+            list_errors.append(f"release directory contains symbolic link: {str_relative_path}")
+
+            # 链接目标不会参与来源一致性比较。
+            continue
 
         # 缺失成员由其他发布清单验证器报告。
         if not path_release_file.is_file():
@@ -556,8 +598,29 @@ def validate_external_release(
     返回：无，检测结果写入 list_errors。
     """
 
+    # 外部发布根或祖先链接不能被脱敏扫描跟随到未知目录。
+    if path_has_symbolic_component(path_release_dir):
+
+        # 将链接根标记为外部包扫描失败。
+        list_errors.append("release directory root must not be a symbolic link")
+
+        # 结束外部包扫描，避免继续触碰未知目录。
+        return
+
     # 遍历实际发布内容识别残留敏感信息。
     for path_release_file in sorted(path_release_dir.rglob("*")):
+
+        # 外部包链接不能被脱敏扫描跟随到发布根之外。
+        if path_release_file.is_symlink():
+
+            # 先计算外部链接相对路径，诊断不依赖链接目标。
+            str_relative_path = path_release_file.relative_to(path_release_dir).as_posix()  # 外部链接相对路径。
+
+            # 直接记录阻断错误而不读取链接目标。
+            list_errors.append(f"release directory contains symbolic link: {str_relative_path}")
+
+            # 当前成员不再进入普通文件或收据分支。
+            continue
 
         # 跳过目录和发布收据自身。
         if not path_release_file.is_file() or path_release_file.name == str_receipt_name:
@@ -618,6 +681,15 @@ def validate_external_release(
         # 声明路径此前已完成根目录边界验证。
         path_release_file = path_release_dir / str_relative_path  # 声明对应的外部发布成员。
 
+        # 收据声明也不能把符号链接伪装成普通文件。
+        if path_release_file.is_symlink():
+
+            # 记录链接路径并跳过摘要读取。
+            list_errors.append(f"release receipt sanitization entry is a symbolic link: {str_relative_path}")
+
+            # 链接目标不属于外部发布包证据。
+            continue
+
         # 不存在文件使收据证据失效。
         if not path_release_file.is_file():
 
@@ -640,16 +712,27 @@ def validate_release_sanitization(
     dict_receipt: dict[str, Any],
     path_repo_root: Path | None,
     list_errors: list[str],
+    str_expected_skill_name: str | None = None,
 ) -> None:
     """验证发布收据记录的完整清洗证据。
 
     参数：path_release_dir、path_receipt 和 dict_receipt 描述发布包。
     参数：path_repo_root 为可选源码仓库，list_errors 为共享诊断列表。
+    参数：str_expected_skill_name 为发布目录声明的技能名。
     返回：无，所有验证错误追加到 list_errors。
     """
 
     # 延迟导入打破清洗与仓库验证模块的初始化环。
     from install_repository_validation import source_skill_dir_from_receipt
+
+    # 发布根或祖先链接不能进入清洗声明和内容复核。
+    if path_has_symbolic_component(path_release_dir):
+
+        # 记录根边界错误并结束清洗验证。
+        list_errors.append("release source or release root must not be a symbolic link")
+
+        # 不再读取或扫描链接根下的任何成员。
+        return
 
     # 顶层清洗字段必须先满足模式合同。
     list_file_entries = validate_sanitization_header(  # 通过头部验证的原始文件条目。
@@ -671,11 +754,26 @@ def validate_release_sanitization(
     )  # 完成逐条路径和证据字段解析。
 
     # 有源码仓库时尝试从收据定位对应技能目录。
-    path_source_skill = (
-        source_skill_dir_from_receipt(path_repo_root, dict_receipt)  # 收据关联的源码技能目录。
-        if path_repo_root is not None  # 仅源码仓库上下文允许关联。
-        else None  # 外部发布包没有源码目录。
-    )  # 可选源码技能目录。
+    path_source_skill: Path | None = None  # 可选源码技能目录。
+
+    # 外部发布包没有源码目录，不执行源码关联。
+    if path_repo_root is not None:
+
+        # 强来源仅关联与发布名一致的源码目录。
+        path_source_skill = source_skill_dir_from_receipt(  # 解析脱敏对照使用的源码根。
+            path_repo_root,  # 已确认的仓库根。
+            dict_receipt,  # 当前收据中的脱敏声明。
+            str_expected_skill_name,  # 当前发布目录的身份键。
+        )  # 收据关联的源码技能目录。
+
+    # 强来源缺少匹配源码时不能静默降级为外部包验证。
+    if path_repo_root is not None and path_source_skill is None:
+
+        # 显式记录保证度下降的来源边界错误。
+        list_errors.append("release receipt source_path does not identify the expected source skill")
+
+        # 不再读取或扫描无法关联的源码和发布内容。
+        return
 
     # 源码存在时执行最高保证度的逐文件对照。
     if path_source_skill is not None:

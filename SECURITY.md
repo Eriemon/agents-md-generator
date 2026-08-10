@@ -1,21 +1,14 @@
 # Security Policy
 
-## Supported Versions
+## Reporting a vulnerability
 
-Security fixes target the latest `main` branch unless a release branch is explicitly announced.
+请不要在公开 issue 中发布可利用的安全细节。请通过项目维护者认可的私密渠道提交：影响范围、复现步骤、最小样例、受影响版本和建议修复方向。
 
-## Reporting a Vulnerability
+## What to include
 
-Please report security issues through GitHub private vulnerability reporting if it is enabled for this repository. If that is unavailable, open a minimal public issue that requests a private coordination channel and does not include exploit details, secrets, or private infrastructure information.
+- 受影响的技能版本与运行环境
+- 可重复的输入和预期/实际行为
+- 是否涉及本地文件、远程 checkout 或凭据
+- 已采取的缓解措施
 
-## What Counts
-
-- Secret exposure, credential leakage, or unsafe logging.
-- Path traversal or unsafe archive, symlink, or shim behavior.
-- Untrusted command execution through generated agent instructions.
-- Validation logic that can falsely report commands, paths, or generated files as verified.
-- Documentation that encourages unsafe token, SSH, or private-repository handling.
-
-## Handling Expectations
-
-We will acknowledge valid reports, reproduce them in a minimal environment, and publish fixes with clear notes. Do not include real tokens, private keys, proprietary repository contents, private server names, or private network details in a report.
+维护者会先确认报告收到，再根据影响范围安排修复、回归验证和公开说明。安全修复也必须遵守现有 dist 回执和 GitHub 关联发布合同。

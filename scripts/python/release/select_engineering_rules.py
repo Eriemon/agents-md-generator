@@ -7,7 +7,55 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 from typing import Any
+
+# 直接执行规则选择入口时禁止生成字节码缓存。
+sys.dont_write_bytecode = True  # 防止发布源码树出现 __pycache__
+
+# importlib 可能在执行当前入口前已经写入自身的字节码缓存。
+def _remove_entry_bytecode_cache() -> None:
+    """删除当前入口在执行前生成的 importlib 字节码缓存。
+
+    参数：无。
+    返回：无。
+    """
+
+    # 当前模块的缓存路径由 importlib 写入模块元数据。
+    object_cached_path = globals().get("__cached__")  # 当前入口缓存路径。
+
+    # 直接执行入口时通常没有可删除的当前模块缓存。
+    if not object_cached_path:
+
+        # 没有缓存路径时保持入口的正常启动流程。
+        return
+
+    # 缓存清理只针对当前入口，不触碰其他模块的运行时文件。
+    path_cached_file = Path(str(object_cached_path))  # 当前入口字节码文件。
+
+    # 缓存文件删除失败时仍保持规则选择入口可用。
+    try:
+
+        # 删除 importlib 在执行入口前写入的自身缓存。
+        path_cached_file.unlink(missing_ok=True)
+
+        # 自身缓存删除后，空的缓存目录也不应留在发布源码树中。
+        path_cached_directory = path_cached_file.parent  # 当前入口缓存目录。
+
+        # 仅空的标准缓存目录允许被清理。
+        if path_cached_directory.name == "__pycache__" and not any(path_cached_directory.iterdir()):
+
+            # 仅删除确认为空的标准缓存目录。
+            path_cached_directory.rmdir()
+
+    # 文件系统拒绝清理时不能阻断规则选择入口的业务输出。
+    except OSError:
+
+        # 缓存清理失败不能阻断规则选择入口的业务输出。
+        return
+
+# 入口模块加载完成后立即移除可能产生的自身缓存。
+_remove_entry_bytecode_cache()
 
 # 支持列表只包含仓库已有参考资料覆盖的工程规则集。
 SUPPORTED_RULE_SETS = [  # 可选择的工程规则集标识

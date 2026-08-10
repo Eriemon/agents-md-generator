@@ -204,6 +204,12 @@ def validate_codebase_memory_artifacts(
     # 全仓扫描清单文件，阻止子目录形成第二个知识图谱根。
     for path_nested in project.glob(f"**/{str_artifact_directory}/{ARTIFACT_MANIFEST_NAME}"):  # 候选知识图谱清单
 
+        # 根 .cbmignore 明确排除的授权快照不属于当前项目边界。
+        if module_type_contract.is_path_excluded_by_cbmignore(project, path_nested):
+
+            # 继续检查项目边界内的其他候选清单。
+            continue
+
         # 只有项目根固定目录允许保存持久化清单。
         if path_nested.parent != path_artifact:
 

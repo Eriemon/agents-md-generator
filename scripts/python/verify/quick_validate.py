@@ -228,10 +228,20 @@ def quick_validate_path() -> Path:
     # 源码旁的系统技能目录支持隔离评估和发布前自检。
     path_skill_root = Path(__file__).resolve().parents[3]  # 当前 agents-md-generator 技能根
 
+    # CODEX_HOME 优先保证隔离验证和实际安装使用同一主目录。
+    str_codex_home = os.environ.get("CODEX_HOME", "").strip()  # Codex 主目录覆盖文本
+
+    # 显式主目录优先于用户默认主目录。
+    path_codex_home = (  # 当前验证使用的 Codex 主目录
+        Path(str_codex_home).expanduser()  # 展开隔离主目录
+        if str_codex_home  # 使用显式 CODEX_HOME
+        else Path.home() / ".codex"  # 回退用户默认主目录
+    )
+
     # 候选顺序先保证 source-bound 验证可复现，再回退用户安装位置。
     list_candidates = [  # 系统 quick_validate 候选路径
         path_skill_root.parent / ".system" / "skill-creator" / "scripts" / "quick_validate.py",  # 源码旁隔离系统技能
-        Path.home() / ".codex" / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py",  # 用户 Codex 安装
+        path_codex_home / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py",  # 用户 Codex 安装
     ]
 
     # 首个真实文件成为当前评估使用的通用校验器。

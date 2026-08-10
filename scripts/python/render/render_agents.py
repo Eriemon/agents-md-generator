@@ -68,9 +68,9 @@ _extend_task_module_search_path()
 # 渲染入口按基础、合同和命令编排顺序加载。
 _load_module_shards(
     (
-        "render_foundation.py",  # 基础渲染分片提供共享数据结构。
-        "render_contracts.py",  # 合同分片提供规则校验实现。
-        "render_contract_templates.py",  # 模板分片提供合同文本渲染。
-        "render_entrypoints.py",  # 入口分片提供对外命令编排。
+        "render_foundation.py",
+        "render_contracts.py",
+        "render_contract_templates.py",
+        "render_entrypoints.py",
     )
 )

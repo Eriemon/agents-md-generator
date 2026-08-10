@@ -206,10 +206,20 @@ def quick_validate_script(bool_self_skill: bool = False, skill_dir: Path | None 
         list_candidates.append(tool_script_path("quick_validate.py"))
 
     # 系统 skill-creator 校验器负责所有通用目标及自评估回退。
+    str_codex_home = os.environ.get("CODEX_HOME", "").strip()  # 隔离 Codex 主目录文本
+
+    # 显式主目录优先于用户默认主目录。
+    path_codex_home = (  # 当前评估使用的 Codex 主目录
+        Path(str_codex_home).expanduser()  # 展开隔离主目录
+        if str_codex_home  # 使用显式 CODEX_HOME
+        else Path.home() / ".codex"  # 回退用户默认主目录
+    )
+
+    # 候选路径遵循 CODEX_HOME 优先、用户默认目录回退的统一合同。
     list_candidates.extend(
         [
             TOOL_SKILL_DIR.parent / ".system" / "skill-creator" / "scripts" / "quick_validate.py",  # 同级系统技能
-            Path.home() / ".codex" / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py",  # 用户安装回退
+            path_codex_home / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py",  # 用户安装回退
         ]
     )
 

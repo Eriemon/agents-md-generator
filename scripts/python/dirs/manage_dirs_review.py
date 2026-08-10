@@ -1115,6 +1115,41 @@ def tests_layout_findings(
         for item in dict_current.get("files", [])  # 标准化 Python 深度检查所需的每个文件条目
     ]  # 当前工作文件夹的全部文件
 
+    # 受控验证快照可携带自身 tests 树，但不属于当前项目的测试根。
+    list_excluded_roots: list[str] = []  # 不参与当前 tests 布局检查的受控目录
+
+    # 按合同读取每个快照排除根，形成稳定的路径前缀集合。
+    for item in dict_layout.get("excluded_roots", []):
+
+        # 目录边界统一使用规范化相对路径，避免前后斜杠造成漏排除。
+        str_excluded_root = normalize_rel(str(item)).rstrip("/")  # 当前受控排除根
+
+        # 空配置不应改变默认的单一 tests 根合同。
+        if str_excluded_root:
+
+            # 保留声明顺序，便于结构诊断和计划复核稳定。
+            list_excluded_roots.append(str_excluded_root)
+
+    # 仅排除受控根及其后代，保留项目其他目录的完整结构证据。
+    list_directories = [
+        item  # 当前项目结构目录
+        for item in list_directories  # 遍历已规范化目录
+        if not any(  # 目录路径命中受控根时跳过目录布局检查
+            item == str_excluded_root or item.startswith(str_excluded_root + "/")  # 目录边界命中判定
+            for str_excluded_root in list_excluded_roots  # 对每个受控文件根执行路径前缀判断
+        )
+    ]
+
+    # 文件事实使用同一排除边界，避免 Python 深度检查重新发现快照 tests。
+    list_files = [
+        item  # 当前项目结构文件
+        for item in list_files  # 遍历已规范化文件
+        if not any(  # 文件路径命中受控根时跳过文件深度检查
+            item == str_excluded_root or item.startswith(str_excluded_root + "/")  # 文件边界命中判定
+            for str_excluded_root in list_excluded_roots  # 逐项比较受控根前缀
+        )
+    ]
+
     # 任意层级同名 tests 都进入唯一根目录检查。
     list_test_roots = [
         item  # 名称等于目标测试根的目录路径

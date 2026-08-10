@@ -1,6 +1,6 @@
 ---
 name: agents-md-generator
-description: Use when creating, updating, compressing, reviewing, or verifying AGENTS.md and other AI coding-agent rules; when a managed root AGENTS.md is missing, malformed, stale, or version-incompatible; when the user explicitly mentions AGENTS.md, agent rules, or scoped AGENTS.md; or when a request about the current workspace, repository, or work folder says 计划, 规划, or 准备 and therefore requires a root AGENTS.md check first.
+description: Use when creating, updating, compressing, reviewing, or verifying AGENTS.md and other AI coding-agent rules; when a managed root AGENTS.md is missing, malformed, stale, or version-incompatible; when the user explicitly mentions AGENTS.md, agent rules, or scoped AGENTS.md; when a managed skill README needs a functional illustration set; or when a request about the current workspace, repository, or work folder says 计划, 规划, or 准备 and therefore requires a root AGENTS.md check first.
 ---
 
 # AGENTS.md Generator
@@ -14,6 +14,7 @@ Generate operational agent rules from repository facts and confirmed human polic
 - Use `read_only` for explanation, planning, state checks, and read-only review; use `design` while collecting policy; use `write` for approved managed changes; use `governance_high_risk` for release or merge review. None of these modes authorizes a non-testing subagent. Only the user's proactive and explicit request in the current task does, and it must name the role or purpose.
 - If the user explicitly asks for Codex Token usage statistics, use registry instruction `detect.token-usage-review`; do not enter the AGENTS design interview. Use it only when `$CODEX_HOME/sessions` or `~/.codex/sessions` exists, and keep any sessions-root override inside that active sessions tree. Generic cost, optimization, and session-health questions do not trigger this branch.
 - External work folders call the installed skill runtime. Only this owner repository uses repo-local `python skills/agents-md-generator/scripts/python/...` paths.
+- 当技能开发需要链接 GitHub 仓库时，统一使用 `github/` 现有 checkout 合同：先完成版本化 `dist/` 发布与安装，再执行只写本地 checkout 的镜像、计划和复核；策略为 `existing-only`，工具不创建远程仓库或执行 push。
 
 ## Inspect
 
@@ -50,6 +51,17 @@ Use registry instruction `design.collect-profile`, resume unfinished state, and 
 4. Keep the root an operational index. Put detailed remote registries in `.agents/agents-control.json`, directory policy in `docs/dir_manager/planned_structure.json`, and configurable coding/output rules in `.agents/global-rule-overrides.json`.
 5. Create scoped AGENTS only for verified local differences. Do not restate inherited root rules.
 6. Keep `.settings/` as work-folder configuration; allow remote `.settings/*.remote.json` and never copy `.settings/*.local.json`, including `.settings/server_list.local.json`, to remote systems.
+
+### README illustration contract
+
+When a user asks this skill to create README illustrations for a skill, treat the request as a functional design deliverable, not as a decorative image task:
+
+1. Write a visual brief from the skill's real inputs, decisions, outputs, gates, and boundaries before generating anything.
+2. Use Image2/ImageGen to generate original raster artwork. SVG is forbidden as a README illustration; Mermaid is also forbidden in the public image assets.
+3. Make the main image a horizontal 16:9 overview that is legible in a repository README. Add style-consistent detail images for each major capability instead of repeating or cropping the hero.
+4. Use panels, tables, relationship maps, code fragments, state cards, or formulas only when they clarify the function. Avoid generic stock imagery, empty neon decoration, and a linear checklist with no functional information.
+5. Provide matching English and Chinese PNGs when the skill has bilingual READMEs, keep them local under `assets/readme/`, and reference every image from the README that explains it.
+6. Validate PNG signatures, dimensions, local paths, and absence of SVG/remote metadata before copying images into the source package or `dist/`.
 
 Managed roots render `coding_behavior.language_skill_routing` exactly as `shared`, `python`, and `script`: shared think-first/in-process gates appear 只渲染一次; Python remains owned by `readable-python-generator`; bat/cmd, shell/bash, PowerShell, and Tcl remain owned by `readable-script-generator`; a script wrapper that invokes Python is still a script target. Preserve line separation, 严禁把代码压缩到一行, and reject 炫技代码. Render `script_output_policy` from configuration rather than hard-coded business enums.
 
@@ -127,4 +139,6 @@ The query is read-only and never executes returned commands. Exit codes are `0` 
 - `references/coding-behavior-language-routing.md`: language routing owner.
 - `references/script-output-policy.md`: process-output policy.
 - `references/evaluation-scenarios.md`: regression scenarios.
+- `references/github-skill-release.md`: existing-repository checkout, dist mirror, plan, and remote-publication boundaries.
+- `references/public-skill-package.md`: required public files and PNG-only bilingual README contract.
 - `assets/templates/`: generated Markdown shapes.

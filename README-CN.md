@@ -1,310 +1,93 @@
-<p align="center">
-  <a href="README.md">English</a>
-  <span>&nbsp;|&nbsp;</span>
-  <a href="README-CN.md"><strong>中文</strong></a>
-</p>
+# AGENTS.md Generator：把仓库事实变成可验证的协作规则
 
-<p align="center">
-  <img src="docs/assets/hero.svg" alt="AGENTS.md Generator" width="100%">
-</p>
+![从仓库事实到可验证 AGENTS.md 的受管路径](assets/readme/hero-cn.png)
 
-<p align="center">
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
-  <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-v2.0.8-7c3aed">
-  <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent-skill-16a34a"></a>
-  <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
-</p>
+这不是一个“把说明文字写长”的模板。它检查真实工作文件夹，询问无法安全推断的策略，生成作用域清晰的 `AGENTS.md`，并把目录、远程、记忆、会话和发布证据留给下一次工作继续使用。
 
-<h1 align="center">AGENTS.md Generator</h1>
+## 一句话理解
 
-<p align="center">
-  面向 Codex 的 AGENTS.md 生成、修复与验证 Skill。
-</p>
-
-<p align="center">
-  最新版本：<strong>v2.0.8</strong> · 发布日期：<strong>2026-08-09</strong>
-</p>
-
-AGENTS.md Generator 用来帮助编程 Agent 根据仓库事实生成可靠的治理文件，而不是凭记忆拼接规则。它把触发元数据、分组式设计访谈、确定性 Python 脚本、文档治理辅助、目录治理门禁和验证链组合在一起，让 Agent 能从仓库事实稳定走到可信的 `AGENTS.md` 输出。
-
-这个仓库首先是一个 **Agent Skill Package**。Python 脚本是确定性执行层，但核心产品其实是 Agent 可加载、可遵循的 skill 工作流。
+`仓库事实 + 已确认意图 → 分层 AGENTS.md + 可追溯治理证据`
 
 ## 它解决什么问题
 
-很多 Agent 规则文件一开始写得很认真，但很快就会和真实仓库脱节：命令不再存在，路径已经变化，本地约束被写在多个地方还互相冲突。AGENTS.md Generator 强制 Agent 走一条更稳的路径：
+| 场景 | 技能行为 | 交付结果 |
+| --- | --- | --- |
+| 根规则缺失 | 先判断项目类型，再按分组收集设计答案 | 可执行的根规则和作用域计划 |
+| 已有 AGENTS.md | 只更新受管区块，保留人工文本 | 小而清晰的差异 |
+| 规则过长 | 围绕决策、路径和门禁压缩 | 适合 Agent 执行的短根文件 |
+| 需要远程验证 | 按配置解析任务路由并检查工作区 | 服务器、任务、工作区证据 |
+| 会话中断 | 读取 handoff 并恢复精确步骤 | 可安全暂停和继续的状态 |
+| 技能发布 | 审计、打包、回执和安装门禁 | `dist/<skill>-vX.Y.Z/RELEASE_RECEIPT.json` |
+| 需要 GitHub 仓库 | 把完成的 dist 内容镜像到已有 `github/` checkout | 清单、计划和独立发布边界 |
 
-- 先检查仓库事实
-- 只询问缺失的人类策略
-- 保持 root 和 scoped `AGENTS.md` 小而聚焦
-- 让 docs、directory、release 治理尽量走脚本化流程
-- 在声明完成前，验证元数据、路径、契约和回复语言规则是否一致
+## 功能子图
 
-## 核心能力
+主图负责建立全局理解，下面四张子图分别展开真实工作内容：检查什么事实、如何锁定策略、规则写到哪里，以及交接为什么可信。
 
-- 为 Codex 类编程 Agent 生成 root 和 scoped `AGENTS.md`。
-- 提供可恢复状态的分组式设计访谈与确认门禁。
-- 为 root `AGENTS.md` 版本失配的旧工作区提供 takeover 流程。
-- 提取命令、文档、CI 线索、作用域和治理信号等仓库事实。
-- 为 skill 项目和 engineering 项目生成 strong-control profile。
-- 提供 handoff、memory、development、install、git-manager 等 docs 治理辅助。
-- 提供由 JSON source、SQLite FTS 索引和只读查询 CLI 组成的渐进披露命令注册表。
-- 通过 `scripts/python/dirs/manage_dirs.py` 执行目录治理审查与结构门禁。
-- 在需要时生成 `CLAUDE.md` 与 `GEMINI.md` 兼容 shim。
-- 提供验证、审计、自动 review 治理、skill-effectiveness eval 和 aggregate confidence gate，用于发布前把关。
+![项目事实：仓库目录、知识图谱、语言构成、命令面和作用域候选](assets/readme/project-facts-cn.png)
 
-## v2.0.8 重点更新
+![设计画像：策略回答、关键问题、作用域边界和决策矩阵](assets/readme/design-profile-cn.png)
 
-v2.0.8 同步了最新的受治理 skill payload。它保持现有公开入口不变，同时把全局指令基线、测试智能体边界、远程工作文件夹合同和发布证据做得更明确、更偏向失败关闭。
+![规则生成：继承与局部覆盖、受管区块和最小差异](assets/readme/rule-rendering-cn.png)
 
-### 全局 v4 治理基线
+![证据守门：新鲜度、路径安全、记忆门禁、验证报告和失败即阻断](assets/readme/evidence-guard-cn.png)
 
-- 将生成的全局基线更新到 v4：每份计划都必须冻结目标、成功标准、范围内和范围外事项；正式计划还必须写明输入、输出、受影响文件或接口、前置条件、失败处理、验证方式和停止条件。
-- 不再把 read-only、design、write 或 governance-high-risk 模式默认视为可以创建额外智能体。非测试智能体必须由用户主动请求并说明用途；存在可执行测试面时，只使用一个隔离的 `tester_worker`，由它拥有 `tests/**`。
-- 新增单任务授权收据合同：skill、根 `AGENTS.md` 和 CLI 对同一目标与范围复用一次授权；目标、范围或重大风险变化时必须重新确认。
+## 一个完整请求
 
-### 工作区与远程操作边界
+```text
+为仓库生成根 AGENTS.md，控制在 20 KB 内；把 rtl/ 下的 FPGA 规则放在作用域文件；
+在指定远程服务器验证；最后准备发布包，但不要安装。
+```
 
-- 生成的根规则现在包含有状态、失败关闭的远程工作文件夹合同：先解析配置路由并验证 workspace，再允许远程工作；部署、运行时、备份和归档生命周期细节写入计划结构记录。
-- 正式的 codebase-memory 索引、刷新、重建、恢复以及配置的缓存/根持久化产物被视为受治理项目边界的一部分；其他外部写入仍必须在明确请求并确认精确动作后才允许。
-- Python 源文件命名规则在 `__init__.py` 之外新增 `__main__.py` 豁免，保留可执行模块入口，同时不放宽其他功能模块不得含数字的规则。
+技能会把请求拆成明确答案，检查工作区是否已经有真实内容，只在对齐后写入，并如实报告实际运行过的门禁。它不会凭空编造服务器，不会把本地参考资料静默复制进去，也不会替你执行远程发布。
 
-### 新增证据与渲染辅助工具
-
-- 新增 `scripts/python/common/codebase_memory_health.py`，用于检查 codebase-memory 的 live/disk 健康状态；新增 `scripts/python/common/tester_worker_profile.py`，用于固定 canonical tester 合同。
-- 新增 `scripts/python/render/render_contract_templates.py` 与 `scripts/python/verify/test_evidence.py`，并补充新职责边界对应的 decomposition-plan 文档，使合同渲染和测试证据来源可以被检查，而不是只依赖 prose 声明。
-- 与 v2.0.3 对比，同步后的公开 payload 目录新增 13 个文件、更新 57 个文件、保持 84 个文件不变，没有删除项。公共仓库外壳保持不变，最终 release ZIP 会同时包含双语 README 和 `docs/`。
-
-### 兼容、迁移、验证与限制
-
-- 现有公开 CLI 入口继续受支持。需要 v4 基线、显式 tester 合同或有状态远程工作文件夹规则的旧生成根，应使用 v2.0.8 刷新；内部辅助模块路径仍不属于兼容合同。
-- v2.0.8 归档收据声明了 strong 的 pre/post 发布验证，并登记 153 个 skill 文件。本公开 checkout 继续把 repo-local tests、smoke 运行、reports、缓存、认证材料、凭据、私钥和机器专属绝对路径排除在公开发布资产之外。
-- 本版本不宣称已经在真实远程服务器或已安装 skill 上运行。需要这些边界的使用者，应在自己的环境中执行文档中的显式远程或安装检查。
-
-## v2.0.3 重点更新
-
-v2.0.3 收紧了首个公开 v2 版本中仍然耦合的三类边界：已安装技能身份与运行能力、可编辑注册源与生成索引、当前工作区与外部文件系统目标。这个版本保持现有公开 CLI 表面不变，同时让失败诊断更精确，并降低生成治理规则被意外弱化的风险。
-
-### RemoteSSH 能力发现
-
-- 当 `erie-remote-ssh` 的技能目录和根 `SKILL.md` 存在时，就确认技能已经安装；CLI 与设置发现改为独立能力，不再反向改变安装判定。
-- 优先使用当前 `scripts/python/runtime/remote_ssh.py` 入口，并把 `scripts/remote_ssh.py` 保留为旧版已安装副本的兼容回退。
-- 已安装但没有受支持 CLI 时返回退出码 127 的运行能力错误，不再错误地引导用户重新安装技能。
-
-### 自描述注册表布局
-
-- 将注册表 metadata、治理配置和 JSON Schema 分别迁移到 `metadata/`、`governance/` 与 `schemas/`；`config/registry/` 根目录现在只保留生成的 `registry.sqlite3` 和按职责划分的子目录。
-- 在注册表根目录下发现且只允许一个有效 manifest；缺失、重复、位于根级或越过目录边界的声明都会失败关闭，不再依赖硬编码的 `manifest.json` 路径。
-- 可选文档治理初始化改为使用 manifest 声明的文档角色和 schema 路径。文档注册仍然只能显式启用，不会因为基础设施存在就自动创建注册状态。
-
-### 受管工作区边界
-
-- 每个生成的受管根必须且只能包含一条 `Workspace boundary`：普通修改仅允许发生在当前工作文件夹或已验证的远程服务器工作文件夹内。
-- 外部读取必须必要且无副作用；外部修改前必须披露规范化目标、动作、范围、风险、替代方案和恢复限制，然后分别取得“原则上允许例外”和“批准精确动作”两次独立确认。
-- 验证器会拒绝缺失、重复、弱化、笼统授权、紧急绕过或只完成第一次确认的变体；目标或范围发生变化后，两次确认都会失效。
-
-### 兼容、迁移与验证
-
-- 现有公开命令入口继续受支持。直接读取旧版注册表根级 JSON 路径的集成需要改用 manifest/角色布局或注册表辅助函数。
-- v2.0.3 之前生成的受管根应使用已安装的 v2.0.3 生成器刷新，使新的工作区边界能够被渲染和验证。
-- 公开镜像对最终安装包执行 quick skill validation、无缓存 Python AST 解析、注册表一致性检查、聚焦的 RemoteSSH/注册表/工作区边界场景、发布内容策略检查和脱敏包检查。规范源码仓库的单元测试不存放在本公开镜像中，也不会把上游收据写成本地重跑结果。
-- 下载资产排除 tests、smoke 运行、reports、缓存、嵌套 `dist/`、本地认证材料、凭据、私钥和机器专属绝对路径。仓库保留已批准的公开署名，下载资产中的联系邮箱替换为 `<REDACTED_EMAIL>`。
-
-## v2.0.1 重点更新
-
-v2.0.1 是首个公开 v2 版本，专门优化了本 skill 与 Codex 中 [GPT-5.6 Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol) 的配合方式：压缩始终加载的指令面，把详细操作知识转移到确定性的按需查询，并让执行证据更容易复核。这些是架构级效率优化；项目不会声明未经实际测量的耗时或 token 成本提升百分比。
-
-### 更小的 Agent 上下文，更丰富的按需 runtime
-
-- `SKILL.md` 从 44,796 字节、202 行压缩到 12,683 字节、119 行，主要 Agent 指令文件按字节减少 71.7%。
-- 详细命令语法迁移到 `config/registry/`，由版本化 JSON source、schema、manifest 和 SQLite FTS 索引共同管理。`query_registry.py ask` 只检索当前任务需要的指令，且绝不会执行查询结果中的命令。
-- 明确说明取舍：确定性 Python 模块从 89 个增加到 99 个，因为实现与验证细节是从主提示中迁移到工具层，而不是被直接删除。
-
-### Runtime 与治理架构
-
-- 用面向职责的公开模块替换 26 个旧下划线内部模块及其分解说明，覆盖项目发现、profile 组装、持久记忆、release 策略、渲染、路由合同以及 policy/release eval。
-- 新增一等 codebase-memory 集成，在受治理写入前显式检查 full index、architecture analysis、持久化状态和 live/disk 数量一致性。
-- 新增持久记忆存储和有界检索视图，同时保留 handoff 与长期记忆合同，并继续拒绝机器本地原始路径。
-- 新增可选文档注册，包含 catalog、knowledge、interface、重复项复核和 migration 记录。该能力仍为显式启用：用户没有明确要求文档注册或迁移时，不创建任何注册状态。
-- 强化源码治理、内容密度、语义 review 证据、release 打包、脱敏、来源收据以及 command/root/routing 合同评估。
-
-### 兼容与迁移
-
-- 现有公开 CLI 入口继续作为受支持接口；内部模块路径不属于兼容合同。适用时，兼容包装器会把旧公开入口路由到新的职责模块。
-- 将 `source_file_limits.max_lines` 和 `source_governance.max_lines` 迁移为基于字节的 `max_bytes`；v2 会拒绝已退役的行数配置字段。
-- 将已弃用的 confidence gate 参数 `--skip-missing-eval-runner` 和 `--require-eval-runner` 替换为 `--eval-runner-policy optional` 与 `--eval-runner-policy required`。
-- evolution 与 experience 子系统继续保持退役；`CLAUDE.md` 和 `GEMINI.md` 兼容 shim 仍然只能显式启用。
-
-### 发布安全
-
-- 从 v1.4.6 到 v2.0.1 的受管 payload 对比为：新增 50 个文件、更新 52 个文件、淘汰 26 个路径、保持不变 38 个文件；公开发布收据随后重新生成。
-- 可安装资产继续排除 repo-local tests、smoke 运行、reports、缓存、嵌套 `dist/`、本地认证文件、凭据、私钥和机器专属绝对路径。
-- 经明确批准的作者/联系邮箱继续公开用于署名；未授权联系方式和其他敏感信息仍会被阻止或脱敏。
-
-## Skill 架构
-
-<p align="center">
-  <img src="docs/assets/architecture-cn.svg" alt="AGENTS.md Generator Skill 架构" width="100%">
-</p>
-
-## 工作流
-
-<p align="center">
-  <img src="docs/assets/workflow-cn.svg" alt="AGENTS.md Generator 工作流" width="100%">
-</p>
-
-## 典型使用路径
-
-1. 根文件健康检查：
-   对包含 `计划`、`规划`、`准备` 的工作区触发请求，先检查 root `AGENTS.md` 是否健康，健康就只报告通过。
-2. 显式 AGENTS 更新：
-   启动分组式设计访谈，补足缺失策略，渲染 root/scoped 文件，再执行验证。
-3. 旧工作区接管：
-   对 root 版本失配的已落地工作区进入 takeover，尽量少问身份信息，但仍完整确认 structured directory contract。
-4. 发布前验证：
-   用 `quick_validate.py`、`audit_skill.py`、`verify_agents.py`、`evaluate_skill.py` 以及 review/eval 门禁组成完整校验链。
-
-## 仓库结构
-
-| 路径 | 作用 |
-| --- | --- |
-| `SKILL.md` | 面向 Agent 的触发、流程、约束和验证规则。 |
-| `agents/openai.yaml` | 宿主 UI 使用的 skill 元数据。 |
-| `scripts/python/` | 检查、访谈、渲染、文档治理、目录治理、release 安装、验证、审计和评估脚本。 |
-| `config/registry/` | 按职责划分的 JSON source 与 schema 子目录，以及位于注册表根目录的生成 SQLite FTS 索引。 |
-| `assets/templates/` | 当前 release 流程使用的 root/scoped `AGENTS.md` 模板。 |
-| `evals/` | 供治理脚本使用的仓库内 skill-effectiveness 用例与可安全发布的评估数据。 |
-| `references/` | 脚本指南、审查清单、问题库、能力覆盖说明和 AGENTS 指南。 |
-| `docs/assets/` | 本对 README 使用的 hero、workflow 和 architecture 图。 |
-
-## 安装
-
-直接告诉你的AI让他安装 https://github.com/Eriemon/agents-md-generator
-
-手动安装方式：
+## 开发与验证入口
 
 ```powershell
-git clone https://github.com/Eriemon/agents-md-generator.git
-cd .\agents-md-generator
-python -m pip install -e .
+python skills/agents-md-generator/scripts/python/design/collect_design_profile.py --project .
+python skills/agents-md-generator/scripts/python/verify/quick_validate.py skills/agents-md-generator
+python skills/agents-md-generator/scripts/python/verify/audit_skill.py skills/agents-md-generator
 ```
 
-如果你在 Codex 或其他支持 skill 的宿主里使用它，把仓库放进 skill 搜索路径后重启宿主即可。
-
-## 快速开始
-
-只读检查与作用域发现：
+正式安装只接受带回执的版本化目录，禁止从源码目录直接安装：
 
 ```powershell
-python scripts/python/detect/inspect_project.py <project>
-python scripts/python/detect/detect_scopes.py <project>
-python scripts/python/detect/extract_commands.py <project>
-python scripts/python/detect/extract_context.py <project>
+python skills/agents-md-generator/scripts/python/release/install_skill.py `
+  dist/agents-md-generator-v2.1.0 --target skip
 ```
 
-分组式设计访谈与 profile 写入：
+## 链接已有 GitHub 仓库
+
+当另一个技能也需要链接 GitHub 仓库时，先在 `.agents/agents-control.json` 登记映射，再走同一条流程：
+
+```text
+status → check → 正常 dist 发布/安装 → mirror → plan →
+独立远程发布确认 → 人工 git/gh 操作 → verify
+```
 
 ```powershell
-python scripts/python/design/collect_design_profile.py <project> --start
-python scripts/python/design/collect_design_profile.py <project> --answer-file partial.json
-python scripts/python/design/collect_design_profile.py <project> --answers answers.json --write
+python skills/agents-md-generator/scripts/python/release/github_skill_release.py `
+  check --project . --skill-dir skills/agents-md-generator
+python skills/agents-md-generator/scripts/python/release/github_skill_release.py `
+  mirror --project . --skill-dir skills/agents-md-generator `
+  --release-dir dist/agents-md-generator-v2.1.0
 ```
 
-渲染与验证：
+镜像工具保留 `.git`，用 dist 内容完整替换 checkout 的其他内容，再比较逐文件 SHA-256。它不会创建远程仓库，也不会执行 `commit`、`push`、`tag` 或 GitHub Release；安装确认和远程发布确认始终分开。
 
-```powershell
-python scripts/python/render/render_agents.py <project> --profile <project>/.agents/agents-control.json
-python scripts/python/verify/verify_agents.py <project>
-python scripts/python/docs/manage_docs.py verify <project>
-```
+## 公开技能包门禁
 
-按需查询详细操作说明：
+每个受管理技能都必须有 `VERSION`、`LICENSE`、`README.md`、`README-CN.md`、`SECURITY.md`、`pyproject.toml`、`CONTRIBUTING.md`、`CITATION.cff` 和 `SKILL.md`。双语 README 必须使用本地光栅 PNG 插图；SVG、Mermaid、远程图片和占位元数据会在打包前被拒绝。
 
-```powershell
-python scripts/python/registry/query_registry.py ask "verify" --limit 3 --json
-```
+当用户用本技能开发或更新其他技能，并提出 README 插图需求时，也必须遵守同一视觉合同：使用 Image2/ImageGen 生成原创光栅图；主图采用适合 README 的横向 16:9 功能总览；再为核心能力提供风格统一的细节子图；图中应表达真实输入、决策、输出、门禁或数据关系。装饰性截图、流水账步骤图、SVG、Mermaid 和远程图片均不合格。
 
-FTS 查询优先使用简短的命令或策略关键词；需要缩小结果时使用 `--category` 或 `--kind`，不要把多个无关词直接组合成一个查询。
+## 核心取舍
 
-Codex token 用量审查：
+- 事实优先：先检查目录，再提问题。
+- 写入收敛：受管区块由生成器维护，人工说明保持人工所有权。
+- 证据优先：回执明确记录来源、发布包和实际执行的检查。
+- 边界分离：本地镜像、安装和远程发布各自需要独立确认。
 
-```powershell
-python scripts/python/detect/codex_token_usage_review.py --hours 48
-python scripts/python/detect/codex_token_usage_review.py --hours 48 --json
-python scripts/python/detect/codex_token_usage_review.py --hours 48 --verbose
-```
+## 许可证与引用
 
-Skill 发布前验证：
-
-```powershell
-python scripts/python/verify/quick_validate.py .
-python scripts/python/verify/run_skill_evals.py evals/evals.json
-python scripts/python/verify/evaluate_skill.py . <project>
-```
-
-自身审计合同用于加入公开仓库文档之前的可安装 runtime，因为规范 runtime 有意只把 `SKILL.md` 作为根级说明：
-
-```powershell
-python scripts/python/verify/audit_skill.py <runtime-stage>
-```
-
-加入 `README.md`、`README-CN.md`、`LICENSE` 和 `CITATION.cff` 后，应使用 release package 检查与 release gate 验证最终 ZIP，而不是把公开镜像误当作规范 runtime 执行自身审计。
-
-源码仓库说明：
-
-- 当前源码仓库不再跟踪 repo-local `tests/`。
-- installable release 会显式拒绝 `tests/`、`smoke*`、`reports/` 与缓存类产物进入打包结果。
-
-治理敏感 release 的进阶检查：
-
-```powershell
-python scripts/python/verify/review_governance.py <project> --base <sha> --head HEAD --skill-dir . --mode all
-python scripts/python/verify/run_confidence_gate.py <project> --review-base <sha> --external-skill-dir <healthy-skill-dir>
-```
-
-兼容 shim 仍然是显式选择：
-
-```powershell
-python scripts/python/render/create_agent_shims.py <project>
-```
-
-## 边界
-
-AGENTS.md Generator 的职责刻意收得很窄：
-
-- 它生成和审查的是 Agent 治理文件，不替代通用项目文档。
-- 从仓库中发现的命令只是候选命令，只有真正执行过才算已验证。
-- 它会保留 managed generated blocks 之外的手写内容。
-- 可维护性和脚本治理细节应尽量放在配置驱动的策略里，而不是在文案里重复堆叠。
-- 外部项目应调用已安装 runtime，例如 `python <codex-home>/skills/agents-md-generator/scripts/python/docs/manage_docs.py ...`，不要把本 skill 脚本复制到项目本地工具目录。
-- 它不应该把密钥、私有基础设施、生成缓存或机器专属绝对路径写进输出。
-
-## 机构说明
-
-Jiyuan Liu 和 He Li 隶属于东南大学电子科学与工程学院。
-两位作者所在团队为东南大学电子科学与工程学院异构智能与量子计算实验室（HIQC），相关工作面向异构智能、量子计算及相关计算系统研究。
-
-## 联系方式
-
-问题、合作或学术使用，请联系：`<REDACTED_EMAIL>`。
-
-## 引用
-
-如果这个 skill 对你的研究、教学或工程流程有帮助，请引用。规范引用元数据以 [CITATION.cff](CITATION.cff) 为准。
-
-```bibtex
-@software{liu_2026_agents_md_generator,
-  author       = {Jiyuan Liu and He Li},
-  title        = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
-  year         = {2026},
-  version      = {2.0.8},
-  date         = {2026-08-09},
-  url          = {https://github.com/Eriemon/agents-md-generator},
-  license      = {Apache-2.0},
-  note         = {Agent skill package for generating and verifying AGENTS.md files}
-}
-```
-
-## 许可证
-
-Apache License 2.0，详见 [LICENSE](LICENSE)。
+本技能使用 Apache-2.0。请阅读 [LICENSE](LICENSE)、[CONTRIBUTING.md](CONTRIBUTING.md)、[SECURITY.md](SECURITY.md) 和 [CITATION.cff](CITATION.cff)。

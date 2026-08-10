@@ -204,6 +204,68 @@ def fail_json(str_message: str) -> None:
     # 非零退出码标记发布包不可继续安装。
     raise SystemExit(1)
 
+# 技能名必须能安全地作为跨平台安装目录的单一叶节点。
+def skill_name_error(str_skill_name: str) -> str | None:
+    """检查技能名是否会扩大安装目标路径边界。
+
+    参数：str_skill_name 为发布目录或 frontmatter 提供的技能名。
+    返回：非法时返回稳定诊断，合法时返回 None。
+    """
+
+    # 空名、点目录和点点目录都不能代表可写入的技能叶节点。
+    if not str_skill_name or str_skill_name in {".", ".."}:
+
+        # 统一诊断避免调用方暴露实际路径结构。
+        return "skill name must be a non-empty safe path component"
+
+    # 跨平台路径分隔符、驱动器和空字节不能进入目录名。
+    if any(str_character in str_skill_name for str_character in ("/", "\\", ":", "\x00")):
+
+        # 单一叶节点约束阻断父级和相邻路径解析。
+        return "skill name must be a single safe path component"
+
+    # 控制字符以及 Windows 会折叠的尾随空格和点会造成身份歧义。
+    if any(ord(str_character) < 32 for str_character in str_skill_name) or str_skill_name[-1] in {" ", "."}:
+
+        # 保持发布目录名与安装目标名的一一对应。
+        return "skill name contains an unsafe control or trailing character"
+
+    # Windows 设备名即使带扩展名也不是普通技能目录叶节点。
+    str_device_name = str_skill_name.split(".", 1)[0].upper()  # Windows 设备名比较基准。
+
+    # 设备名命中保留集合时必须阻断跨平台安装。
+    if str_device_name in {"CON", "PRN", "AUX", "NUL"} or (
+        len(str_device_name) == 4
+        and str_device_name[:3] in {"COM", "LPT"}
+        and str_device_name[3] in "123456789"
+    ):
+
+        # 跨平台拒绝避免 Linux 发布包在 Windows 安装时身份漂移。
+        return "skill name is reserved by the target operating system"
+
+    # 所有检查通过后，调用方可以把名称作为目录叶节点使用。
+    return None
+
+# 路径边界助手检测根路径或任一祖先是否通过链接改变实际位置。
+def path_has_symbolic_component(path_candidate: Path) -> bool:
+    """判断路径本身或其祖先是否包含符号链接。
+
+    参数：path_candidate 为需要保持物理路径身份的文件或目录。
+    返回：路径无法规范化或包含链接时返回 True，否则返回 False。
+    """
+
+    # absolute 保留链接形态，resolve 用于发现祖先目录链接。
+    try:
+
+        # 路径身份变化即表示实际访问边界与声明路径不一致。
+        return path_candidate.absolute() != path_candidate.resolve()
+
+    # 无法判断路径身份时必须按不安全边界处理。
+    except (OSError, RuntimeError):
+
+        # 保守返回 True，阻断后续文件系统访问。
+        return True
+
 # 技能名解析器只信任 SKILL.md frontmatter。
 def parse_skill_name(path_skill_dir: Path) -> str:
     """从技能目录的 SKILL.md frontmatter 读取技能名。
@@ -213,8 +275,29 @@ def parse_skill_name(path_skill_dir: Path) -> str:
     异常：缺少 frontmatter 或 name 时抛出 SystemExit。
     """
 
+    # 技能根或声明链接不能把名称读取导向发布包之外。
+    if path_skill_dir.is_symlink():
+
+        # 在访问声明文件前阻断外部技能根。
+        fail_json(f"skill directory must not be a symbolic link: {path_skill_dir}")
+
     # 技能声明是安装目录名称的唯一来源。
-    str_skill_text = (path_skill_dir / "SKILL.md").read_text(encoding="utf-8", errors="ignore")  # 完整技能声明文本。
+    path_skill_file = path_skill_dir / "SKILL.md"  # 技能 frontmatter 文件路径。
+
+    # 声明链接不能把名称读取导向发布包之外。
+    if path_skill_file.is_symlink():
+
+        # 在 read_text 前阻断外部声明文件。
+        fail_json(f"SKILL.md must not be a symbolic link: {path_skill_file}")
+
+    # 缺少普通声明文件时不能继续推断安装身份。
+    if not path_skill_file.is_file():
+
+        # 使用稳定错误协议报告不完整技能目录。
+        fail_json(f"missing SKILL.md: {path_skill_file}")
+
+    # 读取已确认属于当前技能根的声明文本。
+    str_skill_text = path_skill_file.read_text(encoding="utf-8", errors="ignore")  # 完整技能声明文本。
 
     # 仅匹配文件开头的首个 YAML frontmatter 块。
     match_frontmatter = re.search(r"^---\s*\n(.*?)\n---", str_skill_text, flags=re.DOTALL)  # 技能 frontmatter 匹配结果。
@@ -232,7 +315,19 @@ def parse_skill_name(path_skill_dir: Path) -> str:
         if str_line.strip().startswith("name:"):
 
             # 首个 name 字段定义安装目录名称。
-            return str_line.split(":", 1)[1].strip().strip("\"'")
+            str_skill_name = str_line.split(":", 1)[1].strip().strip("\"'")  # frontmatter 技能名称。
+
+            # 名称校验结果决定是否可以进入安装目标解析。
+            str_skill_name_error = skill_name_error(str_skill_name)  # frontmatter 名称诊断。
+
+            # frontmatter 名称也必须满足安装叶节点合同。
+            if str_skill_name_error:
+
+                # 使用统一结构化失败协议终止不安全的名称解析。
+                fail_json(str_skill_name_error)
+
+            # 返回已经通过路径边界校验的技能名称。
+            return str_skill_name
 
     # 缺少 name 时不能安全决定安装目标叶节点。
     raise SystemExit(json.dumps({"errors": ["> ERR: [Python] SKILL.md frontmatter must include name"]}, indent=2))
@@ -245,6 +340,27 @@ def parse_release_dir(path_release_dir: Path) -> tuple[str, str]:
     返回：技能名与 vX.Y.Z 版本号二元组。
     异常：名称或版本策略非法时通过 fail_json 终止。
     """
+
+    # 发布路径的任一祖先不能通过符号链接改变验证边界。
+    try:
+
+        # absolute 保留路径形态，resolve 用于发现根目录或父目录链接。
+        path_absolute_release_dir = path_release_dir.absolute()  # 发布目录绝对路径。
+
+        # 解析绝对路径用于比较实际来源边界。
+        path_resolved_release_dir = path_absolute_release_dir.resolve()  # 发布目录规范路径。
+
+    # 无法规范化的路径不能进入收据读取阶段。
+    except (OSError, RuntimeError):
+
+        # 使用稳定错误协议阻断不可判定的发布身份。
+        fail_json(f"release directory path cannot be normalized: {path_release_dir}")
+
+    # 根目录链接或祖先链接都会改变发布内容来源。
+    if path_release_dir.is_symlink() or path_absolute_release_dir != path_resolved_release_dir:
+
+        # 在读取收据或扫描内容前阻断链接路径。
+        fail_json(f"release directory must not be a symbolic link: {path_release_dir}")
 
     # 目录名必须完整匹配 <name>-vX.Y.Z。
     match_release_name = re.fullmatch(r"(.+)-(v\d+\.\d+\.\d+)", path_release_dir.name)  # 发布目录名称匹配结果。
@@ -265,7 +381,19 @@ def parse_release_dir(path_release_dir: Path) -> tuple[str, str]:
         fail_json(str_version_error)
 
     # 正则成功且策略通过后两个分组必然可用。
-    return match_release_name.group(1), match_release_name.group(2)
+    str_skill_name = match_release_name.group(1)  # 版本目录技能名称。
+
+    # 名称校验结果决定是否可以继续读取收据。
+    str_skill_name_error = skill_name_error(str_skill_name)  # 版本目录名称诊断。
+
+    # 发布目录名称不能把安装目标提升到父级或根级路径。
+    if str_skill_name_error:
+
+        # 复用 CLI 结构化失败合同，阻断后续收据读取和复制。
+        fail_json(str_skill_name_error)
+
+    # 正则和路径叶节点策略均通过后返回发布身份。
+    return str_skill_name, match_release_name.group(2)
 
 # Codex 主目录解析器遵循显式参数、环境变量、默认目录的优先级。
 def default_codex_home(str_raw_home: str | None) -> Path:
@@ -355,8 +483,20 @@ def read_receipt(path_release_dir: Path) -> tuple[Path, dict[str, Any]]:
     异常：收据缺失或无效时通过 fail_json 终止。
     """
 
+    # 发布根或祖先链接不能把收据读取导向外部目录。
+    if path_has_symbolic_component(path_release_dir):
+
+        # 在构造收据路径前阻断根目录链接。
+        fail_json(f"release directory must not be a symbolic link: {path_release_dir}")
+
     # 收据文件名是发布安装合同的固定组成部分。
     path_receipt = path_release_dir / "RELEASE_RECEIPT.json"  # 发布收据文件路径。
+
+    # 收据链接可能把读取动作导向发布根之外。
+    if path_receipt.is_symlink():
+
+        # 先拒绝链接再调用 is_file 或 read_text。
+        fail_json(f"RELEASE_RECEIPT.json must not be a symbolic link: {path_receipt}")
 
     # 缺少收据的目录不得视为发布包。
     if not path_receipt.is_file():
@@ -393,6 +533,12 @@ def file_manifest(path_release_dir: Path, *, exclude: set[str] | None = None) ->
     返回：按路径排序的 path 和 sha256 映射列表。
     """
 
+    # 根目录或祖先链接不能被清单遍历器当作普通发布树读取。
+    if path_has_symbolic_component(path_release_dir):
+
+        # 上层根目录验证器负责给出阻断诊断。
+        return []
+
     # 空排除参数转换为独立集合，避免可变默认值。
     set_excluded = exclude or set()  # 本次不纳入清单的相对路径。
 
@@ -401,6 +547,12 @@ def file_manifest(path_release_dir: Path, *, exclude: set[str] | None = None) ->
 
     # 排序后的递归遍历保证跨运行输出确定性。
     for path_member in sorted(path_release_dir.rglob("*")):
+
+        # 符号链接不属于可哈希普通文件，避免摘要跟随外部目标。
+        if path_member.is_symlink():
+
+            # 内容策略会单独报告链接违规，清单此处不读取目标。
+            continue
 
         # 目录和其他非普通文件不进入哈希清单。
         if not path_member.is_file():
@@ -466,6 +618,12 @@ def resolve_release_member_path(path_release_dir: Path, str_relative_path: str) 
     返回：根目录内的规范路径；无效或越界时返回 None。
     """
 
+    # 发布根或祖先链接不能成为外部文件引用的解析锚点。
+    if path_has_symbolic_component(path_release_dir):
+
+        # 调用方将把无效路径转换为完整性错误。
+        return None
+
     # 去除字段两端无意义空白，但不折叠内部路径片段。
     str_normalized_path = str_relative_path.strip()  # 标准化后的声明路径。
 
@@ -493,6 +651,21 @@ def resolve_release_member_path(path_release_dir: Path, str_relative_path: str) 
 
     # 根目录和候选路径解析同时覆盖符号链接逃逸。
     try:
+
+        # 发布成员任一父节点链接都不能作为包内普通文件使用。
+        path_cursor = path_release_dir  # 当前逐级检查的原始成员路径。
+
+        # 逐级检查成员路径，拒绝内部链接和链接逃逸。
+        for str_path_segment in path_posix.parts:
+
+            # 当前路径分量加入原始发布根。
+            path_cursor = path_cursor / str_path_segment  # 当前分量加入原始路径。
+
+            # 链接成员即使指向根内也不属于普通发布内容。
+            if path_cursor.is_symlink():
+
+                # 上层完整性门禁将生成稳定的引用错误。
+                return None
 
         # 规范化根目录作为最终 containment 边界。
         path_resolved_root = path_release_dir.resolve()  # 规范化发布根目录。
@@ -532,11 +705,23 @@ def validate_release_completeness(path_release_dir: Path, dict_receipt: dict[str
     返回：稳定排序逻辑生成的完整性错误列表。
     """
 
+    # 发布根或祖先链接不能把完整性检查导向外部目录。
+    if path_has_symbolic_component(path_release_dir):
+
+        # 先拒绝根边界，再读取 SKILL.md 或收据清单。
+        return ["release directory root must not be a symbolic link"]
+
     # 错误列表保留发现顺序，便于发布者逐项修复。
     list_errors: list[str] = []  # 发布完整性诊断。
 
     # SKILL.md 是任何可安装技能的必需入口文件。
     path_skill_file = path_release_dir / "SKILL.md"  # 发布包技能声明路径。
+
+    # 入口链接可能在读取声明前导向发布根之外。
+    if path_skill_file.is_symlink():
+
+        # 不对链接目标执行 is_file 或 read_text。
+        return ["release directory SKILL.md must not be a symbolic link"]
 
     # 缺少入口时无法继续提取内部引用。
     if not path_skill_file.is_file():

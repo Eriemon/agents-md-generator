@@ -579,7 +579,14 @@ def copy_release_tree(skill_dir: Path, release_dir: Path, included_files: list[s
     参数：skill_dir 为技能源码根，release_dir 为版本化发布目录。
     参数：included_files 为相对源码根的允许文件列表。
     返回：无；目标目录被完整重建。
+    异常：允许文件列表包含符号链接时抛出 RuntimeError。
     """
+
+    # 源码根和 dist 父目录都不能通过链接改变复制边界。
+    if skill_dir.is_symlink() or release_dir.is_symlink() or release_dir.parent.is_symlink():
+
+        # 在清理旧目录或创建新目录前阻断链接路径。
+        raise RuntimeError("> ERR: [Python] release source or destination root must not be a symbolic link")
 
     # 旧的同版本目录必须先清除，防止已删除文件残留到新包。
     if release_dir.exists():
@@ -590,14 +597,59 @@ def copy_release_tree(skill_dir: Path, release_dir: Path, included_files: list[s
     # 预建空目录，使空文件清单也形成有效发布根。
     release_dir.mkdir(parents=True, exist_ok=True)
 
+    # 所有允许成员必须以解析后的源码根为锚点。
+    path_skill_root = skill_dir.resolve()  # 已解析的源码技能根。
+
     # 每个允许成员保持相对层级复制到版本目录。
     for relative in included_files:
 
+        # 路径列表来自内部策略，但复制边界仍必须独立拒绝逃逸成员。
+        path_relative = Path(relative)  # 当前允许成员的路径对象。
+
+        # 绝对路径和父目录片段都不能进入复制边界。
+        if not path_relative.parts or path_relative.is_absolute() or ".." in path_relative.parts:
+
+            # 不把外部项目文件复制进发布目录。
+            raise RuntimeError(f"> ERR: [Python] release file path escapes source root: {relative}")
+
         # 相对成员锚定技能源码根，不能从项目其他位置取文件。
-        source = skill_dir / relative  # 当前待复制的源码文件。
+        source = skill_dir / path_relative  # 当前待复制的源码文件。
+
+        # 相对成员的任一父节点都不能是符号链接。
+        path_cursor = skill_dir  # 当前逐级检查的源码路径。
+
+        # 逐级检查相对成员的父节点链接。
+        for str_part in path_relative.parts:
+
+            # 逐级检查目录链接，避免 copy2 跟随外部父目录。
+            path_cursor = path_cursor / str_part  # 当前成员节点路径。
+
+            # 当前节点若为链接则拒绝继续解析。
+            if path_cursor.is_symlink():
+
+                # 复制前失败，避免通过父目录链接读取外部文件。
+                raise RuntimeError(f"> ERR: [Python] release source contains symbolic link: {relative}")
+
+        # 解析后的源文件必须仍位于技能源码根。
+        try:
+
+            # relative_to 成功即证明复制源没有越过源码根。
+            source.resolve().relative_to(path_skill_root)
+
+        # 路径解析或链接逃逸不能进入发布树。
+        except (OSError, RuntimeError, ValueError):
+
+            # 统一报告为源码根边界错误。
+            raise RuntimeError(f"> ERR: [Python] release file path escapes source root: {relative}")
+
+        # 源码链接不能被 copy2 跟随到发布树中。
+        if source.is_symlink():
+
+            # 复制前失败，避免把链接目标内容写入 dist。
+            raise RuntimeError(f"> ERR: [Python] release source contains symbolic link: {relative}")
 
         # 目标路径复用相同相对成员以保持包内结构。
-        target = release_dir / relative  # 当前文件的发布位置。
+        target = release_dir / path_relative  # 当前文件的发布位置。
 
         # 嵌套成员复制前创建对应父目录。
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -1106,6 +1158,7 @@ def package_release(
         "release_content_policy_ok": (
             not dict_release_content["unexpected_top_level_entries"]
             and not dict_release_content["forbidden_paths"]
+            and bool(dict_release_content.get("public_skill_ok", True))
         ),  # 最终发布树策略结论。
     }
 

@@ -95,21 +95,34 @@ def compact_runtime_policy_gate_line(str_line: str) -> tuple[bool, str | None]:
     # 工作区边界保留验收短语，并移除不改变授权范围的重复连接语。
     if str_line.startswith("- **Workspace boundary:**"):
 
-        # 固定替换仍覆盖允许根、远程路由、图谱、只读、披露、单次确认和安装边界。
+        # 固定替换保留 verifier 要求的全部授权短语和单次确认边界。
         str_replacement = (  # 工作区边界紧凑合同
             "- **Workspace boundary:** current work folder; verified remote-server work folder. Changes inside either "
             "work folder require no additional confirmation; remote changes remain allowed only when the configured "
             "task route matches that folder. Official codebase-memory start, index refresh, rebuild, or recovery for "
             "the project bound to either work folder, including its configured runtime cache and root persistence "
             "artifact, also requires no additional confirmation. External reads beyond those boundaries must be "
-            "necessary and side-effect free. Every other external write is prohibited by default; only after the user "
-            "proactively and explicitly requests the exact action. Disclose exact normalized target, action, "
-            "scope, risks, alternatives, and recovery limits; obtain exactly one explicit "
-            "user confirmation. Any target or scope change invalidates that confirmation. "
-            "An installed skill always requires exactly one explicit user confirmation."
+            "necessary and "
+            "side-effect free. Every other external write is prohibited by default; only after the user proactively "
+            "and explicitly requests the exact action. Disclose exact normalized target, action, scope, risks, "
+            "alternatives, and recovery limits; obtain exactly one explicit user confirmation. "
+            "Any target or scope change invalidates that confirmation. installed skill always requires exactly one "
+            "explicit user confirmation."
         )  # 工作区边界的等价紧凑合同
 
         # 当前行由保留全部验证短语的紧凑合同替代。
+        return True, str_replacement
+
+    # 远程工作区合同保留完整可验证句子，避免压缩后丢失安全语义。
+    if str_line.startswith("- **Remote workspace management:**"):
+
+        # 保留完整正文，供渲染门禁和人工审计稳定识别。
+        str_replacement = (
+            "- **Remote workspace management:** Remote workspace management is state-aware "
+            "and fail-closed."
+        )  # 远程工作区完整状态合同
+
+        # 当前远程管理规则由可验证的完整状态合同替代。
         return True, str_replacement
 
     # worktree 规则保留全部禁止入口和分支替代方案。
@@ -185,6 +198,28 @@ def compact_runtime_policy_gate_line(str_line: str) -> tuple[bool, str | None]:
         )  # 工作区设置、远程部署与结构入口
 
         # 当前行由紧凑设置边界替代。
+        return True, str_replacement
+
+    # 主服务器检查失败时仍保留按路由顺序尝试备用服务器的动作。
+    if str_line.startswith("- If the matched primary remote server fails"):
+
+        # 精炼文本保留两个检查命令和备用服务器路由顺序。
+        str_replacement = (
+            "- Primary `check`/`workspace-check` failure: automatically try registered fallback servers in route order."  # 主备服务器故障切换合同
+        )
+
+        # 当前主服务器失败规则由完整动作摘要替代。
+        return True, str_replacement
+
+    # 任务映射变化仍必须先更新 profile，禁止绕过路由表。
+    if str_line.startswith("- If the user wants a different task-to-server mapping"):
+
+        # 精炼文本保留 profile 更新入口和路由表硬阻断。
+        str_replacement = (
+            "- Different task-server mapping: update profile via agents-md-generator; never bypass route table."  # 任务到服务器映射合同
+        )
+
+        # 当前映射规则由最小变更边界替代。
         return True, str_replacement
 
     # 未命中运行环境规则时由普通政策压缩器继续判断。
@@ -391,3 +426,4 @@ def compact_task_gate_text(str_rules: str) -> str:
 
     # 以标准换行重新组装稳定的根级门禁文本。
     return "\n".join(list_result)
+

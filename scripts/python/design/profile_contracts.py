@@ -194,6 +194,167 @@ def meaningful_paths(facts: dict[str, Any]) -> bool:
     # 文件或目录任一集合非空即可阻止无提示接管。
     return bool(list_meaningful_files or list_meaningful_directories)
 
+# 将版本刷新和仓库链接请求路由到互斥的设计流程。
+def classify_version_refresh(request: str | dict[str, Any]) -> dict[str, Any]:
+    """根据文本或项目事实选择版本、修复、接管或 GitHub 镜像流程。
+
+    Args:
+        request: 用户请求文本，或由 ``inspect_project`` 产生的项目事实。
+
+    Returns:
+        包含 ``route``、补充问题和可审计原因的流程合同。
+
+    Raises:
+        None: 无效输入会被当作空事实，进入新建流程。
+    """
+
+    # 文本请求和项目事实统一转换为可审计的字典输入。
+    if isinstance(request, str):
+
+        # 纯文本只保留正文，避免后续把字典键误判为 GitHub 请求。
+        dict_facts: dict[str, Any] = {"request_text": request}  # 文本请求事实
+
+        # 小写化正文以便稳定匹配中英文触发词。
+        str_request = request.lower()  # 规范化后的请求正文
+
+    # 字典事实沿用调用方字段，避免重建时遗漏诊断信息。
+    elif isinstance(request, dict):
+
+        # 复制调用方事实，保持原始字段不被分类过程修改。
+        dict_facts = dict(request)  # 调用方项目事实副本
+
+        # 只读取 request_text 字段，不能把事实键名当作用户意图。
+        str_request = str(dict_facts.get("request_text", "")).lower()  # 规范化后的事实正文
+
+    # 其他输入类型没有可用事实，按空项目处理。
+    else:
+
+        # 非文本输入没有可用事实，按空项目处理。
+        dict_facts = {}  # 空项目事实
+
+        # 空输入不触发任何特定流程。
+        str_request = ""  # 空请求正文
+
+    # GitHub、镜像和发布词一旦出现，就必须进入独立仓库链接流程。
+    tuple_github_terms = ("github", "remote repository", "remote repo", "mirror", "checkout", "publish", "dist/")  # 仓库链接触发词
+
+    # 显式布尔事实单独保留，便于审计调用方的分类依据。
+    bool_explicit_github_request = bool(dict_facts.get("github_request"))  # 是否由事实显式触发
+
+    # 正文词命中负责识别自然语言中的仓库意图。
+    bool_text_github_request = any(str_term in str_request for str_term in tuple_github_terms)  # 是否由正文触发
+
+    # 两类证据任一命中即可进入仓库流程。
+    bool_github_request = bool_explicit_github_request or bool_text_github_request  # 是否存在仓库请求
+
+    # 仓库链接流程要求确认地址、镜像位置和发布边界。
+    if bool_github_request:
+
+        # 返回机器可读的问题集合，供设计访谈继续收集边界。
+        return {
+            "route": "github_linked_release",
+            "questions": [
+                "github",
+                "mirror",
+                "publish",
+                "github_repository_url",
+                "mirror_checkout_path",
+                "branch",
+                "release_directory",
+                "publish_confirmation",
+            ],
+            "reasons": ["request requires an existing GitHub-linked checkout and release mirror"],
+        }
+
+    # 纯文本版本请求没有项目事实，按明确措辞走窄流程。
+    bool_refresh_word = bool(re.search(r"\b(refresh|更新|刷新)\b", str_request))  # 是否包含刷新动词
+
+    # 版本词判断与刷新动词分开，避免正则表达式隐藏业务条件。
+    bool_version_word = bool(re.search(r"\b(version|版本|metadata|元数据)\b", str_request))  # 是否包含版本或元数据词
+
+    # 只有文本同时包含刷新和版本语义才走版本刷新。
+    bool_text_version_only = isinstance(request, str) and bool_refresh_word and bool_version_word  # 是否为纯文本版本刷新
+
+    # 纯文本版本刷新只收集版本来源和校验范围。
+    if bool_text_version_only:
+
+        # 以稳定合同返回版本刷新问题。
+        return {
+            "route": "version_refresh",
+            "questions": ["version_source", "version_metadata_scope", "version_validation"],
+            "reasons": ["request explicitly limits the change to version metadata"],
+        }
+
+    # 根规则或结构缺陷优先于版本刷新，防止元数据操作掩盖破损项目。
+    list_reasons = [str(item) for item in dict_facts.get("root_agents_md_trigger_reasons", [])]  # 根规则触发原因
+
+    # 缺少根规则文件时必须先修复治理入口。
+    bool_root_exists = bool(dict_facts.get("root_agents_md_exists", True))  # 根规则是否存在
+
+    # 结构确认要求代表当前项目不能直接进入窄版流程。
+    bool_structure_confirmation = bool(dict_facts.get("structure_fix_confirmation_required", False))  # 是否需要结构确认
+
+    # 治理入口或结构合同损坏时返回修复流程。
+    if not bool_root_exists or bool_structure_confirmation:
+
+        # 修复流程要求确认根规则和结构边界。
+        return {
+            "route": "repair",
+            "questions": ["root_rules_confirmation", "structure_fix_confirmation"],
+            "reasons": ["root governance or structure requires repair before version work"],
+        }
+
+    # 只有生成器或规则版本漂移才可能是窄版刷新。
+    set_version_reasons = {"agents_version_mismatch", "generator_version_mismatch"}  # 允许的版本漂移原因
+
+    # 计算是否命中至少一个版本漂移原因。
+    set_reason_values = set(list_reasons)  # 规范化后的触发原因集合
+
+    # 版本漂移集合至少要命中一个允许原因。
+    bool_version_reason_hit = bool(set_reason_values & set_version_reasons)  # 是否命中版本漂移
+
+    # 其他根规则原因会阻止窄版版本刷新。
+    bool_version_reasons_only = set_reason_values.issubset(set_version_reasons)  # 是否只有版本漂移
+
+    # 同时满足命中和纯净条件才是版本刷新。
+    bool_version_refresh = bool_version_reason_hit and bool_version_reasons_only  # 是否为纯版本漂移
+
+    # 优先使用调用方计算好的 meaningful_paths 标志。
+    bool_meaningful = bool(dict_facts.get("meaningful_paths", False))  # 是否存在真实项目内容
+
+    # 旧调用方没有该标志时，从文件和目录事实回退计算。
+    if "meaningful_paths" not in dict_facts:
+
+        # 文件或目录任一存在即可视为已有内容。
+        bool_meaningful = bool(dict_facts.get("files") or dict_facts.get("directories"))  # 回退内容判断
+
+    # 纯版本漂移且项目已有内容时返回窄版刷新流程。
+    if bool_version_refresh and bool_meaningful:
+
+        # 版本刷新不要求 GitHub、镜像或发布确认。
+        return {
+            "route": "version_refresh",
+            "questions": ["version_source", "version_metadata_scope", "version_validation"],
+            "reasons": ["only generator or agents version metadata is stale"],
+        }
+
+    # 没有现有工作内容时走新建路径。
+    if not bool_meaningful:
+
+        # 新建流程收集技能目的、用户和验证范围。
+        return {
+            "route": "fresh",
+            "questions": ["skill_purpose", "audience", "validation_scope"],
+            "reasons": ["no existing product content requires takeover"],
+        }
+
+    # 其他真实内容进入接管流程，要求明确兼容和迁移边界。
+    return {
+        "route": "takeover",
+        "questions": ["existing_behavior", "compatibility_scope", "migration_confirmation"],
+        "reasons": ["existing content needs an explicit takeover decision"],
+    }
+
 # 接管判断把版本漂移与真实项目内容同时纳入决策。
 def takeover_required(project: Path) -> tuple[bool, dict[str, Any]]:
     """判断版本不匹配的现有项目是否必须进入接管流程。
@@ -208,8 +369,20 @@ def takeover_required(project: Path) -> tuple[bool, dict[str, Any]]:
     # 项目事实同时供版本触发判断和调用方后续报告使用。
     dict_facts = inspect_project(project)  # 当前项目检查事实
 
-    # 仅生成器或规则版本不匹配会触发接管候选。
-    set_reasons = {str(item) for item in dict_facts.get("root_agents_md_trigger_reasons", [])}  # 根规则触发原因
+    # 把版本刷新分类写回事实，供设计档案和外部 CLI 复用。
+    dict_facts["meaningful_paths"] = meaningful_paths(dict_facts)  # 现有产品内容标志
+
+    # 分类结果持久化到事实，保证后续接管判断使用同一路由。
+    dict_facts["project_update_route"] = classify_version_refresh(dict_facts)["route"]  # 当前项目路由
+
+    # 版本刷新是窄流程，不应被旧接管判断升级成全量访谈。
+    if dict_facts["project_update_route"] == "version_refresh":
+
+        # 窄流程无需触发接管访谈。
+        return False, dict_facts
+
+    # 接管候选只接收根规则诊断中的版本漂移集合。
+    set_reasons = {str(item) for item in dict_facts.get("root_agents_md_trigger_reasons", [])}  # 接管判断所需的根规则证据
 
     # 交集把其他根规则诊断排除在接管决定之外。
     bool_triggered = bool(set_reasons & {"agents_version_mismatch", "generator_version_mismatch"})  # 是否命中版本接管条件

@@ -108,6 +108,21 @@ def infer_repo_root(path_release_dir: Path) -> Path | None:
     返回：严格匹配时返回仓库根，否则返回 None。
     """
 
+    # 任一发布路径链接都会破坏 dist 布局与实际内容的对应关系。
+    try:
+
+        # absolute 保留链接形态，resolve 用于发现父目录链接逃逸。
+        if path_release_dir.absolute() != path_release_dir.resolve():
+
+            # 不能证明发布内容位于声明的仓库 dist 中。
+            return None
+
+    # 无法规范化路径时降级为外部发布包。
+    except (OSError, RuntimeError):
+
+        # 不把异常路径当作强来源证据。
+        return None
+
     # 外部复制不位于固定 dist 布局，使用降低保证度验证。
     if path_release_dir.parent.name != "dist":
 
@@ -154,10 +169,15 @@ def infer_repo_root(path_release_dir: Path) -> Path | None:
     return path_git_root if path_git_root == path_candidate_root.resolve() else None
 
 # 源技能路径解析器约束收据 source_path 不得逃逸仓库根。
-def source_skill_dir_from_receipt(path_repo_root: Path, dict_receipt: dict[str, Any]) -> Path | None:
+def source_skill_dir_from_receipt(
+    path_repo_root: Path,
+    dict_receipt: dict[str, Any],
+    str_expected_skill_name: str | None = None,
+) -> Path | None:
     """从发布收据解析安全的源码技能目录。
 
     参数：path_repo_root 为已确认仓库根，dict_receipt 为收据对象。
+    参数：str_expected_skill_name 为发布目录声明的技能名。
     返回：存在且位于仓库根内的源码目录，否则返回 None。
     """
 
@@ -170,14 +190,50 @@ def source_skill_dir_from_receipt(path_repo_root: Path, dict_receipt: dict[str, 
         # 调用方将按无源码关联处理。
         return None
 
-    # resolve 同时折叠父目录片段和符号链接。
-    path_candidate = (path_repo_root / str_source_path).resolve()  # 规范化源码技能候选路径。
+    # absolute 保留收据路径形态，resolve 用于发现父目录或自身链接。
+    path_unresolved = path_repo_root / str_source_path  # 收据声明的未规范化源码路径。
+
+    # 任一源码路径链接都会削弱发布包与工作树的身份对应关系。
+    try:
+
+        # 只有没有链接逃逸的路径才允许建立强来源关联。
+        if path_unresolved.absolute() != path_unresolved.resolve():
+
+            # 链接路径不作为强来源证据使用。
+            return None
+
+        # resolve 同时折叠父目录片段并得到源码候选根。
+        path_candidate = path_unresolved.resolve()  # 规范化源码技能候选路径。
+
+    # 无法规范化的收据路径不能建立强来源关联。
+    except (OSError, RuntimeError):
+
+        # 异常路径统一按缺少可信源码处理。
+        return None
 
     # 缺失候选不能用于源码对照。
-    if not path_candidate.exists():
+    if not path_candidate.is_dir():
 
         # 返回空状态表示来源不可用。
         return None
+
+    # 发布身份已给出时，源码目录叶节点必须与发布技能名一致。
+    if str_expected_skill_name:
+
+        # 不能用仓库内其他技能替代当前发布源。
+        if path_candidate.name != str_expected_skill_name:
+
+            # 错配目录不提供当前发布的强来源证据。
+            return None
+
+        # 源码目录必须携带普通 SKILL.md 才能证明技能身份。
+        path_skill_file = path_candidate / "SKILL.md"  # 源码技能声明文件。
+
+        # 声明链接或缺失声明都不能提供强来源证据。
+        if path_skill_file.is_symlink() or not path_skill_file.is_file():
+
+            # 继续按无可信源码关联处理。
+            return None
 
     # 路径必须位于规范化仓库根内。
     try:
@@ -407,6 +463,15 @@ def validate_release_content(
         # 禁止内容独立报告。
         list_policy_errors.append("release content policy rejected forbidden development content in release")
 
+    # 新版受管理技能的公开文件和 README 插图也必须通过发布门禁。
+    if dict_release_content.get("public_skill_required") and dict_release_content.get("public_skill_errors"):
+
+        # 公开文件合同的每条错误都要进入安装阻断结果。
+        list_policy_errors.extend(
+            f"public skill package contract: {str_error}"
+            for str_error in dict_release_content["public_skill_errors"]
+        )
+
     # 两个列表分别用于结果载荷和最终 errors。
     return list_policy_errors, list_source_forbidden_paths
 
@@ -467,6 +532,7 @@ def validate_release_dir(path_release_dir: Path) -> dict[str, Any]:
         dict_receipt,  # 发布收据对象。
         path_repo_root,  # 清洗验证可用的源码仓库根。
         list_errors,  # 共享验证诊断。
+        str_skill_name,  # 发布目录声明的技能名。
     )
 
     # 强来源还必须满足 Git 仓库治理条件。
@@ -476,11 +542,17 @@ def validate_release_dir(path_release_dir: Path) -> dict[str, Any]:
         list_errors.extend(verify_repo_release_state(path_repo_root))
 
     # 安全解析收据关联的源码技能目录。
-    path_source_skill = (
-        source_skill_dir_from_receipt(path_repo_root, dict_receipt)  # 强来源下的源码技能目录。
-        if path_repo_root is not None  # 外部包不解析源码路径。
-        else None  # 无仓库关联时保持空值。
-    )  # 可选源码技能根。
+    path_source_skill: Path | None = None  # 可选源码技能根。
+
+    # 外部发布包没有仓库根，不解析收据源码路径。
+    if path_repo_root is not None:
+
+        # 强来源仅关联与发布名一致的源码目录。
+        path_source_skill = source_skill_dir_from_receipt(  # 解析发布包对应的源码根。
+            path_repo_root,  # 已确认的仓库根。
+            dict_receipt,  # 读取当前包的脱敏和内容策略记录。
+            str_skill_name,  # 绑定当前版本目录的身份键。
+        )  # 强来源下的源码技能目录。
 
     # 内容策略复核发布扫描和可选源码证据。
     tuple_content_validation = validate_release_content(  # 内容策略诊断和源码禁止路径二元组。

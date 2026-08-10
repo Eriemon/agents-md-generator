@@ -5,10 +5,31 @@ from __future__ import annotations
 
 # 路径对象负责跨平台相对路径和后缀解析。
 from pathlib import Path
+import public_skill_contract
 from typing import Any
 
 # 策略版本写入发布收据，用于检测规则漂移。
 POLICY_VERSION = "2026-05-26-v2"  # 当前发布内容策略版本
+
+# 路径边界助手拒绝根路径或祖先通过链接改写内容扫描目标。
+def path_has_symbolic_component(path_candidate: Path) -> bool:
+    """判断路径本身或其祖先是否包含符号链接。
+
+    参数：path_candidate 为待扫描的源码根或发布根。
+    返回：路径无法规范化或包含链接时返回 True，否则返回 False。
+    """
+
+    # absolute 保留链接形态，resolve 用于发现祖先目录链接。
+    try:
+
+        # 路径身份变化即表示实际扫描边界与声明路径不一致。
+        return path_candidate.absolute() != path_candidate.resolve()
+
+    # 无法判断路径身份时必须按不安全边界处理。
+    except (OSError, RuntimeError):
+
+        # 保守返回 True，阻断后续内容遍历。
+        return True
 
 # 顶层普通文件只排除明确禁入项，不执行封闭白名单。
 TOP_LEVEL_FILE_MODE = "allow-nonforbidden-files"  # 顶层文件接纳模式
@@ -30,7 +51,6 @@ ALLOWED_TOP_LEVEL_DIRS = {  # 非白名单根目录会写入意外顶层项并�
     "agents",  # 安装后供 Codex 发现的代理元数据
     "assets",  # 技能运行时读取的模板与静态资源
     "config",  # 控制正式运行行为的配置文件
-    "docs",  # 完整仓库 ZIP 中的公开治理与交接文档
     "evals",  # 随包交付的技能评估用例
     "integration",  # 对接外部工具所需的集成资产
     "references",  # Agent 执行任务时查阅的治理参考
@@ -57,7 +77,38 @@ FORBIDDEN_PREFIXES = ("smoke",)  # 禁入路径分量前缀
 # 编译后的 Python 文件不属于源码技能发布内容。
 FORBIDDEN_SUFFIXES = {".pyc", ".pyo"}  # 禁入文件后缀
 
-# 判断单个路径分量是否属于禁入名称。
+# 公开技能门禁委托独立模块，保证 CLI、审计和打包共享同一实现。
+REQUIRED_PUBLIC_FILES = public_skill_contract.REQUIRED_PUBLIC_FILES  # 公开技能根文件合同
+
+# 对外保留历史函数名，避免发布和安装调用方感知模块拆分。
+def validate_public_skill_files(
+    root: Path,
+    *,
+    expected_version: str | None = None,
+    strict_metadata: bool = True,
+) -> dict[str, Any]:
+    """校验公开技能文件、版本元数据和 README PNG 插图。
+
+    参数:
+        root: 技能源码或版本化 dist 根目录。
+        expected_version: 可选的外部版本期望。
+        strict_metadata: 是否执行许可证、版本和占位文本强校验。
+
+    返回:
+        独立公开文件合同产生的结构化报告。
+
+    异常:
+        无；底层文件系统问题均转换为报告错误。
+    """
+
+    # 统一委托确保所有入口使用同一份版本和插图规则。
+    return public_skill_contract.validate_public_skill_files(
+        root,
+        expected_version=expected_version,
+        strict_metadata=strict_metadata,
+    )
+
+# 检查一个路径分量是否命中禁入规则。
 def is_forbidden_component(name: str) -> bool:
     """检查一个路径分量是否命中禁入规则。
 
@@ -119,7 +170,7 @@ def is_forbidden_relative_path(relative_path: str) -> bool:
     # 返回后缀是否属于发布禁入集合。
     return str_file_suffix in FORBIDDEN_SUFFIXES
 
-# 扫描发布根并归类正式文件、禁入路径和意外顶层项。
+# 扫描发布根并收集正式文件、禁入路径和意外顶层项。
 def _scan_release_root(root: Path) -> tuple[list[str], list[str], set[str]]:
     """收集发布目录的三类内容事实。
 
@@ -128,6 +179,12 @@ def _scan_release_root(root: Path) -> tuple[list[str], list[str], set[str]]:
     返回：
         正式文件、禁入路径和意外顶层项组成的元组。
     """
+
+    # 根目录或祖先链接不能被 rglob 跟随到发布根之外。
+    if path_has_symbolic_component(root):
+
+        # 使用稳定占位路径让上层内容策略生成阻断诊断。
+        return [], ["."], set()
 
     # 三个容器分别服务收据文件表、阻断列表和顶层结构检查。
     list_included_files: list[str] = []  # 允许进入发布包的文件
@@ -153,6 +210,15 @@ def _scan_release_root(root: Path) -> tuple[list[str], list[str], set[str]]:
             # 跳过无法形成发布条目的根路径。
             continue
 
+        # 符号链接不是发布普通文件，不能跟随到发布根之外读取内容。
+        if path_entry.is_symlink():
+
+            # 将链接记录为禁入路径，由源码和发布树门禁共同阻断。
+            list_forbidden_paths.append(str_relative_path)
+
+            # 不再对链接目标执行文件或顶层分类。
+            continue
+
         # 第一个分量决定目录白名单归属。
         str_top_level = tuple_path_parts[0]  # 当前条目的顶层名称
 
@@ -172,7 +238,7 @@ def _scan_release_root(root: Path) -> tuple[list[str], list[str], set[str]]:
             continue
 
         # 非白名单目录及其子项统一登记顶层名称。
-        bool_unexpected_directory = (  # 当前条目是否来自意外顶层目录
+        bool_unexpected_directory = (
             path_entry.is_dir() and len(tuple_path_parts) == 1  # 顶层目录自身
         ) or len(tuple_path_parts) > 1  # 顶层目录内的任意后代
 
@@ -199,12 +265,14 @@ def analyze_release_content_root(
     root: Path,
     *,
     allow_source_only_repo_local: bool = False,
+    strict_public_contract: bool = True,
 ) -> dict[str, Any]:
     """分析发布目录并返回内容策略报告。
 
     参数：
         root: 待分析的技能内容根目录。
         allow_source_only_repo_local: 保留的兼容参数，当前策略不接纳源码专属目录。
+        strict_public_contract: 是否执行公开元数据的严格发布门禁。
     返回：
         策略版本、允许项、正式文件和阻断项组成的报告。
     """
@@ -223,6 +291,12 @@ def analyze_release_content_root(
 
     # 第三个扫描分量聚合意外顶层名称。
     set_unexpected_entries = tuple_scan_result[2]  # 非白名单顶层项
+
+    # 公开文件合同独立于历史目录白名单，允许旧收据兼容回放。
+    dict_public_analysis = validate_public_skill_files(  # 当前包的公开入口门禁
+        root,  # 当前发布或源码根目录
+        strict_metadata=strict_public_contract,  # 是否启用严格元数据门禁
+    )  # 公开门禁报告
 
     # 顶层集合便于收据快速证明正式内容覆盖范围。
     list_included_top_levels = sorted(  # 正式文件涉及的顶层名称
@@ -244,6 +318,13 @@ def analyze_release_content_root(
         "included_top_level_entries": list_included_top_levels,  # 正式顶层覆盖
         "unexpected_top_level_entries": sorted(set_unexpected_entries),  # 意外顶层项
         "forbidden_paths": sorted(list_forbidden_paths),  # 发布根内禁入路径
+        "public_skill_required": True,  # 新版受管理技能必须通过公开文件合同
+        "required_public_files": list(dict_public_analysis["required_files"]),  # 公开根文件声明
+        "missing_required_files": list(dict_public_analysis["missing_required_files"]),  # 缺失公开文件
+        "public_skill_errors": list(dict_public_analysis["errors"]),  # 公开文件合同错误
+        "public_skill_ok": bool(dict_public_analysis["ok"]),  # 公开文件合同结果
+        "readme_asset_paths": list(dict_public_analysis["asset_paths"]),  # 双语 README 插图
+        "public_skill_versions": dict(dict_public_analysis["versions"]),  # 公开版本元数据
     }
 
 # 从分析报告提取写入发布收据的稳定字段。
@@ -275,6 +356,12 @@ def release_content_policy_receipt(
         "unexpected_top_level_entries": list(analysis["unexpected_top_level_entries"]),  # 目录白名单偏差证明
         "forbidden_source_paths": sorted(forbidden_source_paths or []),  # 源码树污染扫描结果
         "forbidden_release_paths": list(analysis["forbidden_paths"]),  # 成品目录污染扫描结果
+        "public_skill_required": bool(analysis.get("public_skill_required", False)),  # 是否启用公开文件合同
+        "required_public_files": list(analysis.get("required_public_files", [])),  # 收据携带的公开根文件声明
+        "missing_required_files": list(analysis.get("missing_required_files", [])),  # 收据携带的缺失文件
+        "public_skill_errors": list(analysis.get("public_skill_errors", [])),  # 公开合同错误
+        "public_skill_ok": bool(analysis.get("public_skill_ok", True)),  # 公开合同结果
+        "readme_asset_paths": list(analysis.get("readme_asset_paths", [])),  # 插图清单
     }
 
 # 校验收据中的发布内容策略是否匹配当前分析结果。
@@ -337,6 +424,28 @@ def validate_recorded_release_content_policy(
 
             # 英文错误文本是安装器对外兼容协议。
             list_errors.append(f"release content policy field mismatch: {str_field_name}")
+
+    # 新版收据显式携带公开合同字段时才执行扩展比较，保留历史包回放兼容性。
+    tuple_public_fields = (  # 新版收据可选的公开合同字段
+        "public_skill_required",  # 是否启用公开入口门禁
+        "required_public_files",  # 公开文件合同清单
+        "missing_required_files",  # 版本化包未携带的入口文件
+        "public_skill_errors",  # 公开合同错误列表
+        "public_skill_ok",  # 公开合同通过状态
+        "readme_asset_paths",  # README PNG 资产路径
+    )
+
+    # 只有新版收据出现公开字段时才执行扩展比较。
+    if any(str_field_name in recorded for str_field_name in tuple_public_fields):
+
+        # 按固定字段顺序比较公开合同扩展。
+        for str_field_name in tuple_public_fields:
+
+            # 每个字段分别保留可检索的不一致原因。
+            if recorded.get(str_field_name) != dict_expected[str_field_name]:
+
+                # 沿用安装器兼容的英文错误格式。
+                list_errors.append(f"release content policy field mismatch: {str_field_name}")
 
     # 严格模式要求源码扫描事实完全一致。
     if require_source_paths and recorded.get("forbidden_source_paths") != dict_expected["forbidden_source_paths"]:

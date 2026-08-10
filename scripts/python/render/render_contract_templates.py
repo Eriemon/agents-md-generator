@@ -249,3 +249,4 @@ def manual_content(existing: str) -> str:
 
     # 非空手工内容统一放回 Human Notes 容器。
     return f"\n## Human Notes\n\n{text}\n"
+

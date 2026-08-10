@@ -9,6 +9,9 @@
     },
     {
       "id": "workflow.release", "title": "技能发布与安装闭环", "summary": "验证、准备版本包、生成回执并在明确授权后安装。", "aliases": {"zh": ["技能发布流程", "发布并安装"], "en": ["skill release workflow", "release and install"]}, "steps": ["verify.confidence-gate", "docs.operations", "release.install-skill"], "boundaries": ["发布与安装均需独立满足授权和证据门禁"]
+    },
+    {
+      "id": "workflow.github-skill-release", "title": "GitHub 关联技能发布闭环", "summary": "对已有 GitHub 仓库执行状态检查、正常 dist 发布与安装、完整本地镜像、计划和人工远程发布复核。", "aliases": {"zh": ["GitHub 技能链接流程", "技能仓库镜像流程"], "en": ["GitHub-linked skill workflow", "skill repository mirror workflow"]}, "steps": ["release.github-skill-status", "release.github-skill-check", "verify.confidence-gate", "docs.operations", "release.install-skill", "release.github-skill-mirror", "release.github-skill-plan", "release.github-skill-verify"], "boundaries": ["只允许连接已有仓库", "镜像工具不创建远程仓库、不 commit、push、tag 或创建 Release", "安装确认与远程发布确认彼此独立"]
     }
   ]
 }

@@ -87,6 +87,15 @@ def load_runtime_dependencies() -> None:
     # 版本校验函数为目录名和 VERSION 一致性提供同一规则来源。
     version_policy_error = module_version_policy.version_policy_error  # 版本策略函数
 
+    # 公开文件门禁复用发布策略的单一事实源，避免审计与打包分叉。
+    global validate_public_skill_files
+
+    # 发布策略模块提供受管理技能公开文件的唯一校验实现。
+    module_release_content_policy = importlib.import_module("release_content_policy")  # 发布内容策略模块
+
+    # 将公开文件校验函数绑定到延迟加载的模块命名空间。
+    validate_public_skill_files = module_release_content_policy.validate_public_skill_files  # 公开文件校验函数
+
 # 所有被审计技能至少需要主说明文件。
 CORE_REQUIRED_FILES = [  # 通用技能必需文件
     "SKILL.md",  # 通用技能主说明
@@ -143,7 +152,6 @@ SELF_REQUIRED_FILES = [  # 自身技能必需资源
 
 # 自身技能根拒绝与 SKILL.md 重复的安装和变更文档。
 SELF_DISALLOWED_ROOT_DOCS = {  # 自身技能根禁止文档
-    "README.md",  # 与主说明重复的根文档
     "CHANGELOG.md",  # 与主说明重复的变更文档
     "INSTALL.md",  # 与主说明重复的安装文档
     "INSTALLATION.md",  # 另一种重复安装文档名
@@ -1981,6 +1989,18 @@ def audit(skill_dir: Path) -> dict:
 
     # 第三阶段执行版本、产品界面、eval 和引用对齐合同。
     audit_self_contracts(skill_dir, bool_self_skill, list_errors)
+
+    # 自身技能同时是公开发布包，必须通过双语 README 与元数据合同。
+    if bool_self_skill:
+
+        # 公开产品文件事实与通用审计结果合并保存。
+        dict_public_report = validate_public_skill_files(skill_dir)  # 公开产品文件事实
+
+        # 把公开合同实际检查的路径加入审计证据。
+        list_checked.extend(dict_public_report["checked"])
+
+        # 公开合同错误直接阻断自身技能审计。
+        list_errors.extend(dict_public_report["errors"])
 
     # 第四阶段验证生产脚本布局、语法和规模治理。
     audit_script_sources(

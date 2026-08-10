@@ -38,8 +38,10 @@
     "node_modules",
     "vendor",
     ".agents",
+    ".settings",
     ".git",
-    "ref"
+    "ref",
+    "github"
   ],
   "test_only_patterns": {
     "path_globs": [

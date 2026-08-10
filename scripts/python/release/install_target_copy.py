@@ -8,7 +8,13 @@ import shutil
 from typing import Any, NoReturn
 
 # 发布清单模块提供 Codex 主目录解析合同。
-from install_release_manifest import default_codex_home, file_manifest, validate_release_completeness
+from install_release_manifest import (
+    default_codex_home,
+    fail_json,
+    file_manifest,
+    skill_name_error,
+    validate_release_completeness,
+)
 from install_repository_validation import validate_receipt_file_manifest
 
 # 目标解析器把 CLI 选项转换为最终技能目录。
@@ -25,6 +31,15 @@ def target_path(
     返回：skip 时返回 None，其他合法目标返回技能目录。
     异常：custom 缺少根目录或目标类型非法时抛出 SystemExit。
     """
+
+    # 所有目标类型都必须先验证最终目录叶节点。
+    str_skill_name_error = skill_name_error(str_skill_name)  # 安装目标名称诊断。
+
+    # 直接调用目标解析器时也不能绕过路径边界校验。
+    if str_skill_name_error:
+
+        # 复用安装 CLI 的结构化失败协议。
+        fail_json(str_skill_name_error)
 
     # skip 仅验证发布包，不执行本地文件复制。
     if str_target == "skip":
@@ -93,7 +108,7 @@ def unique_backup_path(path_destination: Path) -> Path:
     int_suffix = 2  # 下一个备份目录序号。
 
     # 已存在时持续寻找首个可用的带序号名称。
-    while path_candidate.exists():
+    while path_candidate.exists() or path_candidate.is_symlink():
 
         # 当前序号必须与随后递增的变量一致，避免未定义名称。
         path_candidate = Path(f"{path_base}-{int_suffix}")  # 新的备份目录候选。
@@ -122,7 +137,7 @@ def unique_sibling_path(path_destination: Path, str_role: str) -> Path:
     int_suffix = 2  # 下一个重名序号。
 
     # 已存在时递增序号，绝不复用未知残留目录。
-    while path_candidate.exists():
+    while path_candidate.exists() or path_candidate.is_symlink():
 
         # 同级路径维持原子切换所需的同卷边界。
         path_candidate = Path(f"{path_base}-{int_suffix}")  # 新事务路径候选。
@@ -149,6 +164,15 @@ def validate_installed_copy(
     # 诊断顺序与验证阶段保持一致，便于上层直接回显。
     list_errors: list[str] = []  # 安装副本完整性诊断。
 
+    # 安装副本根不能是指向外部目标的符号链接。
+    if path_candidate.is_symlink():
+
+        # 根链接拒绝后不再执行目录遍历或收据读取。
+        return {
+            "ok": False,
+            "errors": [f"installed copy must not be a symbolic link: {path_candidate}"],
+        }
+
     # 收据固定放在候选目录根，避免搜索到外部同名文件。
     path_receipt = path_candidate / "RELEASE_RECEIPT.json"  # 固定发布收据位置。
 
@@ -158,11 +182,41 @@ def validate_installed_copy(
         # 缺少候选目录意味着复制或切换未完成。
         return {"ok": False, "errors": [f"installed copy is missing: {path_candidate}"]}
 
+    # 安装副本不得保留任何可指向目标目录外的符号链接。
+    for path_member in sorted(path_candidate.rglob("*")):
+
+        # 链接只记录相对路径，不读取其目标内容。
+        if path_member.is_symlink():
+
+            # 统一错误进入安装态最终阻断列表。
+            str_relative_path = path_member.relative_to(path_candidate).as_posix()  # 安装链接相对路径。
+
+            # 不允许链接成员进入后续收据和清单验证。
+            list_errors.append(f"installed skill contains symbolic link: {str_relative_path}")
+
+    # 收据链接不能被 is_file 或 read_text 跟随到外部目标。
+    if path_receipt.is_symlink():
+
+        # 直接返回避免任何收据目标读取。
+        return {
+            "ok": False,
+            "errors": [
+                *list_errors,
+                f"installed copy RELEASE_RECEIPT.json must not be a symbolic link: {path_receipt}",
+            ],
+        }
+
     # 没有正式收据的目录不能证明来自可安装发布包。
     if not path_receipt.is_file():
 
         # 返回稳定错误合同，不在验证器内终止进程。
-        return {"ok": False, "errors": [f"installed copy is missing RELEASE_RECEIPT.json: {path_candidate}"]}
+        return {
+            "ok": False,
+            "errors": [
+                *list_errors,
+                f"installed copy is missing RELEASE_RECEIPT.json: {path_candidate}",
+            ],
+        }
 
     # 收据语法或编码错误都属于不可安装内容。
     try:
@@ -174,13 +228,25 @@ def validate_installed_copy(
     except (OSError, UnicodeError, json.JSONDecodeError):
 
         # 调用方只需处理结构化失败，无需区分平台异常。
-        return {"ok": False, "errors": [f"installed copy has invalid RELEASE_RECEIPT.json: {path_candidate}"]}
+        return {
+            "ok": False,
+            "errors": [
+                *list_errors,
+                f"installed copy has invalid RELEASE_RECEIPT.json: {path_candidate}",
+            ],
+        }
 
     # 顶层数组或标量不符合发布收据对象合同。
     if not isinstance(dict_receipt, dict):
 
         # 类型错误与语法错误共享同一公开诊断。
-        return {"ok": False, "errors": [f"installed copy has invalid RELEASE_RECEIPT.json: {path_candidate}"]}
+        return {
+            "ok": False,
+            "errors": [
+                *list_errors,
+                f"installed copy has invalid RELEASE_RECEIPT.json: {path_candidate}",
+            ],
+        }
 
     # 原始 staging 必须与发布收据逐文件完全一致。
     if not bool_allow_legacy_evolution:
@@ -234,7 +300,7 @@ def quarantine_failed_copy(path_failed_copy: Path, path_destination: Path) -> Pa
     """
 
     # 尚未产生副本时不创建空隔离目录。
-    if not path_failed_copy.exists():
+    if not path_failed_copy.exists() and not path_failed_copy.is_symlink():
 
         # 空返回值明确表示本轮没有可保留的失败副本。
         return None
@@ -259,13 +325,19 @@ def restore_previous_copy(path_backup: Path, path_destination: Path) -> None:
     """
 
     # 恢复前正式名称必须为空，禁止覆盖不明副本。
-    if path_destination.exists():
+    if path_destination.exists() or path_destination.is_symlink():
 
         # 同时存在目标和备份时保留现场，等待人工判定所有权。
         raise RuntimeError("> ERR: [Python] recovery target still exists while backup is preserved")
 
+    # 备份根链接不能在恢复时被 copytree 跟随。
+    if path_backup.is_symlink():
+
+        # 保留备份现场并阻断恢复复制。
+        raise RuntimeError("> ERR: [Python] recovery backup must not be a symbolic link")
+
     # 使用复制而非移动，确保恢复成功后 backup 仍可审计和手工回退。
-    shutil.copytree(path_backup, path_destination)
+    shutil.copytree(path_backup, path_destination, symlinks=True)
 
     # 恢复副本必须满足与安装后副本相同的收据和哈希合同。
     dict_recovery_validation = validate_installed_copy(  # 恢复后的安装态验证结果。
@@ -291,11 +363,17 @@ def prepare_staging_copy(path_skill_dir: Path, path_staging: Path) -> None:
     异常：复制、清理或任一阶段验证失败时向上抛出异常。
     """
 
+    # 发布包根链接不能被 copytree 当作源目录跟随。
+    if path_skill_dir.is_symlink():
+
+        # 在 staging 创建前拒绝外部根目录内容。
+        raise RuntimeError("> ERR: [Python] release source root must not be a symbolic link")
+
     # 缓存、字节码和版本库元数据不属于技能安装内容。
     func_ignore = shutil.ignore_patterns("__pycache__", "*.pyc", ".git")  # 复制排除规则。
 
-    # 复制失败只会污染 staging，不会触碰现有安装。
-    shutil.copytree(path_skill_dir, path_staging, ignore=func_ignore)
+    # 复制失败只会污染 staging；链接保持原形等待安装态拒绝。
+    shutil.copytree(path_skill_dir, path_staging, ignore=func_ignore, symlinks=True)
 
     # 原始 staging 先证明复制过程完整，兼容清理不得掩盖源损坏。
     dict_validation = validate_installed_copy(path_staging)  # 清理前验证结果。
@@ -417,13 +495,13 @@ def copy_skill(path_skill_dir: Path, path_destination: Path, bool_replace: bool)
     path_staging = unique_sibling_path(path_destination, "staging")  # 切换前完整副本。
 
     # 事务开始时的目标状态决定首次安装与替换安装的恢复合同。
-    bool_destination_existed = path_destination.exists()  # 本轮开始前是否存在旧安装。
+    bool_destination_existed = path_destination.exists() or path_destination.is_symlink()  # 本轮开始前是否存在旧安装。
 
     # 该标志区分原有目标与本事务已经换入的新副本。
     bool_swapped = False  # 最终目录是否已由本事务的新副本占据。
 
     # 已存在目标必须按 replace 合同决定拒绝或备份。
-    if path_destination.exists():
+    if bool_destination_existed:
 
         # 未授权替换时不得移动或覆盖用户现有安装。
         if not bool_replace:
@@ -441,7 +519,7 @@ def copy_skill(path_skill_dir: Path, path_destination: Path, bool_replace: bool)
         prepare_staging_copy(path_skill_dir, path_staging)
 
         # 只有完整新副本就绪后才备份旧安装。
-        if path_destination.exists():
+        if bool_destination_existed:
 
             # 唯一备份路径保留本次切换前的可恢复版本。
             path_backup = unique_backup_path(path_destination)  # 本次旧安装备份目录。
