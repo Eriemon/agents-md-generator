@@ -1,52 +1,61 @@
-# AGENTS.md Generator
+<p align="center">
+  <a href="README.md"><strong>English</strong></a>
+  <span>&nbsp;|&nbsp;</span>
+  <a href="README-CN.md">中文</a>
+</p>
 
-![A governed path from repository facts to a verified AGENTS.md](assets/readme/hero.png)
+<p align="center">
+  <img src="assets/readme/hero.png" alt="AGENTS.md Generator" width="100%">
+</p>
 
-Turn a messy repository handoff into a compact, scoped, reviewable set of coding-agent rules. The skill reads the workspace that actually exists, asks only for policy that cannot be inferred, renders managed blocks, and leaves evidence for the next session.
+<p align="center">
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-1f6feb"></a>
+  <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-2f81f7"></a>
+  <img alt="Version" src="https://img.shields.io/badge/version-v2.1.1-7c3aed">
+  <a href="SKILL.md"><img alt="Agent Skill" src="https://img.shields.io/badge/agent--skill-16a34a"></a>
+  <a href="references/script-guide.md"><img alt="Target" src="https://img.shields.io/badge/target-AGENTS.md-f59e0b"></a>
+</p>
 
-## The product in one sentence
+<h1 align="center">AGENTS.md Generator</h1>
 
-`repository facts + confirmed intent → scoped AGENTS.md + governance evidence`
+<p align="center">
+  A Codex-ready skill for turning repository reality into clear, scoped coding-agent guidance.
+</p>
 
-The generator is designed for maintainers who need the same answer to remain true across a local checkout, a remote validation workspace, an interrupted session, and a versioned release package.
+<p align="center">
+  Latest release: <strong>v2.1.1</strong> · Released on <strong>2026-08-11</strong>
+</p>
 
-## What it handles
+AGENTS.md Generator helps maintainers shape the rules that coding agents actually need: what exists, what matters, where a rule applies, and how work continues after a handoff. It combines repository discovery, grouped design conversations, deterministic renderers, directory governance, and release tooling in one skill package.
 
-| Need | What the skill does | Result you can inspect |
-| --- | --- | --- |
-| New or missing root rules | Detects the project kind and asks the design groups in order | A root and scoped `AGENTS.md` plan |
-| Existing rules | Preserves text outside managed blocks and updates only governed content | A minimal diff with ownership boundaries |
-| Large workspaces | Compresses rules around decisions, paths, and gates | A short operational root instead of a handbook |
-| Remote work | Resolves the configured route and checks the verified workspace | Server, task, and workspace evidence |
-| Interrupted work | Reads the current handoff and resumes the exact step | A safe stop/resume point |
-| Skill releases | Audits, packages, installs, and records a versioned receipt | `dist/<skill>-vX.Y.Z/RELEASE_RECEIPT.json` |
-| GitHub-linked skills | Mirrors a completed dist package into an existing `github/` checkout | A manifest, local plan, and separate publication boundary |
+## Why maintainers use it
 
-## Functional views
+- Turn an unfamiliar repository into a short, navigable context layer.
+- Keep root and scoped rules aligned with the directories they govern.
+- Carry the same intent through local development, validation, packaging, and installation.
+- Give a new agent a clear way to resume without reopening every design decision.
 
-The hero is the overview. These four detail views show the actual contracts behind the workflow: what is inspected, how policy is locked, where rules are rendered, and why a handoff is safe to trust.
+## 01 — Start from repository facts
+
+The skill begins with the tree that is really present. It identifies project shape, languages, command surfaces, ownership boundaries, and existing guidance before asking for decisions. That keeps the first draft grounded in the repository instead of an imagined template.
 
 ![Project facts: repository tree, knowledge graph, language mix, command surface, and scope candidates](assets/readme/project-facts.png)
 
-![Design profile: policy sliders, key questions, scope boundary, and decision matrix](assets/readme/design-profile.png)
+## 02 — Align policy before writing
 
-![Rule rendering: inherited and scoped AGENTS.md files with managed blocks and minimal diffs](assets/readme/rule-rendering.png)
+Grouped design prompts turn ambiguous preferences into explicit choices about scope, inheritance, naming, remote routes, and release boundaries. Once the profile is aligned, managed blocks can stay compact while human notes remain yours.
 
-![Evidence guard: freshness, path safety, memory gate, validation report, and fail-closed states](assets/readme/evidence-guard.png)
+![Design profile: policy answers, key questions, scope boundary, and decision matrix](assets/readme/design-profile.png)
 
-## A real request
+## 03 — Carry the workflow through release
 
-```text
-Create a root AGENTS.md for this repository, keep the root under 20 KB,
-put FPGA rules under rtl/, validate on the selected remote server, and
-prepare a release package without installing it.
-```
+Render only the blocks owned by the generator, preserve the rest of each file, and use the same package contract for a local skill checkout, a versioned dist directory, and an existing GitHub mirror. The result is a workflow that can be resumed, reviewed, installed, and maintained without changing its meaning at every step.
 
-The skill turns that request into explicit answers, checks whether the workspace already has meaningful content, renders only after alignment, and reports which checks were actually run. It does not invent a server, silently copy local references, or call a remote publication command.
+![Rule rendering: inherited and scoped AGENTS.md files with managed blocks and focused diffs](assets/readme/rule-rendering.png)
 
-## Installable entry points
+## Get started
 
-Run from this repository while developing the skill:
+Run the design and validation flow from the repository while developing the skill:
 
 ```powershell
 python skills/agents-md-generator/scripts/python/design/collect_design_profile.py --project .
@@ -54,47 +63,58 @@ python skills/agents-md-generator/scripts/python/verify/quick_validate.py skills
 python skills/agents-md-generator/scripts/python/verify/audit_skill.py skills/agents-md-generator
 ```
 
-Install only from a validated versioned directory, never from the source directory:
+Install only from a versioned package directory:
 
 ```powershell
 python skills/agents-md-generator/scripts/python/release/install_skill.py `
-  dist/agents-md-generator-v2.1.0 --target skip
+  dist/agents-md-generator-v2.1.1 --target skip
 ```
 
-## Linking an existing GitHub repository
+## Develop locally, mirror deliberately
 
-When a skill also has a public repository, register its mapping in `.agents/agents-control.json` and follow this order:
-
-```text
-status → check → normal dist release/install → mirror → plan →
-separate publication confirmation → manual git/gh actions → verify
-```
-
-The local helper is deliberately fail-closed:
+The source skill directory is the only place where README and workflow changes are authored. A release package is created from that source, and an existing `github/` checkout receives only the completed package. Local development, installation, and remote publication stay separate decisions.
 
 ```powershell
+python skills/agents-md-generator/scripts/python/release/github_skill_release.py `
+  status --project . --skill-dir skills/agents-md-generator
 python skills/agents-md-generator/scripts/python/release/github_skill_release.py `
   check --project . --skill-dir skills/agents-md-generator
 python skills/agents-md-generator/scripts/python/release/github_skill_release.py `
   mirror --project . --skill-dir skills/agents-md-generator `
-  --release-dir dist/agents-md-generator-v2.1.0
+  --release-dir dist/agents-md-generator-v2.1.1
+python skills/agents-md-generator/scripts/python/release/github_skill_release.py `
+  verify --project . --skill-dir skills/agents-md-generator `
+  --release-dir dist/agents-md-generator-v2.1.1
 ```
 
-It preserves `.git`, replaces every other checkout entry with the dist contents, compares SHA-256 manifests, and never creates a remote repository or performs `commit`, `push`, `tag`, or GitHub Release actions.
+The mirror keeps `.git`, replaces the checkout content with the selected dist package, compares the resulting files, and never creates a remote repository or runs `commit`, `push`, `tag`, or GitHub Release actions for you.
 
-## Public package contract
+## What ships in the skill
 
-Every managed skill package contains `VERSION`, `LICENSE`, `README.md`, `README-CN.md`, `SECURITY.md`, `pyproject.toml`, `CONTRIBUTING.md`, `CITATION.cff`, and `SKILL.md`. Both README files use local raster PNG illustrations; SVG, Mermaid, remote image URLs, and placeholder metadata are rejected before packaging.
+| Capability | Maintainer outcome |
+| --- | --- |
+| Repository discovery | A compact map of project shape and ownership boundaries |
+| Design alignment | Scoped rules that match the way directories are actually used |
+| Deterministic rendering | Managed blocks that can be regenerated without erasing human notes |
+| Directory governance | Clear gates for roots, nested scopes, and handoff state |
+| Release lifecycle | A versioned package that can be installed or mirrored consistently |
 
-When this skill is used to create or update another skill, a request for README illustrations follows the same visual contract: use Image2/ImageGen to create original raster artwork, make the main image a wide 16:9 functional overview, add matching detail images for the core capabilities, and show real inputs, decisions, outputs, gates, or data relationships. Decorative screenshots, generic step lists, SVG illustrations, Mermaid diagrams, and remote image links do not satisfy the contract.
+## Authors and citation
 
-## Design principles
+Jiyuan Liu and He Li are with the School of Electronic Science and Engineering, Southeast University (东南大学). The work is developed with the Heterogeneous Intelligence and Quantum Computing Laboratory (HIQC).
 
-- Facts before prose: inspect the current tree before asking a question.
-- Narrow writes: managed blocks are generated; human notes remain human-owned.
-- Evidence before confidence: a receipt names the source, package, and checks that produced it.
-- Separate scopes: local mirror, installation, and remote publication each have their own confirmation boundary.
+If you build on this skill, cite the package through [CITATION.cff](CITATION.cff):
 
-## License and citation
+```bibtex
+@software{liu_2026_agents_md_generator,
+  author = {Jiyuan Liu and He Li},
+  title = {{AGENTS.md Generator}: An Agent Skill for Coding-Agent Context Files},
+  year = {2026},
+  version = {2.1.1},
+  date = {2026-08-11},
+  url = {https://github.com/Eriemon/agents-md-generator},
+  license = {Apache-2.0}
+}
+```
 
-Released under Apache-2.0. See [LICENSE](LICENSE), [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [CITATION.cff](CITATION.cff).
+Released under the Apache License 2.0. See [LICENSE](LICENSE), [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [CITATION.cff](CITATION.cff).

@@ -8,6 +8,9 @@ import re
 from pathlib import Path
 from typing import Any
 
+# 双语 README 产品页结构由独立合同模块统一解析。
+import readme_product_contract
+
 # 每个受管理技能必须提供这些公开入口文件。
 REQUIRED_PUBLIC_FILES = (
     "SKILL.md",  # Codex 技能执行入口
@@ -35,9 +38,6 @@ MIN_README_IMAGE_WIDTH = 1600  # README 插图最低像素宽度
 
 # 高度阈值保证宽屏截图不会被压缩成不可读缩略图。
 MIN_README_IMAGE_HEIGHT = 900  # README 插图最低像素高度
-
-# Markdown 图片语法只提取目标路径，不解析标题文本。
-README_IMAGE_PATTERN = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")  # 图片目标匹配器
 
 # 公开说明不得遗留未完成占位符。
 PLACEHOLDER_PATTERN = re.compile(  # 占位文本匹配器
@@ -158,38 +158,11 @@ def _readme_asset_references(path_readme: Path) -> list[str]:
         无；不可读 README 返回空列表。
     """
 
-    # 读取文本后按 Markdown 图片语法收集目标。
+    # 统一复用产品页合同的 Markdown/HTML 解析，避免徽章被漏检。
     str_readme = _read_text(path_readme)  # 当前语言入口的完整 README 文本
 
-    # 列表保存双语说明中声明的本地资源。
-    list_references: list[str] = []  # 图片目标列表
-
-    # 每个图片目标都要单独做路径和格式门禁。
-    for str_target in README_IMAGE_PATTERN.findall(str_readme):
-
-        # 去掉目标两端空白，避免空格改变路径判定。
-        str_reference = str_target.strip()  # 原始图片引用
-
-        # 尖括号包裹的路径允许空格，因此先取括号内部。
-        if str_reference.startswith("<") and ">" in str_reference:
-
-            # 截取尖括号内的完整资源路径。
-            str_reference = str_reference[1 : str_reference.index(">")]  # 尖括号内的资源路径
-
-        # 普通目标的第一个空白前内容才是路径。
-        else:
-
-            # 标题文本不应被当作资源路径。
-            str_reference = str_reference.split()[0] if str_reference.split() else ""  # 普通目标的首个路径词
-
-        # 空目标没有可验证的资产路径，仍由缺失资源规则报告。
-        if str_reference:
-
-            # 保留清理后的相对或绝对目标。
-            list_references.append(str_reference)
-
-    # 返回去重前列表，调用方决定是否保留重复插图证据。
-    return list_references
+    # 返回产品合同提取的稳定图片路径顺序。
+    return readme_product_contract.extract_image_references(str_readme)
 
 # 收集公开文件存在性与符号链接问题。
 def _required_file_report(root: Path) -> tuple[list[str], list[str], list[str]]:
@@ -430,6 +403,12 @@ def _readme_contract_report(
         # 每个引用都要通过路径、格式和分辨率检查。
         for str_reference in list_references:
 
+            # 头部原有 shields 徽章保留远程语义，不作为功能插图资产。
+            if readme_product_contract.is_remote_badge_reference(str_readme, str_reference):
+
+                # 徽章不属于离线功能图资产，跳过本地 PNG 尺寸检查。
+                continue
+
             # SVG 作为插图被明确禁止。
             if str_reference.lower().endswith(".svg"):
 
@@ -662,6 +641,15 @@ def validate_public_skill_files(
     # 合并未被 README 引用的坏 PNG，防止二进制垃圾进入发布包。
     list_errors.extend(_unreferenced_png_report(root))  # 合并 PNG 签名错误
 
+    # 追加头部、作者引用、页脚和三章视觉分组的产品页合同。
+    dict_readme_product = readme_product_contract.validate_readme_product(  # 产品页结构报告
+        root,  # 当前技能源码或 dist 根目录
+        expected_version=expected_version,  # 对齐产品页展示的发布版本
+    )  # 双语产品页校验结果
+
+    # 产品页错误进入统一公开文件错误列表，阻止不完整镜像继续发布。
+    list_errors.extend(dict_readme_product["errors"])  # 合并产品页错误
+
     # 返回稳定字段，供 CLI、审计和发布收据共享。
     return {
         "ok": not list_errors,  # 没有错误才允许继续发布
@@ -671,5 +659,6 @@ def validate_public_skill_files(
         "missing_required_files": sorted(list_missing),  # 报告缺失的公开入口文件
         "asset_paths": list_asset_paths,  # 通过的本地 PNG 路径
         "readme_images": dict_readme_images,  # README 图像尺寸事实
+        "readme_product": dict_readme_product,  # README 产品页语义事实
         "versions": dict_versions,  # 版本元数据事实
     }

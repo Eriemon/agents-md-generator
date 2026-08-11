@@ -1,7 +1,7 @@
 {
   "documents": [
     {
-      "content_sha256": "1a16a25a5d0c822afecb7b140bfc3741c7dcfc47ea4518b86a8dd6d64058aed8",
+      "content_sha256": "19624f501629bfde9b2bccbb9fc500584fcb5263b55f1f3b6b6ae9bf2c2c24f7",
       "id": "document.skill",
       "path": "SKILL.md",
       "responsibility": "定义技能触发条件、工作流顺序、远程技能能力判定、工作区停止边界与渐进披露入口。",
@@ -119,6 +119,22 @@
       "responsibility": "定义技能变更后的前向测试场景及其预期结果。",
       "status": "reviewed",
       "summary": "功能、工作区边界、治理、发布与兼容性的前向验证场景。"
+    },
+    {
+      "content_sha256": "55e3f0c9cb8d545239673538b92bd534a7799b1f7f628b916406e27c60054057",
+      "id": "document.references-github-skill-release",
+      "path": "references/github-skill-release.md",
+      "responsibility": "定义源 README、GitHub 镜像、版本发布与本地技能开发之间的单向同步和验证边界。",
+      "status": "reviewed",
+      "summary": "GitHub 镜像与本地技能发布的源绑定、检查、镜像和验证合同。"
+    },
+    {
+      "content_sha256": "a4cb21fe6ee5b2ac157fe9232fe5959d4debd4eec3f9b25125a4bf22a4b833b4",
+      "id": "document.references-public-skill-package",
+      "path": "references/public-skill-package.md",
+      "responsibility": "定义公开技能包的目录边界、元数据完整性、README 产品页面与功能插图要求。",
+      "status": "reviewed",
+      "summary": "公开技能包的内容、资产、本地化元数据和可审计发布边界。"
     },
     {
       "content_sha256": "ecb4ad440c67754bc0051d1c2b9f3afa3091a17f8c8460622802871147344a6b",

@@ -54,14 +54,16 @@ Use registry instruction `design.collect-profile`, resume unfinished state, and 
 
 ### README illustration contract
 
-When a user asks this skill to create README illustrations for a skill, treat the request as a functional design deliverable, not as a decorative image task:
+When a user asks this skill to update a skill README, reuse suitable existing visuals first. Create new artwork only when the user explicitly requests new visuals or the repository has no suitable asset; treat that request as a functional design deliverable, not as a decorative image task:
 
 1. Write a visual brief from the skill's real inputs, decisions, outputs, gates, and boundaries before generating anything.
-2. Use Image2/ImageGen to generate original raster artwork. SVG is forbidden as a README illustration; Mermaid is also forbidden in the public image assets.
+2. If new artwork is explicitly requested, use Image2/ImageGen to generate original raster artwork. SVG is forbidden as a README illustration; Mermaid is also forbidden in the public image assets.
 3. Make the main image a horizontal 16:9 overview that is legible in a repository README. Add style-consistent detail images for each major capability instead of repeating or cropping the hero.
 4. Use panels, tables, relationship maps, code fragments, state cards, or formulas only when they clarify the function. Avoid generic stock imagery, empty neon decoration, and a linear checklist with no functional information.
 5. Provide matching English and Chinese PNGs when the skill has bilingual READMEs, keep them local under `assets/readme/`, and reference every image from the README that explains it.
-6. Validate PNG signatures, dimensions, local paths, and absence of SVG/remote metadata before copying images into the source package or `dist/`.
+6. Validate PNG signatures, dimensions, local paths, and absence of SVG/remote metadata before copying new images into the source package or `dist/`. Existing illustrations must not be redrawn merely to refresh README copy.
+
+The source README is the sole authoring surface. A versioned `dist/` package and an existing `github/` checkout consume its complete contents; neither may become a second README source. Functional illustrations remain local PNGs, while the original header may retain shields.io badges as metadata links.
 
 Managed roots render `coding_behavior.language_skill_routing` exactly as `shared`, `python`, and `script`: shared think-first/in-process gates appear 只渲染一次; Python remains owned by `readable-python-generator`; bat/cmd, shell/bash, PowerShell, and Tcl remain owned by `readable-script-generator`; a script wrapper that invokes Python is still a script target. Preserve line separation, 严禁把代码压缩到一行, and reject 炫技代码. Render `script_output_policy` from configuration rather than hard-coded business enums.
 

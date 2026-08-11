@@ -4,10 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agents-md-generator"
-version = "2.1.0"
-description = "Governed generation and verification of AGENTS.md repository rules"
+version = "2.1.1"
+description = "A Codex-ready skill for generating and maintaining scoped AGENTS.md rules"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
-authors = [{ name = "Codex Maintainers" }]
+authors = [
+    { name = "Jiyuan Liu" },
+    { name = "He Li" },
+]
 keywords = ["Codex", "AGENTS.md", "repository governance"]

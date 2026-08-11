@@ -324,6 +324,7 @@ def analyze_release_content_root(
         "public_skill_errors": list(dict_public_analysis["errors"]),  # 公开文件合同错误
         "public_skill_ok": bool(dict_public_analysis["ok"]),  # 公开文件合同结果
         "readme_asset_paths": list(dict_public_analysis["asset_paths"]),  # 双语 README 插图
+        "readme_product": dict(dict_public_analysis.get("readme_product", {})),  # README 产品页合同
         "public_skill_versions": dict(dict_public_analysis["versions"]),  # 公开版本元数据
     }
 
@@ -362,6 +363,7 @@ def release_content_policy_receipt(
         "public_skill_errors": list(analysis.get("public_skill_errors", [])),  # 公开合同错误
         "public_skill_ok": bool(analysis.get("public_skill_ok", True)),  # 公开合同结果
         "readme_asset_paths": list(analysis.get("readme_asset_paths", [])),  # 插图清单
+        "readme_product": dict(analysis.get("readme_product", {})),  # 产品页结构事实
     }
 
 # 校验收据中的发布内容策略是否匹配当前分析结果。
@@ -433,6 +435,7 @@ def validate_recorded_release_content_policy(
         "public_skill_errors",  # 公开合同错误列表
         "public_skill_ok",  # 公开合同通过状态
         "readme_asset_paths",  # README PNG 资产路径
+        "readme_product",  # 双语 README 产品页结构收据
     )
 
     # 只有新版收据出现公开字段时才执行扩展比较。

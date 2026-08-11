@@ -1,7 +1,7 @@
 {
   "records": [
     {
-      "content_sha256": "1a16a25a5d0c822afecb7b140bfc3741c7dcfc47ea4518b86a8dd6d64058aed8",
+      "content_sha256": "19624f501629bfde9b2bccbb9fc500584fcb5263b55f1f3b6b6ae9bf2c2c24f7",
       "id": "knowledge.skill",
       "keywords": [
         "route",
@@ -231,6 +231,38 @@
       "source_path": "references/evaluation-scenarios.md",
       "summary": "技能功能、非测试智能体授权、工作区单次确认、治理、运行时、发布与兼容性的前向测试场景。",
       "title": "Evaluation Scenarios"
+    },
+    {
+      "content_sha256": "55e3f0c9cb8d545239673538b92bd534a7799b1f7f628b916406e27c60054057",
+      "id": "knowledge.references-github-skill-release",
+      "keywords": [
+        "GitHub mirror",
+        "release",
+        "source binding",
+        "check",
+        "verify"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/github-skill-release.md",
+      "summary": "GitHub 镜像与本地技能发布的源绑定、检查、镜像和验证合同。",
+      "title": "GitHub Skill Release"
+    },
+    {
+      "content_sha256": "a4cb21fe6ee5b2ac157fe9232fe5959d4debd4eec3f9b25125a4bf22a4b833b4",
+      "id": "knowledge.references-public-skill-package",
+      "keywords": [
+        "public package",
+        "README",
+        "assets",
+        "metadata",
+        "release boundary"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/public-skill-package.md",
+      "summary": "公开技能包的内容、资产、本地化元数据和可审计发布边界。",
+      "title": "Public Skill Package"
     },
     {
       "content_sha256": "ecb4ad440c67754bc0051d1c2b9f3afa3091a17f8c8460622802871147344a6b",
