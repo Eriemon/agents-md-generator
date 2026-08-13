@@ -85,6 +85,7 @@ def validate_public_skill_files(
     root: Path,
     *,
     expected_version: str | None = None,
+    expected_repository_url: str | None = None,
     strict_metadata: bool = True,
 ) -> dict[str, Any]:
     """校验公开技能文件、版本元数据和 README PNG 插图。
@@ -92,6 +93,7 @@ def validate_public_skill_files(
     参数:
         root: 技能源码或版本化 dist 根目录。
         expected_version: 可选的外部版本期望。
+        expected_repository_url: 可选的项目 GitHub 仓库映射。
         strict_metadata: 是否执行许可证、版本和占位文本强校验。
 
     返回:
@@ -105,6 +107,7 @@ def validate_public_skill_files(
     return public_skill_contract.validate_public_skill_files(
         root,
         expected_version=expected_version,
+        expected_repository_url=expected_repository_url,
         strict_metadata=strict_metadata,
     )
 
@@ -262,23 +265,33 @@ def _scan_release_root(root: Path) -> tuple[list[str], list[str], set[str]]:
 
 # 分析发布内容根并生成完整策略事实。
 def analyze_release_content_root(
-    root: Path,
-    *,
+    root: Path, *,
     allow_source_only_repo_local: bool = False,
     strict_public_contract: bool = True,
+    expected_version: str | None = None,
+    expected_repository_url: str | None = None,
+    strict_metadata: bool | None = None,
 ) -> dict[str, Any]:
     """分析发布目录并返回内容策略报告。
 
     参数：
         root: 待分析的技能内容根目录。
         allow_source_only_repo_local: 保留的兼容参数，当前策略不接纳源码专属目录。
-        strict_public_contract: 是否执行公开元数据的严格发布门禁。
+        strict_public_contract: 兼容旧调用方的公开元数据严格门禁。
+        expected_version: 公开技能应声明的版本。
+        expected_repository_url: 公开安装说明应使用的 GitHub 仓库 URL。
+        strict_metadata: 覆盖旧严格门禁开关的公开合同模式。
     返回：
         策略版本、允许项、正式文件和阻断项组成的报告。
     """
 
     # 兼容参数显式消费，避免调用方接口漂移。
     _ = allow_source_only_repo_local  # 当前版本不启用源码专属目录例外
+
+    # 新合同优先使用明确的严格度参数，旧参数仍保持兼容。
+    bool_strict_metadata = (
+        strict_public_contract if strict_metadata is None else strict_metadata  # 新参数优先覆盖旧开关
+    )  # 解析公开合同严格度
 
     # 扫描过程与报告组装分离，便于验证分类行为。
     tuple_scan_result = _scan_release_root(root)  # 正式文件、污染路径与顶层异常
@@ -295,7 +308,9 @@ def analyze_release_content_root(
     # 公开文件合同独立于历史目录白名单，允许旧收据兼容回放。
     dict_public_analysis = validate_public_skill_files(  # 当前包的公开入口门禁
         root,  # 当前发布或源码根目录
-        strict_metadata=strict_public_contract,  # 是否启用严格元数据门禁
+        expected_version=expected_version,  # 公开版本映射
+        expected_repository_url=expected_repository_url,  # 公开安装 URL 映射
+        strict_metadata=bool_strict_metadata,  # 是否启用严格元数据门禁
     )  # 公开门禁报告
 
     # 顶层集合便于收据快速证明正式内容覆盖范围。
@@ -323,6 +338,10 @@ def analyze_release_content_root(
         "missing_required_files": list(dict_public_analysis["missing_required_files"]),  # 缺失公开文件
         "public_skill_errors": list(dict_public_analysis["errors"]),  # 公开文件合同错误
         "public_skill_ok": bool(dict_public_analysis["ok"]),  # 公开文件合同结果
+        "public_skill_warnings": list(dict_public_analysis.get("warnings", [])),  # 预览提示
+        "preview_ready": bool(dict_public_analysis.get("preview_ready", False)),  # 可预览状态
+        "publish_ready": bool(dict_public_analysis.get("publish_ready", False)),  # 可发布状态
+        "repository_url": dict_public_analysis.get("repository_url"),  # 公开仓库 URL
         "readme_asset_paths": list(dict_public_analysis["asset_paths"]),  # 双语 README 插图
         "readme_product": dict(dict_public_analysis.get("readme_product", {})),  # README 产品页合同
         "public_skill_versions": dict(dict_public_analysis["versions"]),  # 公开版本元数据

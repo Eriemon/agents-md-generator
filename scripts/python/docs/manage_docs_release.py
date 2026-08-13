@@ -19,11 +19,11 @@ def _load_test_evidence_module() -> ModuleType:
     """
 
     # 明确文件路径不受调用方模块搜索顺序影响。
-    path_evidence_module = Path(__file__).resolve().parents[1] / "verify" / "test_evidence.py"  # 验证模块路径。
+    path_evidence_module = Path(__file__).resolve().parents[1] / "verify" / "evidence_validation.py"  # 验证模块路径。
 
     # 独立模块名避免复用环境中可能存在的同名验证器。
     module_spec = importlib.util.spec_from_file_location(  # 验证模块加载规格。
-        "agents_test_evidence",  # 当前源码验证器的隔离模块名。
+        "agents_evidence_validation",  # 当前源码验证器的隔离模块名。
         path_evidence_module,  # 当前源码验证器的明确位置。
     )
 

@@ -372,17 +372,35 @@ def takeover_required(project: Path) -> tuple[bool, dict[str, Any]]:
     # 把版本刷新分类写回事实，供设计档案和外部 CLI 复用。
     dict_facts["meaningful_paths"] = meaningful_paths(dict_facts)  # 现有产品内容标志
 
+    # 接管判断需要知道项目是否拥有可作为版本刷新来源的技能版本文件。
+    path_project_version = (
+        project / "skills" / "agents-md-generator" / "VERSION"  # 项目版本来源路径
+    )  # 项目技能版本文件
+
+    # 版本漂移原因先归一化，避免窄版刷新掩盖旧项目接管需求。
+    set_reasons = {
+        str(item)  # 版本触发原因文本
+        for item in dict_facts.get("root_agents_md_trigger_reasons", [])  # 原始触发原因
+    }  # 根规则版本触发原因
+
+    # 已落地内容但没有项目版本来源时，旧项目必须走接管流程。
+    bool_legacy_version_source = (
+        bool(dict_facts["meaningful_paths"])  # 是否存在可接管内容
+        and not path_project_version.is_file()  # 是否缺少项目版本文件
+        and bool(set_reasons & {"agents_version_mismatch", "generator_version_mismatch"})  # 是否存在根规则版本漂移
+    )  # 是否缺少版本来源的旧项目
+
     # 分类结果持久化到事实，保证后续接管判断使用同一路由。
     dict_facts["project_update_route"] = classify_version_refresh(dict_facts)["route"]  # 当前项目路由
 
     # 版本刷新是窄流程，不应被旧接管判断升级成全量访谈。
-    if dict_facts["project_update_route"] == "version_refresh":
+    if (
+        dict_facts["project_update_route"] == "version_refresh"
+        and not bool_legacy_version_source
+    ):
 
         # 窄流程无需触发接管访谈。
         return False, dict_facts
-
-    # 接管候选只接收根规则诊断中的版本漂移集合。
-    set_reasons = {str(item) for item in dict_facts.get("root_agents_md_trigger_reasons", [])}  # 接管判断所需的根规则证据
 
     # 交集把其他根规则诊断排除在接管决定之外。
     bool_triggered = bool(set_reasons & {"agents_version_mismatch", "generator_version_mismatch"})  # 是否命中版本接管条件

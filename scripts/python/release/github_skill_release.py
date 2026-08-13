@@ -654,6 +654,7 @@ def _public_report(
     path_root: Path,
     expected_version: str | None = None,
     *,
+    expected_repository_url: str | None = None,
     strict_metadata: bool = True,
 ) -> dict[str, Any]:
     """校验公开技能文件。
@@ -661,6 +662,7 @@ def _public_report(
     参数:
         path_root: 技能源码或 dist 根目录。
         expected_version: 期望的版本文本。
+        expected_repository_url: 项目映射中的 GitHub 仓库 URL。
         strict_metadata: 是否执行许可证、版本和占位文本强校验。
 
     返回:
@@ -674,6 +676,7 @@ def _public_report(
     dict_report: dict[str, Any] = _policy_module().validate_public_skill_files(  # 执行统一公开文件门禁
         path_root,  # 待检查的技能或 dist 根目录
         expected_version=expected_version,  # 对齐源码 VERSION 的期望值
+        expected_repository_url=expected_repository_url,  # 对齐公开安装 URL
         strict_metadata=strict_metadata,  # 预检与正式发布使用不同严格度
     )  # 公开文件校验结果
 
@@ -968,6 +971,9 @@ def _check(
     # 映射路径作为未显式覆盖时的目标。
     str_default_checkout = str(dict_mapping.get("checkout_path", f"github/{path_skill.name}"))  # checkout 默认路径
 
+    # 仓库映射是严格发布时 README 安装 URL 的权威来源。
+    str_repository_url = str(dict_mapping.get("repository_url", ""))  # 项目 GitHub 仓库地址
+
     # 显式覆盖仍受项目根边界限制。
     path_checkout = _project_path(project, checkout_argument, str_default_checkout)  # 发布检查的 checkout 目录
 
@@ -975,6 +981,7 @@ def _check(
     dict_source_public = _public_report(  # 源码公开文件报告
         path_skill,  # 技能源码根目录
         str_version,  # 源码公开版本事实
+        expected_repository_url=str_repository_url,  # dist README 使用同一仓库映射
         strict_metadata=bool_strict_public,  # 源码元数据严格度
     )  # 源码公开文件检查结果
 
@@ -982,6 +989,7 @@ def _check(
     dict_release_public = _public_report(  # dist 公开文件报告
         path_release,  # 版本化 dist 根目录
         str_version,  # 用于比对的期望版本
+        expected_repository_url=str_repository_url,  # 对齐项目仓库映射
         strict_metadata=bool_strict_public,  # dist 元数据严格度
     )  # dist 公开文件检查结果
 

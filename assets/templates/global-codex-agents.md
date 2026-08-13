@@ -1,5 +1,5 @@
 <!-- Managed by agents-md-generator: keep manual notes outside the managed global baseline block. -->
-<!-- AGENTS-GENERATED:META generator=agents-md-generator schema=1 baseline=global-codex-baseline baseline_version=4 -->
+<!-- AGENTS-GENERATED:META generator=agents-md-generator schema=1 baseline=global-codex-baseline baseline_version=5 -->
 <!-- AGENTS-GENERATED:START global-codex-baseline -->
 # Codex Global AGENTS Baseline
 
@@ -7,12 +7,12 @@
 - Explicit user instructions win.
 - Apply global guidance across repositories and project guidance from its root downward.
 - `AGENTS.override.md` replaces same-level `AGENTS.md`; closer files win conflicts.
-- Keep repository commands, paths, thresholds, exceptions, layouts, and release rules in the nearest project AGENTS file or repository governance config.
+- Keep commands and release rules in repository governance.
 
 ## Managed Repository Entry
 - Re-check scope after changing directory or when guidance may be stale.
 - A repository is managed only when generated metadata or a governance marker says so.
-- Before implementation in a managed repository, inspect or repair a missing, malformed, stale, or incompatible root with `agents-md-generator`.
+- Before implementation, inspect or repair an incompatible managed root.
 - Missing root guidance does not block unmanaged repositories.
 - If repair fails, report it; do not manually rewrite managed sections without authorization.
 
@@ -21,7 +21,7 @@
 - Prefer existing repository patterns, tools, libraries, templates, and mature code before replacements.
 - Plan cross-cutting, high-risk, ambiguous, release-sensitive, or project-scale work.
 - Use `task_rating_gate.py` only when repository governance provides it and the task is non-trivial enough for rating to affect execution mode; its result is advisory.
-- Ask only when an answer materially changes scope, interfaces, data, security, cost, irreversibility, dependencies, or external behavior.
+- Ask only when an answer materially changes scope, data, security, cost, or external behavior.
 - For very high-risk work, phase the plan and record material reuse choices and risks.
 
 ## Scope Discipline
@@ -47,6 +47,7 @@ Guidelines for avoiding common LLM coding mistakes.
 ### 1. Think Before Coding
 - Ground decisions in repository evidence; state material assumptions.
 - Resolve low-risk ambiguity locally; ask about consequential ambiguity.
+- For difficult implementation problems, check library documentation and reuse supported APIs before replacement code; avoid custom substitutes that add debugging cost, reduce capability, or break compatibility.
 - For Python or bat/cmd, shell/bash, PowerShell, and Tcl changes, think first, load both `readable-python-generator` and `readable-script-generator`, and pass both gates before continuing. Final ownership stays with the target-language skill.
 - Recommend a substantially simpler sound approach when one exists.
 
@@ -75,9 +76,9 @@ Minimum code that solves the problem. Nothing speculative.
 ## Comments And Documentation
 - Comment public contracts, key invariants, non-obvious decisions, generation boundaries, and risk boundaries.
 - Do not restate obvious code or narrate syntax.
+- Choose prose, tables, Mermaid flowcharts, or a combination according to which form clarifies links.
 - Update stale comments and documentation when behavior changes.
 - Follow repository documentation conventions.
-- Choose prose, tables, Mermaid flowcharts, or a combination according to which form clarifies links.
 - For Markdown documentation formulas, use inline `$...$` or block `$$...$$` unless project rules differ.
 
 ## Environment And Dependency Safety

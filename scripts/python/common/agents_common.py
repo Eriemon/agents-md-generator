@@ -58,7 +58,7 @@ extend_task_module_search_path()
 
 # 项目内容探测忽略版本库、依赖、缓存、构建产物与参考材料目录。
 SKIP_DIRS = set(  # 项目内容探测排除目录
-    ".git .hg .svn .cache .venv __pycache__ node_modules vendor dist build target ref".split()  # 排除名称序列
+    ".git .hg .svn .cache .venv .conda __pycache__ node_modules vendor dist build target ref".split()  # 排除名称序列
 )
 
 # 元数据区块表达式提取根 AGENTS 注释中的完整键值载荷。
@@ -86,7 +86,7 @@ GLOBAL_CODEX_AGENTS_PREAMBLE = (  # 全局 AGENTS 前言
 # 生成器元标记固定当前全局基线 schema 和版本。
 GLOBAL_CODEX_AGENTS_META = (  # 全局 AGENTS 元标记
     "<!-- AGENTS-GENERATED:META generator=agents-md-generator schema=1 "
-    "baseline=global-codex-baseline baseline_version=4 -->"
+    "baseline=global-codex-baseline baseline_version=5 -->"
 )
 
 # 起始标记限定全局基线的受管写入边界。
@@ -1208,11 +1208,11 @@ def global_codex_agents_repair_details(
         # 人工内容场景公开确认门禁及其唯一修复原因。
         return ["missing_global_codex_agents_managed_block"], True, str_user_message
 
-    # 受管区块缺少 v4 元标记时需要版本升级。
+    # 受管区块缺少当前 v5 元标记时需要版本升级。
     if not bool_meta_ok:
 
         # 元标记缺失优先于文本漂移诊断。
-        return ["missing_global_codex_agents_v4_meta"], False, ""
+        return ["missing_global_codex_agents_v5_meta"], False, ""
 
     # 元标记存在但文本不同属于基线漂移。
     if str_actual_block != str_expected_block:
@@ -1270,8 +1270,8 @@ def global_codex_agents_status(
     # 实际区块仅在标记完整时提取。
     str_actual_block = extract_global_codex_managed_block(str_text) if bool_managed else ""  # 当前受管区块
 
-    # v4 元标记是版本符合性的独立证据。
-    bool_meta_ok = GLOBAL_CODEX_AGENTS_META in str_text  # v4 元标记是否存在
+    # v5 元标记是版本符合性的独立证据。
+    bool_meta_ok = GLOBAL_CODEX_AGENTS_META in str_text  # v5 元标记是否存在
 
     # 通过状态要求受管、版本正确且区块文本完全一致。
     bool_baseline_ok = bool_managed and bool_meta_ok and str_actual_block == str_expected_block  # 基线是否一致
@@ -1314,7 +1314,7 @@ def global_codex_agents_status(
         "exists": bool_exists,
         "empty": bool_empty,
         "managed": bool_managed,
-        "baseline_version": "4" if bool_meta_ok else "",
+        "baseline_version": "5" if bool_meta_ok else "",
         "baseline_ok": bool_baseline_ok,
         "repair_required": bool_repair_required,
         "repair_reasons": list_repair_reasons,

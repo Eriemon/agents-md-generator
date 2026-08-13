@@ -1028,7 +1028,7 @@ def validate_global_baseline_template(path: Path, errors: list[str]) -> None:
     # 必需片段覆盖元数据、执行模式、编码纪律和环境安全合同。
     tuple_required_snippets = (  # 全局基线必需规则片段
         "AGENTS-GENERATED:META generator=agents-md-generator schema=1 "
-        "baseline=global-codex-baseline baseline_version=4",
+        "baseline=global-codex-baseline baseline_version=5",
         "## Instruction Scope",  # 指令作用域章节
         "## Managed Repository Entry",  # 受管仓库入口章节
         "## Execution Mode",  # 执行模式章节
@@ -1042,6 +1042,10 @@ def validate_global_baseline_template(path: Path, errors: list[str]) -> None:
         "Coding Behavior Baseline",  # 编码行为基线章节
         "Guidelines for avoiding common LLM coding mistakes",  # 常见编码错误指南
         "### 1. Think Before Coding",  # 编码前思考章节
+        (
+            "For difficult implementation problems, check library documentation and reuse "
+            "supported APIs before replacement code; avoid custom substitutes that add debugging cost"
+        ),  # 复杂实现优先复用成熟 API
         "Minimum code that solves the problem. Nothing speculative.",  # 最小实现原则
         "### 3. Surgical Changes",  # 外科式修改章节
         "### 4. Work Toward Verifiable Goals",  # 可验证目标章节

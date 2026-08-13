@@ -544,6 +544,7 @@ def validate_public_skill_files(
     root: Path,
     *,
     expected_version: str | None = None,
+    expected_repository_url: str | None = None,
     strict_metadata: bool = True,
 ) -> dict[str, Any]:
     """校验公开技能文件、版本一致性和 PNG 插图合同。
@@ -551,6 +552,7 @@ def validate_public_skill_files(
     参数:
         root: 技能源码或版本化 dist 根目录。
         expected_version: 可选的外部版本期望，用于复核 dist 命名。
+        expected_repository_url: 可选的项目 GitHub 仓库映射。
         strict_metadata: 是否执行版本、许可证和占位文本强校验。
 
     返回:
@@ -645,15 +647,28 @@ def validate_public_skill_files(
     dict_readme_product = readme_product_contract.validate_readme_product(  # 产品页结构报告
         root,  # 当前技能源码或 dist 根目录
         expected_version=expected_version,  # 对齐产品页展示的发布版本
+        expected_repository_url=expected_repository_url,  # 对齐公开安装 URL
+        strict_metadata=strict_metadata,  # 预览或正式发布严格度
     )  # 双语产品页校验结果
 
     # 产品页错误进入统一公开文件错误列表，阻止不完整镜像继续发布。
     list_errors.extend(dict_readme_product["errors"])  # 合并产品页错误
 
+    # 发布合同保留 URL 缺口警告，供预览调用方解释而不伪造通过状态。
+    list_warnings = list(dict_readme_product.get("warnings", []))  # README 用户合同警告
+
     # 返回稳定字段，供 CLI、审计和发布收据共享。
     return {
-        "ok": not list_errors,  # 没有错误才允许继续发布
+        "ok": (
+            bool(dict_readme_product.get("preview_ready", False))
+            if not strict_metadata
+            else not list_errors
+        ),  # 预览允许警告，正式发布必须无错误
         "errors": list_errors,  # 全部阻断原因
+        "warnings": list_warnings,  # 预览阶段的用户合同警告
+        "preview_ready": dict_readme_product.get("preview_ready", False),  # 普通用户内容是否完整
+        "publish_ready": dict_readme_product.get("publish_ready", False),  # 是否满足正式发布合同
+        "repository_url": dict_readme_product.get("repository_url", ""),  # 归一化 GitHub URL
         "checked": sorted(set(list_checked)),  # 已检查的公开文件
         "required_files": list(REQUIRED_PUBLIC_FILES),  # 当前合同文件清单
         "missing_required_files": sorted(list_missing),  # 报告缺失的公开入口文件

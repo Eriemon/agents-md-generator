@@ -8,6 +8,9 @@ import re
 from pathlib import Path
 from typing import Any
 
+# 普通用户合同由独立模块负责，视觉合同继续留在本模块。
+import readme_user_contract
+
 # 双语产品页是受管理技能公开合同的一部分。
 README_PRODUCT_FILES = ("README.md", "README-CN.md")  # 双语产品页入口
 
@@ -41,14 +44,15 @@ AFFILIATION_MARKERS = ("Southeast University", "东南大学")  # 机构名称
 FOOTER_MARKERS = ("CITATION.cff", "LICENSE", "Apache License 2.0")  # 页脚标记
 
 # 现有仓库图像已经覆盖产品三章，不要求重新绘制新文件。
-FEATURE_STEMS = (  # 原有功能图文件名
+FEATURE_STEMS = (  # 普通用户旅程页面引用的功能图文件名
     "project-facts",  # 项目事实图
     "project-facts-cn",  # 中文项目事实图
     "design-profile",  # 设计画像图
     "design-profile-cn",  # 中文设计画像图
     "rule-rendering",  # 规则生成图
     "rule-rendering-cn",  # 中文规则生成图
-    "evidence-guard",  # 兼容旧版功能图
+    "evidence-guard",  # 英文交付确认图
+    "evidence-guard-cn",  # 中文交付确认图
 )
 
 # 产品叙事需要多个标题来承载痛点、能力、上手和归属。
@@ -285,6 +289,7 @@ def _heading_before(str_readme: str, int_position: int) -> str:
     if not list_headings:
 
         # 空标题由角色报告转换为分组错误。
+        # 返回空标题事实，避免虚构图片归属。
         return ""
 
     # 最近标题负责归属当前功能图片。
@@ -439,11 +444,14 @@ def _page_text_errors(
         "footer",  # 页脚引用许可错误类别
     )
 
-    # 公开落地页不得出现内部报告式措辞。
+    # 公开落地页可引用图片文件名，但用户可见正文不得出现内部报告式措辞。
+    str_visible_readme = readme_user_contract._plain_text(str_readme)  # 去除图片与链接目标
+
+    # 只扫描用户真正能读到的页面文字，避免资产路径触发误报。
     list_forbidden_terms = [  # 报告化词语命中
         str_marker  # 命中的报告化词语
         for str_marker in FORBIDDEN_MARKETING_TERMS  # 遍历报告化词语
-        if str_marker.lower() in str_readme.lower()  # 仅保留实际命中的词语
+        if str_marker.lower() in str_visible_readme.lower()  # 仅保留可见正文中的词语
     ]
 
     # 每个命中词单独报告，避免复制整段文案。
@@ -635,25 +643,33 @@ def _page_role_errors(
             f"README product page must preserve at least {MIN_BADGE_REFERENCES} badges: {str_name}"  # 徽章缺失诊断
         ]
 
-    # 三张原有功能图必须各自拥有产品章节标题。
-    if len(list_feature_images) < 3 or len(set_feature_headings) < 3:
+    # 四类用户旅程图必须各自拥有产品章节标题。
+    if len(list_feature_images) < 4 or len(set_feature_headings) < 4:
 
         # 该错误专门阻止图片再次连成一块。
         list_errors = list_errors + [  # 功能分组错误
-            f"README product page must separate three existing feature chapters: {str_name}"  # 功能分组诊断
+            f"README product page must separate four user journey chapters: {str_name}"  # 功能分组诊断
         ]
 
     # 返回排序前的图片列表，收据由上层保持原文顺序。
     return list_errors, list_hero_images, list_badge_images, list_feature_images
 
 # 生成单个 README 的产品页报告。
-def _page_report(root: Path, str_name: str, expected_version: str | None) -> dict[str, Any]:
+def _page_report(
+    root: Path,
+    str_name: str,
+    expected_version: str | None,
+    expected_repository_url: str | None,
+    strict_metadata: bool,
+) -> dict[str, Any]:
     """生成单个 README 的产品页报告。
 
     参数:
         root: 技能源码或版本化 dist 根目录。
         str_name: README 文件名。
         expected_version: 可选的公开版本文本。
+        expected_repository_url: 可选的项目 GitHub 仓库 URL。
+        strict_metadata: 是否把发布合同缺口作为阻断错误。
 
     返回:
         包含页面事实、图片分组和错误列表的字典。
@@ -674,6 +690,7 @@ def _page_report(root: Path, str_name: str, expected_version: str | None) -> dic
             "errors": [f"README product page is missing: {str_name}"],
             "images": {},
             "headings": [],
+            "user_contract": {"ok": False, "errors": [f"README user page is missing: {str_name}"]},
         }
 
     # 读取页面文本，作为语言和图片合同的共同输入。
@@ -684,6 +701,17 @@ def _page_report(root: Path, str_name: str, expected_version: str | None) -> dic
 
     # 拆出文本错误，保持后续错误顺序稳定。
     list_errors = tuple_text_report[0]  # 文本错误列表
+
+    # 普通用户合同与原有视觉合同共享同一份页面文本。
+    dict_user_contract = readme_user_contract.validate_user_readme_page(  # 用户页面报告
+        str_name,  # 当前双语页面名称
+        str_readme,  # 当前页面完整正文
+        expected_repository_url=expected_repository_url,  # 项目 GitHub 映射
+        strict_metadata=strict_metadata,  # 预览或发布严格度
+    )  # 用户页面合同结果
+
+    # 预览模式只把真实用户内容缺口作为错误，URL 发布缺口保留为警告。
+    list_errors = list_errors + list(dict_user_contract["errors"])  # 合并用户页面错误
 
     # 保存标题列表供图片章节归属和发布报告使用。
     list_headings = tuple_text_report[1]  # 页面标题列表
@@ -733,15 +761,24 @@ def _page_report(root: Path, str_name: str, expected_version: str | None) -> dic
         "feature_images": list_feature_images,
         "feature_headings": sorted(set_feature_headings),
         "image_references": list_references,
+        "user_contract": dict_user_contract,
     }
 
 # 对外提供双语 README 产品页合同入口。
-def validate_readme_product(root: Path, expected_version: str | None = None) -> dict[str, Any]:
+def validate_readme_product(
+    root: Path,
+    expected_version: str | None = None,
+    *,
+    expected_repository_url: str | None = None,
+    strict_metadata: bool = True,
+) -> dict[str, Any]:
     """校验双语 README 的产品页结构。
 
     参数:
         root: 技能源码或版本化 dist 根目录。
         expected_version: 可选的公开版本文本，例如 `v2.1.0`。
+        expected_repository_url: 可选的项目 GitHub 仓库 URL。
+        strict_metadata: 是否把发布合同缺口作为阻断错误。
 
     返回:
         包含 `ok`、错误列表和双语页面事实的产品合同报告。
@@ -751,10 +788,22 @@ def validate_readme_product(root: Path, expected_version: str | None = None) -> 
     """
 
     # 双语页面分别校验，避免一页通过掩盖另一页缺陷。
-    dict_pages = {  # 双语页面报告
-        str_name: _page_report(root, str_name, expected_version)  # 当前语言页面报告
-        for str_name in README_PRODUCT_FILES  # 固定双语入口
-    }
+    dict_pages: dict[str, dict[str, Any]] = {}  # 双语页面报告
+
+    # 固定语言顺序逐页生成报告，方便定位单页问题。
+    for str_name in README_PRODUCT_FILES:
+
+        # 将共享发布参数送入当前语言的结构化合同检查。
+        dict_page_report = _page_report(  # 生成当前语言的产品页事实
+            root,  # 技能根目录
+            str_name,  # 需要解析的语言页面
+            expected_version,  # 期望发布版本
+            expected_repository_url,  # 期望 GitHub 仓库地址
+            strict_metadata,  # 当前公开合同严格度
+        )
+
+        # 把单页结果写入固定语言键，保持后续汇总顺序。
+        dict_pages[str_name] = dict_page_report  # 固定语言页面报告
 
     # 总错误列表按固定语言顺序聚合，保证发布报告稳定。
     list_errors = [  # 产品页错误
@@ -763,10 +812,42 @@ def validate_readme_product(root: Path, expected_version: str | None = None) -> 
         for str_error in dict_pages[str_name]["errors"]  # 展开页面错误
     ]
 
+    # 汇总普通用户合同的预览、发布和警告状态。
+    list_warnings: list[str] = []  # 用户合同警告
+
+    # 固定语言顺序复制每页警告，保持报告可复现。
+    for str_name in README_PRODUCT_FILES:
+
+        # 当前页面警告独立追加到总警告集合。
+        list_page_warnings = dict_pages[str_name]["user_contract"].get("warnings", [])  # 当前页面警告列表
+
+        # 页面警告进入总报告，供预览调用方展示。
+        list_warnings.extend(list_page_warnings)  # 汇总当前页面警告
+
+    # 汇总两个页面的预览状态，避免单语通过掩盖另一页缺口。
+    bool_preview_ready = all(  # 双语页面是否均可预览
+        dict_pages[str_name]["user_contract"].get("preview_ready", False)  # 当前页面预览状态
+        for str_name in README_PRODUCT_FILES  # 遍历双语页面
+    )
+
+    # 只有错误和警告都清空时才允许进入发布阶段。
+    bool_publish_ready = not list_errors and not list_warnings  # 双语合同发布状态
+
     # 返回结构化产品合同，供公开校验、GitHub CLI 和发布工具复用。
     return {  # 双语产品合同报告
-        "ok": not list_errors,
+        "ok": bool_preview_ready if not strict_metadata else bool_publish_ready,
         "errors": list_errors,
+        "warnings": list_warnings,
+        "preview_ready": bool_preview_ready,
+        "publish_ready": bool_publish_ready,
+        "repository_url": next(
+            (
+                dict_pages[str_name]["user_contract"].get("repository_url", "")
+                for str_name in README_PRODUCT_FILES
+                if dict_pages[str_name]["user_contract"].get("repository_url")
+            ),
+            "",
+        ),
         "files": dict_pages,
         "required_files": list(README_PRODUCT_FILES),
     }

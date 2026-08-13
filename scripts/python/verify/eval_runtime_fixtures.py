@@ -3,11 +3,14 @@
 # 延迟注解求值以兼容 Python 3.10。
 from __future__ import annotations
 
-# 标准库提供哈希、动态导入、序列化、进程和路径能力。
+# 哈希、动态导入和序列化服务评估夹具的数据流。
 import hashlib
 import importlib.util
 import json
 import os
+
+# 文件复制、子进程和类型标注支撑隔离项目的生成。
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -466,8 +469,8 @@ class EvalFixtures:
         # 版本文件作为发布准备的源码事实。
         (path_skill / "VERSION").write_text(version + "\n", encoding="utf-8")
 
-        # README 证明根级普通文档可以进入发布包。
-        (path_skill / "README.md").write_text("# Demo Skill\n", encoding="utf-8")
+        # 公开文档夹具复用正式双语用户流程，避免评估包退化为内部最小样例。
+        self.write_public_package_contract(path_skill, name=name, version=version)
 
         # 验证脚本保留历史 skill-creator 路径以触发迁移检查。
         str_legacy_validator = (
@@ -529,6 +532,127 @@ class EvalFixtures:
 
         # 返回技能目录供调用方继续渲染或打包。
         return path_skill
+
+    # 写入普通用户安装、调用、预览和交付所需的公开包资料。
+    def write_public_package_contract(
+        self,
+        path_skill: Path,
+        name: str,
+        version: str,
+    ) -> None:
+        """把正式公开包合同写入临时技能目录。
+
+        参数：path_skill 为技能根；name 为包名；version 为包版本。
+        返回：无业务返回值，仅写入临时夹具文件和复用的 PNG 资产。
+        异常：源资产或目标目录不可写时由文件系统异常直接报告。
+        """
+
+        # 版本数字同时写入 README、pyproject 和引用元数据，避免页面漂移。
+        str_version_number = version.lstrip("vV")  # 不带 v 前缀的公开版本
+
+        # 正式 README 文案已通过双语用户合同和归属合同，夹具只替换版本事实。
+        str_readme_english = (  # 英文普通用户页面
+            (SKILL_DIR / "README.md")  # 正式英文页面路径
+            .read_text(encoding="utf-8")  # 读取正式英文页面
+            .replace("v2.2.0", version)  # 将页面徽标版本同步到夹具版本
+            .replace("2.2.0", str_version_number)  # 让引用元数据使用同一版本号
+        )
+
+        # 中文页面沿用同一版本替换策略，保持双语安装入口一致。
+        str_readme_chinese = (  # 中文普通用户页面
+            (SKILL_DIR / "README-CN.md")  # 正式中文页面路径
+            .read_text(encoding="utf-8")  # 读取正式中文页面
+            .replace("v2.2.0", version)  # 中文页面沿用夹具版本
+            .replace("2.2.0", str_version_number)  # 中文引用同步裸版本号
+        )
+
+        # 英文页面落盘后由发布包继续读取。
+        (path_skill / "README.md").write_text(str_readme_english, encoding="utf-8")
+
+        # 中文页面落盘后与英文页面保持同一版本。
+        (path_skill / "README-CN.md").write_text(str_readme_chinese, encoding="utf-8")
+
+        # 公开包元数据使用当前临时技能名称和版本，避免复制所有者版本。
+        str_pyproject = f"""[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "{name}"
+version = "{str_version_number}"
+description = "A Codex skill for repository instructions"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {{ file = "LICENSE" }}
+"""  # 临时项目元数据文本
+
+        # 元数据文件必须进入技能根，供发布工具检查名称与版本。
+        (path_skill / "pyproject.toml").write_text(str_pyproject, encoding="utf-8")
+
+        # 引用文件只记录当前夹具版本和公开仓库地址。
+        str_citation = f"""cff-version: 1.2.0
+title: "AGENTS.md Generator"
+version: "{str_version_number}"
+date-released: 2026-08-12
+type: software
+authors:
+  - family-names: "Liu"
+    given-names: "Jiyuan"
+    affiliation: "Southeast University"
+  - family-names: "Li"
+    given-names: "He"
+    affiliation: "Southeast University"
+repository-code: "https://github.com/Eriemon/agents-md-generator"
+url: "https://github.com/Eriemon/agents-md-generator"
+license: "Apache-2.0"
+"""  # 临时引用元数据文本
+
+        # 引用文件随公开包分发，便于用户追踪版本来源。
+        (path_skill / "CITATION.cff").write_text(str_citation, encoding="utf-8")
+
+        # 许可正文直接复用正式 Apache 2.0 文件，避免夹具自造法律文本。
+        shutil.copyfile(SKILL_DIR / "LICENSE", path_skill / "LICENSE")
+
+        # 安全和贡献入口保持公开用户可读的最小说明。
+        (path_skill / "SECURITY.md").write_text(
+            "# Security\n\nReport vulnerabilities privately to the project maintainers.\n",
+            encoding="utf-8",
+        )
+
+        # 贡献入口让公开包保留最小的协作说明。
+        (path_skill / "CONTRIBUTING.md").write_text(
+            "# Contributing\n\nDescribe the change and validation before opening a pull request.\n",
+            encoding="utf-8",
+        )
+
+        # 双语 README 引用的本地 PNG 必须完整进入临时公开包。
+        path_readme_assets = path_skill / "assets" / "readme"  # 临时 README 资源目录
+
+        # 资源目录承载与页面逐一对应的本地 PNG 文件。
+        path_readme_assets.mkdir(parents=True, exist_ok=True)
+
+        # 资产名称保持与正式双语页面中的角色命名一致。
+        tuple_asset_names = (
+            "hero.png",  # 英文首屏图
+            "hero-cn.png",  # 中文首屏图
+            "project-facts.png",  # 英文事实图
+            "project-facts-cn.png",  # 中文事实图
+            "design-profile.png",  # 英文画像图
+            "design-profile-cn.png",  # 中文画像图
+            "rule-rendering.png",  # 英文规则图
+            "rule-rendering-cn.png",  # 中文规则图
+            "evidence-guard.png",  # 英文交付图
+            "evidence-guard-cn.png",  # 中文交付图
+        )
+
+        # 按页面引用顺序复制资产，避免临时包出现缺图。
+        for str_asset_name in tuple_asset_names:
+
+            # 当前资产从正式技能目录复制到隔离夹具。
+            shutil.copyfile(
+                SKILL_DIR / "assets" / "readme" / str_asset_name,  # 正式资产来源
+                path_readme_assets / str_asset_name,  # 临时包目标路径
+            )
 
     # 初始化无需发布分支的基础 Git 仓库。
     def init_basic_git_repo(self, root: Path) -> None:

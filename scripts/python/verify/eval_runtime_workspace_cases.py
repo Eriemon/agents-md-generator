@@ -459,6 +459,13 @@ def global_template_checks(str_template: str) -> dict[str, bool]:
         and "Update stale comments and documentation when behavior changes" in str_template  # 是否要求行为同步文档
     )
 
+    # 复杂实现问题必须先查库文档并复用受支持 API。
+    bool_library_reuse = (  # 库手册与成熟 API 复用规则
+        "For difficult implementation problems, check library documentation" in str_template  # 检查复杂问题先查库手册
+        and "reuse supported APIs before replacement code" in str_template  # 检查替换代码前复用 API
+        and "avoid custom substitutes" in str_template  # 检查避免自定义替代实现
+    )
+
     # 双语言技能路由必须同时覆盖 Python 和脚本族。
     bool_language_routing = (  # 语言技能路由完整性
         "## Coding Behavior Baseline" in str_template  # 是否包含编码行为基线
@@ -528,6 +535,7 @@ def global_template_checks(str_template: str) -> dict[str, bool]:
     # 调用方将全部复合合同与其他直接文本断言合并。
     return {  # 全局模板复合检查
         "comments": bool_comments,  # 注释与文档治理合同
+        "library_reuse": bool_library_reuse,  # 复杂实现优先复用库能力
         "language_routing": bool_language_routing,  # 双语言技能路由合同
         "markdown_math": bool_markdown_math,  # Markdown 公式合同
         "environment": bool_environment,  # Python 环境隔离合同
