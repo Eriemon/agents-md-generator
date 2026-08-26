@@ -40,35 +40,35 @@ def parse_args(list_arguments: list[str] | None = None) -> argparse.Namespace:
     )
 
     # 子解析器强制调用方明确使用 ask 动作。
-    subparsers_actions = parser_root.add_subparsers(  # 公开动作解析器集合
+    argument_subparsers = parser_root.add_subparsers(  # 公开动作解析器集合
         dest="action",  # 解析后的动作字段名
         required=True,  # 禁止省略动作名
     )
 
     # ask 解析器承载全部只读检索参数。
-    parser_ask = subparsers_actions.add_parser(  # ask 子命令解析器
+    argument_ask_parser = argument_subparsers.add_parser(  # ask 子命令解析器
         "ask",  # 公开只读问询动作
         help="Retrieve ranked command guidance.",  # ask 动作帮助文本
     )
 
     # 自然语言问询是唯一必需位置参数。
-    parser_ask.add_argument("question")
+    argument_ask_parser.add_argument("question")
 
     # 分类过滤允许调用方缩小候选命令集合。
-    parser_ask.add_argument("--category")
+    argument_ask_parser.add_argument("--category")
 
     # kind 选择命令、工作流、文档职责或知识指针命名空间。
-    parser_ask.add_argument(
+    argument_ask_parser.add_argument(
         "--kind",
         choices=("command", "workflow", "document", "knowledge"),
         default="command",
     )
 
     # Top-K 数量由请求门禁限制在小范围内。
-    parser_ask.add_argument("--limit", type=int, default=5)
+    argument_ask_parser.add_argument("--limit", type=int, default=5)
 
     # JSON 模式用于脚本消费稳定结果协议。
-    parser_ask.add_argument("--json", action="store_true", dest="json_output")
+    argument_ask_parser.add_argument("--json", action="store_true", dest="json_output")
 
     # 返回解析后的真实或测试参数。
     return parser_root.parse_args(list_arguments)
@@ -461,7 +461,7 @@ def main(list_arguments: list[str] | None = None) -> int:
     try:
 
         # 当前性门禁返回只读 URI 连接。
-        connection_database, _ = ensure_database_current(path_skill_root)  # 当前只读连接及忽略的元数据
+        resource_connection_database, _ = ensure_database_current(path_skill_root)  # 当前只读连接及忽略的元数据
 
         # 无论查询成功或失败都必须关闭连接。
         try:
@@ -475,7 +475,7 @@ def main(list_arguments: list[str] | None = None) -> int:
                 # 召回只返回 JSON 指导，不执行任何命令模板。
                 list_retrieved_commands.extend(
                     retrieve_commands(
-                        connection_database,  # 已验证只读数据库连接
+                        resource_connection_database,  # 已验证只读数据库连接
                         namespace_args.question,  # 原始问询文本
                         namespace_args.category,  # 可选分类过滤
                         namespace_args.limit,  # Top-K 数量
@@ -494,7 +494,7 @@ def main(list_arguments: list[str] | None = None) -> int:
                 # typed 结果保留完整职责或权威指针载荷。
                 list_retrieved_commands.extend(
                     retrieve_typed_records(
-                        connection_database,  # typed 查询使用的只读连接。
+                        resource_connection_database,  # typed 查询使用的只读连接。
                         namespace_args.question,  # typed 查询原始问题。
                         namespace_args.kind,  # typed 记录命名空间。
                         namespace_args.limit,  # typed 查询 Top-K 上限。
@@ -505,7 +505,7 @@ def main(list_arguments: list[str] | None = None) -> int:
         finally:
 
             # 关闭本次只读数据库连接。
-            connection_database.close()
+            resource_connection_database.close()
 
     # 注册源漂移和 SQLite 查询错误都表示索引不可用。
     except (RegistryError, sqlite3.Error) as object_error:

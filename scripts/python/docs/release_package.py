@@ -3,6 +3,9 @@
 # 延迟解析分片注解，使该模块既可聚合加载也可独立导入。
 from __future__ import annotations
 
+# 发布成员验证需要路径对象执行边界检查。
+from pathlib import Path
+
 # 独立导入时显式提供结果路径格式化函数。
 from agents_common import display_path
 from release_content_policy import POLICY_VERSION
@@ -260,10 +263,14 @@ def commit_prepare_changes(
         }
     )  # 完成受管改动去重和排序。
 
-    # 非空目标使用显式 pathspec 暂存。
+    # 将超长 pathspec 清单通过 stdin 传给 Git，避免 Windows argv 长度上限。
+    str_stage_input = "\0".join(list_stage_targets) + "\0" if list_stage_targets else ""  # 受管 pathspec 的 NUL 清单。
+
+    # 非空目标使用 Git 的 pathspec-from-file 暂存，同一清单仍受前置范围审计约束。
     if list_stage_targets and run_git(
         path_project,  # 执行合并的仓库根。
-        ["add", "--all", "--", *list_stage_targets],
+        ["add", "--all", "--pathspec-from-file=-", "--pathspec-file-nul"],
+        input_text=str_stage_input,  # 通过 stdin 传输完整受管路径清单。
     ).returncode != 0:
 
         # 暂存失败时不创建提交。
@@ -419,7 +426,7 @@ def release_prepare(
 
     参数：project 为仓库根，version 为目标版本。
     参数：skill_dir_raw 为相对或绝对技能目录。
-    参数：test_evidence_raw 非空时在暂存前验证远程测试收据。
+    参数：test_evidence_raw 非空时在暂存前验证完整 pytest 收据；执行位置可本地或远程。
     参数：bool_require_test_evidence 为 True 时拒绝缺失收据。
     返回：包含 Git 证据和错误列表的准备结果。
     """
@@ -572,6 +579,171 @@ def release_prepare(
     # 最终状态决定准备结果。
     return {"ok": not list_errors, "errors": list_errors, "checks": dict_checks}
 
+# 发布清单成员验证拒绝绝对路径、链接和源码根逃逸。
+def _validate_release_members(
+    skill_dir: Path,
+    path_skill_root: Path,
+    included_files: list[str],
+) -> list[tuple[Path, Path]]:
+    """验证发布清单成员并返回可复制的源码文件对。
+
+    参数：skill_dir 为技能源码根；path_skill_root 为已解析源码根；included_files 为相对成员列表。
+    返回：通过边界、链接和普通文件检查的相对路径与源码路径元组。
+    异常：成员越界、含链接或不是普通文件时抛出 RuntimeError。
+    """
+
+    # 先完整验证所有输入成员，确保坏清单不会删除既有发布目录。
+    list_sources: list[tuple[Path, Path]] = []  # 已通过边界验证的源文件对。
+
+    # 每个成员都独立执行路径和文件类型检查。
+    for str_relative in included_files:
+
+        # 路径列表来自内部策略，但复制边界仍必须独立拒绝逃逸成员。
+        path_relative: Path = Path(str_relative)  # 当前允许成员的路径对象。
+
+        # 绝对路径和父目录片段都不能进入复制边界。
+        if not path_relative.parts or path_relative.is_absolute() or ".." in path_relative.parts:
+
+            # 不把外部项目文件复制进发布目录。
+            raise RuntimeError(f"> ERR: [Python] release file path escapes source root: {str_relative}")
+
+        # 相对成员锚定技能源码根，不能从项目其他位置取文件。
+        path_source: Path = skill_dir / path_relative  # 当前待复制的源码文件。
+
+        # 相对成员的任一父节点都不能是符号链接。
+        path_cursor: Path = skill_dir  # 当前逐级检查的源码路径。
+
+        # 逐级检查相对成员的所有节点链接。
+        for str_part in path_relative.parts:
+
+            # 逐级检查目录链接，避免 copy2 跟随外部父目录。
+            path_cursor = path_cursor / str_part  # 当前成员节点路径。
+
+            # 当前节点若为链接则拒绝继续解析。
+            if path_cursor.is_symlink():
+
+                # 复制前失败，避免通过父目录链接读取外部文件。
+                raise RuntimeError(
+                    f"> ERR: [Python] release source contains symbolic link: {str_relative}"
+                )
+
+        # 解析后的源文件必须仍位于技能源码根。
+        try:
+
+            # relative_to 成功即证明复制源没有越过源码根。
+            path_source.resolve().relative_to(path_skill_root)
+
+        # 路径解析或链接逃逸不能进入发布树。
+        except (OSError, RuntimeError, ValueError):
+
+            # 统一报告为源码根边界错误。
+            raise RuntimeError(
+                f"> ERR: [Python] release file path escapes source root: {str_relative}"
+            )
+
+        # 源码链接或非普通文件不能被 copy2 跟随到发布树中。
+        if path_source.is_symlink() or not path_source.is_file():
+
+            # 复制前失败，避免把链接目标或特殊节点写入 dist。
+            raise RuntimeError(
+                f"> ERR: [Python] release source is not a regular file: {str_relative}"
+            )
+
+        # 保存已验证源文件，后续阶段不再接受新的路径清单成员。
+        list_sources.append((path_relative, path_source))
+
+    # 返回已经完成边界证明的源文件集合。
+    return list_sources
+
+# staging 成员复制保持相对层级并保留文件元数据。
+def _copy_release_members(
+    path_staging: Path,
+    list_sources: list[tuple[Path, Path]],
+) -> None:
+    """把已验证的源码文件复制到发布 staging 目录。
+
+    参数：path_staging 为同级临时发布目录；list_sources 为已验证源文件对。
+    返回：无；文件被复制到对应相对路径。
+    异常：父目录创建或文件复制失败时传播文件系统异常。
+    """
+
+    # 每个允许成员保持相对层级复制到临时发布目录。
+    for path_relative, path_source in list_sources:
+
+        # 目标路径复用相同相对成员以保持包内结构。
+        path_target: Path = path_staging / path_relative  # 当前临时发布位置。
+
+        # 嵌套成员复制前创建对应父目录。
+        path_target.parent.mkdir(parents=True, exist_ok=True)
+
+        # copy2 保留文件元数据并写入筛选后的临时发布树。
+        shutil.copy2(path_source, path_target)
+
+# 发布 staging 切换器负责恢复旧目录并清理本次临时现场。
+def _replace_release_tree(
+    release_dir: Path,
+    path_staging: Path,
+    path_backup: Path,
+    list_sources: list[tuple[Path, Path]],
+) -> None:
+    """复制 staging 内容并原子替换同版本发布目录。
+
+    参数：release_dir 为正式发布目录；path_staging 为临时目录；path_backup 为同级备份；list_sources 为源文件对。
+    返回：无；成功时 staging 成为正式目录。
+    异常：任一复制、切换或恢复操作失败时传播原始异常。
+    """
+
+    # 构建和切换失败时只清理本次事务并恢复旧目录。
+    try:
+
+        # 每个允许成员保持相对层级复制到临时发布树。
+        _copy_release_members(path_staging, list_sources)
+
+        # 重新确认发布父边界，缩小检查与切换之间的竞态窗口。
+        if release_dir.parent.is_symlink() or release_dir.parent.absolute() != release_dir.parent.resolve():
+
+            # 发现边界变化时保持旧版本不动。
+            raise RuntimeError("> ERR: [Python] release destination parent became a symbolic link")
+
+        # 旧的同版本目录先移动到同级备份，保证替换可恢复。
+        if release_dir.exists():
+
+            # 目录身份异常时不尝试隐式删除用户文件。
+            if not release_dir.is_dir() or release_dir.is_symlink():
+
+                # 仅接受可安全整体移动的旧发布目录。
+                raise RuntimeError("> ERR: [Python] existing release target is not a regular directory")
+
+            # 移动旧目录后，正式名称可以接收完整 staging。
+            release_dir.rename(path_backup)
+
+        # 完整临时树原子切换为正式版本目录。
+        path_staging.rename(release_dir)
+
+        # 新版本已经完整切换后再清理旧版本临时备份。
+        if path_backup.exists():
+
+            # 备份只包含本次替换前的同版本目录。
+            shutil.rmtree(path_backup)
+
+    # 保留原始异常并在需要时恢复正式发布目录。
+    except Exception:
+
+        # 构建失败时只清理本次临时树，既有发布目录保持可见。
+        if path_staging.exists() and not path_staging.is_symlink():
+
+            # 临时树不属于用户历史产物，可安全清理。
+            shutil.rmtree(path_staging, ignore_errors=True)
+
+        # 切换前失败时恢复旧发布目录，避免留下缺失的版本路径。
+        if path_backup.exists() and not release_dir.exists():
+
+            # 恢复失败会继续向上抛出，保留备份现场供人工处理。
+            path_backup.rename(release_dir)
+
+        # 保留原始异常供发布门禁生成结构化诊断。
+        raise
+
 # 发布树复制器只接收内容策略已经筛选过的成员。
 def copy_release_tree(skill_dir: Path, release_dir: Path, included_files: list[str]) -> None:
     """将策略允许的源文件复制到全新的发布目录。
@@ -582,80 +754,59 @@ def copy_release_tree(skill_dir: Path, release_dir: Path, included_files: list[s
     异常：允许文件列表包含符号链接时抛出 RuntimeError。
     """
 
-    # 源码根和 dist 父目录都不能通过链接改变复制边界。
-    if skill_dir.is_symlink() or release_dir.is_symlink() or release_dir.parent.is_symlink():
+    # 源码根的词法路径用于识别项目根符号链接。
+    path_skill_absolute: Path = skill_dir.absolute()  # 源码根的词法绝对路径。
 
-        # 在清理旧目录或创建新目录前阻断链接路径。
+    # 源码根的解析路径用于证明成员没有逃逸。
+    path_skill_root: Path = skill_dir.resolve()  # 已解析的源码技能根。
+
+    # 发布父目录的词法路径用于识别目标边界变化。
+    path_release_parent_absolute: Path = release_dir.parent.absolute()  # 发布父目录绝对路径。
+
+    # 发布父目录的解析路径用于证明切换仍在预期目录。
+    path_release_parent: Path = release_dir.parent.resolve()  # 发布父目录规范路径。
+
+    # 发布源和目标的初始路径必须保持在真实目录边界内。
+    if (
+        skill_dir.is_symlink()
+        or path_skill_absolute != path_skill_root
+        or release_dir.is_symlink()
+        or release_dir.parent.is_symlink()
+        or path_release_parent_absolute != path_release_parent
+    ):
+
+        # 在任何旧目录切换或新目录创建前阻断链接路径。
         raise RuntimeError("> ERR: [Python] release source or destination root must not be a symbolic link")
 
-    # 旧的同版本目录必须先清除，防止已删除文件残留到新包。
-    if release_dir.exists():
+    # 再次验证策略成员，确保坏清单不会删除既有发布目录。
+    list_sources: list[tuple[Path, Path]] = _validate_release_members(  # 已验证源文件对。
+        skill_dir,  # 技能源码根。
+        path_skill_root,  # 已解析源码根。
+        included_files,  # 策略允许的相对文件列表。
+    )
 
-        # 整棵删除确保发布树与当前允许清单完全一致。
-        shutil.rmtree(release_dir)
+    # staging 与旧版本目录同级，完整构建失败时不触碰既有发布树。
+    path_staging: Path = release_dir.with_name(f".{release_dir.name}.staging")  # 当前发布临时目录。
 
-    # 预建空目录，使空文件清单也形成有效发布根。
-    release_dir.mkdir(parents=True, exist_ok=True)
+    # 旧版本备份与 staging 保持同级，便于原子恢复。
+    path_backup: Path = release_dir.with_name(f".{release_dir.name}.backup")  # 旧发布临时备份。
 
-    # 所有允许成员必须以解析后的源码根为锚点。
-    path_skill_root = skill_dir.resolve()  # 已解析的源码技能根。
+    # 残留事务目录说明上次发布未完成，本次必须停止而不能覆盖现场。
+    if (
+        path_staging.exists()
+        or path_staging.is_symlink()
+        or path_backup.exists()
+        or path_backup.is_symlink()
+    ):
 
-    # 每个允许成员保持相对层级复制到版本目录。
-    for relative in included_files:
+        # 保留现场供人工恢复，避免删除未知版本的发布证据。
+        raise RuntimeError("> ERR: [Python] release transaction sibling already exists")
 
-        # 路径列表来自内部策略，但复制边界仍必须独立拒绝逃逸成员。
-        path_relative = Path(relative)  # 当前允许成员的路径对象。
+    # 先在临时目录构建完整发布树。
+    path_staging.mkdir(parents=True, exist_ok=False)
 
-        # 绝对路径和父目录片段都不能进入复制边界。
-        if not path_relative.parts or path_relative.is_absolute() or ".." in path_relative.parts:
-
-            # 不把外部项目文件复制进发布目录。
-            raise RuntimeError(f"> ERR: [Python] release file path escapes source root: {relative}")
-
-        # 相对成员锚定技能源码根，不能从项目其他位置取文件。
-        source = skill_dir / path_relative  # 当前待复制的源码文件。
-
-        # 相对成员的任一父节点都不能是符号链接。
-        path_cursor = skill_dir  # 当前逐级检查的源码路径。
-
-        # 逐级检查相对成员的父节点链接。
-        for str_part in path_relative.parts:
-
-            # 逐级检查目录链接，避免 copy2 跟随外部父目录。
-            path_cursor = path_cursor / str_part  # 当前成员节点路径。
-
-            # 当前节点若为链接则拒绝继续解析。
-            if path_cursor.is_symlink():
-
-                # 复制前失败，避免通过父目录链接读取外部文件。
-                raise RuntimeError(f"> ERR: [Python] release source contains symbolic link: {relative}")
-
-        # 解析后的源文件必须仍位于技能源码根。
-        try:
-
-            # relative_to 成功即证明复制源没有越过源码根。
-            source.resolve().relative_to(path_skill_root)
-
-        # 路径解析或链接逃逸不能进入发布树。
-        except (OSError, RuntimeError, ValueError):
-
-            # 统一报告为源码根边界错误。
-            raise RuntimeError(f"> ERR: [Python] release file path escapes source root: {relative}")
-
-        # 源码链接不能被 copy2 跟随到发布树中。
-        if source.is_symlink():
-
-            # 复制前失败，避免把链接目标内容写入 dist。
-            raise RuntimeError(f"> ERR: [Python] release source contains symbolic link: {relative}")
-
-        # 目标路径复用相同相对成员以保持包内结构。
-        target = release_dir / path_relative  # 当前文件的发布位置。
-
-        # 嵌套成员复制前创建对应父目录。
-        target.parent.mkdir(parents=True, exist_ok=True)
-
-        # copy2 保留文件元数据并写入筛选后的发布树。
-        shutil.copy2(source, target)
+    # 事务 helper 负责复制、切换、备份清理和失败恢复。
+    _replace_release_tree(release_dir, path_staging, path_backup, list_sources)
 
 # 发布收据构造器集中描述可复现打包事实。
 def build_package_receipt(
@@ -680,6 +831,17 @@ def build_package_receipt(
     返回：可序列化的强验证发布收据。
     """
 
+    # 文件清单先冻结，收据自身不进入基础包树摘要。
+    list_release_files = build_release_file_manifest(path_release_dir)  # 发布目录文件清单
+
+    # 使用紧凑、排序后的清单字节构造稳定包树摘要。
+    bytes_package_tree = json.dumps(  # 发布包树摘要输入字节
+        list_release_files,  # 已冻结的发布目录文件清单
+        ensure_ascii=False,  # 保留中文路径和策略文本的原始字符
+        sort_keys=True,  # 固定收据字段顺序以形成可复现摘要
+        separators=(",", ":"),  # 使用紧凑分隔符稳定包树字节
+    ).encode("utf-8")
+
     # 固定分支与验证字段记录 package-release 完成后的预期状态。
     return {
         "skill_name": str_skill_name,  # 当前技能名称。
@@ -695,7 +857,8 @@ def build_package_receipt(
         "provenance_mode": "repository-dist",  # 产物来源证明模式。
         "sanitization": tuple_sanitization,  # 敏感内容清洗证据。
         "release_content_policy": dict_release_policy,  # 发布内容策略收据。
-        "files": build_release_file_manifest(path_release_dir),  # 文件哈希清单。
+        "files": list_release_files,  # 文件哈希清单。
+        "package_tree_sha256": hashlib.sha256(bytes_package_tree).hexdigest(),  # 基础包树摘要。
         "other_version_artifacts": list_other_artifacts,  # 历史版本不可变快照。
     }
 
@@ -974,6 +1137,19 @@ def create_package_artifacts(
     # 项目类型选择对应的发布清洗合同。
     str_project_kind: str = dict_context["project_kind"]  # 清洗策略类别。
 
+    # installer bundle 只能随 Skill 发布，Engineering 入口必须保持缺席。
+    list_installer_guard_errors = installer_bundle_release_guard(path_skill_dir, str_project_kind)  # Skill-only 发布诊断
+
+    # guard 发现发布边界错误时立即返回，禁止生成半套 dist。
+    if list_installer_guard_errors:
+
+        # 发布 guard 在复制前返回结构化错误，避免生成半套 dist。
+        return {}, {
+            "ok": False,
+            "errors": list_installer_guard_errors,
+            "pre_gate": dict_context.get("pre_gate", {}),
+        }
+
     # 已通过的发布前证据随所有失败载荷返回。
     dict_pre_gate: dict[str, Any] = dict_context["pre_gate"]  # 前置门禁证明。
 
@@ -1009,8 +1185,15 @@ def create_package_artifacts(
         # 空产物映射表示复制阶段尚未开始。
         return {}, dict_failure
 
-    # 复制器按 included_files 重建全新的版本目录。
-    copy_release_tree(path_skill_dir, path_release_dir, dict_source_content["included_files"])
+    # 通用发布包不得携带开发期解析出的单平台状态；安装投影会重新生成它。
+    list_universal_files = [  # 通用发布成员相对路径列表
+        str_relative  # 当前通用发布成员相对路径
+        for str_relative in dict_source_content["included_files"]  # 原始通用成员来源
+        if str_relative != "config/agent.json"  # 排除安装时重新投影的平台配置
+    ]
+
+    # 复制器按通用清单重建全新的版本目录。
+    copy_release_tree(path_skill_dir, path_release_dir, list_universal_files)
 
     # 收据文件名由项目治理配置统一决定。
     path_receipt = path_release_dir / receipt_filename(dict_profile)  # 当前发布收据路径。
@@ -1508,7 +1691,6 @@ def branch_gate(project: Path) -> dict[str, Any]:
     # 最终组装器保持所有调用面的返回字段一致。
     return build_branch_gate_result(project, dict_checks, list_reasons)
 
-# install_confirmation_options 封装当前发布阶段的独立职责。
 # 安装选择集中定义，确保发布门禁和交互层使用同一合同。
 def install_confirmation_options() -> list[dict[str, Any]]:
     """返回发布完成后可供交互层展示的安装选项。
@@ -1617,13 +1799,14 @@ def release_members(root: Path, prefix: Path) -> list[str]:
 
 # 项目类型优先服从治理配置，缺省时再依据技能入口推断。
 def release_project_kind(project: Path, skill_dir: Path) -> str:
-    """读取发布项目类型，并在缺少配置时依据技能入口推断。
+    """读取显式发布项目类型，缺失或非法时 fail-closed。
 
     参数：project 为项目根，skill_dir 为待发布源码目录。
     返回：受支持的 skill 或 engineering 项目类型。
+    异常：ValueError 表示项目没有显式治理类型。
     """
 
-    # 控制配置是显式项目类型的唯一治理来源。
+    # 控制配置是发布类型的唯一事实源，不能被 SKILL.md 启发式替代。
     profile = read_json(project / ".agents" / "agents-control.json")  # 项目类型声明配置。
 
     # 只有映射配置才能安全读取 kind 字段。
@@ -1632,17 +1815,187 @@ def release_project_kind(project: Path, skill_dir: Path) -> str:
         # 规范化大小写和空白后再与受支持类型比较。
         str_kind = str(profile.get("kind", "")).strip().lower()  # 配置声明的项目类型。
 
-        # 已知类型直接返回，避免启发式覆盖显式配置。
+        # 已知类型直接返回，避免文件系统内容覆盖显式配置。
         if str_kind in {"skill", "engineering"}:
 
             # 显式治理类型优先于文件系统启发式判断。
             return str_kind
 
-    # 缺少有效声明时，技能入口文件提供可靠的类型证据。
-    if (skill_dir / "SKILL.md").is_file():
+    # 保留参数兼容性但禁止使用偶然的 SKILL.md 推断类型。
+    del skill_dir
 
-        # SKILL.md 是技能包的公开入口合同。
-        return "skill"
+    # 项目类型缺失时必须停止发布，避免把目录启发式当成治理事实。
+    raise ValueError("> ERR: [Python] explicit project kind is required for release")
 
-    # 无技能入口的发布目录按工程项目处理。
-    return "engineering"
+# 按受管 manifest 校验 installer bundle 的 Skill-only 发布边界。
+def installer_bundle_release_guard(path_skill_dir: Path, str_project_kind: str) -> list[str]:
+    """校验 installer bundle 的 Skill-only 发布边界。
+
+    参数：
+        path_skill_dir: 待发布 Skill 源码目录。
+        str_project_kind: 显式声明的发布项目类型。
+    返回：
+        发布阻断错误列表；空列表表示当前 bundle 边界通过。
+    """
+
+    # Engineering 即使缺少 runtime manifest，也不得携带已发现的 installer 目录。
+    path_discovered_bundle = path_skill_dir / "assets" / "installer"  # 可能存在的 installer 资源根。
+
+    # 工程发布发现 installer 目录时必须直接阻断。
+    if str_project_kind == "engineering" and path_discovered_bundle.exists():
+
+        # 不自动删除不属于当前 release 资源的文件，只返回发布阻断。
+        return ["Engineering release must not contain discovered installer bundle"]
+
+    # runtime manifest 提供 installer manifest 的路径事实。
+    path_runtime_manifest = path_skill_dir / "config" / "runtime-manifest.json"  # 运行时角色清单。
+
+    # 缺失 runtime manifest 时区分普通 Skill 和已声明 bundle。
+    if not path_runtime_manifest.is_file():
+
+        # 没有 installer bundle 的普通 Skill 不需要虚构 runtime manifest。
+        if str_project_kind == "engineering" or not path_discovered_bundle.exists():
+
+            # 仅在实际声明 installer 资源时继续要求其完整 manifest。
+            return []
+
+        # 已发现 installer bundle 但缺少 runtime manifest 时必须阻断发布。
+        return ["Skill release requires runtime-manifest.json"]
+
+    # 读取角色列表，找到 installer manifest 的唯一绑定。
+    dict_runtime_manifest = read_json(path_runtime_manifest)  # 读取 runtime manifest 的结构化角色声明。
+
+    # 角色列表驱动 installer manifest 的唯一定位。
+    list_roles = dict_runtime_manifest.get("roles", []) if isinstance(dict_runtime_manifest, dict) else []  # 当前 Skill 的 runtime 角色集合。
+
+    # 默认没有匹配角色，避免从任意 runtime 条目推断 installer 来源。
+    dict_role = None  # installer manifest 角色记录。
+
+    # 从角色列表中选择名称完全匹配的 installer manifest 角色。
+    for dict_candidate in list_roles:
+
+        # 仅接受结构化对象和受管角色名称。
+        if isinstance(dict_candidate, dict) and dict_candidate.get("name") == "installer_manifest":
+
+            # 保存唯一角色记录并结束扫描。
+            dict_role = dict_candidate  # 当前 installer manifest 角色。
+
+            # 已经找到受管角色，不再接受后续同名条目。
+            break
+
+    # 缺少 installer role 时无法证明 bundle 来源。
+    if not isinstance(dict_role, dict):
+
+        # 缺少 installer role 时 Skill 不能证明 bundle 来源。
+        return [] if str_project_kind == "engineering" else ["Skill release requires installer_manifest role"]
+
+    # 从 role 的相对路径读取 manifest，避免固定当前测试目录。
+    path_manifest = path_skill_dir / str(dict_role.get("relative_path", ""))  # installer manifest 的受管路径。
+
+    # manifest 缺失时使用空对象进入统一失败分支。
+    dict_manifest = read_json(path_manifest) if path_manifest.is_file() else {}  # installer manifest 的结构化内容。
+
+    # manifest 必须是对象才能提供 bundle 资源边界。
+    if not isinstance(dict_manifest, dict):
+
+        # Skill 缺少 manifest 时阻断发布，Engineering 不生成替代物。
+        return [] if str_project_kind == "engineering" else ["Skill release installer manifest is invalid"]
+
+    # bundle 根决定后续资源检查的 containment 范围。
+    path_bundle = path_skill_dir / str(dict_manifest.get("bundle_root_relative", ""))  # manifest 声明的 installer 资源根。
+
+    # 入口集合决定 bundle 是否包含完整的启动面。
+    list_entrypoints = dict_manifest.get("entrypoints", [])  # manifest 声明的入口集合。
+
+    # 收集 manifest 声明但磁盘缺失的入口文件。
+    list_missing = []  # 缺失入口文件列表。
+
+    # 逐项核对入口文件，避免发布不完整的启动面。
+    for str_entrypoint in list_entrypoints:
+
+        # 入口路径必须解析为 bundle 内的真实文件。
+        if not (path_bundle / str(str_entrypoint)).is_file():
+
+            # 保留原始 manifest 值，方便发布报告定位。
+            list_missing.append(str_entrypoint)
+
+    # 前两项资源键覆盖 installer manifest 和 projection 路径。
+    str_resource_group_primary = "manifest_env_relative_path,projection_relative_path"  # installer manifest 基础资源键。
+
+    # 中间两项资源键覆盖 projection schema 和生成器路径。
+    str_resource_group_secondary = "projection_schema_relative_path,projection_generator_relative_path"  # projection 校验与生成步骤的资源键。
+
+    # 后两组资源键覆盖 catalog、overrides、backend 和 runtime 路径。
+    str_resource_group_tertiary = "catalog_relative_path,overrides_relative_path"  # 配置资源键。
+
+    # backend 和 runtime 资源决定安装后端与运行时的可达性。
+    str_resource_group_final = "backend_relative_path,runtime_relative_path"  # 执行资源键。
+
+    # 合并前两组资源键，形成 manifest 校验前缀。
+    str_resource_key_prefix = ",".join((str_resource_group_primary, str_resource_group_secondary))  # manifest 校验资源键前缀。
+
+    # 合并后两组资源键，形成安装执行后缀。
+    str_resource_key_suffix = ",".join((str_resource_group_tertiary, str_resource_group_final))  # 安装执行资源键后缀。
+
+    # 组合前缀和后缀，保持资源键来源集中且可审查。
+    str_resource_key_text = ",".join((str_resource_key_prefix, str_resource_key_suffix))  # installer bundle 资源键文本。
+
+    # 将参数化资源键文本解析成逐项检查集合。
+    tuple_required_resource_keys = tuple(str_resource_key_text.split(","))  # installer bundle 必须具备的资源字段。
+
+    # 收集 manifest 声明但磁盘缺失的资源字段。
+    list_missing_resources = []  # 缺失资源键列表。
+
+    # 逐项检查资源字段，保持缺失诊断可定位。
+    for str_resource_key in tuple_required_resource_keys:
+
+        # 每个资源键都必须指向 Skill 根或 bundle 根内的真实文件。
+        str_resource_relative = str(dict_manifest.get(str_resource_key, "")).strip()  # 当前资源的相对路径。
+
+        # 解析资源绝对路径以执行 bundle containment 后的文件检查。
+        path_resource = (path_bundle / str_resource_relative).resolve()  # 当前资源的规范化路径。
+
+        # 空路径或缺失文件都进入统一缺失列表。
+        if not str_resource_relative or not path_resource.is_file():
+
+            # 记录键名而不是猜测缺少的路径。
+            list_missing_resources.append(str_resource_key)
+
+    # Skill 发布必须完整提供 installer 入口和资源。
+    if str_project_kind == "skill":
+
+        # Skill 发布必须包含入口和所有 manifest 绑定资源。
+        list_errors = []  # Skill bundle 发布阻断错误。
+
+        # 入口缺失时保留全部缺失项供发布报告定位。
+        if list_missing:
+
+            # 记录 manifest 入口缺失原因。
+            list_errors.append("Skill release installer bundle is incomplete: " + ", ".join(list_missing))
+
+        # 资源缺失时保留 manifest 字段名供发布报告定位。
+        if list_missing_resources:
+
+            # 记录 manifest 资源缺失原因。
+            list_errors.append("Skill release installer resources are missing: " + ", ".join(list_missing_resources))
+
+        # 返回 Skill bundle 的完整校验结果。
+        return list_errors
+
+    # Engineering 发布若出现任一 installer 入口必须拒绝，不自动删除用户文件。
+    list_present = []  # Engineering bundle 中实际存在的入口。
+
+    # 逐项记录 Engineering bundle 已落盘的入口。
+    for str_entrypoint in list_entrypoints:
+
+        # 入口存在即证明工程发布携带了 installer 资源。
+        if (path_bundle / str(str_entrypoint)).exists():
+
+            # 保留入口名称用于 fail-closed 诊断。
+            list_present.append(str_entrypoint)
+
+    # 仅在发现实际入口时阻断 Engineering 发布。
+    return [
+        "Engineering release must not contain installer bundle entries: "
+        + ", ".join(list_present)
+    ] if list_present else []

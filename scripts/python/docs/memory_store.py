@@ -157,8 +157,7 @@ MEMORY_SEARCH_INDEXES = {  # 搜索与常用排序需要的二级索引定义
     ),
 }
 
-# 新项目默认只捕获可复用的决策、验证和交接事实。
-# 秘密扫描识别常见键值格式并放行显式脱敏占位符。
+# 新项目默认只捕获可复用事实，并通过秘密扫描放行显式脱敏占位符。
 SECRET_RE = re.compile(  # memory 文本中的凭据模式
     r"(?i)(api[_-]?key|access[_-]?token|auth[_-]?token|secret|password)\s*[:=]\s*(?!<REDACTED_)[^\s,;]+"  # 常见秘密键值模式
 )

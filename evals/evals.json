@@ -121,6 +121,13 @@
       "description": "After internal readability helper decomposition, source governance must preserve its public JSON contract, enforce the 64KB UTF-8 size limit, accept complete repository-local or bundled decomposition plans, reject incomplete bundled plans, skip excluded roots and root/scoped AGENTS.md governance metadata in opaque source evidence, and block one-line or minified unreadable source."
     },
     {
+      "id": "tester_failure_receipt_contract",
+      "kind": "worker_governance_regression",
+      "patterns": ["Tool Wrapper", "Reviewer", "Pipeline"],
+      "handler": "tester_failure_receipt_contract",
+      "description": "Tester RED, BLOCKED, and SCOPE_REJECTED results must reject missing or vague failure reports and accept all 12 top-level fields (failure_stage, failure_kind, first_error, failure_summary, failure_count, failure_tests, expected_actual, root_cause_class, minimal_fix, evidence, residual_jobs, modification_status), with test_id, expected, actual, observed, and source on every failure item."
+    },
+    {
       "id": "root_version_sync_contract",
       "kind": "governance_runtime_regression",
       "patterns": ["Tool Wrapper", "Pipeline"],
@@ -224,6 +231,14 @@
       "patterns": ["Reviewer", "Pipeline"],
       "handler": "openai_metadata_standard_contract",
       "description": "OpenAI skill metadata must keep short_description within 25-64 characters and default_prompt as one concise Use $agents-md-generator sentence without duplicating detailed governance policy."
+    },
+    {
+      "id": "external_generic_health",
+      "kind": "external_smoke",
+      "patterns": ["Tool Wrapper", "Pipeline"],
+      "handler": "external_generic_health",
+      "activation": {"operator": "present", "input": "external_skill_dir"},
+      "description": "A supplied external skill directory should pass the generic audit and evaluation path."
     }
   ]
 }

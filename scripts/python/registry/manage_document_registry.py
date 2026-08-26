@@ -28,24 +28,24 @@ def parse_args(list_arguments: list[str] | None = None) -> argparse.Namespace:
     """
 
     # 顶层解析器描述控制器的可选治理职责。
-    object_parser = argparse.ArgumentParser(  # 文档注册化顶层参数解析器。
+    argument_parser = argparse.ArgumentParser(  # 文档注册化顶层参数解析器。
         description="Manage optional document registry governance.",  # 控制器公开用途。
     )
 
     # 子命令集合要求调用方明确选择生命周期阶段。
-    object_subparsers = object_parser.add_subparsers(dest="command", required=True)  # 生命周期子命令解析器。
+    argument_subparsers = argument_parser.add_subparsers(dest="command", required=True)  # 生命周期子命令解析器。
 
     # scan 子命令只读取技能文档并输出候选事实。
-    object_scan_parser = object_subparsers.add_parser("scan", help="Scan managed skill documents.")  # 扫描参数解析器。
+    argument_scan_parser = argument_subparsers.add_parser("scan", help="Scan managed skill documents.")  # 扫描参数解析器。
 
     # 技能根决定 SKILL.md 与 references 的扫描边界。
-    object_scan_parser.add_argument("skill_dir")
+    argument_scan_parser.add_argument("skill_dir")
 
     # JSON 选项保留与其他 registry CLI 一致的显式机器协议入口。
-    object_scan_parser.add_argument("--json", action="store_true", dest="bool_json")
+    argument_scan_parser.add_argument("--json", action="store_true", dest="bool_json")
 
     # init 子命令要求启用和写入两个显式信号共同授权。
-    object_init_parser = object_subparsers.add_parser("init", help="Initialize optional document governance.")  # 初始化参数解析器。
+    object_init_parser = argument_subparsers.add_parser("init", help="Initialize optional document governance.")  # 初始化参数解析器。
 
     # 初始化目标技能根与扫描边界一致。
     object_init_parser.add_argument("skill_dir")
@@ -63,37 +63,37 @@ def parse_args(list_arguments: list[str] | None = None) -> argparse.Namespace:
     for str_command_name in ("check", "status"):
 
         # 两个只读命令共享技能根和机器输出参数。
-        object_status_parser = object_subparsers.add_parser(  # 当前只读状态命令解析器。
+        argument_status_parser = argument_subparsers.add_parser(  # 当前只读状态命令解析器。
             str_command_name,  # check 或 status 公开动作名。
             help=f"Read optional document governance {str_command_name} state.",  # 当前动作帮助文本。
         )
 
         # 状态读取目标技能根。
-        object_status_parser.add_argument("skill_dir")
+        argument_status_parser.add_argument("skill_dir")
 
         # JSON 参数保持生命周期 CLI 一致。
-        object_status_parser.add_argument("--json", action="store_true", dest="bool_json")
+        argument_status_parser.add_argument("--json", action="store_true", dest="bool_json")
 
     # finalize 只在 Agent 完成草案复核后晋级持久状态。
-    object_finalize_parser = object_subparsers.add_parser(  # 完成阶段参数解析器。
+    argument_finalize_parser = argument_subparsers.add_parser(  # 完成阶段参数解析器。
         "finalize",  # 公开完成动作名。
         help="Finalize an Agent-reviewed document registry draft.",  # 完成动作帮助文本。
     )
 
     # 完成目标必须是已经显式启用的技能根。
-    object_finalize_parser.add_argument("skill_dir")
+    argument_finalize_parser.add_argument("skill_dir")
 
     # 写入信号防止只读验证静默晋级状态。
-    object_finalize_parser.add_argument("--write", action="store_true", dest="bool_write")
+    argument_finalize_parser.add_argument("--write", action="store_true", dest="bool_write")
 
     # 仅 Agent 标记不确定时要求用户通过本开关明确确认。
-    object_finalize_parser.add_argument("--confirm-user", action="store_true", dest="bool_confirm_user")
+    argument_finalize_parser.add_argument("--confirm-user", action="store_true", dest="bool_confirm_user")
 
     # 完成结果使用单对象机器协议。
-    object_finalize_parser.add_argument("--json", action="store_true", dest="bool_json")
+    argument_finalize_parser.add_argument("--json", action="store_true", dest="bool_json")
 
     # 完整命名空间交给主入口分派。
-    return object_parser.parse_args(list_arguments)
+    return argument_parser.parse_args(list_arguments)
 
 # JSON 输出器保证 stdout 只有一个机器可读对象。
 def emit_json(dict_payload: dict[str, Any]) -> None:

@@ -20,7 +20,7 @@ Patterns may be combined; gate conditions control progress: do not skip steps or
 - `SKILL.md` owns trigger, stop lines, workflow order, and safety boundaries.
 - `references/script-guide.md` owns command syntax; `references/review-checklist.md` owns review evidence.
 - `.agents/agents-control.json` owns project remote routes; `.agents/global-rule-overrides.json` is the local JSON governance config for configurable coding/output rules.
-- Global `.codex/AGENTS.md` owns cross-repository defaults; project and scoped files own narrower facts.
+- The configured global instruction file owns cross-repository defaults; project and scoped files own narrower facts.
 - Generated documents point to owners instead of copying their full policy.
 - Distill saved HTML into decision-changing rules. Do not copy downloaded CSS or JS.
 
@@ -31,9 +31,10 @@ Patterns may be combined; gate conditions control progress: do not skip steps or
 - Remote structure remains separate from remote server enablement. Remote mutation governance for all actions validates both endpoints and protected path classes.
 - The root-level file whitelist uses `allowed_root_files`; structure repair requires `confirm-structure-fix`.
 - Codebase-memory requires root-only persistent evidence and a ready full index.
-- Coding Behavior Baseline language skill routing comes from `coding_behavior.language_skill_routing`: `shared` is 只渲染一次, Python belongs to `readable-python-generator`, and scripts belong to `readable-script-generator`.
+- Coding Behavior Baseline language skill routing comes from `coding_behavior.language_skill_routing`: `shared` is rendered once, Python belongs to `readable-python-generator`, and scripts belong to `readable-script-generator`.
 - Memory summaries are bounded retrieval views; SQLite and JSONL preserve full history.
 - The Documentation Governance Contract points current context to `docs/handoff/HANDOFF.md`, durable context to `docs/memory/`, and directory changes to `docs/dir_manager/`.
+- Tester failure receipts are enforced by the worker dispatch validator, rendered tester rule, profile handshake, and the `tester_failure_receipt_contract` eval; a bare failure count cannot be recorded.
 - The verification loop uses `python skills/agents-md-generator/scripts/python/verify/quick_validate.py skills/agents-md-generator`, audit, AGENTS verification, docs verification, and evaluation.
 
 ## Review Gate

@@ -4,21 +4,70 @@
 from __future__ import annotations
 
 # 标准库覆盖 JSON 协议、路径发现、CLI 执行和任务名规范化。
+import importlib.util
+
+# 动态模块规格和运行时模块对象用于按需加载设计合同。
+from importlib.machinery import ModuleSpec
 import json
 import os
 import re
 import subprocess
 import sys
+
+# 路径和类型标注明确独立脚本的文件边界。
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
-from design_questions import (
-    REMOTE_SSH_GIT_URL,
-    REMOTE_SSH_INSTALL_SPECS,
-    REMOTE_SSH_SKILL_NAME,
-    USE_REMOTE_SERVER_KEY,
-    remote_directory_policy_required,
-)
+# 设计问题合同按需加载，避免模块导入阶段修改 sys.path 或执行目标模块。
+module_type_design_questions_cache: ModuleType | None = None  # 延迟加载的设计问题模块
+
+# 首次调用才建立缓存模块，导入本文件本身保持无副作用。
+def _load_design_questions() -> ModuleType:
+    """加载设计问题合同模块并缓存其模块对象。
+
+    参数：无。
+    返回：包含远程 SSH 合同常量的设计问题模块。
+    异常：ImportError：设计问题源码不存在或无法建立模块加载器。
+    """
+
+    # 读取缓存状态并在首次成功加载后更新模块引用。
+    global module_type_design_questions_cache
+
+    # 后续调用复用同一合同模块，避免重复执行设计问题源码。
+    if module_type_design_questions_cache is not None:
+
+        # 缓存存在时直接返回已加载的模块对象。
+        return module_type_design_questions_cache
+
+    # 入口文件与设计问题定义保持同一目录，避免依赖工作目录。
+    path_questions: Path = Path(__file__).with_name("design_questions.py")  # 设计问题源码路径
+
+    # 文件加载器不改变 sys.path，适合独立脚本和安装副本。
+    module_spec_spec_questions: ModuleSpec = (  # 设计问题模块加载规格
+        importlib.util.spec_from_file_location(  # 以源码路径创建加载规格
+            "agents_md_design_questions",  # 缓存模块的内部名称
+            path_questions,  # 当前源码文件路径
+        )
+    )
+
+    # 缺少规范加载器时拒绝继续使用不完整合同。
+    if module_spec_spec_questions is None or module_spec_spec_questions.loader is None:
+
+        # ImportError 让上层门禁明确报告依赖合同缺失。
+        raise ImportError("> ERR: [Python] cannot load design_questions module")
+
+    # 创建独立模块对象，保持按需加载的边界清晰。
+    module_type_design_questions: ModuleType = importlib.util.module_from_spec(module_spec_spec_questions)  # 设计问题模块
+
+    # 执行同目录合同源码并返回缓存对象。
+    module_spec_spec_questions.loader.exec_module(module_type_design_questions)
+
+    # 保存已加载模块，确保后续调用不重复执行源码。
+    module_type_design_questions_cache = module_type_design_questions  # 设计问题模块缓存
+
+    # 调用方从该模块读取远程依赖和路由常量。
+    return module_type_design_questions
 
 # 判断访谈答案是否进入远程依赖与路由流程。
 def use_remote_server_enabled(answers: dict[str, Any]) -> bool:
@@ -28,8 +77,11 @@ def use_remote_server_enabled(answers: dict[str, Any]) -> bool:
     返回：启用远程服务器时为 True。
     """
 
+    # 远程开关键从缓存合同读取，保持问题库为唯一事实源。
+    module_type_design_questions: ModuleType = _load_design_questions()  # 读取远程开关合同
+
     # 统一布尔转换兼容 JSON 中的缺失值和显式 false。
-    return bool(answers.get(USE_REMOTE_SERVER_KEY))
+    return bool(answers.get(module_type_design_questions.USE_REMOTE_SERVER_KEY))
 
 # 将列表或分隔文本整理为稳定的任务名称集合。
 def normalize_remote_task_list(raw: Any) -> list[str]:
@@ -151,21 +203,21 @@ def normalize_remote_server_registry(raw: Any) -> list[dict[str, Any]]:
             continue
 
         # 标识字段是去重和路由引用的唯一主键。
-        server_id = str(item.get("id", "")).strip()  # 当前服务器标识。
+        str_server_id: str = str(item.get("id", "")).strip()  # 当前服务器标识。
 
         # 空标识或重复标识都不能进入注册表。
-        if not server_id or server_id in set_seen:
+        if not str_server_id or str_server_id in set_seen:
 
             # 保留首个合法记录作为该标识的事实来源。
             continue
 
         # 先登记主键，避免后续重复记录覆盖首次事实。
-        set_seen.add(server_id)
+        set_seen.add(str_server_id)
 
         # 只复制治理合同允许的服务器属性。
         list_registry.append(
             {
-                "id": server_id,  # 路由引用的稳定服务器主键。
+                "id": str_server_id,  # 路由引用的稳定服务器主键。
                 "name": str(item.get("name", "")).strip(),  # 用户可读服务器名称。
                 "category": str(item.get("category", "")).strip(),  # 服务器用途分类。
                 "functions": normalize_remote_task_list(  # 服务器声明的能力名称。
@@ -231,7 +283,7 @@ def normalize_remote_task_routes(raw: Any) -> list[dict[str, Any]]:
         set_seen.add(str_task_key)
 
         # 主服务器是路由解析时的首选目标。
-        primary_server_id = (  # 当前任务首选服务器标识。
+        str_primary_server_id: str = (  # 当前任务首选服务器标识。
             str(item.get("primary_server_id", "")).strip()  # 原始主服务器字段。
         )
 
@@ -247,7 +299,7 @@ def normalize_remote_task_routes(raw: Any) -> list[dict[str, Any]]:
         ):
 
             # 主服务器和已出现回退项不重复尝试。
-            if server_id == primary_server_id or server_id in set_seen_fallbacks:
+            if server_id == str_primary_server_id or server_id in set_seen_fallbacks:
 
                 # 继续保留后续首次出现的服务器标识。
                 continue
@@ -279,7 +331,7 @@ def normalize_remote_task_routes(raw: Any) -> list[dict[str, Any]]:
             {
                 "task_name": str_task_name,  # 用户确认的任务展示名称。
                 "task_key": str_task_key,  # 不区分大小写的路由索引键。
-                "primary_server_id": primary_server_id,  # 首选服务器标识。
+                "primary_server_id": str_primary_server_id,  # 首选服务器标识。
                 "fallback_server_ids": list_fallback_server_ids,  # 故障切换服务器顺序。
                 "route_tasks": list_route_tasks,  # 路由覆盖的任务集合。
                 "route_functions": list_route_functions,  # 路由依赖的服务器能力。
@@ -307,13 +359,13 @@ def remote_settings_path(skill_dir: Path) -> Path | None:
     for relative in ("assets/defaults.json", "config/defaults.json"):
 
         # 候选路径始终限制在已安装 skill 根之下。
-        candidate = skill_dir / relative  # 当前待验证设置文件。
+        path_candidate: Path = skill_dir / relative  # 当前待验证设置文件。
 
         # 只有真实文件才能证明该目录契约可用。
-        if candidate.is_file():
+        if path_candidate.is_file():
 
             # 返回首个兼容布局，确保新版布局优先。
-            return candidate
+            return path_candidate
 
     # 两种设置布局均缺失时依赖不完整。
     return None
@@ -344,7 +396,72 @@ def remote_ssh_entry_path(skill_dir: Path) -> Path | None:
     # 两个公开入口均缺失时由调用方报告运行能力错误。
     return None
 
-# 从显式覆盖或 Codex 默认目录发现可用远程 SSH skill。
+# 旧安装副本缺少平台模块时，从参数化配置恢复安装根。
+def _legacy_agent_install_root(
+    path_skill_root: Path,
+    str_raw_home: str,
+) -> tuple[Path | None, Path | None]:
+    """从 agent.json 读取旧副本仍可用的用户根和技能安装根。
+
+    参数：path_skill_root 为旧副本根目录，str_raw_home 为可选用户根覆盖。
+    返回：用户根与安装根二元组；配置缺失、畸形或字段为空时均返回空二元组。
+    """
+
+    # 解析后的 agent 配置是兼容回退的唯一布局事实源。
+    path_config: Path = path_skill_root / "config" / "agent.json"  # 兼容 agent 配置路径
+
+    # 裁剪安装副本没有配置时不猜测平台目录。
+    if not path_config.is_file():
+
+        # 缺少配置时拒绝推断任何平台安装位置。
+        return None, None
+
+    # 读取配置内容并拒绝任意畸形对象。
+    try:
+
+        # JSON 解析结果先保留为对象，随后收窄到映射。
+        obj_config: object = json.loads(path_config.read_text(encoding="utf-8"))  # 读取 agent 路径配置对象
+
+        # 非映射配置不能安全读取用户根和安装根字段。
+        if not isinstance(obj_config, dict):
+
+            # 畸形配置按未发现安装副本处理。
+            return None, None
+
+        # 通过类型收窄后再读取配置字段。
+        dict_config: dict[str, Any] = obj_config  # 已确认的 agent 配置映射
+
+    # 读取或解析失败时保留兼容回退的保守结果。
+    except (OSError, UnicodeError, json.JSONDecodeError):
+
+        # 不把部分读取内容解释为有效安装路径。
+        return None, None
+
+    # 配置字段必须是非空字符串，避免拼接隐式路径。
+    str_config_home: str = str(dict_config.get("user_home_dir") or "").strip()  # 配置中的用户根
+
+    # 安装目录字段决定远程 skill 根的最后一段路径。
+    str_install_dir: str = str(dict_config.get("skill_install_dir") or "").strip()  # 配置中的安装目录
+
+    # 两个路径字段必须同时存在才能继续拼接安装根。
+    if not str_config_home or not str_install_dir:
+
+        # 缺字段时拒绝使用不完整路径。
+        return None, None
+
+    # 显式环境根优先，配置中的相对根则相对用户主目录解释。
+    path_home: Path = Path(str_raw_home).expanduser() if str_raw_home else Path.home() / str_config_home  # 用户根路径
+
+    # 相对用户根统一锚定到当前用户主目录。
+    if not path_home.is_absolute():
+
+        # 配置中的相对路径不能脱离用户主目录解释。
+        path_home = Path.home() / path_home  # 相对用户根转换为绝对路径
+
+    # 安装目录仍由配置决定，不内置任何平台名称。
+    return path_home.resolve(), (path_home / str_install_dir).resolve()
+
+# 从显式覆盖或配置目录发现可用远程 SSH skill。
 def remote_skill_dir() -> Path | None:
     """从 Codex skill 根定位已安装的远程 SSH skill。
 
@@ -352,8 +469,11 @@ def remote_skill_dir() -> Path | None:
     返回：包含根 SKILL.md 的 erie-remote-ssh 目录；未安装时为 None。
     """
 
+    # 远程 skill 名称由设计问题合同统一提供。
+    module_type_design_questions: ModuleType = _load_design_questions()  # 读取远程 skill 名称合同
+
     # 测试和定制安装可通过显式环境变量提供候选根。
-    override = os.environ.get(  # 用户指定的远程 SSH skill 目录。
+    str_override: str = os.environ.get(  # 用户指定的远程 SSH skill 目录。
         "AGENTS_MD_REMOTE_SSH_SKILL_DIR",  # 环境覆盖键。
         "",  # 未设置覆盖时的空路径。
     ).strip()
@@ -362,28 +482,29 @@ def remote_skill_dir() -> Path | None:
     list_candidates: list[Path] = []  # 待验证的远程 SSH skill 根。
 
     # 非空覆盖路径先解析为绝对路径。
-    if override:
+    if str_override:
 
         # 环境覆盖作为第一候选，支持隔离测试与定制部署。
-        list_candidates.append(Path(override).resolve())
+        list_candidates.append(Path(str_override).resolve())
 
-    # CODEX_HOME 存在时按其 skills 子目录定位安装副本。
-    codex_home = os.environ.get("CODEX_HOME", "").strip()  # Codex 用户数据根。
+    # 平台安装根从参数化 agent.json 恢复，显式覆盖仍拥有更高优先级。
+    path_skill_root: Path = Path(__file__).resolve().parents[3]  # 从脚本位置向上定位 owner skill 根
 
-    # 显式 Codex 根优先于用户主目录回退。
-    if codex_home:
+    # 环境变量只提供兼容安装的用户根覆盖。
+    str_raw_home: str = os.environ.get("AGENT_HOME", "").strip() or os.environ.get("CODEX_HOME", "").strip()  # 用户根覆盖
 
-        # 解析后的路径消除相对段对结构验证的影响。
+    # 从兼容配置读取用户根和安装根二元事实。
+    tuple_path_agent_home, tuple_path_install_root = _legacy_agent_install_root(  # 兼容安装路径
+        path_skill_root,  # 当前 skill 根目录
+        str_raw_home,  # 用户根覆盖文本
+    )
+
+    # 只有同时恢复用户根和安装根才可构造兼容候选。
+    if tuple_path_agent_home is not None and tuple_path_install_root is not None:
+
+        # 兼容候选沿用受控 skill 名称，不读取任意目录名。
         list_candidates.append(
-            (Path(codex_home).resolve() / "skills" / REMOTE_SSH_SKILL_NAME).resolve()
-        )
-
-    # 未设置 CODEX_HOME 时使用标准 ~/.codex/skills 布局。
-    else:
-
-        # 用户主目录回退与 Codex 默认安装器保持一致。
-        list_candidates.append(
-            (Path.home() / ".codex" / "skills" / REMOTE_SSH_SKILL_NAME).resolve()
+            (tuple_path_install_root / module_type_design_questions.REMOTE_SSH_SKILL_NAME).resolve()
         )
 
     # 安装身份只由技能目录和根 SKILL.md 决定。
@@ -405,6 +526,9 @@ def remote_dependency_summary() -> dict[str, Any]:
     参数：无。
     返回：包含安装身份、CLI/设置能力、仓库和安装规格的摘要。
     """
+
+    # 远程依赖地址和安装规格由缓存合同统一提供。
+    module_type_design_questions: ModuleType = _load_design_questions()  # 读取远程安装规格合同
 
     # 目录发现结果同时决定 installed 状态和展示路径。
     path_skill_dir = remote_skill_dir()  # 已验证的远程 SSH skill 根。
@@ -431,8 +555,8 @@ def remote_dependency_summary() -> dict[str, Any]:
         "settings_path": (  # 实际选中的设置文件路径。
             str(path_settings) if path_settings else None
         ),
-        "url": REMOTE_SSH_GIT_URL,  # 缺失依赖时使用的仓库地址。
-        "install_specs": list(REMOTE_SSH_INSTALL_SPECS),  # skill 安装参数副本。
+        "url": module_type_design_questions.REMOTE_SSH_GIT_URL,  # 缺失依赖时使用的仓库地址。
+        "install_specs": list(module_type_design_questions.REMOTE_SSH_INSTALL_SPECS),  # skill 安装参数副本。
     }
 
 # 构造远程 SSH CLI 的解释器、设置文件与附加参数。
@@ -879,18 +1003,23 @@ def remote_install_command_hint(skill_dir: Path | None = None) -> str:
     返回：包含仓库和安装规格的 skill 安装命令。
     """
 
+    # 安装指引使用缓存合同，避免复制仓库地址和 skill 名称。
+    module_type_design_questions: ModuleType = _load_design_questions()  # 获取安装提示所需的仓库合同
+
     # 兼容参数保留旧调用签名，安装指引不依赖当前残缺目录。
     if skill_dir is not None:
 
         # 已提供目录时仍要求从受控仓库重新安装完整依赖。
         return (
-            f"Install `{REMOTE_SSH_SKILL_NAME}` from {REMOTE_SSH_GIT_URL}, "
+            f"Install `{module_type_design_questions.REMOTE_SSH_SKILL_NAME}` from "
+            f"{module_type_design_questions.REMOTE_SSH_GIT_URL}, "
             "then rerun `python scripts/collect_design_profile.py <project> --resume`."
         )
 
     # 未发现任何目录时使用相同的受控安装来源。
     return (
-        f"Install `{REMOTE_SSH_SKILL_NAME}` from {REMOTE_SSH_GIT_URL}, "
+        f"Install `{module_type_design_questions.REMOTE_SSH_SKILL_NAME}` from "
+        f"{module_type_design_questions.REMOTE_SSH_GIT_URL}, "
         "then rerun `python scripts/collect_design_profile.py <project> --resume`."
     )
 
@@ -1159,6 +1288,9 @@ def resolve_remote_server_for_task(
     返回：包含匹配状态、选中服务器、尝试记录与错误的解析结果。
     """
 
+    # 依赖名称从缓存合同读取，保证阻断提示与安装摘要一致。
+    module_type_design_questions: ModuleType = _load_design_questions()  # 获取运行阻断消息使用的依赖标识
+
     # 远程路由必须由当前工作目录合同显式启用。
     if not isinstance(contract, dict) or not contract.get("enabled"):
 
@@ -1238,7 +1370,7 @@ def resolve_remote_server_for_task(
             "ok": False,  # 依赖预检未通过。
             "decision": "blocked",  # 无 runtime 时禁止远程执行。
             "message": (  # 缺失远程依赖的阻断原因。
-                f"Remote dependency `{REMOTE_SSH_SKILL_NAME}` is not installed."
+                f"Remote dependency `{module_type_design_questions.REMOTE_SSH_SKILL_NAME}` is not installed."
             ),
             "matched_route": dict_route,  # 已匹配但无法执行的路由。
         }

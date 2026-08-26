@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema_version", "model", "model_reasoning_effort"],
+  "properties": {
+    "schema_version": {"type": "integer", "minimum": 1},
+    "model": {"type": "string", "minLength": 1},
+    "model_reasoning_effort": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": false
+}

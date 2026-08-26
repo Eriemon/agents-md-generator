@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "versions": {
+    "baseline": "v0.6.3",
+    "baseline_next": "v0.6.4",
+    "installed_mismatch": "v0.6.2",
+    "installed_generator_mismatch": "v0.6.1",
+    "root_stale": "v0.4.2",
+    "generator_fixture": "v0.4.3",
+    "project_skill": "v0.4.4",
+    "source_render": "v9.9.9",
+    "stale_installed": "v1.0.4",
+    "release_fixture": "v0.4.3",
+    "experience_contract": "v1.1.0",
+    "source_public": "v2.2.0"
+  },
+  "names": {
+    "skill": "demo-skill",
+    "owner_skill": "agents-md-generator"
+  },
+  "paths": {
+    "workspace": "workspace",
+    "remote_directory": "not configured",
+    "owner": "owner",
+    "installed_runtime": "installed-runtime",
+    "export": "export",
+    "skill_relative": "skills/agents-md-generator"
+  }
+}

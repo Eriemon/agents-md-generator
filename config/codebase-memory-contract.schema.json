@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "type": "object",
+  "required": [
+    "repository_url",
+    "artifact_directory",
+    "install_scripts",
+    "scope_policy",
+    "wal_health"
+  ],
+  "properties": {
+    "repository_url": {"type": "string"},
+    "artifact_directory": {"type": "string"},
+    "install_scripts": {
+      "type": "object",
+      "required": ["windows", "linux"]
+    },
+    "scope_policy": {
+      "type": "object",
+      "required": [
+        "project_root",
+        "index_mode",
+        "persistence",
+        "debug_policy_enabled",
+        "debug_policy_disabled",
+        "git_policy",
+        "cbmignore_path",
+        "managed_start",
+        "managed_end",
+        "max_governance_ratio",
+        "required_excludes",
+        "protected_paths"
+      ]
+    },
+    "wal_health": {
+      "type": "object",
+      "required": [
+        "sample_count",
+        "sample_interval_seconds",
+        "absolute_limit_bytes",
+        "database_ratio_limit",
+        "long_process_seconds",
+        "long_process_count",
+        "long_wal_absolute_bytes",
+        "long_wal_ratio_limit"
+      ]
+    }
+  }
+}

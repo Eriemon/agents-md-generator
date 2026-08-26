@@ -122,16 +122,22 @@ def case_version_mismatch_takeover(case: dict[str, Any], helper: EvalFixtures) -
             encoding="utf-8",
         )
 
+        # 当前案例版本由 fixture 合同提供，调用方可在 JSON 中替换。
+        str_installed_version = str(helper.fixture_value("versions", "installed_mismatch"))  # fixture 安装版本
+
+        # 读取故意漂移的生成器版本，驱动根规则 mismatch 诊断。
+        str_generator_version = str(helper.fixture_value("versions", "installed_generator_mismatch"))  # fixture 生成器版本
+
         # 安装版本代表当前可用的规则基线。
-        path_installed_skill = helper.make_installed_skill_fixture(  # v0.6.2 模拟安装副本
+        path_installed_skill = helper.make_installed_skill_fixture(  # 配置版本模拟安装副本
             path_root,  # 指定版本安装副本所在隔离根
-            version="v0.6.2",  # 当前安装技能的语义版本
+            version=str_installed_version,  # 当前安装技能的语义版本
         )  # 指定版本的模拟安装副本
 
         # 根规则故意记录落后一版的生成器版本。
         str_agents_content = (
-            "<!-- AGENTS-METADATA: agents_version=v0.6.2; "
-            "generator_version=v0.6.1; default_language=中文 -->\n"
+            f"<!-- AGENTS-METADATA: agents_version={str_installed_version}; "
+            f"generator_version={str_generator_version}; default_language=中文 -->\n"
             "# AGENTS.md\n"
         )  # 触发 generator_version_mismatch 的规则文本
 
@@ -439,19 +445,21 @@ def prepare_experience_project(path_root: Path, helper: EvalFixtures) -> tuple[P
     return path_project, dict_scaffold, dict_memory_init
 
 # 单轮交接载荷助手集中维护正式 handoff 所需字段。
-def experience_handoff_payload(int_index: int) -> dict[str, list[str]]:
+def experience_handoff_payload(
+    int_index: int,
+    string_contract_version: str,
+) -> dict[str, list[str]]:
     """构造指定轮次的交接输入。
 
-    Args:
-        int_index: 从零开始的交接轮次索引。
-
-    Returns:
-        可序列化到 handoff 输入文件的字段映射。
+    参数：int_index 为从零开始的交接轮次索引；string_contract_version 为 fixture 合同版本文本。
+    返回：可序列化到 handoff 输入文件的字段映射。
     """
 
     # 每轮只改变当前步骤，其余字段保持稳定以隔离周期行为。
     return {  # 当前轮次交接载荷
-        "original_plan": ["exercise v1.1.0 experience removal cadence"],  # 原始验证计划
+        "original_plan": [
+            f"exercise {string_contract_version} experience removal cadence"
+        ],  # 原始验证计划
         "current_step": [f"handoff {int_index + 1}"],  # 当前交接轮次
         "resolved": ["memory records handoff without experience governance"],  # 已验证的记忆接管事实
         "remaining": ["none"],  # 当前轮次无遗留工作
@@ -460,14 +468,14 @@ def experience_handoff_payload(int_index: int) -> dict[str, list[str]]:
     }
 
 # 多轮交接助手复现旧 experience 周期请求触发边界。
-def run_experience_handoffs(path_project: Path) -> list[dict[str, Any]]:
+def run_experience_handoffs(
+    path_project: Path,
+    string_contract_version: str,
+) -> list[dict[str, Any]]:
     """连续执行五轮真实文档交接。
 
-    Args:
-        path_project: 已初始化 memory 的治理项目。
-
-    Returns:
-        按执行顺序保存的五轮交接结果。
+    参数：path_project 为已初始化 memory 的治理项目；string_contract_version 为交接载荷版本。
+    返回：按执行顺序保存的五轮交接结果。
     """
 
     # 五轮交接覆盖旧实现产生周期 experience 请求的边界。
@@ -480,7 +488,10 @@ def run_experience_handoffs(path_project: Path) -> list[dict[str, Any]]:
         path_handoff_input = path_project / f"handoff-{int_index}.json"  # 当前轮次交接输入
 
         # 输入字段覆盖交接合同要求的计划、状态和验证证据。
-        dict_handoff_input = experience_handoff_payload(int_index)  # 即将写盘的本轮 handoff 输入
+        dict_handoff_input = experience_handoff_payload(  # 当前轮次的可序列化交接载荷
+            int_index,  # 当前交接轮次索引
+            string_contract_version,  # 交接载荷使用的合同版本
+        )  # 即将写盘的本轮 handoff 输入
 
         # 每次命令读取磁盘 JSON，贴近正式治理入口。
         path_handoff_input.write_text(
@@ -614,8 +625,16 @@ def case_experience_removed_contract(case: dict[str, Any], helper: EvalFixtures)
         # memory 初始化结果证明新后端已接管持久化职责。
         dict_memory_init: dict[str, Any] = tuple_prepared[2]  # 新记忆后端的创建状态
 
-        # 五轮真实交接证明 memory 接管旧 experience 周期职责。
-        list_handoff_results = run_experience_handoffs(path_project)  # 五轮交接命令结果
+        # 五轮真实交接证明 memory 接管旧 experience 周期职责；合同版本来自 fixture。
+        str_contract_version = str(  # fixture 交接合同版本
+            helper.fixture_value("versions", "experience_contract")  # 读取交接合同版本
+        )
+
+        # 执行多轮交接并收集 memory 接管证据。
+        list_handoff_results = run_experience_handoffs(  # 五轮交接命令结果
+            path_project,  # 承载 memory 状态的隔离项目
+            str_contract_version,  # 本轮交接使用的合同版本
+        )
 
         # 最终验证、治理状态和事件计数构成验收事实。
         tuple_evidence = read_experience_evidence(path_project)  # 最终治理证据元组
@@ -896,8 +915,14 @@ def case_install_release_completeness(case: dict[str, Any], helper: EvalFixtures
         # 根目录承载仓库外的版本化导出包。
         path_root = Path(tmp)  # 安装完整性场景隔离根
 
-        # 版本化目录命名满足安装器的发布来源合同。
-        path_release_dir = path_root / "export" / "demo-skill-v0.4.3"  # 不完整发布目录
+        # 发布技能名来自 fixture，确保导出目录与夹具名称一致。
+        str_skill_name = str(helper.fixture_value("names", "skill"))  # fixture 技能名称
+
+        # 发布版本来自 fixture，避免把当前版本写进完整性场景。
+        str_release_version = str(helper.fixture_value("versions", "release_fixture"))  # fixture 发布版本
+
+        # 用 fixture 名称和版本组合安装器要求的版本化导出目录。
+        path_release_dir = path_root / "export" / f"{str_skill_name}-{str_release_version}"  # 不完整发布目录
 
         # config 目录存在但故意缺少被引用的 defaults.json。
         (path_release_dir / "config").mkdir(parents=True)
@@ -908,10 +933,10 @@ def case_install_release_completeness(case: dict[str, Any], helper: EvalFixtures
         # 主说明明确引用缺失配置，形成完整性检查目标。
         list_skill_lines = [  # 不完整发布包的主说明行
             "---",  # 发布完整性夹具 frontmatter 起始边界
-            "name: demo-skill",  # 不完整发布包中的技能名称
+            f"name: {str_skill_name}",  # 不完整发布包中的技能名称
             "description: Use when testing release completeness",  # 发布完整性测试描述
             "---",  # 发布完整性夹具 frontmatter 结束边界
-            "# Demo Skill",  # 发布完整性夹具正文标题
+            f"# {str_skill_name}",  # 发布完整性夹具正文标题
             "",  # 发布说明标题与引用段之间的空行
             "Use `config/defaults.json` during validation.",  # 故意指向缺失配置的发布说明
         ]
@@ -931,8 +956,8 @@ def case_install_release_completeness(case: dict[str, Any], helper: EvalFixtures
         # 收据准确记录现有文件，缺口只能由引用完整性检查发现。
         helper.make_release_receipt(
             path_release_dir,
-            "demo-skill",
-            "v0.4.3",
+            str_skill_name,
+            str_release_version,
             validation_level="reduced_assurance",
         )
 

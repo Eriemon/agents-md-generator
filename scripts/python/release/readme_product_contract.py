@@ -37,8 +37,8 @@ FORBIDDEN_MARKETING_TERMS = ("evidence", "checklist", "证据", "清单")  # 报
 # 作者姓名是产品归属信息的固定标记。
 AUTHOR_MARKERS = ("Jiyuan Liu", "He Li")  # 作者姓名
 
-# 双语页面分别保留学校归属，实验室标记单独校验。
-AFFILIATION_MARKERS = ("Southeast University", "东南大学")  # 机构名称
+# 双语页面统一保留英文学校归属，中文页面可追加本地化文本。
+AFFILIATION_MARKERS = ("Southeast University",)  # 英文机构标记
 
 # 引用和许可链接共同构成产品页的公共归属入口。
 FOOTER_MARKERS = ("CITATION.cff", "LICENSE", "Apache License 2.0")  # 页脚标记
@@ -288,8 +288,7 @@ def _heading_before(str_readme: str, int_position: int) -> str:
     # 没有标题表示图片未被产品章节承载。
     if not list_headings:
 
-        # 空标题由角色报告转换为分组错误。
-        # 返回空标题事实，避免虚构图片归属。
+        # 空标题由角色报告转换为分组错误，并返回空事实避免虚构图片归属。
         return ""
 
     # 最近标题负责归属当前功能图片。

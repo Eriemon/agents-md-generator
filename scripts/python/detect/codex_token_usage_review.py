@@ -592,7 +592,7 @@ def render_guard_failure_text(payload: Mapping[str, Any]) -> str:
         f"请求 Sessions 目录: {payload['sessions_root']}",  # 本次请求位置
         "",  # 路径信息与失败原因之间的空行
         f"未检测到 Codex sessions 目录：{payload['codex_sessions_root']}",  # 环境守卫失败原因
-        "此功能仅在当前环境可解析到 `$CODEX_HOME/sessions` 或 `~/.codex/sessions` 且目录存在时可执行。",  # 环境执行条件
+        "此功能仅在当前环境可解析到配置平台的 sessions 目录且目录存在时可执行。",  # 环境执行条件
     ]
 
     # 显式覆盖存在时补充其不能绕过环境守卫的说明。

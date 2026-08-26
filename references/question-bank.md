@@ -76,7 +76,7 @@ Start grouped interviews with `python <codex-home>/skills/agents-md-generator/sc
 | Root AGENTS.md missing | If this work folder already has landed content, do not launch the full design interview. Enter takeover mode, confirm the minimal identity fields first, then complete the full structured directory contract before forced local directory takeover and governance scaffolding. |
 | Root AGENTS.md version abnormal | If the current work folder root `AGENTS.md` is version-abnormal and the folder already has landed content, do not enter the full design interview. Enter takeover mode, keep identity questions minimal, but still require the full structured directory contract before continuing. |
 | Existing content but no AGENTS | This work folder already has landed content but no root `AGENTS.md`; should I first read exact-cwd Codex sessions and bootstrap `docs/memory/` before normal AGENTS generation continues? |
-| User says 计划/规划/准备 | Because this is a current workspace/current repository/current work folder planning request, should I first inspect the root `AGENTS.md`, report pass-only when it is healthy, and ask before entering AGENTS design or restructuring when it is abnormal? |
+| User requests planning | Because this is a current workspace/current repository/current work folder planning request, should I first inspect the root `AGENTS.md`, report pass-only when it is healthy, and ask before entering AGENTS design or restructuring when it is abnormal? |
 | Branch governance abnormal | The current work folder branch state does not match the configured branch model; should I enter branch cleanup or release governance before normal generation continues? |
 | Existing docs layout ambiguous | Existing `docs/` content may conflict with AGENTS.md governance. Is it acceptable to add governance subdirectories under the existing `docs/` folder? |
 | Structure governance abnormal | Normal design flow asks whether to normalize the structure first. Takeover mode does not ask again; it should proceed with forced local takeover using `manage_dirs.py takeover-fix`. |
@@ -116,7 +116,7 @@ Ask these when the user wants book-derived engineering guidance in generated AGE
 | Commit policy absent | Are agents expected to commit changes, and what format should commits use? |
 | Branch/PR policy absent | Are agents allowed to push branches or open PRs? |
 | Review expectations unknown | What review evidence should agents provide after changes? |
-| Git management preference unknown | Should this skill enable git management? Offer `是（默认）`, `否`, or `其他` and record the exact user intent. |
+| Git management preference unknown | Should this skill enable Git management? Offer `yes (recommended)`, `no`, or a custom choice and record the exact user intent. |
 
 ## Domain Context
 

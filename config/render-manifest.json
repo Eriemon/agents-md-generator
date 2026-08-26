@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "generated_roots": [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "GEMINI.md"
+  ],
+  "platform_catalog": "config/agent-platforms.json",
+  "platform_state_selection": "config/agent.json",
+  "hardcoding_gate": "scripts/python/verify/agent_platform_gate.py",
+  "script_task_map": {
+    "render": ["render_agents.py", "create_agent_shims.py", "render_entrypoints.py", "render_contracts.py", "render_foundation.py", "render_gate_compaction.py", "render_contract_templates.py"],
+    "workers": ["manage_workers.py", "manage_worker_state.py", "pycode_gardener.py", "reviewer_session.py"],
+    "verify": ["agent_platform_gate.py", "evidence_validation.py", "routing_contract.py"],
+    "release": ["install_skill.py", "install_release_manifest.py", "install_target_copy.py", "install_repository_validation.py", "install_release_sanitization.py"],
+    "installer": ["assets/installer/install.ps1", "assets/installer/install.sh", "assets/installer/install.bat", "scripts/python/release/guided_installer.py", "config/installer/installer.manifest.json", "config/installer/platform-overrides.json", "assets/installer/platforms.tsv"],
+    "common": ["agents_common.py", "agent_platform.py", "tester_worker_profile.py", "reviewer_worker_profile.py", "gardener_worker_profile.py", "toml_compat.py"]
+  }
+}

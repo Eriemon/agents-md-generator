@@ -18,38 +18,64 @@ def compact_lifecycle_gate_line(
     """
 
     # 首条文档规则后补充统一的开始与完成动作。
-    if str_line.startswith("- Before new work"):
+    if str_line.startswith(("- Before new work", "- Before work")):
 
-        # 从 run 片段提取恢复命令，保留外部工作区可执行的安装路径。
-        str_resume_check = (  # 提取出的恢复检查命令
-            str_line.split("run `", 1)[1].split("`", 1)[0]  # 受管恢复命令正文
-            if "run `" in str_line  # 当前行包含可提取命令时进入正文分支
-            else "manage_docs.py resume-check <project>"  # 缺少命令时使用稳定回退入口
-        )
+        # 已包含稳定 handoff 前缀的输入直接保留，避免二次压缩丢失动作顺序。
+        if "Start with `start-session`; write `handoff` at completion" in str_line:
 
-        # owner 仓库保留项目内可复制命令，外部工作区保留完整安装技能命令。
-        bool_owner_relative = str_resume_check.startswith(  # 是否为 owner 仓库相对命令
-            "python skills/agents-md-generator/"  # owner 仓库命令前缀
-        )
+            # 当前行已经满足恢复与交接硬短语，只更新文档合并状态。
+            return True, str_line, True, bool_memory_added
 
-        # 根据 owner 仓库边界选择可复制的恢复命令显示文本。
-        str_resume_display = (
-            f"`{str_resume_check}`"  # 可复制的恢复命令
-            if (  # 可公开命令的路径条件
-                "<codex-home>/skills/agents-md-generator/" in str_resume_check  # 已安装路径
-                or bool_owner_relative  # owner 仓库相对路径
-            )
-            else "manage_docs.py resume-check"  # 外部路径的稳定短入口
-        )  # 面向调用方的恢复命令显示文本
+        # 提取并保留源合同中的完整命令路径，再补充启动与完成交接动作。
+        str_original_contract = str_line.split(": ", 1)[1] if ": " in str_line else str_line  # 原始文档合同正文
 
-        # 合并生命周期时所有项目都保留 handoff 读取边界。
+        # 去除源合同句末标点，避免拼接交接动作时形成重复标点。
+        str_original_contract = str_original_contract.rstrip(".")  # 去除源合同句末标点
+
+        # owner repo 根索引使用短入口，外部项目则保留安装版完整路径。
+        if "python skills/agents-md-generator/" in str_original_contract:
+
+            # 只压缩本仓库路径，不改变外部工作区的可执行命令合同。
+            tuple_owner_path_replacements = (
+                ("python skills/agents-md-generator/scripts/python/docs/manage_docs.py", "manage_docs.py"),  # 保持 docs 交接入口简洁
+                ("python skills/agents-md-generator/scripts/python/dirs/manage_dirs.py", "manage_dirs.py"),  # 保持 dirs 审查入口简洁
+            )  # owner repo 命令短入口映射
+
+            # 逐项替换 owner repo 的长路径，保留外部项目路径原文。
+            for str_long_path, str_short_path in tuple_owner_path_replacements:
+
+                # 当前替换只影响当前仓库的命令文本。
+                str_original_contract = str_original_contract.replace(str_long_path, str_short_path)  # 当前 owner 路径替换
+
+            # owner repo 保留仓库顶层可复现的文档治理命令。
+            str_original_contract = (
+                "read `docs/handoff/HANDOFF.md`; run `python skills/agents-md-generator/scripts/python/docs/"
+                "manage_docs.py resume-check <project>`; "
+                "repair `resume-repair`"
+            )  # owner repo 生命周期短合同
+
+        # 外部项目复用安装态 resume-check 路径，避免重复展开同一安装根。
+        if "<codex-home>" in str_original_contract:
+
+            # 只保留外部运行时必须可执行的检查路径和恢复动作。
+            str_original_contract = (
+                "read `docs/handoff/HANDOFF.md`; run `python <codex-home>/skills/agents-md-generator/"
+                "scripts/python/docs/manage_docs.py resume-check <project>`; repair `resume-repair`"
+            )  # 外部项目生命周期短合同
+
+        # 组合启动、恢复、命令路径和完成交接的稳定根规则。
         str_replacement = (
-            f"- Before work: read `docs/handoff/HANDOFF.md`; {str_resume_display}; "  # 生命周期读取入口
-            "Start with `start-session`; write `handoff` at completion."  # 生命周期完成动作
-        )  # owner 与外部项目共享完整生命周期入口
+            "- Before work: Start with `start-session`; write `handoff` at completion; "
+            f"{str_original_contract}."
+        )  # 生命周期入口替换文本
 
-        # 告知调用方该行已完成合并。
-        return True, str_replacement, True, bool_memory_added
+        # 返回已保留源路径的生命周期合同并更新文档合并状态。
+        return (
+            True,
+            str_replacement,
+            True,
+            bool_memory_added,
+        )
 
     # 文档入口已合并后丢弃重复的开始与完成说明。
     if bool_docs_added and str_line.startswith(
@@ -64,7 +90,8 @@ def compact_lifecycle_gate_line(
 
         # 精炼文本保留权威存储与四个必要动作。
         str_replacement = (
-            "- **Memory:** docs/memory/MEMORY.md; memory-gate; memory-bootstrap-sessions/memory-read"  # memory 入口文本
+            "- **Memory:** docs/memory/MEMORY.md; memory-gate; memory-bootstrap-sessions/memory-read; "
+            "bootstrap exact-cwd sessions"  # memory 入口文本
         )  # memory 合并入口替换文本
 
         # 更新 memory 状态以过滤后续重复细则。
@@ -81,6 +108,99 @@ def compact_lifecycle_gate_line(
     # 未命中生命周期规则时交给普通政策压缩器。
     return False, None, bool_docs_added, bool_memory_added
 
+# 无动态状态的运行环境政策使用前缀映射，避免主压缩器堆积分支。
+def _compact_static_runtime_policy_line(str_line: str) -> tuple[bool, str | None]:
+    """
+    压缩不依赖当前行动态值的运行环境政策。
+
+    参数:
+        str_line: 当前待判断的根级规则行。
+    返回:
+        命中静态政策时返回 True 和替换文本，否则返回 False 和 None。
+    """
+
+    # 逐项按前缀选择替换正文或删除标记，命中后结束当前行处理。
+    for str_prefix, str_replacement in (
+        (
+            "- **Workspace boundary:**",  # 工作区授权合同前缀
+            None,  # 完整 workspace 合同由根级 Contract reference notes 承载
+        ),
+        (
+            "- **gardener_worker:**",  # gardener 受管只读前缀
+            (
+                "- **gardener_worker:** canonical read-only; `fork_turns=none`; tracked `.py`/`.md`; list/read "
+                "tests/**; never touches dist/github/root docs/.agents/.git/.codebase-memory/ref; strict JSON; "
+                "zero-call needs graph+tester; deletion gate."
+            ),
+        ),
+        (
+            "- **reviewer_worker:**",  # reviewer 阶段门禁前缀
+            (
+                "- **reviewer_worker:** canonical; read-only; never tests/**; INITIAL/10m/CORRECTION/FINAL; PERIODIC."
+            ),  # reviewer 短合同
+        ),
+        (
+            "- **Unique TESTER:**",  # tester 唯一所有权前缀
+            None,  # TESTER provenance 细则移至根引用区
+        ),
+        (
+            "- **远程上传边界：**",  # manifest-only 传输前缀
+            (
+                "- **远程上传边界：** manifest-only；禁整体上传/同步/镜像/递归打包；禁传 "
+                "`.git/`/`git/`/`github/`/`dist/`/`ref/`/archives；仅传清单/窄目录；制品单列；"
+                "禁改名/复制/重打包/绕过。"
+            ),
+        ),
+            (
+                "- Do not create or use additional Git worktrees",  # 隔离入口阻断前缀
+                (
+                "- Do not create or use additional Git worktrees: forbid `git worktree add`, "
+                "`git config core.worktree`; reserve `.worktrees`/`.git-worktrees`; use local branches for isolation."
+            ),
+        ),
+        (
+            "- **Codebase memory MCP:** enabled",  # 图谱门禁前缀
+            "- **Codebase memory MCP:** enabled/full; use `get_architecture`/`search_graph`/`trace_path`/"
+            "`detect_changes`; "
+            "report graph failure before fallback",
+        ),
+        (
+            "- **Remote deployment:**",  # 远程部署规则前缀
+            "- **Remote deployment:** do not sync local skill-development content to servers; runtime artifacts only.",  # 远程运行时边界
+        ),  # 运行时上传边界由 manifest-only 合同承载
+        (
+            "- **Remote structure:**",  # 远程结构合同前缀
+            "- **Remote structure:** lifecycle details use the remote workspace management entry; root AGENTS.md "
+            "is only the entry index.",  # 远程结构摘要
+        ),  # 远程结构规划前缀
+        ("- Remote server usage:", None),  # 路由源与 workspace 状态已承载远程启用事实
+            (
+                "- **Workspace settings:**",  # 本地设置隔离前缀
+            (
+                "- **Workspace settings:** `.settings/project.local.json`/`.settings/project.remote.json`;"
+                "`.settings/*.local.json` stays local; forbid remote `server_list.local.json`."
+            ),
+        ),
+        (
+            "- If the matched primary remote server fails",  # 主服务器失败规则前缀
+            "- Primary `check`/`workspace-check` failure: automatically try registered fallback "
+            "servers in route order.",
+        ),  # 备用服务器动作前缀
+        (
+            "- If the user wants a different task-to-server mapping",  # 任务映射规则前缀
+            "- If the user wants a different task-to-server mapping, update the profile; never bypass the route table.",  # 路由映射更新入口
+        ),  # 任务路由更新前缀
+    ):  # 静态合同顺序与原始政策发现顺序一致
+
+        # 命中静态规则后直接返回其完整替换文本。
+        if str_line.startswith(str_prefix):
+
+            # True 区分“已处理但删除正文”的 None 替换。
+            return True, str_replacement
+
+    # 未命中静态规则时交给动态状态压缩器继续判断。
+    return False, None
+
 # 运行环境政策单独处理 worktree、知识图谱、目录和私有设置边界。
 def compact_runtime_policy_gate_line(str_line: str) -> tuple[bool, str | None]:
     """压缩单条运行环境根级政策。
@@ -92,82 +212,42 @@ def compact_runtime_policy_gate_line(str_line: str) -> tuple[bool, str | None]:
         是否已处理以及可选的精炼替换文本。
     """
 
-    # 工作区边界保留验收短语，并移除不改变授权范围的重复连接语。
-    if str_line.startswith("- **Workspace boundary:**"):
+    # 静态合同先由前缀映射处理，主函数只保留动态状态分支。
+    tuple_static_result = _compact_static_runtime_policy_line(str_line)  # 静态运行环境合同结果
 
-        # 固定替换保留 verifier 要求的全部授权短语和单次确认边界。
-        str_replacement = (  # 工作区边界紧凑合同
-            "- **Workspace boundary:** current work folder; verified remote-server work folder. Changes inside either "
-            "work folder require no additional confirmation; remote changes remain allowed only when the configured "
-            "task route matches that folder. Official codebase-memory start, index refresh, rebuild, or recovery for "
-            "the project bound to either work folder, including its configured runtime cache and root persistence "
-            "artifact, also requires no additional confirmation. External reads beyond those boundaries must be "
-            "necessary and "
-            "side-effect free. Every other external write is prohibited by default; only after the user proactively "
-            "and explicitly requests the exact action. Disclose exact normalized target, action, scope, risks, "
-            "alternatives, and recovery limits; obtain exactly one explicit user confirmation. "
-            "Any target or scope change invalidates that confirmation. installed skill always requires exactly one "
-            "explicit user confirmation."
-        )  # 工作区边界的等价紧凑合同
+    # 静态规则无论保留还是删除正文，都应在此结束当前行处理。
+    if tuple_static_result[0]:
 
-        # 当前行由保留全部验证短语的紧凑合同替代。
-        return True, str_replacement
+        # 返回静态合同的处理标记和替换文本。
+        return tuple_static_result
 
-    # 远程工作区合同保留完整可验证句子，避免压缩后丢失安全语义。
-    if str_line.startswith("- **Remote workspace management:**"):
+    # 远程工作区合同压缩为一行，并保留路由、验证工作区和动态状态事实。
+    if str_line.startswith(("- **Remote workspace management:**", "- Remote workspace:")):
 
-        # 保留完整正文，供渲染门禁和人工审计稳定识别。
+        # 保留动态状态，避免压缩器覆盖画像事实。
+        str_state_marker = "remote workspace state:"  # 状态字段的稳定解析标记
+
+        # 状态标记存在时读取画像中的动态值。
+        if str_state_marker in str_line:
+
+            # 状态值取自当前规则正文，不能使用固定文本覆盖画像。
+            str_state = str_line.split(str_state_marker, 1)[1].strip()  # 读取画像中的远程状态
+
+        # 状态标记缺失时仅兼容旧版压缩输入。
+        else:
+
+            # 旧版输入没有动态状态，使用受控默认值。
+            str_state = "enabled"  # 旧输入缺少状态时的保守默认值
+
+        # 规则正文保留 fail-closed、精确路由、验证工作区、结构入口和动态状态。
         str_replacement = (
-            "- **Remote workspace management:** Remote workspace management is state-aware "
-            "and fail-closed."
+            "- **Remote workspace management:** state-aware/fail-closed; resolve exact task route and verified "
+            "workspace; unmatched/unverified stop. Keep lifecycle details in "
+            "`docs/dir_manager/planned_structure.json`; "
+            f"remote workspace state: {str_state}"
         )  # 远程工作区完整状态合同
 
         # 当前远程管理规则由可验证的完整状态合同替代。
-        return True, str_replacement
-
-    # worktree 规则保留全部禁止入口和分支替代方案。
-    if str_line.startswith("- Do not create or use additional Git worktrees"):
-
-        # 单行规则覆盖命令、目录名和允许的隔离方式。
-        str_replacement = (  # worktree 紧凑合同
-            "- Do not create or use additional Git worktrees: forbid `git worktree add`, "
-            "`git config core.worktree`, .worktrees, worktrees, .git-worktrees, "
-            "git-worktrees; use local branches for isolation."
-        )  # 额外 worktree 硬阻断规则
-
-        # 当前行由完整但紧凑的 worktree 规则替代。
-        return True, str_replacement
-
-    # 知识图谱启用规则保留写入门禁和调试工具顺序。
-    if str_line.startswith("- **Codebase memory MCP:** enabled"):
-
-        # 精炼文本仍要求持久化 full 索引和 live/disk 计数一致。
-        str_replacement = (
-            "- **Codebase memory MCP:** enabled; full; debug "
-            "`get_architecture`/search_graph/trace_path/`detect_changes`; report graph failure before fallback"
-        )  # 知识图谱写入与调试停止线
-
-        # 当前行由紧凑知识图谱规则替代。
-        return True, str_replacement
-
-    # 远程部署规则保留源码与运行时产物的安全边界。
-    if str_line.startswith("- **Remote deployment:**"):
-
-        # 根文件保留旧版部署禁同步短语，详细载荷仍由远程计划承载。
-        str_replacement = (
-            "- **Remote deployment:** do not sync local skill-development content to servers"  # 禁止部署本地开发源码
-        )  # 远程开发部署紧凑合同
-
-        # 当前部署规则由紧凑安全文本替代。
-        return True, str_replacement
-
-    # 远程结构规则保留可检索的旧标题，同时把细节交给规划文件。
-    if str_line.startswith("- **Remote structure:**"):
-
-        # 具体部署、运行时和归档细节统一放在 planned_structure 中。
-        str_replacement = "- **Remote structure:** planned_structure"  # 远程目录规划入口
-
-        # 当前结构规则由紧凑入口替代。
         return True, str_replacement
 
     # 目录规则在外部工作区保留已安装运行时的完整路径。
@@ -176,8 +256,11 @@ def compact_runtime_policy_gate_line(str_line: str) -> tuple[bool, str | None]:
         # owner repo 可使用短命令名，外部工作区必须保留安装路径。
         if "<codex-home>" in str_line:
 
-            # 外部工作区继续引用已安装技能下的目录审查命令。
-            str_replacement = str_line  # 外部工作区目录审查规则
+            # 外部工作区保留安装态命令，但删除非阻断解释文本。
+            str_replacement = (
+                "- **Directory changes:** run `python <codex-home>/skills/agents-md-generator/"
+                "scripts/python/dirs/manage_dirs.py review <project> --input change.json`."
+            )  # 外部工作区目录审查规则
 
         # owner repo 不需要重复已安装技能的绝对路径。
         else:
@@ -188,41 +271,54 @@ def compact_runtime_policy_gate_line(str_line: str) -> tuple[bool, str | None]:
         # 当前目录规则由位置感知文本替代。
         return True, str_replacement
 
-    # 私有设置规则只保留本地、远程和禁止部署三类路径。
-    if str_line.startswith("- **Workspace settings:**"):
-
-        # 精炼文本仍明确禁止部署任何 local 配置。
-        str_replacement = (
-            "- **Workspace settings:** `.settings/project.local.json`/`.settings/project.remote.json`; "
-            "no deploy `.settings/*.local.json`/server_list.local.json"
-        )  # 工作区设置、远程部署与结构入口
-
-        # 当前行由紧凑设置边界替代。
-        return True, str_replacement
-
-    # 主服务器检查失败时仍保留按路由顺序尝试备用服务器的动作。
-    if str_line.startswith("- If the matched primary remote server fails"):
-
-        # 精炼文本保留两个检查命令和备用服务器路由顺序。
-        str_replacement = (
-            "- Primary `check`/`workspace-check` failure: automatically try registered fallback servers in route order."  # 主备服务器故障切换合同
-        )
-
-        # 当前主服务器失败规则由完整动作摘要替代。
-        return True, str_replacement
-
-    # 任务映射变化仍必须先更新 profile，禁止绕过路由表。
-    if str_line.startswith("- If the user wants a different task-to-server mapping"):
-
-        # 精炼文本保留 profile 更新入口和路由表硬阻断。
-        str_replacement = (
-            "- Different task-server mapping: update profile via agents-md-generator; never bypass route table."  # 任务到服务器映射合同
-        )
-
-        # 当前映射规则由最小变更边界替代。
-        return True, str_replacement
-
     # 未命中运行环境规则时由普通政策压缩器继续判断。
+    return False, None
+
+# 远程路由只投影执行时解析、回退和停止边界。
+def _compact_remote_route_line(str_line: str) -> tuple[bool, str | None]:
+    """压缩远程路由入口，保留根文件必需的停止短语。
+
+    参数：str_line 为远程路由原文。
+    返回：命中时返回替换结果，否则返回未处理标记。
+    """
+
+    # 路由映射集中保存，避免普通政策函数继续增加分支。
+    tuple_route_replacements = (  # 远程路由前缀到根级短合同的映射
+        (
+            "- Resolve primary and fallback servers",  # 主备服务器解析前缀
+            "- Resolve primary/fallback servers from the route source at execution time; no "
+            "registry/runner/absolute remote paths in root AGENTS.md.",
+        ),
+        (
+            "- If the matched primary remote server fails",  # 主服务器失败前缀
+            "- Primary `check`/`workspace-check` failure: automatically try registered fallback "
+            "servers in route order.",
+        ),
+        (
+            "- If no registered task route matches",  # 未匹配任务前缀
+            "- If no registered task route matches, stop and update the current work-folder "
+            "AGENTS.md/profile before continuing.",
+        ),
+        (
+            "- Task-server mapping:",  # 任务映射前缀
+            "- Different task-server mapping: update profile; never bypass route table.",  # 任务映射短合同
+        ),
+        (
+            "- Route source:",  # 路由来源前缀
+            "- Route source: `.agents/agents-control.json` field `remote_server_contract`.",  # 路由来源短合同
+        ),
+    )
+
+    # 逐项匹配保持来源顺序，未命中时让调用方保留原文。
+    for str_prefix, str_replacement in tuple_route_replacements:
+
+        # 当前路由前缀命中后返回稳定短合同。
+        if str_line.startswith(str_prefix):
+
+            # None 表示该行由其他合同承载或不需要单独输出。
+            return True, str_replacement
+
+    # 非路由行继续交给普通政策压缩器。
     return False, None
 
 # 普通政策压缩器处理不依赖跨行状态的根级规则。
@@ -239,24 +335,26 @@ def compact_policy_gate_line(str_line: str) -> tuple[bool, str | None]:
     # 验证清单只保留来源指针和必需门禁类别。
     if str_line.startswith("- Validation gates:"):
 
-        # 精炼文本避免在根文件重复整条命令手册。
-        str_replacement = (
-            "- Validation gates: `quick_validate`, tests, audit, AGENTS/docs `verify`, evaluation."  # 验证门禁入口
-        )  # 最终验证清单替换文本
+        # 根索引保留仓库顶层测试命令和其余验证类别，具体实现由 SKILL.md 承载。
+        return True, (
+            "- Validation gates: `quick_validate`; tests, audit: `python -m unittest discover -s tests -t . -v`; "
+            "AGENTS/docs `verify`; evaluation."
+        )
 
-        # 当前行由精炼验证规则替代。
-        return True, str_replacement
+    # 输出策略保留 Kind 来源和 Python 过程性日志的执行语义。
+    if str_line.startswith("- 配置来源："):
+
+        # 具体命令留在 registry，根索引只保留不可丢失的政策锚点。
+        return True, (
+            "- Script Output Policy: `Kind` 列表只从 JSON 读取；Python 过程性 INFO 默认打印；"
+            "`--quiet` 关闭；WARNING 和 ERR 继续可见；机器可读输出不套前缀。"
+        )
 
     # 高风险前向测试压缩为需要覆盖的功能类别。
     if str_line.startswith("- Forward testing:"):
 
-        # 类别列表保留触发范围但不复制实现细节。
-        str_replacement = (
-            "- Forward testing: compression; install, release"  # 前向测试类别摘要
-        )  # 前向测试摘要替换文本
-
-        # 当前行由精炼前向测试规则替代。
-        return True, str_replacement
+        # 根索引保留前向测试的三类执行门禁。
+        return True, "- Forward testing: compression/install/release."
 
     # 未配置书籍规则时删除两个无决策价值的占位行。
     if str_line in ("- Primary rule set: none.", "- Mode: none."):
@@ -276,38 +374,28 @@ def compact_policy_gate_line(str_line: str) -> tuple[bool, str | None]:
     # 发布来源规则只保留三个权威位置。
     if str_line.startswith("- Release details live"):
 
-        # 根文件指向 profile、git 文档和脚本指南。
+        # 根文件同时指向发布政策并保留版本制品、安装和 push 停止线。
         str_replacement = (
             "- Release policy lives in `.agents/agents-control.json`, `docs/git_manager/`, and "
-            "skills/agents-md-generator/references/script-guide.md"
+            "`skills/agents-md-generator/references/script-guide.md`; Different-version release directories and "
+            "matching zip files are immutable history; install `dist/<name>-vX.Y.Z/` only with "
+            "`RELEASE_RECEIPT.json`; source directory installs are forbidden; push requested."
         )  # 发布政策权威入口
 
         # 当前行由紧凑发布来源指针替代。
         return True, str_replacement
 
-    # profile 提供的主源码根必须原样保留，只压缩其外围措辞。
+    # profile 提供的主源码根已由项目画像和目录合同承载，根门禁不重复复制路径。
     if str_line.startswith("- **Project root:**"):
 
-        # 短语替换不会把外部工程目录误写成 owner 仓库路径。
-        str_old_boundary = "unless the directory contract is updated."  # 匹配原目录合同边界。
+        # 只有 owner repo 使用固定短路径，其他项目必须保留画像中的动态根。
+        if "skills/agents-md-generator/" in str_line:
 
-        # 新短语保留目录合同变更这一必要条件。
-        str_new_boundary = "unless its directory contract changes."  # 定义压缩后的变更条件。
+            # owner repo 的详细 feature 规则继续由本地治理配置承载。
+            return True, "- **Project root:** primary project root `skills/agents-md-generator/`; features stay inside."
 
-        # 首次替换只调整动词，不接触反引号内的动态目录根。
-        str_replacement = str_line.replace("keep feature work inside", "feature work stays in")  # 保留 profile 路径。
-
-        # 第二次替换缩短目录合同边界的外围措辞。
-        str_replacement = str_replacement.replace(str_old_boundary, str_new_boundary)  # 保留合同条件。
-
-        # 根索引保留动态源码根，但省略已在目录合同中定义的条件句。
-        str_root = str_line.split("`")[1] if "`" in str_line else "skills/agents-md-generator/"  # 保留的源码根
-
-        # 用保留的源码根构造位置稳定的紧凑规则。
-        str_replacement = f"- **Project root:** `{str_root}`"  # 主源码根紧凑规则
-
-        # 当前行由紧凑主源码根规则替代。
-        return True, str_replacement
+        # demo 或 engineering fixture 的主根必须保持调用方画像事实。
+        return True, str_line.replace("keep feature work inside it", "features stay inside")
 
     # 阻断审查只需保留默认停止、强制确认和风险记录三个动作。
     if str_line.startswith("- **Blocked directory review:**"):
@@ -321,15 +409,8 @@ def compact_policy_gate_line(str_line: str) -> tuple[bool, str | None]:
     # 历史包不可变规则同时承载安装源与 push 停止线。
     if str_line.startswith("- Different-version release directories"):
 
-        # 合并文本保留版本目录、zip、receipt、source install 和 push 边界。
-        str_replacement = (
-            "- Different-version release directories and matching zip files are immutable history; "
-            "validated install only from dist/<name>-vX.Y.Z/ with RELEASE_RECEIPT.json; "
-            "source directory installs are forbidden; push only on explicit request"
-        )  # 发布历史和安装授权边界
-
-        # 当前行由合并后的发布停止线替代。
-        return True, str_replacement
+        # 发布政策入口已经承载版本制品和安装停止线。
+        return True, None
 
     # 已被历史包规则吸收的安装和 push 单行不再重复输出。
     if str_line.startswith(("- Install only from", "- Do not push to a remote")):
@@ -337,14 +418,120 @@ def compact_policy_gate_line(str_line: str) -> tuple[bool, str | None]:
         # None 表示删除已被上层合并的重复规则。
         return True, None
 
-    # 未启用书籍规则时只保留参考而非复制全文。
+    # 未启用书籍规则时明确保留完整规则仅作参考的边界。
     if str_line.startswith("- Do not paste full book rules"):
 
-        # 精炼文本保留 reference-only 的硬边界。
-        return True, "- Keep full book rules reference-only"
+        # 保留停止复制全文的机器可检索合同。
+        return True, "- Do not paste full book rules into AGENTS.md. Keep full book rules reference-only."
+
+    # 低信息密度的受管入口统一缩短，但不删除其停止条件和权威路径。
+    tuple_short_policy_lines = (  # 低信息密度入口的精简映射
+        (
+            "- Before work:",  # 开工前置合同前缀。
+            "- Before work: Start with `start-session`; run "
+            "`python <codex-home>/skills/agents-md-generator/scripts/python/docs/manage_docs.py "
+            "resume-check <project>` and "
+            "`python <codex-home>/skills/agents-md-generator/scripts/python/dirs/manage_dirs.py review "
+            "<project> --input change.json`; repair interruptions with `resume-repair`; write `handoff` "
+            "at completion.",  # 生命周期入口保留恢复检查与会话交接顺序
+        ),
+        (
+            "- **Task authorization:**",  # 单次授权收据前缀。
+            "- **Task authorization:** one receipt covers skill/AGENTS.md/CLI; "
+            "target/scope/risk changes invalidate.",  # 授权变化边界。
+        ),
+    )
+
+    # 逐项匹配时保持动态目录和命令内容只出现在替换正文中。
+    for str_prefix, str_replacement in tuple_short_policy_lines:
+
+        # 当前行命中后返回固定短合同，未命中则继续保留原文。
+        if str_line.startswith(str_prefix):
+
+            # 替换结果保留当前规则的动作、停止线和风险边界。
+            return True, str_replacement
+
+    # 路由来源由独立 helper 压缩，避免与普通政策分支耦合。
+    tuple_route_result = _compact_remote_route_line(str_line)  # 远程路由压缩结果
+
+    # 命中路由合同时直接返回其替换文本。
+    if tuple_route_result[0]:
+
+        # helper 已保留运行时解析、回退和停止短语。
+        return tuple_route_result
 
     # 未命中无状态压缩规则时由调用方保留原文。
     return False, None
+
+# 合并同一远程路由的来源、回退和停止规则，避免根文件重复展开控制面事实。
+def compact_remote_route_lines(list_lines: list[str]) -> list[str]:
+    """把远程路由的多行事实压成一个可检索入口。
+
+    参数：list_lines 为已完成普通政策压缩的根规则行。
+    返回：保留同等执行语义的根规则行。
+    """
+
+    # 路由来源是稳定锚点，其余路由行可安全并入同一条规则。
+    str_anchor_prefix = "- Route source:"  # 远程路由来源行前缀
+
+    # 需要并入来源行的远程路由规则前缀集合。
+    tuple_route_prefixes = (  # 远程路由规则前缀集合
+        str_anchor_prefix,  # 来源规则前缀
+        "- Resolve primary/fallback servers",  # 主备解析前缀
+        "- Resolve primary and fallback servers",  # 兼容旧解析前缀
+        "- Primary `check`/`workspace-check` failure:",  # 主备失败前缀
+        "- If no registered task route matches",  # 路由缺失前缀
+        "- If the user wants a different task-to-server mapping",  # 映射变更前缀
+        "- Different task-server mapping:",  # 简短映射前缀
+    )
+
+    # 没有完整路由事实时保持原列表，兼容非远程项目。
+    if not any(str_line.startswith(str_anchor_prefix) for str_line in list_lines):
+
+        # 非远程项目没有可压缩的路由事实。
+        return list_lines
+
+    # 合并行保留来源、解析时机、回退动作和不匹配停止线。
+    str_route_summary = (
+        "- Route source: `.agents/agents-control.json` field `remote_server_contract`. "
+        "Resolve primary and fallback servers from the route source at execution time; no registry/runner/absolute "
+        "remote paths in root AGENTS.md. Primary `check`/`workspace-check` failure: automatically try registered "
+        "fallback servers in route order. If no registered task route matches the requested task, stop and update the "
+        "current work folder AGENTS.md/profile before continuing. Mapping: update profile; no bypass."
+    )
+
+    # 只在首个来源位置写入汇总，后续路由行由同一合同吸收。
+    list_compact: list[str] = []  # 合并后的根规则行
+
+    # 仅允许来源锚点插入一次汇总规则。
+    bool_inserted = False  # 是否已写入路由汇总
+
+    # 逐行移除已并入来源锚点的重复路由事实。
+    for str_line in list_lines:
+
+        # 首次遇到来源行时写入完整远程路由合同。
+        if str_line.startswith(str_anchor_prefix) and not bool_inserted:
+
+            # 来源行承载所有路由解析、回退和停止语义。
+            list_compact.append(str_route_summary)
+
+            # 标记来源汇总已经写入。
+            bool_inserted = True  # 防止重复写入路由汇总
+
+            # 当前来源行已被汇总规则替换。
+            continue
+
+        # 后续路由行已经由来源汇总承载。
+        if str_line.startswith(tuple_route_prefixes):
+
+            # 不再重复输出同一控制面事实。
+            continue
+
+        # 非路由规则保持原有顺序。
+        list_compact.append(str_line)
+
+    # 返回去除重复路由规则后的行集合。
+    return list_compact
 
 # 根级门禁压缩器合并同一子系统的重复入口。
 def compact_task_gate_text(str_rules: str) -> str:
@@ -423,6 +610,9 @@ def compact_task_gate_text(str_rules: str) -> str:
 
         # 未命中任何压缩规则时原样保留输入行。
         list_result.append(str_line)
+
+    # 远程路由事实只保留一个可检索入口，避免控制面重复占用根预算。
+    list_result = compact_remote_route_lines(list_result)  # 合并远程路由重复事实
 
     # 以标准换行重新组装稳定的根级门禁文本。
     return "\n".join(list_result)

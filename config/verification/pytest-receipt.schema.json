@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "required": ["schema_version", "active_receipt_extension", "receipt_schema", "freshness_seconds", "default_modes", "modes"],
+  "mode_required": ["mode_name", "command_id", "runner", "suite", "command_template", "release_eligible", "required_fields", "forbidden_fields", "parameter_rules"]
+}

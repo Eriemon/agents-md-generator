@@ -6,6 +6,7 @@ from __future__ import annotations
 # CLI 与动态模块加载支持直接脚本执行。
 import argparse
 import importlib
+from importlib.machinery import ModuleSpec
 import sys
 
 # 公共设计入口必须在导入兄弟模块前关闭字节码写入，避免污染可发布源码树。
@@ -105,25 +106,27 @@ def load_agents_common() -> ModuleType:
     path_common_dir = Path(__file__).resolve().parents[1] / "common"  # 公共任务模块目录
 
     # 显式规格加载优先于通配导入，保持依赖表面可审查。
-    spec_agents_common = importlib.util.spec_from_file_location(  # 公共模块加载规格
+    module_type_spec_agents_common: ModuleSpec | None = importlib.util.spec_from_file_location(  # 公共模块加载规格
         "agents_common",  # 公共模块运行时名称
         path_common_dir / "agents_common.py",  # 公共模块源码位置
     )
 
     # 缺失加载器说明源码布局不完整，不能继续执行 CLI。
-    if spec_agents_common is None or spec_agents_common.loader is None:
+    if module_type_spec_agents_common is None or module_type_spec_agents_common.loader is None:
 
         # 抛出稳定错误供入口调用方定位缺失公共依赖。
         raise ImportError("> ERR: [Python] cannot load agents_common module")
 
     # 模块对象承载公共 CLI 的路径解析和 JSON 输出函数。
-    module_agents_common = importlib.util.module_from_spec(spec_agents_common)  # 公共 CLI 模块
+    module_type_agents_common: ModuleType = importlib.util.module_from_spec(  # 公共 CLI 模块对象
+        module_type_spec_agents_common  # 使用已验证的公共模块加载规格。
+    )
 
     # 执行公共模块后再向调用点暴露其稳定接口。
-    spec_agents_common.loader.exec_module(module_agents_common)
+    module_type_spec_agents_common.loader.exec_module(module_type_agents_common)
 
     # 返回已完成初始化的公共模块对象。
-    return module_agents_common
+    return module_type_agents_common
 
 # 项目解析包装器保持现有测试和调用方可替换的模块级接口。
 def resolve_project(path_value: str | Path) -> Path:
@@ -196,9 +199,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
         ),
     )
 
-    # write 明确授权生成治理配置和文档产物。
-    # 显式确认参数只授权解除 Git 索引跟踪，不删除本地产物。
-    # 独立确认参数保护 codebase-memory 的本地持久化副本。
+    # write 明确授权生成配置和文档；独立确认参数保护 Git 跟踪与 codebase-memory 副本。
     parser.add_argument(
         "--write",
         action="store_true",
@@ -515,12 +516,12 @@ def answer_interview(path_project: Path, path_answer_file: Path) -> None:
     str_status = str(dict_state.get("status", "collecting_group"))  # 回答前访谈状态
 
     # 显式类型标注让状态到处理器的可空关系可审查。
-    callable_handler: (  # 当前状态对应的可空回答动作
+    function_handler: (  # 当前状态对应的可空回答动作
         Callable[[Path, dict[str, Any], dict[str, Any]], dict[str, Any]] | None  # 状态机动作签名
     ) = ANSWER_HANDLER_BY_STATUS.get(str_status)  # 当前状态回答处理器
 
     # 未登记状态不能消费答案，否则可能跳过强制门禁。
-    if callable_handler is None:
+    if function_handler is None:
 
         # 交互载荷保留当前状态并附加不可回答诊断。
         emit_json(
@@ -535,7 +536,7 @@ def answer_interview(path_project: Path, path_answer_file: Path) -> None:
         raise SystemExit(1)
 
     # 已登记处理器负责验证答案并推进持久化状态。
-    emit_json(callable_handler(path_project, dict_state, dict_payload))
+    emit_json(function_handler(path_project, dict_state, dict_payload))
 
 # 写入语言门禁确保生成规则不会依赖隐式语言猜测。
 def validate_write_language(path_project: Path, dict_answers: dict[str, Any]) -> None:

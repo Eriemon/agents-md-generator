@@ -86,13 +86,13 @@ def owner_document_layout() -> dict[str, object]:
     dict_roles = load_document_roles(path_owner_registry, dict_manifest)  # 文档治理角色映射
 
     # schema 路径必须保持清单顺序供初始化结果稳定展示。
-    object_schemas = dict_manifest.get("document_schemas")  # 未收窄 schema 路径容器
+    list_schemas = dict_manifest.get("document_schemas")  # 未收窄 schema 路径容器
 
     # 空值或非字符串条目都破坏可发布模板集合。
     if (
-        not isinstance(object_schemas, list)
-        or not object_schemas
-        or not all(isinstance(object_path, str) and object_path for object_path in object_schemas)
+        not isinstance(list_schemas, list)
+        or not list_schemas
+        or not all(isinstance(object_path, str) and object_path for object_path in list_schemas)
     ):
 
         # 文档控制器将共用领域错误转成稳定 CLI 请求错误。
@@ -102,7 +102,7 @@ def owner_document_layout() -> dict[str, object]:
     list_schema_paths = []  # 已验证的 schema 相对路径
 
     # 每项声明必须解析为 registry 子目录中的 JSON 文件。
-    for object_schema_path in object_schemas:
+    for object_schema_path in list_schemas:
 
         # 上方容器门禁已经把元素收窄为非空字符串。
         str_schema_path = str(object_schema_path)  # 当前 schema 清单路径
@@ -416,7 +416,7 @@ def fuzzy_candidate(
         return None
 
     # 标准库比较器禁用长度相关垃圾字符启发式。
-    object_matcher = SequenceMatcher(  # 当前长块对比较器。
+    sequence_matcher_blocks: SequenceMatcher = SequenceMatcher(  # 当前长块对比较器。
         None,  # 不定义额外垃圾字符集合。
         str(dict_left_block["text"]),  # 左侧规范化正文。
         str(dict_right_block["text"]),  # 右侧规范化正文。
@@ -424,19 +424,19 @@ def fuzzy_candidate(
     )
 
     # 长度上界不足时跳过完整动态规划。
-    if object_matcher.real_quick_ratio() < FLOAT_DEFAULT_SIMILARITY_THRESHOLD:
+    if sequence_matcher_blocks.real_quick_ratio() < FLOAT_DEFAULT_SIMILARITY_THRESHOLD:
 
         # 当前块对不可能达到公开阈值。
         return None
 
     # 字符多重集上界进一步缩小完整比较集合。
-    if object_matcher.quick_ratio() < FLOAT_DEFAULT_SIMILARITY_THRESHOLD:
+    if sequence_matcher_blocks.quick_ratio() < FLOAT_DEFAULT_SIMILARITY_THRESHOLD:
 
         # 当前块对的快速上界不足。
         return None
 
     # 只有可能达标的候选执行完整相似度计算。
-    float_similarity = object_matcher.ratio()  # 当前块对最终相似度。
+    float_similarity = sequence_matcher_blocks.ratio()  # 当前块对最终相似度。
 
     # 真实比率仍可能低于候选阈值。
     if float_similarity < FLOAT_DEFAULT_SIMILARITY_THRESHOLD:
@@ -700,10 +700,10 @@ def document_schema_payloads() -> dict[str, dict[str, Any]]:
         path_schema_source = path_owner_registry / str_schema_path  # 当前 schema 模板路径
 
         # UTF-8 JSON 保留 schema 标题和约束。
-        object_schema = json.loads(path_schema_source.read_text(encoding="utf-8"))  # 当前 schema 载荷。
+        dict_schema = json.loads(path_schema_source.read_text(encoding="utf-8"))  # 当前 schema 载荷。
 
         # 顶层非对象不能表达 JSON Schema。
-        if not isinstance(object_schema, dict):
+        if not isinstance(dict_schema, dict):
 
             # 错误绑定损坏模板名称。
             raise ValueError(
@@ -711,7 +711,7 @@ def document_schema_payloads() -> dict[str, dict[str, Any]]:
             )
 
         # 已验证模板加入初始化文件集合。
-        dict_schemas[str_schema_path] = object_schema  # 当前 schema 文件载荷
+        dict_schemas[str_schema_path] = dict_schema  # 当前 schema 文件载荷
 
     # 完整模板集合交给初始化器写入。
     return dict_schemas
@@ -1010,10 +1010,10 @@ def validate_catalog_records(
     """
 
     # 文档容器必须是一文档一记录的列表。
-    object_catalog_documents = dict_catalog.get("documents")  # 文档职责记录容器。
+    list_catalog_documents = dict_catalog.get("documents")  # 文档职责记录容器。
 
     # 非列表结构无法执行路径对照。
-    if not isinstance(object_catalog_documents, list):
+    if not isinstance(list_catalog_documents, list):
 
         # 结构错误阻止 finalize 和持续门禁。
         raise ValueError("> ERR: [Python] document catalog documents must be a list")
@@ -1021,7 +1021,7 @@ def validate_catalog_records(
     # 两个映射分别代表登记状态和当前磁盘状态。
     dict_catalog_by_path = {  # 登记路径到职责记录。
         str(dict_item.get("path", "")): dict_item  # 当前职责记录。
-        for dict_item in object_catalog_documents  # 遍历登记文档。
+        for dict_item in list_catalog_documents  # 遍历登记文档。
     }
 
     # 实时扫描映射用于摘要漂移检查。
@@ -1032,7 +1032,7 @@ def validate_catalog_records(
 
     # 重复目录记录或文档增删都属于集合漂移。
     if (
-        len(dict_catalog_by_path) != len(object_catalog_documents)
+        len(dict_catalog_by_path) != len(list_catalog_documents)
         or set(dict_catalog_by_path) != set(dict_scan_by_path)
     ):
 
@@ -1080,10 +1080,10 @@ def validate_knowledge_records(
     """
 
     # records 必须是结构化列表。
-    object_knowledge_records = dict_knowledge.get("records")  # 知识指针记录容器。
+    list_knowledge_records = dict_knowledge.get("records")  # 知识指针记录容器。
 
     # 错误容器不能生成 SQLite 知识记录。
-    if not isinstance(object_knowledge_records, list):
+    if not isinstance(list_knowledge_records, list):
 
         # 结构错误阻止联合索引构建。
         raise ValueError("> ERR: [Python] knowledge index records must be a list")
@@ -1092,7 +1092,7 @@ def validate_knowledge_records(
     set_knowledge_sources: set[str] = set()  # 已登记知识来源路径。
 
     # 每条记录核对来源、摘要和内容哈希。
-    for dict_record in object_knowledge_records:
+    for dict_record in list_knowledge_records:
 
         # 来源必须回到当前受管 Markdown。
         str_source_path = str(dict_record.get("source_path", ""))  # 当前知识来源路径。
@@ -1104,13 +1104,13 @@ def validate_knowledge_records(
             raise ValueError(f"> ERR: [Python] knowledge source is not managed: {str_source_path}")
 
         # 摘要必须由 Agent 填写。
-        object_summary = dict_record.get("summary")  # 当前知识检索摘要。
+        str_summary = dict_record.get("summary")  # 当前知识检索摘要。
 
         # 空摘要或脚本占位符不能支持知识查询。
         if (
-            not isinstance(object_summary, str)
-            or not object_summary.strip()
-            or object_summary == "PENDING_AGENT_REVIEW"
+            not isinstance(str_summary, str)
+            or not str_summary.strip()
+            or str_summary == "PENDING_AGENT_REVIEW"
         ):
 
             # 诊断绑定知识标识。
@@ -1161,10 +1161,10 @@ def validate_duplicate_reviews(
     for str_review_field in ("exact_reviews", "fuzzy_reviews"):
 
         # 没有候选时允许空列表。
-        object_reviews = dict_migration.get(str_review_field, [])  # 当前重复复核记录容器。
+        list_reviews = dict_migration.get(str_review_field, [])  # 当前重复复核记录容器。
 
         # 非列表结构不能形成逐项审计记录。
-        if not isinstance(object_reviews, list):
+        if not isinstance(list_reviews, list):
 
             # 诊断明确损坏字段。
             raise ValueError(f"> ERR: [Python] migration {str_review_field} must be a list")
@@ -1173,7 +1173,7 @@ def validate_duplicate_reviews(
         dict_actual_identity: dict[str, Any] = {}  # 已持久化裁决的标识到证据映射。
 
         # 逐项构造映射，以便同时发现重复标识。
-        for dict_review in object_reviews:
+        for dict_review in list_reviews:
 
             # 字符串标识作为迁移证据的稳定主键。
             str_review_id = str(dict_review.get("id", ""))  # 当前持久裁决标识。
@@ -1195,7 +1195,7 @@ def validate_duplicate_reviews(
 
         # 正文变化导致的候选替换必须重新进入 Agent 复核。
         if (
-            len(dict_actual_identity) != len(object_reviews)
+            len(dict_actual_identity) != len(list_reviews)
             or dict_actual_identity != dict_expected_identity
         ):
 
@@ -1203,7 +1203,7 @@ def validate_duplicate_reviews(
             raise ValueError(f"> ERR: [Python] stale duplicate review evidence: {str_review_field}")
 
         # 每项必须选择保留或去重。
-        for dict_review in object_reviews:
+        for dict_review in list_reviews:
 
             # pending 和未知值都阻止完成。
             if dict_review.get("decision") not in {"keep", "deduplicate"}:
@@ -1260,10 +1260,10 @@ def load_registered_commands(path_skill_root: Path) -> dict[str, dict[str, Any]]
         dict_source = read_json_object(path_source, f"registry source {object_relative_path}")  # 当前命令源。
 
         # 缺失 commands 允许空列表。
-        object_commands = dict_source.get("commands", [])  # 当前命令记录容器。
+        list_commands = dict_source.get("commands", [])  # 当前命令记录容器。
 
         # 非列表结构阻止映射验证。
-        if not isinstance(object_commands, list):
+        if not isinstance(list_commands, list):
 
             # 诊断绑定当前源路径。
             raise ValueError(
@@ -1271,7 +1271,7 @@ def load_registered_commands(path_skill_root: Path) -> dict[str, dict[str, Any]]
             )
 
         # 每条命令必须是带稳定标识的对象。
-        for dict_command in object_commands:
+        for dict_command in list_commands:
 
             # 标量或数组记录不能作为命令证据。
             if not isinstance(dict_command, dict):
@@ -1300,10 +1300,10 @@ def validate_mapped_interface(
     """
 
     # mapped 事实必须声明至少一个命令标识。
-    object_command_ids = dict_review.get("command_ids")  # 当前接口命令标识容器。
+    list_command_ids = dict_review.get("command_ids")  # 当前接口命令标识容器。
 
     # 空映射不能证明脚本用法已注册。
-    if not isinstance(object_command_ids, list) or not object_command_ids:
+    if not isinstance(list_command_ids, list) or not list_command_ids:
 
         # 诊断绑定接口值。
         raise ValueError(f"> ERR: [Python] mapped interface has no command ids: {dict_review.get('value', '')}")
@@ -1312,7 +1312,7 @@ def validate_mapped_interface(
     list_command_records: list[dict[str, Any]] = []  # 当前接口映射命令记录。
 
     # 每个声明标识必须真实存在。
-    for object_command_id in object_command_ids:
+    for object_command_id in list_command_ids:
 
         # 字符串化后使用稳定标识查找。
         str_command_id = str(object_command_id)  # 当前映射命令标识。
@@ -1355,16 +1355,16 @@ def validate_interface_reviews(
     """
 
     # 接口复核数量必须与当前扫描事实一致。
-    object_interface_reviews = dict_migration.get("interface_reviews", [])  # 接口复核容器。
+    list_interface_reviews = dict_migration.get("interface_reviews", [])  # 接口复核容器。
 
     # 错误容器不能形成逐项裁决。
-    if not isinstance(object_interface_reviews, list):
+    if not isinstance(list_interface_reviews, list):
 
         # 结构错误阻止完成。
         raise ValueError("> ERR: [Python] interface_reviews must be a list")
 
     # 数量差异表示新增、删除或遗漏接口事实。
-    if len(object_interface_reviews) != len(dict_scan["interface_facts"]):
+    if len(list_interface_reviews) != len(dict_scan["interface_facts"]):
 
         # 要求重新扫描和 Agent 复核。
         raise ValueError("> ERR: [Python] interface review coverage is incomplete")
@@ -1373,7 +1373,7 @@ def validate_interface_reviews(
     list_actual_interface_identity: list[tuple[Any, Any, Any]] = []  # 已持久接口事实身份。
 
     # 保留迁移记录顺序形成三字段身份。
-    for dict_review in object_interface_reviews:
+    for dict_review in list_interface_reviews:
 
         # 类型、值与来源共同标识单条持久接口事实。
         tuple_review_identity = (  # 当前持久接口身份。
@@ -1411,7 +1411,7 @@ def validate_interface_reviews(
     list_mapped_reviews: list[dict[str, Any]] = []  # 需要命令证据的接口裁决。
 
     # 每项必须明确 mapped 或 not_public。
-    for dict_review in object_interface_reviews:
+    for dict_review in list_interface_reviews:
 
         # 未知裁决值阻止完成。
         if dict_review.get("decision") not in {"mapped", "not_public"}:

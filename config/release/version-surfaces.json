@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "surfaces": [
+    {"role": "skill_version", "base_kind": "skill_root", "relative_path": "VERSION", "adapter": "plain_version", "selector": "whole_file", "required": true},
+    {"role": "project_metadata_version", "base_kind": "skill_root", "relative_path": "pyproject.toml", "adapter": "toml_project_version", "selector": "project.version", "required": true},
+    {"role": "citation_version", "base_kind": "skill_root", "relative_path": "CITATION.cff", "adapter": "yaml_version", "selector": "version", "required": true},
+    {"role": "readme_version", "base_kind": "skill_root", "relative_path": "README.md", "adapter": "markdown_version_badge", "selector": "version_badge", "required": true},
+    {"role": "readme_cn_version", "base_kind": "skill_root", "relative_path": "README-CN.md", "adapter": "markdown_version_badge", "selector": "version_badge", "required": true},
+    {"role": "development_version", "base_kind": "project_root", "relative_path": "docs/development/DEVELOPMENT.md", "adapter": "markdown_first_version", "selector": "first_version", "required": true},
+    {"role": "changelog_version", "base_kind": "project_root", "relative_path": "docs/git_manager/CHANGELOG.md", "adapter": "markdown_first_version", "selector": "first_version", "required": true},
+    {"role": "git_manager_version", "base_kind": "project_root", "relative_path": "docs/git_manager/GIT_MANAGER.md", "adapter": "markdown_current_version", "selector": "current_version", "required": true}
+  ]
+}

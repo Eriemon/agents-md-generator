@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "action": "dispatch-repair",
+  "max_attempts": 2,
+  "circuit_breaker": {"failure_window": 3, "open_after": 3, "reset_requires_new_event": true},
+  "target_policy": "reuse_same_canonical_target",
+  "preserve_fields": ["event_id", "worker_id", "plan_sha256", "task_mode"],
+  "replace_fields": ["invalid_envelope_fields", "failure_report_fields"],
+  "allowed_phases": ["RED", "GREEN", "FINAL", "INITIAL", "PERIODIC", "CORRECTION"],
+  "zero_dispatch_verdict": "NO_DISPATCH_REQUIRED",
+  "message_template": "Retry the same target for {worker_id} at phase {phase}; preserve event {event_id}; correct {correction_fields}."
+}

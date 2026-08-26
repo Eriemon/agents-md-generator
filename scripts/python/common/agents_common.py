@@ -56,9 +56,9 @@ def extend_task_module_search_path() -> None:
 # 后续兄弟模块导入前完成一次搜索路径设置。
 extend_task_module_search_path()
 
-# 项目内容探测忽略版本库、依赖、缓存、构建产物与参考材料目录。
+# 项目内容探测忽略版本库、依赖、缓存、构建产物、参考材料与历史远程证据目录。
 SKIP_DIRS = set(  # 项目内容探测排除目录
-    ".git .hg .svn .cache .venv .conda __pycache__ node_modules vendor dist build target ref".split()  # 排除名称序列
+    ".git .hg .svn .cache .venv .conda __pycache__ node_modules vendor dist build target ref remote-validation".split()  # 排除名称序列
 )
 
 # 元数据区块表达式提取根 AGENTS 注释中的完整键值载荷。
@@ -86,7 +86,7 @@ GLOBAL_CODEX_AGENTS_PREAMBLE = (  # 全局 AGENTS 前言
 # 生成器元标记固定当前全局基线 schema 和版本。
 GLOBAL_CODEX_AGENTS_META = (  # 全局 AGENTS 元标记
     "<!-- AGENTS-GENERATED:META generator=agents-md-generator schema=1 "
-    "baseline=global-codex-baseline baseline_version=5 -->"
+    "baseline=global-codex-baseline baseline_version=6 -->"
 )
 
 # 起始标记限定全局基线的受管写入边界。
@@ -119,6 +119,11 @@ design_interview_state.py=design
 design_interview_payload.py=design
 render_agents.py=render
 create_agent_shims.py=render
+render_entrypoints.py=render
+render_contracts.py=render
+render_foundation.py=render
+render_gate_compaction.py=render
+render_contract_templates.py=render
 manage_docs.py=docs
 manage_docs_shared.py=docs
 manage_docs_memory.py=docs
@@ -129,6 +134,11 @@ manage_dirs.py=dirs
 manage_dirs_state.py=dirs
 manage_dirs_review.py=dirs
 manage_dirs_remote.py=dirs
+manage_dirs_upload.py=dirs
+manage_worker_state.py=workers
+manage_workers.py=workers
+reviewer_session.py=workers
+pycode_gardener.py=workers
 quick_validate.py=verify
 audit_skill.py=verify
 verify_agents.py=verify
@@ -144,11 +154,22 @@ eval_runtime_core.py=verify
 eval_runtime_foundation_cases.py=verify
 eval_runtime_policy_cases.py=verify
 eval_runtime_fixtures.py=verify
+agent_platform_gate.py=verify
+evidence_validation.py=verify
+routing_contract.py=verify
 install_skill.py=release
+install_release_manifest.py=release
+install_target_copy.py=release
+install_repository_validation.py=release
+install_release_sanitization.py=release
 release_content_policy.py=release
 select_engineering_rules.py=release
 agents_common.py=common
+agent_platform.py=common
 tester_worker_profile.py=common
+reviewer_worker_profile.py=common
+gardener_worker_profile.py=common
+toml_compat.py=common
 agents_decisions.py=common
 agents_project_facts.py=common
 workspace_settings_policy.py=common
@@ -218,19 +239,40 @@ def read_json(path: Path) -> dict[str, Any]:
         # 空对象触发各调用方既有默认值，不伪造部分配置。
         return {}
 
-# Codex 主目录解析顺序固定为显式值、环境变量、用户默认目录。
-def codex_home_root(raw: str | None = None) -> Path:
-    """解析显式值、环境变量或默认 Codex 主目录。
+# 选定平台主目录解析顺序固定为显式值、环境变量、用户默认目录。
+def agent_home_root(raw: str | None = None, str_agent_platform: str | None = None) -> Path:
+    """解析选定平台的用户主目录。
 
     Args:
         raw: 可选的主目录覆盖值。
+        str_agent_platform: 可选的平台标识覆盖值。
 
     Returns:
-        Codex 主目录绝对路径。
+        选定平台用户主目录绝对路径。
     """
 
-    # 显式覆盖优先，空覆盖仍回退到 CODEX_HOME。
-    str_env_home = raw.strip() if raw else os.environ.get("CODEX_HOME", "").strip()  # Codex 主目录文本
+    # 平台 profile 从当前技能目录解析，目录值不散落在业务代码中。
+    try:
+
+        # 延迟导入平台配置，兼容旧安装副本的模块布局。
+        from agent_platform import load_agent_config, resolve_agent_profile
+
+    # 旧安装副本缺少平台模块时使用环境变量兼容路径。
+    except ModuleNotFoundError:
+
+        # 兼容路径优先采用显式覆盖或已有环境变量。
+        str_compat_home = raw or os.environ.get("AGENT_HOME") or os.environ.get("CODEX_HOME", "")  # 兼容主目录文本
+
+        # 兼容解析结果保持绝对路径，供后续配置文件访问复用。
+        return Path(str_compat_home).expanduser().resolve() if str_compat_home else Path.home().resolve()
+
+    # 选择显式平台档案或当前技能根目录对应的默认档案。
+    profile = resolve_agent_profile(str_agent_platform) if str_agent_platform else load_agent_config(skill_root())  # 平台配置档案
+
+    # 显式覆盖优先，空覆盖仍回退到选定平台环境变量。
+    str_env_home = raw.strip() if raw else (  # 平台主目录覆盖文本
+        os.environ.get("AGENT_HOME") or os.environ.get("CODEX_HOME", "")  # 环境变量主目录回退
+    ).strip()  # 规范化后的平台主目录文本
 
     # 非空配置统一展开用户目录并转为绝对路径。
     if str_env_home:
@@ -238,8 +280,25 @@ def codex_home_root(raw: str | None = None) -> Path:
         # 显式配置路径不要求预先存在，以支持初始化流程。
         return Path(str_env_home).expanduser().resolve()
 
-    # 未配置时遵循 Codex 的用户目录约定。
-    return (Path.home() / ".codex").resolve()
+    # 未配置时由 catalog 的 user_home_dir 决定用户目录。
+    return (Path.home() / profile.user_home_dir).resolve()
+
+# 兼容旧调用点，继续复用统一的平台主目录解析。
+def codex_home_root(raw: str | None = None) -> Path:
+    """兼容旧调用点，实际解析当前技能配置的平台主目录。
+
+    Args:
+        raw: 可选的主目录覆盖值。
+
+    Returns:
+        选定平台用户主目录绝对路径。
+    """
+
+    # Codex 专用入口优先尊重 CODEX_HOME，避免 AGENT_HOME 污染会话树边界。
+    str_codex_home = os.environ.get("CODEX_HOME", "").strip()  # 当前会话优先使用的 Codex 主目录
+
+    # 将显式 raw 覆盖、CODEX_HOME 和默认目录统一交给主目录解析器。
+    return agent_home_root(raw or str_codex_home or None, "codex")
 
 # 会话发现逻辑从统一 Codex 主目录派生固定子目录。
 def codex_sessions_root() -> Path:
@@ -351,18 +410,21 @@ def installed_skill_dir(
         # 不存在的覆盖目录按未安装处理。
         return path_override if path_override.exists() else None
 
-    # CODEX_HOME 未设置时回退到用户主目录下的标准位置。
-    str_codex_home = os.environ.get("CODEX_HOME", "").strip()  # Codex 主目录配置
+    # 缺平台按未安装处理。
+    try:
+        from agent_platform import load_agent_config
 
-    # 两种来源都规范化为绝对路径后再拼接技能目录。
-    path_home_root = (  # Codex 主目录
-        Path(str_codex_home).expanduser().resolve()  # 环境配置主目录
-        if str_codex_home  # 环境已配置 Codex 主目录
-        else (Path.home() / ".codex").resolve()  # 用户默认 Codex 主目录
-    )
+    # 直接导入模块时可能没有兄弟平台配置。
+    except ModuleNotFoundError:
 
-    # 安装态技能遵循 CODEX_HOME/skills/<name> 目录合同。
-    path_installed = path_home_root / "skills" / skill_name  # 安装态技能候选目录
+        # 不伪造安装目录证据，调用方继续使用源码态。
+        return None
+
+    # 读取平台档案以确定安装目录布局。
+    profile = load_agent_config(skill_root())  # 平台安装配置档案
+
+    # 根据平台安装子目录构造候选技能路径。
+    path_installed = agent_home_root() / profile.skill_install_dir / skill_name  # 安装态技能候选目录
 
     # 仅返回有文件系统证据的安装目录。
     return path_installed if path_installed.exists() else None
@@ -1201,18 +1263,18 @@ def global_codex_agents_repair_details(
 
         # 提示明确建议插入而不是覆盖现有文件。
         str_user_message = (  # 用户确认提示
-            "Global .codex/AGENTS.md has manual content but no managed baseline block; "
+            "Global instruction file has manual content but no managed baseline block; "
             "insert the generated baseline block near the top of the file after any opening comments."
         )
 
         # 人工内容场景公开确认门禁及其唯一修复原因。
         return ["missing_global_codex_agents_managed_block"], True, str_user_message
 
-    # 受管区块缺少当前 v5 元标记时需要版本升级。
+    # 受管区块缺少当前 v6 元标记时需要版本升级。
     if not bool_meta_ok:
 
         # 元标记缺失优先于文本漂移诊断。
-        return ["missing_global_codex_agents_v5_meta"], False, ""
+        return ["missing_global_codex_agents_v6_meta"], False, ""
 
     # 元标记存在但文本不同属于基线漂移。
     if str_actual_block != str_expected_block:
@@ -1270,8 +1332,8 @@ def global_codex_agents_status(
     # 实际区块仅在标记完整时提取。
     str_actual_block = extract_global_codex_managed_block(str_text) if bool_managed else ""  # 当前受管区块
 
-    # v5 元标记是版本符合性的独立证据。
-    bool_meta_ok = GLOBAL_CODEX_AGENTS_META in str_text  # v5 元标记是否存在
+    # v6 元标记是版本符合性的独立证据。
+    bool_meta_ok = GLOBAL_CODEX_AGENTS_META in str_text  # v6 元标记是否存在
 
     # 通过状态要求受管、版本正确且区块文本完全一致。
     bool_baseline_ok = bool_managed and bool_meta_ok and str_actual_block == str_expected_block  # 基线是否一致
@@ -1281,7 +1343,7 @@ def global_codex_agents_status(
         bool_exists,  # 文件存在性
         bool_empty,  # 空文件状态
         bool_managed,  # 受管边界状态
-        bool_meta_ok,  # v4 版本证据判断
+        bool_meta_ok,  # v6 版本证据判断
         str_actual_block,  # 现状文本比较输入
         str_expected_block,  # 模板文本比较输入
     )
@@ -1314,7 +1376,7 @@ def global_codex_agents_status(
         "exists": bool_exists,
         "empty": bool_empty,
         "managed": bool_managed,
-        "baseline_version": "5" if bool_meta_ok else "",
+        "baseline_version": "6" if bool_meta_ok else "",
         "baseline_ok": bool_baseline_ok,
         "repair_required": bool_repair_required,
         "repair_reasons": list_repair_reasons,
@@ -1618,37 +1680,63 @@ def parse_args(description: str) -> argparse.ArgumentParser:
     # 调用方可继续在返回解析器上注册专用参数。
     return argument_parser
 
-# 项目事实能力在本模块基础合同定义完成后导入，避免循环导入初始化失败。
-from agents_project_facts import (
-    # 项目命令、默认约束和分解计划事实。
-    command_entry,
-    default_implementation_constraints,
-    default_global_rule_overrides,
-    decomposition_plan_path,
-    detect_scopes,
-    ensure_global_rule_overrides_file,
-    # 路径、命令、上下文和全局规则事实。
-    existing_paths,
-    extract_commands,
-    extract_context,
-    global_rule_overrides_path,
-    global_rule_overrides_reference,
-    has_any,
-    # 实现约束、项目探测和源码文件遍历能力。
-    implementation_constraints_from_profile,
-    inspect_project,
-    iter_handwritten_code_files,
-    list_dirs,
-    list_files,
-    load_global_rule_overrides,
-    # 脚本根、会话和脚本治理事实。
-    managed_script_roots,
-    matched_codex_sessions,
-    parse_session_meta,
-    script_governance_exceptions,
-    script_layout_facts,
-    # 会话消息、覆盖校验和工作流记录能力。
-    session_message_rows,
-    validate_global_rule_overrides_data,
-    workflow_runs,
+# 项目事实公开名称改为按需解析，避免聚合分片初始化时发生循环导入。
+PROJECT_FACTS_EXPORT_NAMES = frozenset(  # 项目事实懒加载公开名称
+    """
+    command_entry
+    default_implementation_constraints
+    default_global_rule_overrides
+    decomposition_plan_path
+    detect_scopes
+    ensure_global_rule_overrides_file
+    existing_paths
+    extract_commands
+    extract_context
+    global_rule_overrides_path
+    global_rule_overrides_reference
+    has_any
+    implementation_constraints_from_profile
+    inspect_project
+    iter_handwritten_code_files
+    list_dirs
+    list_files
+    load_global_rule_overrides
+    managed_script_roots
+    matched_codex_sessions
+    parse_session_meta
+    script_governance_exceptions
+    script_layout_facts
+    session_message_rows
+    validate_global_rule_overrides_data
+    workflow_runs
+    """.split()
 )
+
+# 仅在调用方真正请求项目事实 API 时加载聚合模块。
+def __getattr__(str_name: str) -> Any:
+    """按需解析项目事实聚合模块的公开名称。
+
+    参数：str_name 为调用方请求的模块级属性名。
+    返回：项目事实聚合模块中与名称对应的对象。
+    异常：名称不属于公开项目事实 API 时抛出 AttributeError。
+    """
+
+    # 未登记名称不能通过懒加载路径伪造模块属性。
+    if str_name not in PROJECT_FACTS_EXPORT_NAMES:
+
+        # 保持 Python 模块属性缺失的标准异常语义。
+        raise AttributeError(
+            f"> ERR: [Python] module {__name__!r} has no attribute {str_name!r}"
+        )
+
+    # 延迟导入避免项目事实分片回头读取未完成的 agents_common。
+    import agents_project_facts as module_project_facts
+
+    # 缓存已经解析的对象，后续调用不再重复触发导入。
+    value_export = getattr(module_project_facts, str_name)  # 当前项目事实公开对象
+
+    # 写回本模块命名空间，保持 from agents_common import 的兼容行为。
+    globals()[str_name] = value_export  # 缓存已解析的项目事实对象
+
+    # 返回调用方请求的具体项目事实 API。
+    return value_export

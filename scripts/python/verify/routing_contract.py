@@ -3,7 +3,8 @@
 # 延迟注解解析避免运行时解析仅用于类型检查的参数。
 from __future__ import annotations
 
-# 标准库提供环境变量读取和跨平台路径处理。
+# 标准库提供环境变量读取、JSON 路由配置和跨平台路径处理。
+import json
 import os
 from pathlib import Path
 
@@ -24,123 +25,239 @@ def readable_skill_is_installed(skill_name: str) -> bool:
         标准技能目录存在时返回 True，否则返回 False。
     """
 
-    # CODEX_HOME 优先于用户主目录，且不复用仅面向生成器自身的安装目录覆盖变量。
-    str_codex_home = os.environ.get("CODEX_HOME", "").strip()  # 显式 Codex 主目录
+    # 平台目录和显式隔离根统一由技能目录解析结果提供。
+    try:
 
-    # 未配置 CODEX_HOME 时回退到标准用户级 Codex 目录。
-    path_codex_home = (  # 实际参与技能发现的 Codex 主目录
-        Path(str_codex_home).expanduser()  # 显式主目录路径
-        if str_codex_home  # 显式主目录优先
-        else Path.home() / ".codex"  # 标准用户级回退目录
-    )
+        # 延迟加载平台目录，兼容源码态和安装态运行入口。
+        from agent_platform import load_agent_config, resolve_agent_home
+
+    # 平台目录缺失或损坏时按未安装处理，禁止猜测安装位置。
+    except (ModuleNotFoundError, FileNotFoundError, ValueError):
+
+        # 无法证明平台配置有效时返回保守的未安装结果。
+        return False
+
+    # 当前文件向上三级定位技能根目录。
+    path_skill_root: Path = Path(__file__).resolve().parents[3]  # 当前技能根目录
+
+    # 读取技能根对应的平台配置档案。
+    try:
+
+        # 平台配置作为后续用户根和安装目录的唯一来源。
+        profile_agent = load_agent_config(path_skill_root)  # 当前平台配置档案
+
+    # 配置文件缺失或内容非法时保持 fail-closed 安装判断。
+    except (FileNotFoundError, ValueError):
+
+        # 无法读取档案时不能把任意目录当作已安装技能。
+        return False
+
+    # 环境变量只作为平台用户根的显式覆盖输入。
+    str_raw_home = os.environ.get("AGENT_HOME", "").strip() or os.environ.get("CODEX_HOME", "").strip()  # 用户根覆盖文本
+
+    # 解析平台用户根后再检查固定技能安装目录。
+    path_agent_home = resolve_agent_home(path_skill_root, str_raw_home, profile_agent.agent)  # 平台用户根目录
 
     # 目录存在即构成当前渲染进程可加载该技能的安装证据。
-    return (path_codex_home / "skills" / skill_name).is_dir()
+    return (path_agent_home / profile_agent.skill_install_dir / skill_name).is_dir()
+
+# 读取 packaged structured route defaults，配置缺失时才进入兼容 fallback。
+def _load_structured_route_defaults() -> dict[str, object]:
+    """读取语言路由的结构化默认配置。
+
+    参数：无。
+
+    返回：包含 shared、python、script 三条结构化路由的映射；来源不可用时返回空映射。
+    """
+
+    # 项目 override 优先于 packaged 默认，安装态仍使用 Skill 内配置。
+    list_route_config_paths = [
+        Path.cwd() / ".agents" / "global-rule-overrides.json",  # 当前项目的治理覆盖配置
+        Path(__file__).resolve().parents[3] / "config" / "language-routes.json",  # Skill 内置路由配置
+    ]  # 路由配置候选路径
+
+    # 按项目覆盖优先、内置配置兜底的顺序读取路由来源。
+    for path_route_config in list_route_config_paths:
+
+        # 缺失的项目 override 不能阻断 packaged defaults 的读取。
+        if not path_route_config.is_file():
+
+            # 继续尝试下一个受管配置来源。
+            continue
+
+        # 解析当前候选配置，拒绝执行任何配置文本。
+        try:
+
+            # 只读取 JSON 对象，不执行任何配置文本。
+            object_route_config = json.loads(path_route_config.read_text(encoding="utf-8"))  # 路由配置对象
+
+        # 读取或解析失败时继续尝试下一个受管来源。
+        except (OSError, UnicodeError, json.JSONDecodeError):
+
+            # 当前来源损坏时继续使用后续受管默认，而不是返回半解析结果。
+            continue
+
+        # 非对象配置不能提供结构化路由，继续读取下一个来源。
+        if not isinstance(object_route_config, dict):
+
+            # 保持 fail-closed，同时允许 packaged defaults 修复项目 override 缺失。
+            continue
+
+        # packaged 配置直接以 routes 为根事实；override 则读取嵌套 structured 节点。
+        if isinstance(object_route_config.get("routes"), dict):
+
+            # 当前来源已经提供结构化路由记录。
+            dict_structured = object_route_config["routes"]  # packaged 路由记录
+
+        # 项目覆盖只在 packaged 路由缺失时解析 structured 节点。
+        else:
+
+            # 项目 override 可能同时保留旧字符串和新的结构化路由。
+            dict_coding_behavior = object_route_config.get("coding_behavior", {})  # 项目编码行为配置
+
+            # 从编码行为配置提取语言技能路由节点。
+            if isinstance(dict_coding_behavior, dict):
+
+                # 读取当前项目声明的语言技能路由对象。
+                dict_language_routes = dict_coding_behavior.get("language_skill_routing", {})  # 语言技能路由节点
+
+            # 非字典编码行为不能提供项目路由覆盖。
+            else:
+
+                # 配置根类型不正确时使用空路由节点。
+                dict_language_routes = {}  # 空项目语言路由节点
+
+            # 从语言技能路由节点提取结构化覆盖记录。
+            if isinstance(dict_language_routes, dict):
+
+                # 读取当前项目声明的结构化路由对象。
+                dict_structured = dict_language_routes.get("structured", {})  # 结构化路由节点
+
+            # 非字典路由节点不能提供结构化覆盖。
+            else:
+
+                # 路由节点根类型不正确时使用空结构化节点。
+                dict_structured = {}  # 空结构化路由节点
+
+        # 只有完整 route contract 才能覆盖 packaged defaults，并阻止半成品配置。
+        bool_complete_routes = isinstance(dict_structured, dict) and all(  # 判断三条角色路由字段是否完整
+            isinstance(dict_structured.get(str_route_name), dict)  # 当前角色记录必须是对象
+            and isinstance(dict_structured[str_route_name].get("id"), str)  # 角色标识必须是字符串
+            and bool(dict_structured[str_route_name]["id"].strip())  # 角色标识不能是空文本
+            and isinstance(dict_structured[str_route_name].get("target_families"), list)  # 目标族必须是列表
+            and isinstance(dict_structured[str_route_name].get("full_text"), str)  # 完整路由必须是字符串
+            and bool(dict_structured[str_route_name]["full_text"].strip())  # 完整路由不能为空
+            and isinstance(dict_structured[str_route_name].get("compact_text"), str)  # 紧凑路由必须是字符串
+            and bool(dict_structured[str_route_name]["compact_text"].strip())  # 紧凑路由不能为空
+            and isinstance(dict_structured[str_route_name].get("boundaries"), list)  # 边界列表必须存在
+            for str_route_name in ("shared", "python", "script")  # 遍历三个角色路由
+        )  # 三条路由字段完整性结果
+
+        # 完整配置可以直接交给构造器，避免回退到不确定文本。
+        if bool_complete_routes:
+
+            # 返回可直接交给路由构造器的统一结构。
+            return {"routes": dict_structured}
+
+    # 所有受管来源都缺失或不完整时交由调用方产生稳定阻断。
+    return {}
 
 # 路由构造必须分别处理两个 owner 的四种安装组合。
 def build_language_skill_routes(
     python_installed: bool,
     script_installed: bool,
+    language_skill_routing: dict[str, object] | None = None,
 ) -> tuple[str, str, str]:
     """按两个 owner 技能的独立安装状态构造共同门禁与语言路由。
 
-    参数:
+    参数：
         python_installed: Python readable 技能是否已安装。
         script_installed: 脚本 readable 技能是否已安装。
+        language_skill_routing: 可选的项目治理路由文案覆盖。
 
-    返回:
+    返回：
         共同门禁、Python 路由与脚本路由组成的三元组。
+
+    异常：
+        ValueError：结构化路由缺少角色记录或当前文本为空。
     """
 
-    # 两个 owner 都可用时，共同门禁集中声明双技能前置约束。
-    if python_installed and script_installed:
+    # 治理配置缺失时使用与 JSON 合同一致的受管默认文案。
+    dict_route_defaults = _load_structured_route_defaults().get("routes", {})  # packaged 结构化路由默认值
 
-        # 双技能文案只在 shared 字段保存一次，语言路由不再复制全文。
-        str_shared_route = (  # 双技能共同前置门禁
-            "创建或修改 Python、bat/cmd、shell/bash、PowerShell、Tcl 代码时，"
-            "必须先思考并同时加载 `readable-python-generator` 与 `readable-script-generator`；"
-            "两个技能组成当前可执行的语言门禁；"
-            "两个技能的门禁必须在过程中满足，全部通过后才能继续，不得事后补做。"
-        )
+    # 只有字典形式的默认路由才能接受项目覆盖。
+    dict_route_overrides = dict_route_defaults if isinstance(dict_route_defaults, dict) else {}  # 默认路由映射
 
-    # 任一 owner 不可用时，共同门禁只陈述当前真实可执行的语言约束。
-    else:
+    # 项目覆盖只合并结构化路由，保留内置字段边界。
+    if isinstance(language_skill_routing, dict):
 
-        # 通用文案不虚构技能名，具体 owner 的加载要求留在对应语言路由。
-        str_shared_route = (  # 单 owner 或无 owner 的共同门禁
-            "创建或修改 Python、bat/cmd、shell/bash、PowerShell、Tcl 代码前必须先思考；"
-            "必须在过程中满足当前可执行的语言门禁，不得事后补做。"
-        )
+        # 项目治理只覆盖结构化对象；旧版字符串覆盖留给兼容 fallback。
+        dict_route_overrides = {
+            **dict_route_overrides,  # 保留 packaged 默认路由字段
+            **{  # 项目角色覆盖映射
+                str_key: value_route  # 当前角色的结构化覆盖记录
+                for str_key, value_route in language_skill_routing.items()  # 遍历项目角色覆盖
+                if isinstance(value_route, dict)  # 仅接受角色对象覆盖
+            },
+        }  # 合并后的三条语言路由
 
-    # Python owner 可用时，Python 路由只保存职责和所有权合同。
-    if python_installed:
+    # 结构化路由是唯一事实源，缺少任一角色记录时立即拒绝构造路由。
+    if not all(isinstance(dict_route_overrides.get(str_key), dict) for str_key in ("shared", "python", "script")):
 
-        # companion 存在时显式阻止脚本技能接管 Python 最终职责。
-        str_python_boundary = (  # Python 跨技能所有权边界
-            "不得由 `readable-script-generator` 接管。"  # 双 owner 场景拒绝脚本技能接管
-            if script_installed  # companion 可用时只保留所有权排除边界
-            else "创建或修改时必须加载该技能，该技能门禁满足后才能继续。"  # 单 owner 场景保留加载门禁
-        )
+        # 错误文本保持项目机器输出协议，供调用方稳定分类。
+        raise ValueError("> ERR: [Python] structured language route records are missing")
 
-        # Python 路由组合触发范围、owner 质量合同与跨技能边界。
-        str_python_route = (  # 完整 Python 所有权路由
-            "进行 Python 代码生成、修改、注释和规范化时，"
-            "Python 最终仍由 `readable-python-generator` 负责，"
-            "并遵循其任务分类、注释质量、变量命名和质量门禁；"
-            f"{str_python_boundary}"
-        )
+    # 每个 owner 的安装状态独立决定使用 full_text 还是 compact_text。
+    dict_route_states = {
+        "shared": python_installed and script_installed,  # 双技能共同门禁是否可展开
+        "python": python_installed,  # Python owner 是否可展开
+        "script": script_installed,  # 脚本 owner 是否可展开
+    }  # 三条路由的当前安装态
 
-    # Python owner 缺失时只保留语言专属边界，不虚构具体技能。
-    else:
+    # 按固定角色顺序保存最终可渲染文本。
+    dict_result_routes: dict[str, str] = {}  # 通过安装态选择后的路由文本
 
-        # 一般边界阻止脚本规则接管 Python 目标。
-        str_python_route = "Python 目标保持 Python 专属技能边界，不得由脚本技能接管。"  # Python 一般所有权边界
+    # 为每个角色选择当前安装态对应的文本字段。
+    for str_route_name, bool_full_text in dict_route_states.items():
 
-    # 脚本路由只在对应 owner 可用时点名技能，并按 Python 安装态选择边界措辞。
-    if script_installed:
+        # 锁定本次循环的角色记录，后续只读取该角色的文本字段。
+        dict_route = dict_route_overrides[str_route_name]  # 当前角色的结构化路由记录
 
-        # Python owner 可用时在脚本路由中保留跨语言移交边界。
-        if python_installed:
+        # 依据 owner 安装态选择 full 或 compact 文本字段。
+        str_route_key = "full_text" if bool_full_text else "compact_text"  # 当前安装态文本字段
 
-            # Python 目标必须回到自己的 readable owner。
-            str_python_boundary = (  # Python owner 移交边界
-                "Python 目标不属于本脚本路由，"
-                "Python 目标继续使用 `readable-python-generator`；"
+        # 单 Python owner 不得泄露未安装的脚本 companion 名称。
+        if str_route_name == "python" and python_installed and not script_installed:
+
+            # 选择不包含脚本技能名的 Python owner 文案。
+            str_route_key = "full_text_without_script"  # Python-only 文案字段
+
+        # 单脚本 owner 不得泄露未安装的 Python companion 名称。
+        if str_route_name == "script" and script_installed and not python_installed:
+
+            # 选择不包含 Python 技能名的 script owner 文案。
+            str_route_key = "full_text_without_python"  # 脚本 owner 的 companion 隔离文案字段
+
+        # 清理当前角色文本外围空白，保持渲染结果稳定。
+        str_route_text = str(dict_route.get(str_route_key, "")).strip()  # 当前角色最终路由文本
+
+        # 缺少目标文本时阻止渲染出空路由。
+        if not str_route_text:
+
+            # 将缺失文本转换为可定位的机器错误。
+            raise ValueError(
+                f"> ERR: [Python] structured language route is missing {str_route_key}: {str_route_name}"
             )
 
-        # Python owner 缺失时只声明脚本路由不拥有 Python 目标。
-        else:
+        # 将已确认的文本写入角色结果映射。
+        dict_result_routes[str_route_name] = str_route_text  # 当前角色可渲染路由
 
-            # 无技能名的一般边界避免虚构不可加载的 Python owner。
-            str_python_boundary = "Python 目标不属于本脚本路由；"  # Python 目标排除边界
-
-        # 单脚本 owner 场景把自身加载要求附在脚本路由，避免共同门禁虚构 companion。
-        str_script_loading = (  # 脚本 owner 的单技能加载要求
-            ""  # 双 owner 场景由共同门禁统一声明加载要求
-            if python_installed  # Python owner 可用时共同门禁已经覆盖加载动作
-            else "创建或修改时必须加载该技能，该技能门禁满足后才能继续。"  # 单脚本 owner 场景补充自身门禁
-        )
-
-        # 脚本路由组合目标语言、最终 owner、跨语言移交与包装器边界。
-        str_script_route = (  # 完整脚本所有权路由
-            "bat/cmd、shell/bash、PowerShell、Tcl 脚本目标最终由 "
-            "`readable-script-generator` 负责；"
-            f"{str_python_boundary}调用 Python 外部命令的脚本包装器仍按脚本目标处理；"
-            f"{str_script_loading}"
-        )
-
-    # 脚本 owner 缺失时不得在路由中虚构技能名。
-    else:
-
-        # 一般脚本边界仍需保留包装器按目标语言判定的规则。
-        str_script_route = (  # 未安装脚本 owner 的一般所有权边界
-            "bat/cmd、shell/bash、PowerShell、Tcl 目标保持脚本专属技能边界；"
-            "Python 目标不属于本脚本路由；"
-            "调用 Python 外部命令的脚本包装器仍按脚本目标处理。"
-        )
-
-    # 三段文本供配置默认值、渲染和 verifier 按职责独立复用。
-    return str_shared_route, str_python_route, str_script_route
+    # 返回 shared、python、script 的稳定三元组。
+    return (
+        dict_result_routes["shared"],
+        dict_result_routes["python"],
+        dict_result_routes["script"],
+    )
 
 # 当前进程的 Python owner 安装事实决定动态默认路由。
 BOOL_READABLE_PYTHON_INSTALLED = readable_skill_is_installed(READABLE_PYTHON_SKILL)  # Python owner 安装状态
@@ -148,10 +265,10 @@ BOOL_READABLE_PYTHON_INSTALLED = readable_skill_is_installed(READABLE_PYTHON_SKI
 # 脚本 owner 独立探测，禁止由 Python owner 状态推断。
 BOOL_READABLE_SCRIPT_INSTALLED = readable_skill_is_installed(READABLE_SCRIPT_SKILL)  # 脚本 owner 安装状态
 
-# 默认路由构造结果先保留为具名三元组，避免隐式解包模糊职责。
-tuple_default_language_skill_routes = build_language_skill_routes(  # 当前安装态默认路由
-    BOOL_READABLE_PYTHON_INSTALLED,  # Python owner 安装事实
-    BOOL_READABLE_SCRIPT_INSTALLED,  # 脚本 owner 安装事实
+# 默认治理合同固定要求两个 owner，不能受执行机安装态影响。
+tuple_default_language_skill_routes = build_language_skill_routes(  # 双技能治理默认路由
+    True,  # 配置默认值固定启用 Python owner
+    True,  # 配置默认值固定启用脚本目标 owner
 )
 
 # 首项固定对应共同门禁，供配置默认值和 verifier 共用。
@@ -165,19 +282,12 @@ DEFAULT_LANGUAGE_SKILL_ROUTING_SCRIPT = tuple_default_language_skill_routes[2]  
 
 # 共同门禁必须保留修改前思考、过程内验证和禁止事后补做三类约束。
 SHARED_LANGUAGE_SKILL_ROUTE_REQUIRED_SNIPPETS = (  # 共同门禁强制短语
-    "必须先思考",  # 修改前思考边界
-    "必须在过程中满足",  # 实现过程内门禁边界
-    "不得事后补做",  # 禁止事后补门禁
-) + (  # 安装态决定双技能或通用共同门禁短语
-    (  # 双技能均可用时必须保留完整共同加载合同
-        "readable-python-generator",  # Python owner 的共同加载要求
-        "readable-script-generator",  # 脚本 owner 的共同加载要求
-        "同时加载",  # 两个 owner 必须在修改前共同加载
-        "两个技能的门禁必须在过程中满足",  # 两个门禁都必须在实现过程内完成
-        "全部通过后才能继续",  # 两个门禁均通过才允许继续
-    )
-    if BOOL_READABLE_PYTHON_INSTALLED and BOOL_READABLE_SCRIPT_INSTALLED  # 双安装采用严格共同门禁
-    else ("当前可执行的语言门禁",)  # 其他安装态不虚构缺失技能
+    "think through the change",  # 修改前思考边界
+    "both gates must pass during the task",  # 实现过程内门禁边界
+    "before continuing",  # 门禁完成边界
+    "readable-python-generator",  # Python owner 的共同加载要求
+    "readable-script-generator",  # 脚本 owner 的共同加载要求
+    "load both",  # 两个 owner 必须在修改前共同加载
 )
 
 # 历史两字段合同没有独立共同门禁，空值仅用于受管迁移识别。
@@ -193,7 +303,9 @@ LEGACY_MANAGED_LANGUAGE_SKILL_ROUTING_PYTHON = (  # 历史 Python 受管默认�
 
 # 收集脚本路由默认文案，确保双技能前置与脚本归属边界同时成立。
 LEGACY_MANAGED_LANGUAGE_SKILL_ROUTING_SCRIPT = (  # 历史脚本受管默认路由
-    "进行 bat/cmd、shell/bash、PowerShell、Tcl 脚本生成、审查、重构、修复、解释、添加/规范中文语义注释时优先使用 `readable-script-generator`；"  # 历史脚本触发声明
+    "进行 bat/cmd、shell/bash、PowerShell、Tcl、Node-only JavaScript（.js/.mjs）和 "
+    "static Dockerfile 脚本生成、审查、重构、修复、解释、添加/规范中文语义注释时优先使用 "
+    "`readable-script-generator`；"  # 历史脚本触发声明
     "必须先思考，"
     "必须同时使用 readable-python-generator 和 readable-script-generator，两个技能的门禁条件都满足后才能继续；"
     "目标必须是这些脚本语言。Python 目标继续使用 `readable-python-generator`；"
@@ -202,28 +314,12 @@ LEGACY_MANAGED_LANGUAGE_SKILL_ROUTING_SCRIPT = (  # 历史脚本受管默认路�
 
 # 收集 Python 路由必须命中的精确短语，供 verifier 和测试共享。
 PYTHON_LANGUAGE_SKILL_ROUTE_REQUIRED_SNIPPETS = (  # 供根规则校验器阻断最终所有权缺失
-    (  # 根据当前安装事实选择 Python 最终所有权约束
-        "Python 最终仍由 `readable-python-generator` 负责",  # Python 最终所有权必须保留的验收短语
-        "任务分类",  # Python owner 继续承担任务分类
-        "注释质量",  # Python owner 继续承担注释质量检查
-        "变量命名",  # Python owner 继续承担变量命名检查
-        "质量门禁",  # Python owner 继续承担最终质量门禁
-        "不得由 `readable-script-generator` 接管",  # companion 不得接管 Python 最终职责
-    )
-    if BOOL_READABLE_PYTHON_INSTALLED and BOOL_READABLE_SCRIPT_INSTALLED  # 双技能均安装时采用严格合同
-    else (  # 单技能或无技能场景的 Python 路由合同
-        (  # 仅 Python 技能可用时保留 owner 质量合同和加载要求
-            "readable-python-generator",  # Python 最终 owner 名称
-            "任务分类",  # 单 owner 仍承担任务分类
-            "注释质量",  # 单 owner 仍承担注释质量检查
-            "变量命名",  # 单 owner 仍承担变量命名检查
-            "质量门禁",  # 单 owner 仍承担最终质量门禁
-            "创建或修改时必须加载该技能",  # 单 owner 需要显式加载
-            "该技能门禁满足后才能继续",  # 单 owner 门禁必须通过
-        )
-        if BOOL_READABLE_PYTHON_INSTALLED  # Python 技能真实可加载的选择分支
-        else ("Python 专属技能边界", "不得由脚本技能接管")  # Python 技能缺失时的一般合同
-    )
+    "readable-python-generator is the final owner",  # Python 最终所有权必须保留
+    "task classification",  # Python owner 继续承担任务分类
+    "comment",  # Python owner 继续承担注释质量检查
+    "naming",  # Python owner 继续承担变量命名检查
+    "quality gates",  # Python owner 继续承担最终质量门禁
+    "must not claim Python ownership",  # companion 不得接管 Python 职责
 )
 
 # 列出脚本路由必须覆盖的目标语言、包装器边界与最终归属，避免脚本侧规则被弱化。
@@ -232,23 +328,11 @@ SCRIPT_LANGUAGE_SKILL_ROUTE_REQUIRED_SNIPPETS = (  # 脚本强制短语
     "shell/bash",  # Shell 目标仍属于脚本侧
     "PowerShell",  # PowerShell 目标继续沿用脚本技能收口
     "Tcl",  # Tcl 目标继续保留在脚本技能范围内
-    "调用 Python 外部命令的脚本包装器",  # 包装器调用 Python 仍按脚本目标处理
-) + (  # 安装态决定脚本 owner 和跨语言移交约束
-    (  # 当前安装状态对应的脚本最终所有权约束
-        "脚本目标最终由 `readable-script-generator` 负责",  # 脚本最终所有权必须保留的验收短语
-        "Python 目标继续使用 `readable-python-generator`",  # 跨语言目标必须移交 Python 技能
-    )
-    if BOOL_READABLE_PYTHON_INSTALLED and BOOL_READABLE_SCRIPT_INSTALLED  # 双技能均安装时采用脚本严格合同
-    else (  # 单技能或无技能场景的脚本路由合同
-        (  # 仅脚本技能可用时保留 owner 和加载要求
-            "readable-script-generator",  # 脚本最终 owner 名称
-            "创建或修改时必须加载该技能",  # 脚本修改必须先加载唯一可用的 owner
-            "该技能门禁满足后才能继续",  # 脚本 owner 门禁通过后才允许继续
-            "Python 目标不属于本脚本路由",  # Python 目标不归脚本 owner
-        )
-        if BOOL_READABLE_SCRIPT_INSTALLED  # 脚本技能真实可加载的选择分支
-        else ("脚本专属技能边界", "Python 目标不属于本脚本路由")  # 脚本技能缺失时的一般合同
-    )
+    "Node-only JavaScript",  # 新增 Node-only JavaScript 目标
+    "static Dockerfile",  # static Dockerfile 只允许静态分析
+    "browser JavaScript",  # 浏览器脚本边界
+    "readable-script-generator is the final owner",  # 脚本最终所有权必须保留
+    "Python remains on readable-python-generator",  # 跨语言目标必须移交 Python 技能
 )
 
 # 禁用短语构造器在函数内处理安装分支，避免模块导入产生可执行控制流。
@@ -291,9 +375,9 @@ def forbidden_language_skill_route_snippets(
     return tuple_all_skill_names, tuple_all_skill_names
 
 # 当前安装态的禁用短语只计算一次，供 verifier 和测试共享。
-tuple_forbidden_language_skill_routes = forbidden_language_skill_route_snippets(  # 两条路由禁用短语
-    BOOL_READABLE_PYTHON_INSTALLED,  # 禁用规则的 Python 状态输入
-    BOOL_READABLE_SCRIPT_INSTALLED,  # 禁用规则的脚本状态输入
+tuple_forbidden_language_skill_routes = forbidden_language_skill_route_snippets(  # 双技能合同无禁用 owner
+    True,  # 禁用检查允许 Python owner 出现在跨语言边界
+    True,  # 禁用检查允许脚本 owner 出现在跨语言边界
 )
 
 # 首项是 Python 路由不得引用的技能名。
@@ -387,13 +471,13 @@ LEGACY_SCRIPT_LANGUAGE_SKILL_ROUTE_REQUIRED_SNIPPETS = (  # 历史脚本路由�
 )
 
 # 收集共同门禁行前缀，供逐行抽取时定位跨语言规则。
-SHARED_ROUTE_PREFIX = "- 语言技能共同门禁："  # 共同门禁前缀用于本步校验判断
+SHARED_ROUTE_PREFIX = "- Shared language-skill gate: "  # 共同门禁前缀
 
 # 收集 Python 路由行前缀，供逐行抽取时定位单条规则。
-PYTHON_ROUTE_PREFIX = "- 语言技能路由（Python）："  # Python 路由前缀用于本步校验判断
+PYTHON_ROUTE_PREFIX = "- Language-skill route (Python): "  # Python 路由前缀
 
 # 使用脚本前缀从 AGENTS 行文本中切出脚本规则，避免跨行命中误判。
-SCRIPT_ROUTE_PREFIX = "- 语言技能路由（脚本）："  # 脚本路由前缀用于本步校验判断
+SCRIPT_ROUTE_PREFIX = "- Language-skill route (scripts): "  # 脚本路由前缀
 
 # 返回缺失短语列表，供上游 verifier 生成精确的退化诊断。
 def missing_language_skill_route_snippets(route_text: str, required_snippets: tuple[str, ...]) -> list[str]:

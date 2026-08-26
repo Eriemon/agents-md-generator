@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "worker_id": "reviewer_worker",
+  "task_kind": "review",
+  "phases": ["INITIAL", "PERIODIC", "CORRECTION", "FINAL"],
+  "allowed_read_roots": ["{root_agents}", "{governance_root}", "{docs_root}", "{skill_root}"],
+  "allowed_write_roots": [],
+  "forbidden_actions": ["read_tests", "modify_anything", "run_tests", "build", "release", "install", "delegate"],
+  "scope_rejection": "SCOPE_REJECTED",
+  "no_action_taken": true,
+  "receipt_verdicts": ["ALIGNED", "BLOCKED", "REVIEWER_BASELINE_MISSING", "USER_RECONFIRMATION_REQUIRED", "SCOPE_REJECTED"],
+  "alignment_verdict": "ALIGNED",
+  "blocking_verdicts": ["BLOCKED", "REVIEWER_BASELINE_MISSING", "USER_RECONFIRMATION_REQUIRED"],
+  "rejection_report_required": true,
+  "expected_output": "strict reviewer receipt with rejection_report for SCOPE_REJECTED"
+}

@@ -87,19 +87,31 @@ from install_release_sanitization import (
 )
 
 # Git 命令保留原始输出，供上层规则形成可解释诊断。
-def run_git(project: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
+def run_git(
+    project: Path,
+    args: list[str],
+    input_text: str | None = None,
+) -> subprocess.CompletedProcess[str]:
     """在指定工作区执行 Git 命令。
 
-    Args:
-        project: Git 仓库根目录。
-        args: 不含可执行文件名的 Git 参数。
+    参数：
+        project 为 Git 仓库根目录。
+        args 为不含可执行文件名的 Git 参数。
+        input_text 为可选的标准输入文本，用于超长 pathspec 清单。
 
-    Returns:
+    返回：
         含退出码和标准输出的进程结果。
     """
 
     # release gate 需要自行解释 stdout/stderr，因此这里不抛出异常。
-    return subprocess.run(["git", *args], cwd=project, text=True, capture_output=True, check=False)
+    return subprocess.run(
+        ["git", *args],
+        cwd=project,
+        text=True,
+        input=input_text,
+        capture_output=True,
+        check=False,
+    )
 
 # 简单探测只暴露成功标志和首选诊断文本。
 def git_ok(project: Path, args: list[str]) -> tuple[bool, str]:
@@ -638,8 +650,7 @@ def read_release_receipt(path: Path) -> dict[str, Any]:
     # 数组或标量 JSON 不满足收据字段契约。
     return dict_data if isinstance(dict_data, dict) else {}
 
-# 文本和二进制清洗原语复用安装验证模块，保持发布与安装判定一致。
-# 源码分析允许仓库内 evals 等仅源码成员进入打包清单。
+# 文本和二进制清洗复用安装验证模块，并允许 evals 等源码成员进入清单。
 def source_release_content_analysis(skill_dir: Path) -> dict[str, Any]:
     """分析待发布技能源码目录。
 
@@ -816,8 +827,7 @@ def sanitize_release_tree(
         # 缺失发布副本由其他内容策略门禁负责诊断。
         path_release_file = release_dir / str_relative_path  # 对应发布成员。
 
-        # 只处理实际复制到发布树的文件。
-        # 发布副本链接不能进入单文件清洗流程。
+        # 只清洗实际复制到发布树的普通文件，发布副本链接不得进入单文件流程。
         if path_release_file.is_symlink():
 
             # 清洗阶段的链接诊断必须先于任何正文 helper。

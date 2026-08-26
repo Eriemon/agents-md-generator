@@ -221,7 +221,7 @@ def dispatch_manage_docs_command(path_project: Path, namespace_args: argparse.Na
             namespace_args.skill_dir,  # 待发布技能目录。
             namespace_args.phase,  # 发布前或发布后阶段。
             namespace_args.install_intent,  # 发布后的安装意图。
-            namespace_args.test_evidence,  # 不透明远程测试收据。
+            namespace_args.test_evidence,  # 不透明完整 pytest 收据。
             bool_require_test_evidence=True,  # CLI release-gate 属于明确发布态。
         ),
         "release-prepare": lambda: docs_function("release_prepare")(  # 发布前准备动作。
@@ -238,6 +238,15 @@ def dispatch_manage_docs_command(path_project: Path, namespace_args: argparse.Na
             test_evidence_raw=namespace_args.test_evidence,  # pre/post 共用测试收据。
             bool_require_test_evidence=True,  # 打包命令强制 pre/post 收据一致。
         ),  # 生成版本发布包。
+        "release-version": lambda: docs_function("prepare_release_version")(  # 版本面预览或写入动作。
+            path_project,  # 版本面所属项目根。
+            Path(namespace_args.skill_dir).expanduser().resolve(),  # 版本面技能根。
+            namespace_args.version,  # 调用方请求版本。
+            Path(namespace_args.runtime_manifest).expanduser().resolve()  # 显式 runtime manifest 路径
+            if namespace_args.runtime_manifest  # 仅在调用方提供覆盖时解析
+            else None,  # 未提供时沿用 contract 默认 manifest
+            write=namespace_args.write,  # 是否按 contract 执行版本写入。
+        ),
         "branch-gate": lambda: branch_gate(path_project),  # 检查当前分支合同。
         "work-folder-gate": lambda: docs_function("work_folder_gate")(  # 工作目录边界检查动作。
             path_project,  # 工作文件夹根目录。
@@ -327,15 +336,15 @@ def manage_docs_command_failed(namespace_args: argparse.Namespace, dict_result: 
     return False
 
 # 每个子命令都接受同一形式的可选项目根参数。
-def add_project_parser(object_subparsers_commands: Any, str_command: str) -> argparse.ArgumentParser:
+def add_project_parser(argument_subparsers_commands: Any, str_command: str) -> argparse.ArgumentParser:
     """注册带项目参数的子命令解析器。
 
-    参数：object_subparsers_commands 为 argparse 子解析器集合；str_command 为命令名。
+    参数：argument_subparsers_commands 为 argparse 子解析器集合；str_command 为命令名。
     返回：可继续添加命令专用选项的解析器。
     """
 
     # 子命令名称同时作为 CLI 分派键。
-    argument_parser_command: argparse.ArgumentParser = object_subparsers_commands.add_parser(str_command)  # 当前子命令解析器。
+    argument_parser_command: argparse.ArgumentParser = argument_subparsers_commands.add_parser(str_command)  # 当前子命令解析器。
 
     # 缺省项目根保持历史当前目录行为。
     argument_parser_command.add_argument("project", nargs="?", default=".")
@@ -357,7 +366,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
 
     # command 是后续分派表的必填键。
-    object_subparsers_commands = argument_parser_argument_parser.add_subparsers(  # 治理子命令集合。
+    argument_subparsers_commands = argument_parser_argument_parser.add_subparsers(  # 治理子命令集合。
         dest="command",  # 分派表使用的命令字段。
         required=True,  # 调用时必须选择子命令。
     )
@@ -377,37 +386,37 @@ def build_argument_parser() -> argparse.ArgumentParser:
     for str_command in tuple_simple_commands:
 
         # 注册返回值无需继续配置。
-        add_project_parser(object_subparsers_commands, str_command)
+        add_project_parser(argument_subparsers_commands, str_command)
 
     # 可选输入文件用于交接、会话启动和恢复修复。
     for str_command in ("handoff", "start-session", "resume-repair"):
 
         # 当前命令共享可选 --input 合同。
-        argument_parser_command = add_project_parser(object_subparsers_commands, str_command)  # 输入文件命令解析器。
+        argument_parser_command = add_project_parser(argument_subparsers_commands, str_command)  # 输入文件命令解析器。
 
         # 空输入由对应实现生成默认载荷或报告错误。
         argument_parser_command.add_argument("--input", default=None)
 
     # 恢复检查可读取指定会话日志。
-    argument_parser_resume_check = add_project_parser(object_subparsers_commands, "resume-check")  # 恢复检查解析器。
+    argument_parser_resume_check = add_project_parser(argument_subparsers_commands, "resume-check")  # 恢复检查解析器。
 
     # 对话日志覆盖用于恢复证据诊断。
     argument_parser_resume_check.add_argument("--conversation-log", default=None)
 
     # 记忆初始化必须由显式标志确认创建。
-    argument_parser_memory_init = add_project_parser(object_subparsers_commands, "memory-init")  # 记忆初始化解析器。
+    argument_parser_memory_init = add_project_parser(argument_subparsers_commands, "memory-init")  # 记忆初始化解析器。
 
     # 标志值传给记忆授权门禁。
     argument_parser_memory_init.add_argument("--confirm-create", action="store_true")
 
     # 记忆写入必须提供结构化输入文件。
-    argument_parser_memory_write = add_project_parser(object_subparsers_commands, "memory-write")  # 记忆写入解析器。
+    argument_parser_memory_write = add_project_parser(argument_subparsers_commands, "memory-write")  # 记忆写入解析器。
 
     # 写入实现拒绝缺失输入。
     argument_parser_memory_write.add_argument("--input", required=True)
 
     # 记忆查询需要查询词和可选结果上限。
-    argument_parser_memory_read = add_project_parser(object_subparsers_commands, "memory-read")  # 记忆查询解析器。
+    argument_parser_memory_read = add_project_parser(argument_subparsers_commands, "memory-read")  # 记忆查询解析器。
 
     # 查询词决定摘要检索主题。
     argument_parser_memory_read.add_argument("--query", required=True)
@@ -416,19 +425,19 @@ def build_argument_parser() -> argparse.ArgumentParser:
     argument_parser_memory_read.add_argument("--limit", type=int, default=5)
 
     # 记忆压缩默认只写有界视图，显式选项才额外导出完整 Markdown。
-    argument_parser_memory_compress = add_project_parser(object_subparsers_commands, "memory-compress")  # 记忆压缩解析器。
+    argument_parser_memory_compress = add_project_parser(argument_subparsers_commands, "memory-compress")  # 记忆压缩解析器。
 
     # 完整导出路径必须相对 memory 根目录，并由实现执行越界检查。
     argument_parser_memory_compress.add_argument("--full-output", default=None)
 
     # 交接命名修复只有显式 write 才落盘。
-    argument_parser_repair = add_project_parser(object_subparsers_commands, "repair-handoff-names")  # 命名修复解析器。
+    argument_parser_repair = add_project_parser(argument_subparsers_commands, "repair-handoff-names")  # 命名修复解析器。
 
     # 默认模式仅报告拟执行动作。
     argument_parser_repair.add_argument("--write", action="store_true")
 
     # 开发记录需要阶段并可选输入文件。
-    argument_parser_development = add_project_parser(object_subparsers_commands, "development")  # 开发记录解析器。
+    argument_parser_development = add_project_parser(argument_subparsers_commands, "development")  # 开发记录解析器。
 
     # 阶段名称进入开发历史标题。
     argument_parser_development.add_argument("--stage", required=True)
@@ -437,13 +446,13 @@ def build_argument_parser() -> argparse.ArgumentParser:
     argument_parser_development.add_argument("--input", default=None)
 
     # Git 变更记录接受可选结构化输入。
-    argument_parser_changelog = add_project_parser(object_subparsers_commands, "git-changelog")  # Git 记录解析器。
+    argument_parser_changelog = add_project_parser(argument_subparsers_commands, "git-changelog")  # Git 记录解析器。
 
     # 缺省输入由实现根据仓库事实生成。
     argument_parser_changelog.add_argument("--input", default=None)
 
     # 根 AGENTS 同步支持写入、安装目录覆盖和验证标记。
-    argument_parser_sync_root = add_project_parser(object_subparsers_commands, "sync-root-agents")  # 根规则同步解析器。
+    argument_parser_sync_root = add_project_parser(argument_subparsers_commands, "sync-root-agents")  # 根规则同步解析器。
 
     # 无 write 时只返回同步差异。
     argument_parser_sync_root.add_argument("--write", action="store_true")
@@ -467,7 +476,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
 
     # 全局规则同步接受写入标志和 Codex 主目录覆盖。
-    argument_parser_sync_global = add_project_parser(object_subparsers_commands, "sync-global-codex-agents")  # 全局同步解析器。
+    argument_parser_sync_global = add_project_parser(argument_subparsers_commands, "sync-global-codex-agents")  # 全局同步解析器。
 
     # 默认只审查全局规则差异。
     argument_parser_sync_global.add_argument("--write", action="store_true")
@@ -482,7 +491,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
 
     # 发布门禁需要版本、技能目录、阶段和安装意图。
-    argument_parser_release_gate = add_project_parser(object_subparsers_commands, "release-gate")  # 发布门禁解析器。
+    argument_parser_release_gate = add_project_parser(argument_subparsers_commands, "release-gate")  # 发布门禁解析器。
 
     # 目标版本用于校验发布事实一致性。
     argument_parser_release_gate.add_argument("--version", required=True)
@@ -507,7 +516,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     for str_command in ("release-prepare", "package-release"):
 
         # 两个发布动作拥有相同参数形态。
-        argument_parser_command = add_project_parser(object_subparsers_commands, str_command)  # 发布动作解析器。
+        argument_parser_command = add_project_parser(argument_subparsers_commands, str_command)  # 发布动作解析器。
 
         # 版本必须与控制画像和发布目录一致。
         argument_parser_command.add_argument("--version", required=True)
@@ -518,8 +527,23 @@ def build_argument_parser() -> argparse.ArgumentParser:
         # 发布准备与打包使用同一不透明测试收据。
         argument_parser_command.add_argument("--test-evidence", default="")
 
+    # 版本面命令只负责从 JSON contract 预览或写入所有 surface。
+    argument_parser_release_version = add_project_parser(argument_subparsers_commands, "release-version")  # 版本面解析器。
+
+    # 版本面命令要求调用方明确目标版本。
+    argument_parser_release_version.add_argument("--version", required=True)
+
+    # 版本面命令要求调用方明确技能目录来源。
+    argument_parser_release_version.add_argument("--skill-dir", required=True)
+
+    # 版本面命令允许显式覆盖 runtime manifest。
+    argument_parser_release_version.add_argument("--runtime-manifest", default=None)
+
+    # 写入动作必须由调用方显式打开。
+    argument_parser_release_version.add_argument("--write", action="store_true")
+
     # 工作目录门禁检查技能位置和执行模式。
-    argument_parser_work_folder = add_project_parser(object_subparsers_commands, "work-folder-gate")  # 工作目录门禁解析器。
+    argument_parser_work_folder = add_project_parser(argument_subparsers_commands, "work-folder-gate")  # 工作目录门禁解析器。
 
     # 技能目录用于验证开发或发布工作根。
     argument_parser_work_folder.add_argument("--skill-dir", required=True)

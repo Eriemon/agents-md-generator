@@ -1,0 +1,39 @@
+{
+  "schema_version": 2,
+  "scan_roots": [
+    "scripts/python/common",
+    "scripts/python/verify",
+    "scripts/python/docs",
+    "scripts/python/release",
+    "scripts/python/render",
+    "scripts/python/workers",
+    "assets/installer",
+    "config/installer",
+    "config/workers"
+  ],
+  "excluded_roots": ["__pycache__", "reports", "dist", "ref", "github", ".git"],
+  "consumer_surfaces": {
+    "source": {"base": "skill", "roots": ["scripts/python"], "extensions": [".py"]},
+    "tests": {"base": "project", "roots": ["tests"], "extensions": [".py", ".json", ".md"]},
+    "scripts": {"base": "skill", "roots": ["assets/installer", "scripts"], "extensions": [".bat", ".cmd", ".ps1", ".sh", ".tcl", ".js", ".mjs", "Dockerfile"]},
+    "templates": {"base": "skill", "roots": ["assets/templates"], "extensions": [".md", ".j2", ".txt"]},
+    "documents": {"base": "project", "roots": ["README.md", "AGENTS.md", "CLAUDE.md", "GEMINI.md", "docs/handoff/HANDOFF.md", "docs/memory/summaries.md"], "extensions": [".md"]},
+    "skill_documents": {"base": "skill", "roots": ["SKILL.md"], "extensions": [".md"]}
+  },
+  "scan_contexts": ["strings", "comments", "docstrings", "plain_text"],
+  "value_sources": [
+    {"role": "evaluation_contract", "pointers": ["/required_case_ids/*"]},
+    {"role": "evaluation_fixtures", "pointers": ["/versions/*", "/names/*", "/paths/*"]},
+    {"role": "pytest_receipt_policy", "pointers": ["/modes/*/command_template", "/modes/*/command_id", "/modes/*/parameter_rules"]},
+    {"role": "version_surfaces", "pointers": ["/surfaces/*/relative_path", "/surfaces/*/selector"]},
+    {"role": "platform_manifest", "pointers": ["/platform_catalog", "/platform_state_selection"]}
+    ,{"role": "installer_manifest", "pointers": ["/entrypoints", "/powershell_candidates", "/python_candidates", "/shell_runtime"]}
+    ,{"role": "worker_protocol", "pointers": ["/task_modes/*", "/event_types/*", "/worker_states/*", "/root_authorization_states/*", "/canonical_roles/*", "/lifecycle_phases/*", "/phase_roles/*", "/phase_by_event/*", "/event_roles/*", "/path_bindings/*"]}
+    ,{"role": "language_routes", "pointers": ["/routes/*/id", "/routes/*/target_families"]}
+    ,{"role": "language_catalog", "pointers": ["/defaults/*", "/languages/*", "/document_exceptions/*"]}
+    ,{"role": "codebase_memory_contract", "pointers": ["/repository_url", "/artifact_directory", "/install_scripts/*", "/scope_policy/*", "/wal_health/*"]}
+  ],
+  "allowed_protocol_literals": ["schema_version", "version", "VERSION", "README.md", "pyproject.toml", "required", "handler_id", "command_id", "project_root", "skill_root", "reports_root", "present", "canonical_json", "sha256_bytes", "README-CN.md", "CITATION.cff", "config/agent.json", "config/agent-platforms.json", "config/language-routes.json", "config/workers/protocol.json", "config/workers/repair.json", "config/workers/role-card.schema.json", "config/workers/worker-runtime.json", "config/workers/worker-runtime.schema.json", "config/installer/installer.manifest.json", "config/installer/projection.schema.json", "installer.manifest.env", "platforms.tsv", "PROJECTION_SCHEMA_RELATIVE_PATH", "PROJECTION_GENERATOR_RELATIVE_PATH", "PROJECTION_RECORD_CLASSES", "PROJECTION_REQUIRED_COLUMNS", "HASH_COMMANDS", "SHELL_UTILITIES", "SHELL_OUTPUT_FORMAT", "POWERSHELL_OUTPUT_FORMAT", "BATCH_ENTRY", "NO_DISPATCH_REQUIRED", "failure_window", "reset_requires_new_event", "preserve_fields", "replace_fields", "source_manifest_prefix", "recovery_receipt_suffix", "docs/git_manager/CHANGELOG.md", "docs/git_manager/GIT_MANAGER.md", "docs/development/DEVELOPMENT.md", "pytest-full", "pytest-full-xdist", "python -m pytest -q", "python -m pytest -q -n {worker_count} --dist loadfile --max-worker-restart 0", "python -m pytest -q -n 2 --dist loadfile --max-worker-restart 0", "current_version", "whole_file", "project.version", "version_badge", "first_version", "conversation", "documentation", "python", "disabled", "enabled", "unconfigured", "INITIAL", "implementation", "tests", "TEST_RED", "not_started", "Chinese", "English", "read_only", "release", "active", "failed", "completed", "CORRECTION", "FINAL", "bash", "install.bat", "install.ps1", "install.sh", ".codebase-memory", "language_skill_routing_contract", "script_output_policy_contract", "plan_mode_language_lock_contract", "task_rating_gate_contract", "global_review_agent_opt_in_contract", "additional_worktree_prohibition_contract", "workspace_boundary_authorization_contract", "source_governance_test_boundary", "source_governance_size_readability_contract", "tester_failure_receipt_contract", "PERIODIC", "CONTROL_BOUNDARY", "IMPLEMENTATION_START", "AGENTS_REFRESH_VERIFIED", "TEST_GREEN", "GIT_COMMIT_CREATED", "CORRECTION_APPLIED", "COMPLETION_REQUESTED", "TEST_FINAL", "python3", "powershell.exe", "pwsh.exe", "waiting_receipt", "scope_rejected", "detect_missing_root_agents", "generator_version_takeover", "root_level_whitelist_gate", "root_workspace_artifact_gate", "evolution_removed_contract", "experience_removed_contract", "generic_audit_split", "evaluate_failure_classification", "install_release_completeness", "release_content_evals_install_contract", "release_sanitizer_regex_constant", "review_governance_companion_checks", "design_review_gate", "root_version_sync_contract", "source_repo_render_version_contract", "codex_token_usage_review_contract", "governance_runtime_de_vendoring", "installed_runtime_owner_repo_local_commands", "handoff_naming_gate", "workspace_settings_gate", "governance_cli_entrypoint_smoke", "memory_governance_gate", "openai_metadata_standard_contract", "https://github.com/DeusData/codebase-memory-mcp"],
+  "comment_scan": true,
+  "string_scan": true
+}

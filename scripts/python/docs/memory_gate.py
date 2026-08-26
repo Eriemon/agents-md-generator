@@ -66,14 +66,14 @@ def latest_memory_items(connection: Any, limit: int) -> list[dict[str, Any]]:
     """
 
     # 参数化 LIMIT 避免把调用方数值拼入 SQL。
-    rows = connection.execute(  # 执行更新时间倒序查询并保留原始数据库行
+    list_rows = connection.execute(  # 执行更新时间倒序查询并保留原始数据库行
         f"SELECT {MEMORY_ITEM_SELECT_COLUMNS} FROM memory_items "
         "ORDER BY updated_at DESC LIMIT ?",
         (limit,),  # 参数化查询的最大返回数量
     ).fetchall()  # 最近更新的数据库行集合
 
     # 数据库行统一转换为公开 memory 字段结构。
-    return [row_to_memory_item(row) for row in rows]
+    return [row_to_memory_item(row) for row in list_rows]
 
 # Memory 读取入口保证初始化完成后再选择查询后端。
 def read_memory(project: Path, query: str, limit: int = 5) -> dict[str, Any]:
@@ -475,12 +475,12 @@ def memory_database_schema_findings(
     str_database = rel(project, path_database)  # 主表 schema 诊断路径前缀
 
     # sqlite_master 提供 memory_items 表存在性证据。
-    row_table = connection.execute(  # 查询主表是否已经建立
+    tuple_table_row = connection.execute(  # 查询主表是否已经建立
         "SELECT name FROM sqlite_master WHERE type='table' AND name='memory_items'"  # 主表存在性查询
     ).fetchone()  # memory_items 表记录
 
     # 主表缺失时无法继续执行列和索引覆盖检查。
-    if not row_table:
+    if not tuple_table_row:
 
         # False 阻止调用方执行依赖主表的计数查询。
         return [f"{str_database}: missing memory_items table"], False

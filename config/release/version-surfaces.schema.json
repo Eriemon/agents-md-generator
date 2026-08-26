@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "required": ["schema_version", "surfaces"],
+  "surface_required": ["role", "base_kind", "relative_path", "adapter", "selector", "required"],
+  "adapters": ["plain_version", "toml_project_version", "yaml_version", "markdown_version_badge", "markdown_first_version", "markdown_current_version"]
+}

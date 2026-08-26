@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "active_receipt_extension": "active-v1",
+  "receipt_schema": 2,
+  "freshness_seconds": 86400,
+  "default_modes": {"targeted": "targeted", "full": "full"},
+  "modes": [
+    {
+      "mode_name": "targeted",
+      "command_id": "pytest-targeted",
+      "runner": "pytest",
+      "suite": "targeted",
+      "command_template": "python -B -m pytest -q {selectors}",
+      "release_eligible": false,
+      "required_fields": ["runner", "suite", "command_id", "command_sha256"],
+      "forbidden_fields": [],
+      "parameter_rules": {"selectors": {"type": "non_empty_relative_path_list"}}
+    },
+    {
+      "mode_name": "full",
+      "command_id": "pytest-full",
+      "runner": "pytest",
+      "suite": "full",
+      "command_template": "python -m pytest -q",
+      "release_eligible": true,
+      "required_fields": ["runner", "suite", "command_id", "command_sha256", "source_manifest_sha256", "tests_tree_sha256", "test_commit", "policy_sha256", "runtime_manifest_sha256", "exit_code", "collected", "passed", "failed", "errors", "skipped", "xfailed", "xpassed", "governance_manifest_sha256", "route_probe_sha256", "stdout_sha256", "stderr_sha256", "completion_signal", "receipt_sha256", "residual_jobs"],
+      "forbidden_fields": ["selectors", "worker_count", "distribution"],
+      "parameter_rules": {}
+    }
+  ]
+}

@@ -89,7 +89,13 @@ DATE_RE = re.compile(r"Last updated:\s*(\d{4}-\d{2}-\d{2})")  # 根规则旧版�
 VERIFIED_RE = re.compile(r"Last verified:\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})")  # 根规则完整验证时间格式
 
 # 远程测试收据是自更新证据，不代表根规则发生变化。
-FRESHNESS_IGNORED_PATHS = frozenset({"docs/git_manager/test-evidence-v204.json"})  # 新鲜度忽略的证据路径
+FRESHNESS_IGNORED_PATHS = frozenset({"docs/git_manager/test-evidence-v204.json"})  # 历史兼容收据路径
+
+# 当前版本的发布收据沿用同一自更新语义，不能反向使根规则变旧。
+FRESHNESS_TEST_RECEIPT_PREFIX = "docs/git_manager/test-evidence-"  # 活动 pytest 收据路径前缀
+
+# 版本化 dist 内容由 package-release 生成，属于发布产物而非规则正文。
+FRESHNESS_RELEASE_PREFIX = "dist/"  # 版本化发布产物路径前缀
 
 # 时间解析器把元数据文本转换为可比较值。
 def parse_datetime(raw: str) -> datetime | None:
@@ -122,11 +128,22 @@ def is_relevant_change_path(str_line: str) -> bool:
     # Git 输出可能携带空白，先形成稳定的仓库相对路径文本。
     str_normalized_path = str_line.strip()  # 当前 Git 变更路径
 
-    # 根规则自身与自更新收据都不代表规则正文发生变化。
+    # 版本化发布产物和活动 pytest 收据都不代表规则正文发生变化。
+    bool_generated_release = str_normalized_path.startswith(FRESHNESS_RELEASE_PREFIX)  # 发布产物是否自动生成
+
+    # 当前 pytest 收据属于不应触发 stale 的自更新证据。
+    bool_current_test_receipt = (
+        str_normalized_path.startswith(FRESHNESS_TEST_RECEIPT_PREFIX)  # 收据前缀检查
+        and str_normalized_path.endswith(".json")  # JSON 后缀检查
+    )
+
+    # 根规则自身、发布产物与自更新收据不触发 stale。
     return bool(
         str_normalized_path
         and not str_normalized_path.endswith("AGENTS.md")
         and str_normalized_path not in FRESHNESS_IGNORED_PATHS
+        and not bool_generated_release
+        and not bool_current_test_receipt
     )
 
 # Git 时间查询器提供旧日期元数据的精确比较基准。
@@ -150,16 +167,16 @@ def git_commit_time_for_file(project: Path, path: Path) -> datetime | None:
         str_rel_path = str(path)  # Git 查询的路径回退值
 
     # 单条日志的提交者时间提供秒级新鲜度事实。
-    command_result = run_git(project, ["log", "-1", "--format=%cI", "--", str_rel_path])  # Git 日志查询结果
+    completed_process_result = run_git(project, ["log", "-1", "--format=%cI", "--", str_rel_path])  # Git 日志查询结果
 
     # 未跟踪文件或非 Git 工作区没有可用提交时间。
-    if command_result.returncode != 0:
+    if completed_process_result.returncode != 0:
 
         # 调用方随后尝试文件修改时间或日期回退。
         return None
 
     # 去除命令结尾换行后再解析 ISO 时间。
-    raw = command_result.stdout.strip()  # Git 输出的提交时间文本
+    raw = completed_process_result.stdout.strip()  # Git 输出的提交时间文本
 
     # 空日志与解析失败统一表示没有可靠 Git 时间。
     return parse_datetime(raw) if raw else None
@@ -215,31 +232,31 @@ def legacy_update_evidence(project: Path, agents: Path, str_date: str) -> tuple[
     """
 
     # 最近提交时间是旧日期格式下的首选精确事实。
-    last_updated = git_commit_time_for_file(project, agents)  # 根规则最近 Git 提交时间
+    value_last_updated = git_commit_time_for_file(project, agents)  # 根规则最近 Git 提交时间
 
     # Git 证据可用时无需继续降低证据强度。
-    if last_updated is not None:
+    if value_last_updated is not None:
 
         # 提交时间比仅有日期的元数据更精确。
-        return last_updated, "git_commit_time"
+        return value_last_updated, "git_commit_time"
 
     # 未跟踪文件继续尝试本地修改时间。
-    last_updated = file_mtime(agents)  # 根规则本地修改时间
+    value_last_updated = file_mtime(agents)  # 根规则本地修改时间
 
     # 可访问的 mtime 作为第二级比较来源。
-    if last_updated is not None:
+    if value_last_updated is not None:
 
         # 输出明确区分文件时间与版本库证据。
-        return last_updated, "file_mtime"
+        return value_last_updated, "file_mtime"
 
     # 文件时间也不可用时只能把维护日解释为当天午夜。
-    last_updated = parse_datetime(f"{str_date}T00:00:00")  # 旧维护日的午夜时间
+    value_last_updated = parse_datetime(f"{str_date}T00:00:00")  # 旧维护日的午夜时间
 
     # 非法日期没有可用比较事实。
-    str_source = "date_midnight_fallback" if last_updated else "missing"  # 日期回退来源分类
+    str_source = "date_midnight_fallback" if value_last_updated else "missing"  # 日期回退来源分类
 
     # 最弱证据仍显式公开来源，禁止伪装成元数据时间戳。
-    return last_updated, str_source
+    return value_last_updated, str_source
 
 # 根规则元数据解析器隔离现代时间戳、验证时间和旧日期兼容路径。
 def freshness_metadata(project: Path, agents: Path) -> dict[str, Any]:
@@ -271,7 +288,7 @@ def freshness_metadata(project: Path, agents: Path) -> dict[str, Any]:
     str_last_verified_raw = match_verified.group(1) if match_verified else None  # 验证时间元数据原文
 
     # 格式非法时解析器返回空并保留原文供诊断。
-    last_verified = parse_datetime(str_last_verified_raw) if str_last_verified_raw else None  # 可比较验证时间
+    value_last_verified = parse_datetime(str_last_verified_raw) if str_last_verified_raw else None  # 可比较验证时间
 
     # 优先读取带秒的现代更新时间格式。
     match_timestamp = TIMESTAMP_RE.search(str_text)  # 完整更新时间匹配结果
@@ -283,16 +300,16 @@ def freshness_metadata(project: Path, agents: Path) -> dict[str, Any]:
         str_last_updated_raw = match_timestamp.group(1)  # 更新时间元数据原文
 
         # ISO 解析失败会使来源保持 missing。
-        last_updated = parse_datetime(str_last_updated_raw)  # 可比较的更新时间
+        value_last_updated = parse_datetime(str_last_updated_raw)  # 可比较的更新时间
 
         # 仅合法解析值可以声明来自元数据时间戳。
-        str_source = "metadata_timestamp" if last_updated else "missing"  # 更新时间来源分类
+        str_source = "metadata_timestamp" if value_last_updated else "missing"  # 更新时间来源分类
 
         # 现代元数据分支不需要执行旧日期回退。
         return {
-            "last_updated": last_updated,
+            "last_updated": value_last_updated,
             "last_updated_raw": str_last_updated_raw,
-            "last_verified": last_verified,
+            "last_verified": value_last_verified,
             "last_verified_raw": str_last_verified_raw,
             "comparison_source": str_source,
         }
@@ -307,7 +324,7 @@ def freshness_metadata(project: Path, agents: Path) -> dict[str, Any]:
         return {
             "last_updated": None,
             "last_updated_raw": None,
-            "last_verified": last_verified,
+            "last_verified": value_last_verified,
             "last_verified_raw": str_last_verified_raw,
             "comparison_source": "missing",
         }
@@ -322,7 +339,7 @@ def freshness_metadata(project: Path, agents: Path) -> dict[str, Any]:
     return {
         "last_updated": tuple_legacy_evidence[0],
         "last_updated_raw": str_last_updated_raw,
-        "last_verified": last_verified,
+        "last_verified": value_last_verified,
         "last_verified_raw": str_last_verified_raw,
         "comparison_source": tuple_legacy_evidence[1],
     }
@@ -339,13 +356,13 @@ def freshness_report(project: Path, agents: Path) -> dict[str, Any]:
     dict_metadata = freshness_metadata(project, agents)  # 根规则时间元数据
 
     # 分项读取用于后续时间选择和序列化。
-    last_updated = dict_metadata["last_updated"]  # 根规则更新时间
+    value_last_updated: datetime | None = dict_metadata["last_updated"]  # 根规则更新时间
 
     # 验证时间可覆盖更早的更新时间。
-    last_verified = dict_metadata["last_verified"]  # 根规则最近验证时间
+    value_last_verified: datetime | None = dict_metadata["last_verified"]  # 根规则最近验证时间
 
     # 更新时间先作为默认的新鲜度基准。
-    freshness_time = last_updated  # 当前选择的新鲜度时间
+    value_freshness_time: datetime | None = value_last_updated  # 当前选择的新鲜度时间
 
     # 来源与默认时间同步，后续可由更新的验证时间替换。
     str_comparison_source = str(dict_metadata["comparison_source"])  # 更新时间比较事实来源
@@ -354,13 +371,13 @@ def freshness_report(project: Path, agents: Path) -> dict[str, Any]:
     str_freshness_source = str_comparison_source  # 当前选择的新鲜度来源
 
     # 不早于更新时间的验证标记证明规则在更晚时间被复核。
-    if last_verified and (
-        not last_updated
-        or comparable_datetime(last_verified) >= comparable_datetime(last_updated)
+    if value_last_verified and (
+        not value_last_updated
+        or comparable_datetime(value_last_verified) >= comparable_datetime(value_last_updated)
     ):
 
         # 使用较新的验证时间缩小待检查变更范围。
-        freshness_time = last_verified  # 最终采用的验证时间
+        value_freshness_time = value_last_verified  # 最终采用的验证时间
 
         # 两个兼容来源字段同步声明显式验证元数据。
         str_freshness_source = "last_verified"  # 最终验证来源
@@ -369,9 +386,17 @@ def freshness_report(project: Path, agents: Path) -> dict[str, Any]:
         str_comparison_source = "last_verified"  # 兼容输出中的验证来源
 
     # 有时间基准时查询其后的提交文件，否则保守检查工作树。
-    command_result = (  # Git 新鲜度证据查询结果
-        run_git(project, ["log", "--name-only", "--pretty=format:", f"--since={normalize_datetime(freshness_time)}"])  # 基准后的提交文件
-        if freshness_time  # 具备时间基准时查询提交历史
+    completed_process_freshness = (  # Git 新鲜度证据查询结果
+        run_git(  # 有时间基准时执行 Git 日志查询
+            project,  # 当前项目根目录
+            [  # 查询基准后的变更文件
+                "log",  # Git 日志子命令
+                "--name-only",  # 只读取文件名
+                "--pretty=format:",  # 隐藏提交元数据
+                f"--since={normalize_datetime(value_freshness_time)}",  # 新鲜度时间边界
+            ],
+        )  # 基准后的提交文件
+        if value_freshness_time  # 具备时间基准时查询提交历史
         else run_git(project, ["status", "--short"])  # 无时间基准时检查工作树
     )
 
@@ -379,13 +404,13 @@ def freshness_report(project: Path, agents: Path) -> dict[str, Any]:
     list_changed_files = []  # 晚于新鲜度基准的仓库文件
 
     # Git 命令成功后才解释其标准输出。
-    if command_result.returncode == 0:
+    if completed_process_freshness.returncode == 0:
 
         # 根规则自身不算“规则之后的项目变化”，其余路径稳定去重。
         list_changed_files = sorted(  # 晚于基准且可能使规则陈旧的文件
             {  # 去重后的变更路径集合
                 str_line.strip()  # 去除 Git 输出前后空白
-                for str_line in command_result.stdout.splitlines()  # 遍历日志或状态行
+                for str_line in completed_process_freshness.stdout.splitlines()  # 遍历日志或状态行
                 if is_relevant_change_path(str_line)  # 排除空行、规则自身和自更新收据
             }
         )
@@ -393,15 +418,15 @@ def freshness_report(project: Path, agents: Path) -> dict[str, Any]:
     # 协议同时输出原始元数据、规范时间、来源与具体变更路径。
     return {
         "agents_file": str(agents),
-        "last_updated": normalize_datetime(last_updated) if last_updated else None,
+        "last_updated": normalize_datetime(value_last_updated) if value_last_updated else None,
         "last_updated_raw": dict_metadata["last_updated_raw"],
-        "last_updated_at": normalize_datetime(last_updated) if last_updated else None,
-        "last_verified": normalize_datetime(last_verified) if last_verified else None,
+        "last_updated_at": normalize_datetime(value_last_updated) if value_last_updated else None,
+        "last_verified": normalize_datetime(value_last_verified) if value_last_verified else None,
         "last_verified_raw": dict_metadata["last_verified_raw"],
-        "last_verified_at": normalize_datetime(last_verified) if last_verified else None,
+        "last_verified_at": normalize_datetime(value_last_verified) if value_last_verified else None,
         "comparison_source": str_comparison_source,
         "freshness_source": str_freshness_source,
-        "stale": bool(list_changed_files) or freshness_time is None,
+        "stale": bool(list_changed_files) or value_freshness_time is None,
         "changed_files": list_changed_files,
     }
 

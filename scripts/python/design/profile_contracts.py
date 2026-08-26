@@ -1234,8 +1234,8 @@ def git_branch_policy() -> dict[str, Any]:
         "source_install_forbidden": True,
         "remote_branch_cleanup_allowed": False,
         "rule": (
-            "Before releasing an installable dist package, commit all work, merge "
-            "development branches into master, record the release, and delete local "
+            "Do not create or use additional Git worktrees. Before releasing an installable dist package, "
+            "commit all work, merge development branches into master, record the release, and delete local "
             "branches other than master and release."
         ),
     }
@@ -1720,8 +1720,7 @@ def remote_server_contract(project: Path, answers: dict[str, Any]) -> tuple[dict
         # 空列表保持后续错误聚合路径一致。
         list_legacy_errors = []  # 空兼容迁移错误
 
-    # 选项读取、兼容迁移和实时解析错误统一返回。
-    # 合并服务器选项和旧版迁移错误。
+    # 合并服务器选项与兼容迁移错误，形成当前合同的完整错误列表。
     list_errors = list_choice_errors + list_legacy_errors  # 当前合同的全部验证错误
 
     # 实时路由解析错误追加到同一列表。

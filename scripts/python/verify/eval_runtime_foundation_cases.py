@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 # 句界识别用于核验产品入口只保留一个启动句。
+import importlib.util
 import re
 
 # 分片显式声明使用的运行时符号，避免依赖隐式全局上下文。
@@ -22,6 +23,9 @@ from eval_runtime_core import (
     subprocess,
     tempfile,
 )
+
+# 失败回传合同的源码目录，评估运行时按需加载生产校验器。
+PATH_WORKERS = Path(__file__).resolve().parents[1] / "workers"  # worker 合同源码目录
 
 # 评估夹具复用同一 skill 仓库相对根，避免各场景拼写漂移。
 PATH_SKILL_REPOSITORY = Path("skills") / "agents-md-generator"  # 模拟 skill 仓库相对根
@@ -77,6 +81,97 @@ PATH_BIG_PLAN = Path("docs") / "development" / "decomposition-plans" / "src" / "
 # 超长物理行夹具验证单行字节限制。
 PATH_LONG_SOURCE = Path("src") / "long_line.py"  # 超长物理行夹具路径
 
+# tester 失败报告场景使用一个可定位的最小完整失败项。
+def _load_tester_failure_contract() -> Any:
+    """按需加载生产 tester 失败报告合同模块。
+
+    参数:
+        无；源码路径由当前 skill 的 verify 目录确定。
+    返回:
+        worker_dispatch_contracts 中的生产合同模块。
+    异常:
+        RuntimeError: worker 合同源码或公开校验器缺失。
+    """
+
+    # 生产合同文件必须来自当前 skill 的 workers 目录。
+    path_contracts = PATH_WORKERS / "worker_dispatch_contracts.py"  # tester 合同源码路径
+
+    # 按需创建模块规格，避免评估模块导入时修改全局搜索路径。
+    module_spec = importlib.util.spec_from_file_location(  # tester 合同动态加载规格
+        "agents_md_tester_dispatch_contracts",  # 隔离模块名称
+        path_contracts,  # 当前生产合同文件
+    )
+
+    # 缺少 loader 时不能执行未经确认的评估替代逻辑。
+    if module_spec is None or module_spec.loader is None:
+
+        # 让评估入口报告明确的生产合同缺失。
+        raise RuntimeError("> ERR: [Python] tester dispatch contract loader is unavailable")
+
+    # 按规格创建独立模块对象，避免污染已有导入缓存。
+    module_contracts = importlib.util.module_from_spec(module_spec)  # tester 合同模块对象
+
+    # 执行当前生产校验器，确保 eval 不复制合同实现。
+    module_spec.loader.exec_module(module_contracts)
+
+    # 公开校验器缺失时拒绝把评估降级为假阳性。
+    validator = getattr(module_contracts, "validate_tester_failure_report", None)  # 生产校验函数
+
+    # 只有可调用的生产函数才可以驱动本场景。
+    if not callable(validator):
+
+        # 缺失公开入口属于实现与 eval 的绑定错误。
+        raise RuntimeError("> ERR: [Python] tester failure report validator is unavailable")
+
+    # 返回生产模块供当前 eval 同时读取校验器和字段合同。
+    return module_contracts
+
+# 构造 tester 失败报告场景的最小完整样本。
+def _complete_tester_failure_report() -> dict[str, Any]:
+    """构造通过生产校验器的完整 tester 失败报告。
+
+    参数:
+        无；样本字段固定用于边界评估。
+    返回:
+        含症状、期望/实际、根因、修复、证据和副作用状态的报告对象。
+    """
+
+    # 失败项清单保留一条完整的 expected/actual/source 事实链。
+    dict_failure_test = {  # 单条 tester 失败明细
+        "test_id": "test_route_selection",  # 可定位测试节点
+        "expected": "configured route is selected",  # 期望行为
+        "actual": "fallback route is selected",  # 实际行为
+        "observed": "assertion failed after source binding",  # 具体症状
+        "source": "verify/routing_contract.py:214",  # 源码定位
+    }
+
+    # 返回合同要求的全部顶层失败信息。
+    return {
+        "failure_stage": "remote_pytest_execution",  # 失败执行阶段
+        "failure_kind": "product_source_regression",  # 失败类别
+        "first_error": "expected configured route but received fallback",  # 首个错误
+        "failure_summary": "the bound full-suite run exposed a reproducible route mismatch",  # 具体影响
+        "failure_count": 1,  # 失败明细总数
+        "failure_tests": [dict_failure_test],  # 完整失败项列表
+        "expected_actual": {  # 总体期望与实际
+            "expected": "configured route is selected",  # 总体期望
+            "actual": "fallback route is selected",  # 总体实际
+        },
+        "root_cause_class": "product_source",  # 根因分类
+        "minimal_fix": "repair route selection before rerunning the same command",  # 最小修复
+        "evidence": {  # 可追溯事实锚点
+            "job_id": "remote-job-example",  # 远程作业身份
+            "command_id": "pytest-full",  # 固定命令身份
+            "exit_code": 1,  # 实际退出码
+        },
+        "residual_jobs": [],  # 已确认没有残留作业
+        "modification_status": {  # 失败阶段副作用
+            "product_source_modified": False,  # 产品源码未改变
+            "tests_modified": False,  # 测试树未改变
+            "git_modified": True,  # 工作树仍有其他变更
+        },
+    }
+
 # 单行压缩夹具验证 minified 检测。
 PATH_COMPRESSED_SOURCE = Path("src") / "compressed.js"  # 单行压缩夹具路径
 
@@ -120,30 +215,31 @@ INT_DENSE_PYTHON_CALLS = 260  # Python 密集调用数量
 INT_DENSE_C_CALLS = 160  # C 与 C++ 密集调用数量
 
 # 伴随审查基线助手写入完整的代码、测试、文档和版本证据。
-def write_review_companion_baseline(path_project: Path) -> None:
+def write_review_companion_baseline(
+    path_project: Path,
+    string_baseline_version: str,
+) -> None:
     """写入伴随治理场景的基线仓库文件。
 
-    Args:
-        path_project: 已创建的隔离 Git 仓库根。
+    参数：path_project 为已创建的隔离 Git 仓库根；string_baseline_version 为 fixture 提供的基线版本文本。
 
-    Returns:
-        无业务返回值，基线文件直接写入 path_project。
+    返回：无；基线文件直接写入 path_project。
     """
 
     # 文件集合覆盖审查器识别的代码、版本和伴随文档位置。
-    dict_files = {  # v0.6.3 基线仓库文件
+    dict_files = {  # 配置版本基线仓库文件
         PATH_CONFIDENCE_GATE.as_posix(): (  # 置信门禁基线脚本
             "import argparse\nargparse.ArgumentParser()\n"  # 最小可解析脚本内容
         ),  # 置信门禁基线内容结束
-        PATH_VERSION_FILE.as_posix(): "v0.6.3\n",  # 技能基线版本
+        PATH_VERSION_FILE.as_posix(): f"{string_baseline_version}\n",  # 技能基线版本
         PATH_SCRIPT_GUIDE.as_posix(): "# Script Guide\n",  # CLI 伴随指南
         PATH_REVIEW_CHECKLIST.as_posix(): "# Review Checklist\n",  # 发布审查清单
         PATH_EVALUATION_SCENARIOS.as_posix(): "# Evaluation Scenarios\n",  # 行为评估场景
         PATH_EVALS.as_posix(): '{"version": 1, "cases": []}\n',  # 正式 eval 基线
         PATH_REVIEW_TEST.as_posix(): "# tests\n",  # 门禁伴随测试
-        PATH_CHANGELOG.as_posix(): "# Change Log\n- Version: v0.6.3\n",  # 版本变更日志
-        PATH_GIT_MANAGER.as_posix(): "# Git Manager\n## Current Version\n- Active version for this release: `v0.6.3`.\n",  # Git 发布状态
-        PATH_DEVELOPMENT.as_posix(): "# Development\n- Version: v0.6.3\n",  # 开发版本状态
+        PATH_CHANGELOG.as_posix(): f"# Change Log\n- Version: {string_baseline_version}\n",  # 版本变更日志
+        PATH_GIT_MANAGER.as_posix(): f"# Git Manager\n## Current Version\n- Active version for this release: `{string_baseline_version}`.\n",  # Git 发布状态
+        PATH_DEVELOPMENT.as_posix(): f"# Development\n- Version: {string_baseline_version}\n",  # 开发版本状态
     }
 
     # 写入每个基线文件前递归创建其父目录。
@@ -175,8 +271,14 @@ def review_companion_report(helper: EvalFixtures) -> dict[str, Any]:
         # 项目根包含审查器识别的完整基线文件集合。
         path_project = Path(tmp)  # 伴随治理场景仓库根
 
-        # 专用助手建立审查前完整伴随文件基线。
-        write_review_companion_baseline(path_project)
+        # 专用助手建立审查前完整伴随文件基线，版本值完全来自 evaluation fixture。
+        str_baseline_version = str(helper.fixture_value("versions", "baseline"))  # fixture 基线版本
+
+        # 读取下一版本文本，供后续制造版本漂移场景。
+        str_next_version = str(helper.fixture_value("versions", "baseline_next"))  # fixture 下一版本
+
+        # 用 fixture 版本写入伴随审查基线文件。
+        write_review_companion_baseline(path_project, str_baseline_version)
 
         # 初始化独立 Git 仓库并提交完整基线。
         helper.init_basic_git_repo(path_project)
@@ -206,7 +308,7 @@ def review_companion_report(helper: EvalFixtures) -> dict[str, Any]:
         )
 
         # 版本提升同样故意缺少发布文档更新。
-        (path_project / PATH_VERSION_FILE).write_text("v0.6.4\n", encoding="utf-8")
+        (path_project / PATH_VERSION_FILE).write_text(f"{str_next_version}\n", encoding="utf-8")
 
         # 第二次提交形成审查器可比较的不完整变更集。
         helper.git_commit_all(path_project, "eval: incomplete gate change")
@@ -903,5 +1005,92 @@ def case_source_governance_size_readability_contract(case: dict[str, Any], _help
                 "line-count governance did not measure UTF-8 byte size or block "
                 "one-line/minified readable-source regressions"
             )
+        },
+    )
+
+# tester 失败回传场景验证“只报失败”被拒绝且完整诊断可被接受。
+def case_tester_failure_receipt_contract(case: dict[str, Any], _helper: EvalFixtures) -> dict[str, Any]:
+    """评估 tester 失败报告的字段完整性和空泛结论阻断。
+
+    参数:
+        case: 当前 evals.json 案例元数据。
+        _helper: 统一评估夹具；本场景只调用纯生产校验器。
+    返回:
+        缺失、空泛和完整报告三类边界的结构化对照结果。
+    """
+
+    # 完整报告作为后续缺失和空泛变体的共同基线。
+    dict_complete_report = _complete_tester_failure_report()  # 通过合同的完整报告
+
+    # 当前评估必须调用生产校验器，不允许复制一份独立合同。
+    module_failure_contract = _load_tester_failure_contract()  # 生产失败报告合同模块
+
+    # 读取 canonical 顶层和单项字段，防止文档、envelope 与 validator 漂移。
+    func_validate_failure_report = module_failure_contract.validate_tester_failure_report  # 生产失败报告校验函数
+
+    # 生产合同的顶层字段集合用于验证完整样本。
+    set_required_report_fields = set(module_failure_contract.TESTER_FAILURE_REPORT_FIELDS)  # canonical 顶层字段
+
+    # 生产合同的失败项字段集合用于验证每条明细。
+    set_required_test_fields = set(module_failure_contract.TESTER_FAILURE_TEST_FIELDS)  # canonical 失败项字段
+
+    # 检查完整样本是否覆盖生产合同声明的全部字段。
+    list_missing_schema_fields = sorted(  # 完整样本缺失的顶层字段
+        set_required_report_fields - set(dict_complete_report)  # 比较样本与 canonical 顶层字段
+    )
+
+    # 检查第一条失败明细是否覆盖生产合同字段。
+    list_missing_item_fields = sorted(  # 完整样本缺失的失败项字段
+        set_required_test_fields - set(dict_complete_report["failure_tests"][0])  # 比较样本与 canonical 单项字段
+    )
+
+    # 空对象必须被拒绝并返回可修正的缺失字段诊断。
+    list_missing_errors = func_validate_failure_report({})  # 缺失字段错误列表
+
+    # 将摘要替换为空泛“failed”，验证不能只报失败结论。
+    dict_vague_report = dict(dict_complete_report)  # 空泛报告副本
+
+    # 用最短空泛结论模拟 tester 未提供可执行原因的回传。
+    dict_vague_report["failure_summary"] = "failed"  # 模拟不可行动的失败摘要
+
+    # 检查空泛报告是否被生产合同拒绝。
+    list_vague_errors = func_validate_failure_report(dict_vague_report)  # 空泛文本错误列表
+
+    # 完整报告必须通过所有分层校验器。
+    list_complete_errors = func_validate_failure_report(dict_complete_report)  # 完整报告错误列表
+
+    # 三条边界共同构成 with-skill 的失败回传能力矩阵。
+    dict_with_skill_checks = {  # 失败回传门禁检查
+        "rejects_missing_report": bool(list_missing_errors),  # 缺失报告被拒绝
+        "rejects_vague_failure": bool(list_vague_errors),  # 空泛失败被拒绝
+        "accepts_complete_report": not list_complete_errors,  # 完整报告被接受
+        "schema_is_complete": (  # 样本与生产字段合同一致
+            len(set_required_report_fields) == 12  # 顶层字段数量固定
+            and len(set_required_test_fields) == 5  # 单项字段数量固定
+            and not list_missing_schema_fields  # 顶层字段无缺失
+            and not list_missing_item_fields  # 单项字段无缺失
+        ),
+    }
+
+    # 无技能基线不具备字段级失败回传约束。
+    dict_without_skill_checks = {
+        str_check: False  # 历史基线不提供当前门禁
+        for str_check in dict_with_skill_checks  # 遍历本场景全部检查
+    }  # 基线能力关闭映射
+
+    # 返回三条边界的实际错误文本，便于 eval 失败时直接定位。
+    return build_case_result(
+        case,
+        with_skill_checks=dict_with_skill_checks,
+        without_skill_checks=dict_without_skill_checks,
+        with_skill_detail={
+            "missing_errors": list_missing_errors,
+            "vague_errors": list_vague_errors,
+            "complete_errors": list_complete_errors,
+            "missing_schema_fields": list_missing_schema_fields,
+            "missing_item_fields": list_missing_item_fields,
+        },
+        without_skill_detail={
+            "baseline": "no structured tester failure receipt contract",
         },
     )

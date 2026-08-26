@@ -1,0 +1,266 @@
+{
+  "schema_version": 1,
+  "bootstrap_base": "skill_root",
+  "roles": [
+    {
+      "name": "evaluation_contract",
+      "base_kind": "skill_root",
+      "relative_path": "config/evaluation/contract.json",
+      "schema_relative_path": "config/evaluation/contract.schema.json",
+      "required": true,
+      "hash_mode": "canonical_json",
+      "content_sha256": "823848f07055047560456a718998c2282788beef10ec51ae329ec766ed13904a",
+      "schema_sha256": "434c4eabddf9f50f07bd275af9d9fe4fda54b3be8c41db7a327485df3842528c"
+    },
+    {
+      "name": "evaluation_cases",
+      "base_kind": "skill_root",
+      "relative_path": "evals/evals.json",
+      "schema_relative_path": null,
+      "required": true,
+      "hash_mode": "canonical_json",
+      "content_sha256": "b5706ab116ef76730c1acf301e7b51ad86e6a35c5c65332caad4ed8a45f6ce6d",
+      "schema_sha256": null
+    },
+    {
+      "name": "evaluation_fixtures",
+      "base_kind": "skill_root",
+      "relative_path": "config/evaluation/fixtures.json",
+      "schema_relative_path": "config/evaluation/fixtures.schema.json",
+      "required": true,
+      "hash_mode": "canonical_json",
+      "content_sha256": "f7de4e77d22c083a158a62343ef54c1c4144ea5c33515b129720daeb4276e7ad",
+      "schema_sha256": "b1060958e1cdf989c3f7574e6df81079be845a896dd564c150e677d90f6169ba"
+    },
+    {
+      "name": "pytest_receipt_policy",
+      "base_kind": "skill_root",
+      "relative_path": "config/verification/pytest-receipt.json",
+      "schema_relative_path": "config/verification/pytest-receipt.schema.json",
+      "required": true,
+      "hash_mode": "canonical_json",
+      "content_sha256": "0de918b3d0fa60f51616f64df011749623b42bd7a84fb467174ed1ef862c4734",
+      "schema_sha256": "4934d56775f10bc514bbfea670d9a6dceb9834b831ee5e146c396eaf194439a5"
+    },
+    {
+      "name": "version_surfaces",
+      "base_kind": "skill_root",
+      "relative_path": "config/release/version-surfaces.json",
+      "schema_relative_path": "config/release/version-surfaces.schema.json",
+      "required": true,
+      "hash_mode": "canonical_json",
+      "content_sha256": "1098ed71eecc7c2c70972e747ef6c624d00f2f309f0e40d05b654ccc92ad3b44",
+      "schema_sha256": "bf5cdbad7b5d4c0b1ff6340d3f39b64570b96f69b81c9192213ceeafe1e385f8"
+    },
+    {
+      "name": "platform_manifest",
+      "base_kind": "skill_root",
+      "relative_path": "config/render-manifest.json",
+      "schema_relative_path": null,
+      "required": true,
+      "hash_mode": "canonical_json",
+      "content_sha256": "39b4e2831339bb67cee12a261dfef8632d0aae09caa24c3350d800f236b81ee0",
+      "schema_sha256": null
+    },
+    {
+      "name": "parameterization_policy",
+      "base_kind": "skill_root",
+      "relative_path": "config/parameterization/policy.json",
+      "schema_relative_path": "config/parameterization/policy.schema.json",
+      "required": true,
+      "hash_mode": "canonical_json",
+      "content_sha256": "80bf59ef89ef75413ca253b9d0699890fcc535ac4ed61441cb7c52a379ffeb5a",
+      "schema_sha256": "3c647f9db5063a6e36b6519a4db7e48c15bb19eb6679b748c8d94340712e2f1f"
+    },
+    {
+      "name": "language_routes",
+      "base_kind": "skill_root",
+      "relative_path": "config/language-routes.json",
+      "schema_relative_path": null,
+      "required": true,
+      "hash_mode": "canonical_json",
+      "content_sha256": "e14979b6b1c0a9c2ce7ff96e5a0fd8c25d72a53903f25373b08fb9aed508feb9",
+      "schema_sha256": null
+    },
+    {
+      "name": "language_catalog",
+      "base_kind": "skill_root",
+      "relative_path": "config/languages.json",
+      "schema_relative_path": "config/languages.schema.json",
+      "required": true,
+      "hash_mode": "canonical_json",
+      "content_sha256": "f1165e9e51b46abb616fe11892f6ff3165a8a68cd9fba6a8ddba2e85fa1cb145",
+      "schema_sha256": "3e1aec6300f552309e007e0f9ab217ed2f6d8b9f57dc1df09fc1a1fbe70db4d1"
+    },
+    {
+      "name": "codebase_memory_contract",
+      "base_kind": "skill_root",
+      "relative_path": "config/codebase-memory-contract.json",
+      "schema_relative_path": "config/codebase-memory-contract.schema.json",
+      "required": true,
+      "hash_mode": "canonical_json",
+      "content_sha256": "b0d2379b33765fdc11181259c0fbbb96c8820cda46c19af6d3a044e52b054372",
+      "schema_sha256": "d9a85e716bf7fb79eeb791587063d251120449f5163043a138854f58478e14d9"
+    },
+    {
+      "name": "project_metadata",
+      "base_kind": "skill_root",
+      "relative_path": "pyproject.toml",
+      "schema_relative_path": null,
+      "required": true,
+      "hash_mode": "sha256_bytes",
+      "content_sha256": "85f526b2d04aac880557cca9d3d351d048441b4843e082579039d15e5c1da586",
+      "schema_sha256": null
+    },
+    {
+      "name": "remote_governance",
+      "base_kind": "project_root",
+      "relative_path": ".agents/agents-control.json",
+      "schema_relative_path": null,
+      "required": false,
+      "hash_mode": "canonical_json",
+      "content_sha256": "11e93d665ec7bf230ff09faead28d1951554596f246d0a5bda41e84c4a817dd8",
+      "schema_sha256": null
+    },
+    {
+      "name": "installer_manifest",
+      "base_kind": "skill_root",
+      "relative_path": "config/installer/installer.manifest.json",
+      "schema_relative_path": "config/installer/installer.manifest.schema.json",
+      "required": true,
+      "hash_mode": "canonical_json",
+      "content_sha256": "cfc2be1754336e960c8990d847efbb09adf289f28016ea282fa7dd53b02499ff",
+      "schema_sha256": "65055f45a139ec536ea4394d4598ebdb0676a2a162f8aea5b31f4b0a86f0c552"
+    },
+    {
+      "name": "installer_platform_overrides",
+      "base_kind": "skill_root",
+      "relative_path": "config/installer/platform-overrides.json",
+      "schema_relative_path": null,
+      "required": true,
+      "hash_mode": "canonical_json",
+      "content_sha256": "d1bf7219042613b7987776fa60631d7372472ba0b3194ec43be53a9b97f3992f",
+      "schema_sha256": null
+    },
+    {
+      "name": "installer_projection",
+      "base_kind": "skill_root",
+      "relative_path": "assets/installer/platforms.tsv",
+      "schema_relative_path": null,
+      "required": true,
+      "hash_mode": "sha256_bytes",
+      "content_sha256": "b37d466f3c65a106dd95403104ca29b0f92f6e32b460f3fd9ef3c55d4d5bb254",
+      "schema_sha256": null
+    },
+    {
+      "name": "installer_manifest_env",
+      "base_kind": "skill_root",
+      "relative_path": "assets/installer/installer.manifest.env",
+      "schema_relative_path": null,
+      "required": true,
+      "hash_mode": "sha256_bytes",
+      "content_sha256": "0c4ea099e9b320f863208e0ee9fc1fd76452d53dbedfc8fe78ff1329fa329e0d",
+      "schema_sha256": null
+    },
+    {
+      "name": "installer_projection_schema",
+      "base_kind": "skill_root",
+      "relative_path": "config/installer/projection.schema.json",
+      "schema_relative_path": null,
+      "required": true,
+      "hash_mode": "canonical_json",
+      "content_sha256": "0989362ad52967eaee8c32518e8671584ee4f1e37734b4212f5182281e1417b7",
+      "schema_sha256": null
+    },
+    {
+      "name": "installer_projection_generator",
+      "base_kind": "skill_root",
+      "relative_path": "scripts/python/release/build_installer_projection.py",
+      "schema_relative_path": null,
+      "required": true,
+      "hash_mode": "sha256_bytes",
+      "content_sha256": "53e0ae8edab86ee09f18dbeeaa8db91809b5278dc105cee5bfd9c829ee136532",
+      "schema_sha256": null
+    },
+    {
+      "name": "guided_installer_backend",
+      "base_kind": "skill_root",
+      "relative_path": "scripts/python/release/guided_installer.py",
+      "schema_relative_path": null,
+      "required": true,
+      "hash_mode": "sha256_bytes",
+      "content_sha256": "6ec75bce41c6015e8522ba84d56c11a840e6036b5364727f2a6ad9d0cc2f8ca2",
+      "schema_sha256": null
+    },
+    {
+      "name": "worker_role_cards",
+      "base_kind": "skill_root",
+      "relative_path": "config/workers/tester.role.json",
+      "schema_relative_path": null,
+      "required": true,
+      "hash_mode": "canonical_json",
+      "content_sha256": "d363c5d614315890d70cbc6e809a2327728bfc155946beebb97b39de770f0778",
+      "schema_sha256": null
+    },
+    {
+      "name": "worker_reviewer_role_card",
+      "base_kind": "skill_root",
+      "relative_path": "config/workers/reviewer.role.json",
+      "schema_relative_path": null,
+      "required": true,
+      "hash_mode": "canonical_json",
+      "content_sha256": "03b99742dd6cd1ce70d7dfc91a13f869ac4effaf8e767a2ed5c02a6d3e972201",
+      "schema_sha256": null
+    },
+    {
+      "name": "worker_gardener_role_card",
+      "base_kind": "skill_root",
+      "relative_path": "config/workers/gardener.role.json",
+      "schema_relative_path": null,
+      "required": true,
+      "hash_mode": "canonical_json",
+      "content_sha256": "97dce380d89b53032989e0f6ce45276cd7a07988f485ae8904caacb86a64bd97",
+      "schema_sha256": null
+    },
+    {
+      "name": "worker_repair_config",
+      "base_kind": "skill_root",
+      "relative_path": "config/workers/repair.json",
+      "schema_relative_path": null,
+      "required": true,
+      "hash_mode": "canonical_json",
+      "content_sha256": "65c6384f58cc45b1f9e09e7bf7cd6517c1b9937d13a11c72ad259934c7b11274",
+      "schema_sha256": null
+    },
+    {
+      "name": "worker_role_card_schema",
+      "base_kind": "skill_root",
+      "relative_path": "config/workers/role-card.schema.json",
+      "schema_relative_path": null,
+      "required": true,
+      "hash_mode": "canonical_json",
+      "content_sha256": "9acebe762d59fd459649074cdc170faacfd806ba81917d6d87b411daaa353caa",
+      "schema_sha256": null
+    },
+    {
+      "name": "worker_runtime_config",
+      "base_kind": "skill_root",
+      "relative_path": "config/workers/worker-runtime.json",
+      "schema_relative_path": "config/workers/worker-runtime.schema.json",
+      "required": true,
+      "hash_mode": "canonical_json",
+      "content_sha256": "bf057fea22aaf98bc01cdfa5d6ca19a4a46eab28e0d5c263712db81a26ee0cba",
+      "schema_sha256": "a94f87ff0c51fe66ccad2b728c95edc93174658bd53568e6ed35ff8de882b9ea"
+    },
+    {
+      "name": "worker_protocol",
+      "base_kind": "skill_root",
+      "relative_path": "config/workers/protocol.json",
+      "schema_relative_path": "config/workers/protocol.schema.json",
+      "required": true,
+      "hash_mode": "canonical_json",
+      "content_sha256": "9f49ebf4143b279b95d82f0b5d9f8a698138739bdc0d82f4e3d56ffb9a6c7251",
+      "schema_sha256": "5608501bbe3e789d2aef0f1c7213d9e86bf235d0c353a5fbf4f0fc85365b83cf"
+    }
+  ]
+}

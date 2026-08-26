@@ -31,7 +31,7 @@ The second retained group is the final validation chain:
 
 ```text
 python skills/agents-md-generator/scripts/python/verify/quick_validate.py skills/agents-md-generator
-python -m unittest discover -s tests -t . -v
+python -m pytest -q
 python skills/agents-md-generator/scripts/python/verify/audit_skill.py skills/agents-md-generator
 python skills/agents-md-generator/scripts/python/verify/verify_agents.py . --installed-skill-dir skills/agents-md-generator
 python skills/agents-md-generator/scripts/python/docs/manage_docs.py verify .
@@ -46,7 +46,9 @@ Use the validation chain above for ordinary completion. `verify/check_source_gov
 
 Source-governance validation also accepts a validated plan bundled at `references/decomposition-plans/<relative source path>.md` when a repository-local plan is unavailable. This keeps installed skill copies self-governing without weakening the 64KB source limit or the required plan headings.
 
-Release validation passes the opaque remote receipt through `manage_docs.py release-prepare`, `release-gate`, and `package-release` with `--test-evidence docs/git_manager/test-evidence-v<version>.json`; the release gate also checks AGENTS freshness, governance-metadata exclusion from the source manifest, source-cache exclusion, versioned dist parity, and the versioned `install_skill.py --target skip` path.
+Release and installation validation require one complete schema-2 pytest receipt: `runner=pytest`, `suite=full`, selector-free `python -m pytest -q`, successful counts, current tests/source SHA-256, test commit, and self-hash. Local or remote execution location is metadata only; it never changes acceptance. Legacy schema-1 or non-pytest receipts are immutable-history evidence only. The gate also checks AGENTS freshness, governance-metadata exclusion from the source manifest, source-cache exclusion, versioned dist parity, and the versioned `install_skill.py --target skip` path.
+
+Release-facing CLI and gate changes keep their companion review material in the same change span. `scripts/python/docs/manage_docs_release.py` owns release-document transitions, `scripts/python/release/install_skill.py` owns versioned dist installation, `scripts/python/detect/check_freshness.py` owns root-rule freshness and generated-evidence filtering, and `scripts/python/verify/source_governance_config.py` owns source readability and decomposition-plan policy. When these contracts change, update this guide, `references/review-checklist.md`, and `references/evaluation-scenarios.md` together, then run `review_governance.py --mode release` with revision-bound semantic-review evidence.
 
 ## Ask For More Usage
 

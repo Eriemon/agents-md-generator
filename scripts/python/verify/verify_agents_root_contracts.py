@@ -27,6 +27,7 @@ from verify_agents_runtime_shared import (
 )
 # 命令合同模块提供容错 JSON 配置读取能力。
 from command_contracts import read_json
+from verify_language_contracts import validate_language_profile
 
 # 持久化验收使用固定清单文件名，不把路径片段散落在控制流中。
 ARTIFACT_MANIFEST_NAME = "artifact.json"  # 知识图谱持久化清单文件名
@@ -52,22 +53,22 @@ def load_codebase_memory_contract_module() -> ModuleType:
     path_contract = Path(__file__).resolve().parents[1] / "common" / "codebase_memory_mcp.py"  # 知识图谱合同路径
 
     # 独立模块名避免覆盖调用进程中可能存在的安装副本。
-    module_spec = importlib.util.spec_from_file_location("agents_codebase_memory_contract", path_contract)  # 模块加载规格
+    module_type_spec = importlib.util.spec_from_file_location("agents_codebase_memory_contract", path_contract)  # 模块加载规格
 
     # 缺失加载器表示仓库结构或 Python 导入机制已损坏。
-    if module_spec is None or module_spec.loader is None:
+    if module_type_spec is None or module_type_spec.loader is None:
 
         # 根合同无法读取单一事实源时必须明确阻断。
         raise RuntimeError("> ERR: [Python] 无法加载知识图谱公共合同模块")
 
     # 模块对象在执行前由标准导入工具创建。
-    module_contract = importlib.util.module_from_spec(module_spec)  # 知识图谱合同模块
+    module_type_contract = importlib.util.module_from_spec(module_type_spec)  # 知识图谱合同模块
 
     # 执行源码后模块公开合同常量和构造函数。
-    module_spec.loader.exec_module(module_contract)
+    module_type_spec.loader.exec_module(module_type_contract)
 
     # 返回加载完成的单一事实源模块。
-    return module_contract
+    return module_type_contract
 
 # 画像与渲染文本校验先返回可信布尔选择，供文件系统合同继续使用。
 def validated_codebase_memory_choice(
@@ -1056,6 +1057,9 @@ def validate_strong_control(text: str, file: str, project: Path, errors: list[st
         # 直接回显缺少默认语言的根因，方便恢复强控制最小契约。
         errors.append(f"{file}: strong-control profile must explicitly set default_conversation_language")
 
+    # 语言和 Worker 授权配置由独立合同模块校验，避免根入口继续膨胀。
+    validate_language_profile(file, dict_profile, errors)
+
     # 知识图谱选择需同时核验画像、根规则和本地产物仓库边界。
     validate_codebase_memory_mcp_contract(text, file, project, dict_profile, errors)
 
@@ -1148,6 +1152,15 @@ def validate_coding_behavior_language_routing(
 
         # 找不到承载正文时，无法继续做短语或配置联动检查。
         return False
+
+    # 预算压缩时详细路由合同位于同一文件的 Contract reference notes。
+    str_reference_body = section_body(text, "## Contract reference notes")  # 根文件内的详细路由合同正文。
+
+    # 只有存在引用区时才合并，避免缺失合同被默认文本掩盖。
+    if str_reference_body:
+
+        # verifier 继续对根文件内的完整合同执行相同短语和逐行检查。
+        str_body = f"{str_body}\n{str_reference_body}"  # 合并指针段与引用段供同一门禁校验。
 
     # 初始化总体验证状态，后续每层失败都会把它拉成 False。
     bool_is_valid = True  # 语言技能路由总体验证状态
@@ -1257,6 +1270,15 @@ def validate_script_output_policy(
 
         # 找不到承载正文时，脚本输出策略不具备继续核对的基础。
         return False
+
+    # 预算压缩时 Script Output Policy 详细合同位于同一文件的引用区。
+    str_reference_body = section_body(text, "## Contract reference notes")  # 根文件内的脚本输出合同正文。
+
+    # 引用区存在时追加到同一验证正文，不改变 required snippet 门禁。
+    if str_reference_body:
+
+        # 继续检查根文件内的完整输出策略，而不是放宽为指针存在。
+        str_body = f"{str_body}\n{str_reference_body}"  # 合并指针段与引用段供输出策略校验。
 
     # 初始化总体验证状态，后续只要正文或配置有缺口就会置为 False。
     bool_is_valid = True  # 脚本输出策略总体验证状态

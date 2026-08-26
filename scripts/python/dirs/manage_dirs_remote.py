@@ -25,6 +25,49 @@ def normalize_rel(str_raw: str) -> str:
     # 远程规划合同统一使用正斜杠，避免主机平台影响比较结果。
     return str(str_raw).replace("\\", "/").strip().strip("/")
 
+# 远程路径安全检查拒绝会被实际文件系统重新解释的分段。
+def _is_safe_relative_remote_path(str_raw: object) -> bool:
+    """判断远程路径是否保持为无歧义的相对路径。
+
+    参数:
+        str_raw: 待检查的远程路径候选值。
+
+    返回:
+        True 表示路径可以安全作为工作区相对路径使用。
+    """
+
+    # 远程路径合同只接受字符串，避免对象字符串化形成隐藏路径语义。
+    if not isinstance(str_raw, str):
+
+        # 类型不明的路径不能参与远程白名单比较。
+        return False
+
+    # 原始分隔符必须先统一，之后才可拒绝归一化会改变含义的片段。
+    str_value = str_raw.replace("\\", "/").strip()  # 待检查的 POSIX 路径文本。
+
+    # 空值、根路径和盘符路径都不属于工作区相对路径。
+    if not str_value or str_value.startswith("/"):
+
+        # 空或绝对路径不能被拼接进远程工作区白名单。
+        return False
+
+    # 首个分段出现盘符标记时拒绝跨平台绝对路径伪装。
+    if ":" in str_value.split("/", 1)[0]:
+
+        # 远程路径只允许普通相对目录名。
+        return False
+
+    # 单独的点号是受管合同中的工作区根标识，不代表目录逃逸。
+    if str_value == ".":
+
+        # 根标识由 join_remote_workspace_path 解析为已验证工作区根。
+        return True
+
+    # 其他空分段、当前目录和父级目录均可能被远程 shell 重新解释。
+    return not any(
+        str_part in {"", ".", ".."} for str_part in str_value.split("/")
+    )
+
 # 工作区根解析隔离问卷占位符与真实路径。
 def remote_workspace_root(dict_remote_plan: dict[str, Any]) -> str:
     """返回已配置的远程工作区根目录，未配置时返回空字符串。
@@ -79,6 +122,38 @@ def join_remote_workspace_path(str_workspace: str, str_relative: str) -> str:
     # 单个分隔符连接根目录和非空规划项。
     return f"{str_workspace.rstrip('/')}/{str_relative_norm}"
 
+# 远程输入既可带已验证工作区根，也可直接使用相对路径。
+def _workspace_relative_path(str_path: str, str_workspace: str) -> str:
+    """把远程路径转换为相对于已验证工作区的形式。
+
+    参数：str_path 为调用方路径；str_workspace 为已验证远程根。
+    返回：用于统一策略比较的工作区相对路径。
+    """
+
+    # 调用方与远程根先统一为规范形式，再剥离已验证根前缀。
+    str_normalized = normalize_rel(str_path)  # 调用方路径的规范形式。
+
+    # 远程根的规范形式用于精确前缀比较。
+    str_root = normalize_rel(str_workspace)  # 远程根的规范形式。
+
+    # 根目录本身映射为点号，避免把工作区根误当作子路径。
+    if str_normalized == str_root:
+
+        # 点号是远程工作区根的唯一相对表示。
+        return "."
+
+    # 带根路径只剥离一个已验证前缀，避免空根或相似目录名误匹配。
+    str_prefix = f"{str_root}/" if str_root else ""  # 已验证远程根的路径前缀。
+
+    # 仅剥离完整根前缀，避免相似目录名误匹配。
+    if str_prefix and str_normalized.startswith(str_prefix):
+
+        # 返回根下的相对部分供设置和运行时策略复用。
+        return str_normalized[len(str_prefix):]
+
+    # 未带根的输入本来就是工作区相对路径。
+    return str_normalized
+
 # 白名单判断允许规划项、其后代和创建结构所需的父目录。
 def allowed_remote_path(str_path: str, dict_remote_plan: dict[str, Any]) -> bool:
     """判断远程路径是否落在规划项、其父目录或模板前缀内。
@@ -96,18 +171,65 @@ def allowed_remote_path(str_path: str, dict_remote_plan: dict[str, Any]) -> bool
         # 默认拒绝可防止把相对路径误判为已授权路径。
         return False
 
+    # 白名单判断必须拒绝原始路径中的逃逸片段，不能依赖字符串前缀比较兜底。
+    if not _is_safe_relative_remote_path(str_path):
+
+        # 父级、点号、空分段或绝对路径均不进入远程路径拼接。
+        return False
+
+    # 工作区相对路径用于设置分类，并在白名单比较前拒绝本地专用设置。
+    str_relative_path = _workspace_relative_path(str_path, str_workspace)  # 工作区相对路径。
+
+    # 本地专用设置必须在任何白名单匹配前拒绝。
+    if "workspace-settings-local" in workspace_settings_path_classes(str_relative_path):
+
+        # 远端设置只接受明确的 .remote.json 命名合同。
+        return False
+
+    # 已验证 workspace_root 本身允许用点号作为精确工作区目标。
+    if normalize_rel(str_path) == ".":
+
+        # 点号不扩大到工作区后代，后代仍需命中显式计划或模板。
+        return True
+
     # 调用方路径按工作区相对路径合同转换为完整远程路径。
     str_normalized = join_remote_workspace_path(  # 生成参与白名单比较的完整路径。
         str_workspace,  # 已授权的远程工作区根目录。
-        str_path,  # 调用方提交的工作区相对路径。
+        str_relative_path,  # 已统一为工作区相对路径的调用方输入。
     )  # 待审查的规范化远程路径。
 
     # 空规划项不参与授权，避免意外放宽到整个工作区。
     list_allowed = [  # 过滤空值并规范化全部显式规划项。
         normalize_rel(str(item))  # 单个规范化规划项。
         for item in dict_remote_plan.get("planned_structure", [])  # 逐项读取规划结构。
-        if str(item).strip()  # 忽略不能形成授权边界的空规划项。
+        if normalize_rel(str(item))  # 规划项必须先规范化。
+        and _is_safe_relative_remote_path(normalize_rel(str(item)))  # 忽略不安全规划项。
     ]  # 已声明的远程结构白名单。
+
+    # runtime/conda 模板本身也是已批准的相对结构，兼容未展开的旧计划。
+    dict_runtime = dict_remote_plan.get("runtime_artifacts", {})  # 运行时模板映射
+
+    # 读取隔离环境模板映射，兼容旧计划缺少该字段的情况。
+    dict_conda = dict_remote_plan.get("conda_environment", {})  # 环境模板映射
+
+    # 将运行与环境模板收集到稳定顺序的元组中。
+    tuple_templates = (
+        dict_runtime.get("active_path_template", "") if isinstance(dict_runtime, dict) else "",  # 活跃运行模板
+        dict_runtime.get("backup_path_template", "") if isinstance(dict_runtime, dict) else "",  # 归档运行模板
+        dict_conda.get("path_template", "") if isinstance(dict_conda, dict) else "",  # Conda 环境模板
+    )  # 计划中声明的动态路径模板
+
+    # 只把安全且非空模板加入白名单，保持 fail-closed 路径筛选。
+    for value_template in tuple_templates:
+
+        # 模板值统一为相对路径后再参与后代匹配。
+        str_template = normalize_rel(str(value_template))  # 当前模板的相对路径
+
+        # 非空且安全的模板才获得动态后代授权。
+        if str_template and _is_safe_relative_remote_path(str_template):
+
+            # 运行模板缺少展开项时仍由批准配置提供授权。
+            list_allowed.append(str_template)
 
     # 规划项的父目录允许被创建，以便逐层建立目标结构。
     set_parents: set[str] = set()  # 所有规划项隐含授权的父目录。
@@ -125,7 +247,7 @@ def allowed_remote_path(str_path: str, dict_remote_plan: dict[str, Any]) -> bool
             set_parents.add("/".join(list_parts[:int_index]))
 
     # 创建规划结构所需的中间父目录属于授权范围。
-    if str_normalized in set_parents:
+    if str_normalized in set_parents or str_relative_path in set_parents:
 
         # 父目录仅因现有规划项而获得授权。
         return True
@@ -134,8 +256,10 @@ def allowed_remote_path(str_path: str, dict_remote_plan: dict[str, Any]) -> bool
     for str_item in list_allowed:
 
         # 规划项本身及其后代目录均处于同一授权边界内。
-        if str_normalized == str_item or str_normalized.startswith(
-            str_item.rstrip("/") + "/"
+        if any(
+            str_candidate == str_item
+            or str_candidate.startswith(str_item.rstrip("/") + "/")
+            for str_candidate in (str_normalized, str_relative_path)
         ):
 
             # 精确或后代匹配不需要继续检查其他规划项。
@@ -148,7 +272,10 @@ def allowed_remote_path(str_path: str, dict_remote_plan: dict[str, Any]) -> bool
             str_prefix = str_item.split("<", 1)[0].rstrip("/")  # 模板稳定前缀。
 
             # 模板前缀只授权其后代，空前缀不能授权整个工作区。
-            if str_prefix and str_normalized.startswith(str_prefix + "/"):
+            if str_prefix and any(
+                str_candidate.startswith(str_prefix + "/")
+                for str_candidate in (str_normalized, str_relative_path)
+            ):
 
                 # 动态实例路径符合已声明的规划模板。
                 return True
@@ -168,7 +295,10 @@ def remote_path_classes(
     """
 
     # 所有类别判断均基于同一种相对路径表示。
-    str_normalized = normalize_rel(str_path)  # 待分类的规范化远程路径。
+    str_workspace = remote_workspace_root(dict_remote_plan)  # 远程根用于剥离绝对输入。
+
+    # 运行时分类必须看见剥离根后的活动与备份前缀。
+    str_normalized = _workspace_relative_path(str_path, str_workspace)  # 归一化路径用于类别分支判断。
 
     # 空路径没有可保护的远程目录类别。
     if not str_normalized:
@@ -322,12 +452,16 @@ def remote_runtime_reasons(
     )  # 可信制品留存模板。
 
     # 原路径用于设置文件保护和破坏性类别判断。
-    str_normalized_path = normalize_rel(str_path)  # 规范化后的操作源路径。
+    str_workspace = remote_workspace_root(dict_remote_plan)  # 远程根用于统一路径语义。
+
+    # 设置泄漏检查使用已剥离远程根的源路径。
+    str_normalized_path = _workspace_relative_path(str_path, str_workspace)  # 工作区相对源路径。
 
     # 移动或重命名检查目标位置，其他操作检查源位置。
-    str_normalized = normalize_rel(  # 选择实际需要审查的位置。
-        str_target if str_target else str_path  # 有目标时优先审查目标位置。
-    )  # 需要满足运行时位置策略的路径。
+    str_normalized = _workspace_relative_path(  # 选择实际需要审查的位置。
+        str_target if str_target else str_path,  # 有目标时优先审查目标位置。
+        str_workspace,  # 统一剥离已验证远程根。
+    )  # 需要满足运行时位置策略的工作区相对路径。
 
     # 空路径没有可判定的运行时位置。
     if not str_normalized:

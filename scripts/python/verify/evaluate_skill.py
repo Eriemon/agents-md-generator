@@ -95,32 +95,36 @@ ERROR_CATEGORY_NAMES = (
 )
 
 # 命令结果统一转换成后续错误分类可消费的映射。
-def command_entry(name: str, argv: list[str], cwd: Path, result: subprocess.CompletedProcess[str]) -> dict[str, Any]:
+def command_entry(
+    name: str,
+    argv: list[str],
+    cwd: Path,
+    completed_process_result: subprocess.CompletedProcess[str],
+) -> dict[str, Any]:
     """序列化单次子进程执行结果并尝试解析 JSON 输出。
 
     Args:
         name: 评估链中的命令名称。
         argv: 实际执行的参数列表。
         cwd: 子进程工作目录。
-        result: subprocess 返回的完成结果。
+        completed_process_result: subprocess 返回的完成结果。
 
     Returns:
         包含文本输出、退出码和可选 JSON 的命令记录。
     """
 
-    # Windows 子进程可能使用本地代码页，评估链统一要求 UTF-8 输出。
-    # 缺失标准输出时保持可序列化空文本。
-    str_stdout = result.stdout or ""  # 可序列化标准输出
+    # Windows 子进程可能使用本地代码页；缺失输出时统一回退为空文本。
+    str_stdout = completed_process_result.stdout or ""  # 可序列化标准输出
 
     # 缺失标准错误时保持可序列化空文本。
-    str_stderr = result.stderr or ""  # 可序列化标准错误
+    str_stderr = completed_process_result.stderr or ""  # 可序列化标准错误
 
     # 原始输出必须保留，以便非 JSON 命令仍可诊断。
     dict_entry: dict[str, Any] = {  # 标准命令执行记录
         "name": name,  # 评估步骤名称
         "argv": argv,  # 实际命令参数
         "cwd": str(cwd),  # 执行工作目录
-        "returncode": result.returncode,  # 子进程退出码
+        "returncode": completed_process_result.returncode,  # 子进程退出码
         "stdout": str_stdout,  # 标准输出正文
         "stderr": str_stderr,  # 标准错误正文
     }
@@ -206,20 +210,38 @@ def quick_validate_script(bool_self_skill: bool = False, skill_dir: Path | None 
         list_candidates.append(tool_script_path("quick_validate.py"))
 
     # 系统 skill-creator 校验器负责所有通用目标及自评估回退。
-    str_codex_home = os.environ.get("CODEX_HOME", "").strip()  # 隔离 Codex 主目录文本
+    from agent_platform import load_agent_config, resolve_agent_home
 
-    # 显式主目录优先于用户默认主目录。
-    path_codex_home = (  # 当前评估使用的 Codex 主目录
-        Path(str_codex_home).expanduser()  # 展开隔离主目录
-        if str_codex_home  # 使用显式 CODEX_HOME
-        else Path.home() / ".codex"  # 回退用户默认主目录
-    )
+    # 工具技能根作为平台配置解析的稳定锚点。
+    path_skill_root: Path = TOOL_SKILL_DIR  # 当前工具技能根目录
+
+    # 平台档案决定用户根和技能安装目录的相对布局。
+    profile_agent = load_agent_config(path_skill_root)  # 当前平台配置档案
+
+    # 环境变量仅覆盖平台用户根，不改变平台目录规则。
+    str_raw_home = os.environ.get("AGENT_HOME", "").strip() or os.environ.get("CODEX_HOME", "").strip()  # 用户根覆盖文本
+
+    # 解析平台用户根以构造安装态系统技能候选。
+    path_agent_home = resolve_agent_home(path_skill_root, str_raw_home, profile_agent.agent)  # 平台用户根目录
 
     # 候选路径遵循 CODEX_HOME 优先、用户默认目录回退的统一合同。
     list_candidates.extend(
         [
-            TOOL_SKILL_DIR.parent / ".system" / "skill-creator" / "scripts" / "quick_validate.py",  # 同级系统技能
-            path_codex_home / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py",  # 用户安装回退
+            (
+                TOOL_SKILL_DIR.parent  # 同级系统技能父目录
+                / ".system"  # 系统技能目录
+                / "skill-creator"  # 通用验证技能名称
+                / "scripts"  # 验证脚本目录
+                / "quick_validate.py"  # 通用快速验证入口
+            ),
+            (
+                path_agent_home  # 用户平台安装根
+                / profile_agent.skill_install_dir  # 平台技能安装目录
+                / ".system"  # 安装态系统技能目录
+                / "skill-creator"  # 安装态通用验证技能名称
+                / "scripts"  # 安装态验证脚本目录
+                / "quick_validate.py"  # 安装态快速验证入口
+            ),
         ]
     )
 

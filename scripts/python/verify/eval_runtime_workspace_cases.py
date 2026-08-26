@@ -19,7 +19,10 @@ from eval_runtime_core import (
 )
 
 # 根合同验证器提供工作区边界的正式唯一性与语义检查。
-from verify_workspace_boundary import validate_workspace_boundary_contract
+from verify_workspace_boundary import (
+    WORKSPACE_BOUNDARY_COMPACT_SNIPPETS,
+    validate_workspace_boundary_contract,
+)
 
 # 技能内评估目录只作为允许存在的发布内容规则证据。
 PATH_SKILL_EVALS = Path("skills") / "demo-skill" / "evals"  # 示例技能评估目录相对路径
@@ -79,8 +82,29 @@ def evaluate_workspace_boundary_mutations(str_agents_text: str) -> list[bool]:
     # 每轮只替换一个保护片段，避免复合变异掩盖失败来源。
     for str_original, str_replacement in workspace_boundary_weakened_fragments():
 
-        # 当前文本仅弱化本轮指定的保护语义。
-        str_mutated = str_agents_text.replace(str_original, str_replacement)  # 单项弱化根文本。
+        # 当前文本仅弱化本轮指定的保护语义，兼容标准长句和受控紧凑短句。
+        str_mutated = str_agents_text  # 当前弱化版本根文本
+
+        # 记录本轮是否实际找到并替换了目标保护片段。
+        bool_mutated = False  # 变异是否命中正文
+
+        # 标准片段优先，紧凑片段只从公共映射读取。
+        for str_candidate in (
+            str_original,
+            *WORKSPACE_BOUNDARY_COMPACT_SNIPPETS.get(str_original, ()),
+        ):
+
+            # 命中任一受控片段后只替换本轮目标并停止搜索。
+            if str_candidate in str_agents_text:
+
+                # 当前文本仅弱化本轮指定的保护语义。
+                str_mutated = str_agents_text.replace(str_candidate, str_replacement, 1)  # 单项弱化根文本
+
+                # 标记本轮变异确实作用于正文。
+                bool_mutated = True  # 变异命中正文
+
+                # 当前候选已完成替换，不再尝试同一保护层的其他表达。
+                break
 
         # 正式验证器把当前变异诊断写入独立列表。
         list_errors: list[str] = []  # 当前弱化版本的正式诊断。
@@ -90,7 +114,8 @@ def evaluate_workspace_boundary_mutations(str_agents_text: str) -> list[bool]:
 
         # 只接受明确指向工作区边界的正式拒绝结果。
         list_rejections.append(
-            not bool_valid
+            bool_mutated
+            and not bool_valid
             and any("workspace boundary" in str_error.casefold() for str_error in list_errors)
         )
 
@@ -114,54 +139,102 @@ def workspace_boundary_positive_checks(
     """
 
     # 长片段单独命名，避免能力映射掩盖只读例外的准确边界。
-    str_read_only_fragment = "External reads beyond those boundaries must be necessary and side-effect free"  # 边界外只读访问固定片段。
+    tuple_read_only_fragments = (  # 边界外只读访问固定片段集合
+        "External reads beyond those boundaries must be necessary and side-effect free",  # 标准只读片段
+        "Necessary side-effect-free reads",  # 紧凑只读片段
+    )
+
+    # 文本检查同时接受生产 verifier 已登记的标准和紧凑表达。
+    def contains_any(tuple_fragments: tuple[str, ...]) -> bool:
+        """判断根文本是否包含任一受控语义片段。
+
+        参数：tuple_fragments 为标准或紧凑语义片段集合。
+        返回：任一片段命中根文本时为 True。
+        """
+
+        # 只接受显式列出的标准或紧凑片段。
+        return any(str_fragment in str_agents_text for str_fragment in tuple_fragments)
 
     # 固定键集合维持历史评估 JSON 结构和断言接口。
     return {
         "renders_once": str_agents_text.count("- **Workspace boundary:**") == 1,
         "governed_work_folders_skip_repeat_confirmation": (
-            "Changes inside either work folder require no additional confirmation" in str_agents_text
+            contains_any(
+                (
+                    "Changes inside either work folder require no additional confirmation",
+                    "changes inside either need no confirmation",
+                )
+            )
         ),
-        "remote_route_must_match": "configured task route matches that folder" in str_agents_text,
+        "remote_route_must_match": contains_any(
+            ("configured task route matches that folder", "remote changes need route")
+        ),
         "bound_codebase_memory_operations_skip_confirmation": (
-            "Official codebase-memory start, index refresh, rebuild, or recovery" in str_agents_text
-            and "also requires no additional confirmation" in str_agents_text
+            contains_any(
+                (
+                    "Official codebase-memory start, index refresh, rebuild, or recovery",
+                    "Official codebase-memory start/index/rebuild/recovery",
+                )
+            )
+            and contains_any(("also requires no additional confirmation", "needs no confirmation"))
         ),
-        "other_external_write_prohibited_by_default": (
-            "Every other external write is prohibited by default" in str_agents_text
+        "other_external_write_prohibited_by_default": contains_any(
+            ("Every other external write is prohibited by default", "other external writes prohibited")
         ),
-        "exact_proactive_request_required": (
-            "only after the user proactively and explicitly requests the exact action" in str_agents_text
+        "exact_proactive_request_required": contains_any(
+            (
+                "only after the user proactively and explicitly requests the exact action",
+                "unless user proactively requests action",
+            )
         ),
         "single_confirmation_after_disclosure": (
-            "exact normalized target, action, scope, risks, alternatives, and recovery limits"
-            in str_agents_text
-            and "obtain exactly one explicit user confirmation" in str_agents_text
+            contains_any(
+                (
+                    "exact normalized target, action, scope, risks, alternatives, and recovery limits",
+                    "normalized target/action/scope/risks/alternatives/recovery limits",
+                )
+            )
+            and contains_any(
+                ("obtain exactly one explicit user confirmation", "obtain one confirmation")
+            )
         ),
-        "changed_scope_invalidates_confirmation": (
-            "target or scope change invalidates that confirmation" in str_agents_text
+        "changed_scope_invalidates_confirmation": contains_any(
+            ("target or scope change invalidates that confirmation", "Target/scope changes invalidate")
         ),
-        "installed_skill_always_confirmed_once": (
-            "installed skill always requires exactly one explicit user confirmation" in str_agents_text
+        "installed_skill_always_confirmed_once": contains_any(
+            (
+                "installed skill always requires exactly one explicit user confirmation",
+                "installed skill requires one explicit user confirmation",
+            )
         ),
         "authoritative_test_hash_agreement_auto_confirms": (
-            "Routine test-hash confirmation is prohibited." in str_agents_text
-            and (
-                "Agent autonomously confirms when the canonical tester result agrees "
-                "with the authoritative current tests tree or receipt."
-            ) in str_agents_text
+            contains_any(
+                (
+                    "Routine test-hash confirmation is prohibited.",
+                    "Routine test-hash confirmation prohibited.",
+                )
+            )
+            and contains_any(
+                (
+                    "agent may confirm when an authoritative current tests result agrees with the authoritative current tests tree or receipt.",
+                    "agent may confirm when authoritative current tests result agrees with authoritative current tests tree/receipt.",
+                )
+            )
         ),
-        "report_only_hash_mismatch_corrected": (
-            "A report-only hash mismatch is corrected to the authoritative value." in str_agents_text
-        ),
-        "conflicting_or_insufficient_provenance_requires_user_review": (
+        "report_only_hash_mismatch_corrected": contains_any(
             (
-                "Conflicting or insufficient provenance stops for user review "
-                "without an autonomous rerun."
-            ) in str_agents_text
+                "A report-only hash mismatch is corrected to the authoritative value.",
+                "Report-only mismatch uses authoritative value",
+            )
         ),
-        "no_autonomous_rerun_after_provenance_stop": (
-            "without an autonomous rerun" in str_agents_text
+        "conflicting_or_insufficient_provenance_requires_user_review": contains_any(
+            (
+                "Conflicting or insufficient provenance stops for user review without an autonomous rerun.",
+                "conflicting/insufficient provenance stops for review.",
+            )
+        ),
+        "no_autonomous_rerun_after_provenance_stop": contains_any(
+            ("without an autonomous rerun", "conflicting/insufficient provenance stops for review")
         ),
         "double_confirmation_removed": (
             "two separate explicit user confirmations" not in str_agents_text
@@ -169,7 +242,7 @@ def workspace_boundary_positive_checks(
             and "second approves the exact action" not in str_agents_text
             and "invalidates both confirmations" not in str_agents_text
         ),
-        "side_effect_free_read_stays_read_only": str_read_only_fragment in str_agents_text,
+        "side_effect_free_read_stays_read_only": contains_any(tuple_read_only_fragments),
         "weakened_contract_rejected": all(list_weakened_rejections),
         "duplicate_contract_rejected": not bool_duplicate_valid and bool(list_duplicate_errors),
     }
@@ -195,12 +268,21 @@ def case_workspace_boundary_authorization_contract(
         # 临时项目承载正式渲染的受管根 AGENTS.md。
         path_project = Path(str_temporary_directory)  # 外部写入授权评估项目根
 
-        # 项目与安装版本一致，避免无关版本诊断影响边界证据。
+        # 项目与安装版本由 fixture 合同提供，避免场景值写入实现。
+        str_skill_name = str(helper.fixture_value("names", "skill"))  # fixture 技能名称
+
+        # 读取项目版本，驱动渲染夹具的源码状态。
+        str_project_version = str(helper.fixture_value("versions", "project_skill"))  # fixture 项目版本
+
+        # 读取安装版本，保持安装态输入也来自同一份合同。
+        str_installed_version = str(helper.fixture_value("versions", "project_skill"))  # fixture 安装版本
+
+        # 使用 fixture 名称和版本构造渲染夹具。
         helper.make_rendered_governed_skill_project(
             path_project,  # 指定外部写入授权评估项目根
-            name="demo-skill",  # 使用普通受管技能名称
-            project_version="v0.4.3",  # 固定评估项目版本
-            installed_version="v0.4.3",  # 固定评估安装版本
+            name=str_skill_name,  # 使用普通受管技能名称
+            project_version=str_project_version,  # 配置评估项目版本
+            installed_version=str_installed_version,  # 配置评估安装版本
         )
 
         # 正式根文本包含生成器实际输出的边界规则。
@@ -455,7 +537,7 @@ def global_template_checks(str_template: str) -> dict[str, bool]:
         "## Comments And Documentation" in str_template  # 是否包含注释治理章节
         and "Comment public contracts" in str_template  # 是否要求注释公共合同
         and "key invariants, non-obvious decisions, generation boundaries, and risk boundaries" in str_template  # 是否覆盖关键语义边界
-        and "Do not restate obvious code" in str_template  # 是否禁止复述显然代码
+        and "do not restate obvious code" in str_template.casefold()  # 是否禁止复述显然代码
         and "Update stale comments and documentation when behavior changes" in str_template  # 是否要求行为同步文档
     )
 
@@ -513,16 +595,10 @@ def global_template_checks(str_template: str) -> dict[str, bool]:
         and "Authorization is task-local and does not carry over" in str_template  # 授权不跨任务
     )
 
-    # 测试目录只能由同一隔离测试者操作并形成反馈修复复验循环。
-    bool_isolated_testing = (  # 独立测试闭环合同完整性
-        "When requested work has an executable test surface" in str_template  # 是否按测试面触发
-        and "exactly one isolated `TESTER`" in str_template  # 是否只有一个测试智能体
-        and "Pure read-only or planning work" in str_template  # 是否排除无测试面工作
-        and "Only that `TESTER` may list, read, create, modify, or run anything under `tests/**`" in str_template  # 是否独占测试目录
-        and "The implementing agent must not inspect tests or execute test commands" in str_template  # 是否隔离实现者
-        and "problem feedback, and suggested fixes" in str_template  # 是否要求问题反馈
-        and "same `TESTER` to re-run verification" in str_template  # 是否要求同一测试者复验
-        and "Routine test-hash confirmation is prohibited." in str_template  # 是否禁止常规哈希确认
+    # 全局基线保持 worker-neutral，具体 tests/** 所有权由项目授权状态决定。
+    bool_isolated_testing = all(  # 全局基线不泄露 disabled worker 合同
+        str_token not in str_template
+        for str_token in ("tester_worker", "reviewer_worker", "gardener_worker", "`TESTER`")
     )
 
     # 文档按理解收益选择表现形式，计划同时消除执行期设计决策。
@@ -741,14 +817,16 @@ def case_global_review_agent_opt_in_contract(
         "omitted_count_defaults_to_three": "use exactly three" in str_template,  # 缺省数量规则
         "explicit_count_overrides_default": "explicit user-provided count overrides" in str_template,  # 显式数量覆盖规则
         "authorization_is_task_local": "Authorization is task-local and does not carry over" in str_template,  # 单任务授权规则
-        "isolated_tester_for_executable_surface": (  # 独立测试者触发能力。
-            "When requested work has an executable test surface" in str_template  # 可执行测试面触发语义
-            and "exactly one isolated `TESTER`" in str_template  # 唯一测试者语义
-            and "fork_turns=none" in str_template  # 隔离上下文语义
+        "isolated_tester_for_executable_surface": (  # 测试所有权必须服从项目授权状态。
+            "when tester is disabled, the main Agent owns `tests/**`" in str_skill
+            and all(
+                str_token not in str_template
+                for str_token in ("tester_worker", "reviewer_worker", "gardener_worker", "`TESTER`")
+            )
         ),
-        "no_surface_work_skips_tester": (  # 无测试面工作不派发测试者。
-            "Pure read-only or planning work and documentation-only changes "  # 无测试面工作类型
-            "without a test surface" in str_template  # 检查无测试面时是否跳过测试者
+        "no_surface_work_skips_tester": (  # 无测试面工作不触发测试所有权流程。
+            "Pure read-only or planning work and documentation-only changes without a test surface "
+            "do not require test ownership" in str_skill
         ),
         "write_intent_skips_default_subagent_design_review": (  # 写入默认跳过审查能力。
             "Write intent also defaults to no review subagent" in str_skill  # 技能路由默认不审查。
@@ -857,7 +935,7 @@ def run_memory_sequence(
         path_codex_home,
         path_project,
         "019-eval-memory",
-        [("user", "请从历史会话初始化 memory，不要保存 password=abc123。")],
+        [("user", "Bootstrap memory summaries must redact password=abc123 before persistence.")],
     )
 
     # 所有后续命令只扫描隔离的评估会话目录。

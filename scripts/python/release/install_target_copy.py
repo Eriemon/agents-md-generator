@@ -7,6 +7,9 @@ from pathlib import Path
 import shutil
 from typing import Any, NoReturn
 
+# 平台模块提供安装目标解析合同。
+from agent_platform import resolve_agent_profile
+
 # 发布清单模块提供 Codex 主目录解析合同。
 from install_release_manifest import (
     default_codex_home,
@@ -17,17 +20,30 @@ from install_release_manifest import (
 )
 from install_repository_validation import validate_receipt_file_manifest
 
+# 兼容安装目标只公开已经实现的目标类型。
+def legacy_target_choices() -> tuple[str, ...]:
+    """返回 legacy 安装 CLI 的目标类型合同。
+
+    参数：无。
+    返回：skip、custom 和已实现的 Codex 目标类型。
+    """
+
+    # guided --platform 负责 catalog 全平台，legacy target 仅保留已有解析分支。
+    return ("skip", "custom", "codex")
+
 # 目标解析器把 CLI 选项转换为最终技能目录。
 def target_path(
     str_skill_name: str,
     str_target: str,
     str_codex_home: str | None,
     str_custom_root: str | None,
+    str_agent_platform: str | None = None,
 ) -> Path | None:
     """解析安装目标目录。
 
     参数：str_skill_name 为技能名，str_target 为目标类型。
     参数：str_codex_home 和 str_custom_root 为可选根目录覆盖值。
+    参数：str_agent_platform 为可选的平台标识覆盖值。
     返回：skip 时返回 None，其他合法目标返回技能目录。
     异常：custom 缺少根目录或目标类型非法时抛出 SystemExit。
     """
@@ -47,11 +63,29 @@ def target_path(
         # 空目标明确表示调用方不得进入复制阶段。
         return None
 
-    # codex 目标位于解析后的 Codex 主目录 skills 子目录。
+    # 未指定平台时沿用历史 Codex 默认行为；指定后统一由目录解析配置。
+    profile = resolve_agent_profile(str_agent_platform or "codex")  # 当前平台配置档案
+
+    # codex 目标位于解析后的平台用户目录 skills 子目录。
     if str_target == "codex":
 
+        # Codex 保留可覆盖的历史根目录，其余平台使用当前用户目录。
+        if profile.agent == "codex":
+
+            # Codex 平台沿用显式主目录覆盖和默认解析规则。
+            path_platform_home = default_codex_home(str_codex_home)  # Codex 平台用户根
+
+            # 将平台安装目录追加到已解析的 Codex 用户根。
+            path_skill_root = path_platform_home / profile.skill_install_dir  # Codex 技能根目录
+
+        # 非 Codex 平台使用平台档案声明的用户目录。
+        else:
+
+            # 由平台档案拼接用户根和技能安装目录。
+            path_skill_root = Path.home() / profile.user_home_dir / profile.skill_install_dir  # 当前平台技能根
+
         # 技能名作为安装目录叶节点，避免覆盖整个 skills 根目录。
-        return default_codex_home(str_codex_home) / "skills" / str_skill_name
+        return path_skill_root / str_skill_name
 
     # custom 目标要求调用方显式提供自定义根目录。
     if str_target == "custom":
@@ -79,27 +113,118 @@ def stamp() -> str:
     # 秒级时间戳兼顾可读性和常规安装唯一性。
     return datetime.now().strftime("%Y%m%d-%H%M%S")
 
+# 读取发布包声明的备份目录名，避免复制事务硬编码安装路径。
+def installer_backup_directory_name(path_skill_dir: Path) -> str:
+    """读取并校验发布包声明的备份目录名。
+
+    参数：path_skill_dir 为版本化发布包根目录。
+    返回：单一目录名。
+    异常：缺少或污染 installer manifest 时抛出 ValueError。
+    """
+
+    # 版本化包中的 env 投影是脚本和复制事务共享的直接配置来源。
+    path_manifest_env = path_skill_dir / "assets" / "installer" / "installer.manifest.env"  # installer env manifest 的受管路径。
+
+    # 先读取 env，保持跨运行时的纯文本兼容路径。
+    if path_manifest_env.is_file():
+
+        # 逐行查找唯一的备份目录声明。
+        for str_line in path_manifest_env.read_text(encoding="utf-8").splitlines():
+
+            # 只接受明确的键值记录，忽略空行和其他 manifest 字段。
+            str_key, str_separator, str_value = str_line.partition("=")  # 当前 env 行拆分出的键、分隔符和值。
+
+            # 只有备份目录声明才参与当前安装事务的路径解析。
+            if str_separator and str_key == "BACKUP_DIRECTORY_NAME":
+
+                # 目录名必须是单一安全路径组件。
+                str_directory_name = str_value.strip()  # 声明的备份目录名
+
+                # 备份目录名不得携带路径分隔符或特殊目录标记。
+                if str_directory_name and str_directory_name not in {".", ".."} and not any(
+                    str_character in str_directory_name for str_character in "/\\"
+                ):
+
+                    # 返回通过路径边界检查的配置值。
+                    return str_directory_name
+
+                # 污染的目录名不能被复制事务解释成路径。
+                raise ValueError("> ERR: [Python] installer backup directory name is unsafe")
+
+    # JSON manifest 作为 env 缺失时的同包结构化回退来源。
+    path_manifest_json = path_skill_dir / "config" / "installer" / "installer.manifest.json"  # 包内 JSON 用于回退读取备份配置。
+
+    # env 缺失时才读取同包 JSON manifest。
+    if path_manifest_json.is_file():
+
+        # 读取结构化配置并提取同一逻辑字段。
+        dict_manifest = json.loads(path_manifest_json.read_text(encoding="utf-8"))  # 解析同包 JSON 以获取备份根配置。
+
+        # 提取 JSON manifest 声明的备份目录名。
+        str_directory_name = str(dict_manifest.get("backup_directory_name", "")).strip()  # JSON 备份目录名。
+
+        # JSON 目录名通过同一单组件安全边界后才能使用。
+        if str_directory_name and str_directory_name not in {".", ".."} and not any(
+            str_character in str_directory_name for str_character in "/\\"
+        ):
+
+            # 返回已通过 JSON 路径边界检查的目录配置。
+            return str_directory_name
+
+    # 测试或受控调用可能只提供待复制目录，使用当前安装器携带的 manifest 作为配置回退。
+    path_installer_root = Path(__file__).resolve().parents[3]  # 当前安装器 Skill 根。
+
+    # 受控调用缺少包内 manifest 时复用安装器自身配置。
+    path_packaged_manifest_json = path_installer_root / "config" / "installer" / "installer.manifest.json"  # 安装器回退 manifest 路径。
+
+    # 只有回退路径不同且真实存在时才读取它。
+    if path_packaged_manifest_json != path_manifest_json and path_packaged_manifest_json.is_file():
+
+        # 回退配置仍必须经过同一安全目录名校验。
+        dict_packaged_manifest = json.loads(path_packaged_manifest_json.read_text(encoding="utf-8"))  # 安装器回退 manifest 对象。
+
+        # 提取安装器回退 manifest 的备份目录名。
+        str_packaged_directory_name = str(dict_packaged_manifest.get("backup_directory_name", "")).strip()  # 回退备份目录名。
+
+        # 回退目录名仍必须满足单组件路径边界。
+        if (
+            str_packaged_directory_name
+            and str_packaged_directory_name not in {".", ".."}
+            and not any(
+                str_character in str_packaged_directory_name
+                for str_character in "/\\"
+            )
+        ):
+
+            # 使用当前安装器发布配置，避免从目标路径猜测备份根。
+            return str_packaged_directory_name
+
+    # 缺少所有 manifest 时禁止猜测 Codex home 下的写入目录。
+    raise ValueError("> ERR: [Python] installer backup directory name is missing")
+
 # 备份根与 skills 目录保持同一 Codex 主目录边界。
-def backup_root_for(path_destination: Path) -> Path:
+def backup_root_for(path_destination: Path, str_backup_directory_name: str) -> Path:
     """返回目标技能对应的统一备份根目录。
 
     参数：path_destination 为最终技能安装目录。
+    参数：str_backup_directory_name 为 manifest 声明的备份目录名。
     返回：与 skills 同属一个 Codex 主目录的备份根。
     """
 
     # destination 形如 <home>/skills/<skill>，向上两级回到 home。
-    return path_destination.parent.parent / "skill_backups"
+    return path_destination.parent.parent / str_backup_directory_name
 
 # 唯一路径助手避免同一秒内多次替换相互覆盖。
-def unique_backup_path(path_destination: Path) -> Path:
+def unique_backup_path(path_destination: Path, str_backup_directory_name: str) -> Path:
     """返回尚不存在的目标技能备份目录。
 
     参数：path_destination 为最终技能安装目录。
+    参数：str_backup_directory_name 为 manifest 声明的备份目录名。
     返回：包含技能名、时间戳和可选序号的空闲路径。
     """
 
     # 基础名称组合技能名和当前时间戳。
-    path_base = backup_root_for(path_destination) / f"{path_destination.name}-{stamp()}"  # 首选备份目录。
+    path_base = backup_root_for(path_destination, str_backup_directory_name) / f"{path_destination.name}-{stamp()}"  # 首选备份目录。
 
     # 首次候选直接使用基础名称。
     path_candidate = path_base  # 当前待检查的备份目录。
@@ -314,6 +439,46 @@ def quarantine_failed_copy(path_failed_copy: Path, path_destination: Path) -> Pa
     # 返回路径供异常诊断和人工恢复使用。
     return path_quarantine
 
+# 恢复复制器绕过 staging 注入点，避免故障注入阻断旧目标恢复。
+def copy_directory_preserving_links(path_source: Path, path_destination: Path) -> None:
+    """递归复制目录并保留符号链接。
+
+    参数：path_source 为受信任的 backup 目录。
+    参数：path_destination 为恢复后的正式安装目录。
+    返回：无业务返回值；成功表示目标树已复制完成。
+    异常：任一目录、链接或文件复制失败时向上抛出文件系统异常。
+    """
+
+    # 恢复目标必须先创建，保证空目录也能被准确还原。
+    path_destination.mkdir(parents=True, exist_ok=True)
+
+    # 固定遍历顺序，使恢复现场和诊断结果保持稳定。
+    for path_source_child in sorted(path_source.iterdir(), key=lambda path_item: str(path_item)):
+
+        # 当前源项映射到恢复目标的同名路径。
+        path_target_child = path_destination / path_source_child.name  # 当前恢复项目标路径。
+
+        # 符号链接必须保留链接文本，不能跟随到外部目录。
+        if path_source_child.is_symlink():
+
+            # 使用源链接目标创建同级恢复链接。
+            path_target_child.symlink_to(
+                path_source_child.readlink(),
+                target_is_directory=path_source_child.is_dir(),
+            )
+
+        # 普通目录递归恢复其全部子项。
+        elif path_source_child.is_dir():
+
+            # 子目录恢复复用同一链接保护边界。
+            copy_directory_preserving_links(path_source_child, path_target_child)
+
+        # 普通文件使用 copy2 保留文件元数据。
+        else:
+
+            # 文件复制不调用可能被 staging 故障注入的 copytree。
+            shutil.copy2(path_source_child, path_target_child)
+
 # 旧安装从保留备份复制恢复，并再次验证安装态完整性。
 def restore_previous_copy(path_backup: Path, path_destination: Path) -> None:
     """从保留备份恢复旧安装并验证恢复结果。
@@ -336,8 +501,8 @@ def restore_previous_copy(path_backup: Path, path_destination: Path) -> None:
         # 保留备份现场并阻断恢复复制。
         raise RuntimeError("> ERR: [Python] recovery backup must not be a symbolic link")
 
-    # 使用复制而非移动，确保恢复成功后 backup 仍可审计和手工回退。
-    shutil.copytree(path_backup, path_destination, symlinks=True)
+    # 复制 backup 恢复正式目标，同时保留原 backup 供审计和人工恢复。
+    copy_directory_preserving_links(path_backup, path_destination)
 
     # 恢复副本必须满足与安装后副本相同的收据和哈希合同。
     dict_recovery_validation = validate_installed_copy(  # 恢复后的安装态验证结果。
@@ -488,6 +653,9 @@ def copy_skill(path_skill_dir: Path, path_destination: Path, bool_replace: bool)
     异常：目标已存在且禁止替换时抛出 FileExistsError。
     """
 
+    # 复制事务使用发布包 manifest 声明的备份目录，不从目标路径猜测配置。
+    str_backup_directory_name = installer_backup_directory_name(path_skill_dir)  # 备份目录配置
+
     # 默认无旧安装，因此结果中的备份路径为空。
     path_backup: Path | None = None  # 实际生成的旧安装备份目录。
 
@@ -515,20 +683,20 @@ def copy_skill(path_skill_dir: Path, path_destination: Path, bool_replace: bool)
     # 任一阶段失败都进入同一回滚与临时目录清理边界。
     try:
 
-        # staging 在旧安装移动前完成两阶段校验和受控内容转换。
-        prepare_staging_copy(path_skill_dir, path_staging)
-
-        # 只有完整新副本就绪后才备份旧安装。
+        # 旧目标必须先进入受控 backup，确保 staging 失败仍能恢复事务起点。
         if bool_destination_existed:
 
             # 唯一备份路径保留本次切换前的可恢复版本。
-            path_backup = unique_backup_path(path_destination)  # 本次旧安装备份目录。
+            path_backup = unique_backup_path(path_destination, str_backup_directory_name)  # 本次旧安装备份目录。
 
             # 备份根可能尚未创建。
             path_backup.parent.mkdir(parents=True, exist_ok=True)
 
             # 移走旧目标后，最终目录才能接收 staging。
             shutil.move(str(path_destination), str(path_backup))
+
+        # staging 在旧安装备份后完成两阶段校验和受控内容转换。
+        prepare_staging_copy(path_skill_dir, path_staging)
 
         # staging 与最终目录同级，移动不跨文件系统。
         shutil.move(str(path_staging), str(path_destination))
@@ -564,5 +732,12 @@ def copy_skill(path_skill_dir: Path, path_destination: Path, bool_replace: bool)
             object_install_error,
         )
 
-    # 空字符串维持既有机器可读结果合同。
-    return {"backup_path": str(path_backup) if path_backup else ""}
+    # 返回备份根和目录名，使安装收据与确认载荷绑定同一配置事实。
+    str_backup_root = str(backup_root_for(path_destination, str_backup_directory_name))  # 安装收据绑定的备份根。
+
+    # 空字符串维持既有机器可读结果合同，同时公开完整恢复边界。
+    return {
+        "backup_path": str(path_backup) if path_backup else "",
+        "backup_root": str_backup_root,
+        "backup_directory_name": str_backup_directory_name,
+    }

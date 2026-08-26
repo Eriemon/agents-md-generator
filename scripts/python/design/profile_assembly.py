@@ -1,5 +1,9 @@
 """组装设计画像并把确认后的画像写入项目治理目录。"""
 
+# 语言 catalog 负责 conversation 字段的 canonical 归一化。
+from language_contract import canonical_language, default_language
+from worker_dispatch_contracts import ROOT_AUTHORIZATION_STATES, WORKER_NAMES
+
 # 画像主体字段根据项目类型选择不同的问答来源。
 def _project_identity(answers: dict[str, Any], str_kind: str) -> tuple[str, str, str, str]:
     """提取项目类型对应的用途、原因、受众和备注字段。
@@ -181,7 +185,117 @@ def finalize_profile_contracts(
     # 返回已完成派生合同关联的同一画像映射。
     return dict_profile
 
-# 基础画像组装集中映射已验证输入，不承担错误判断或文件写入。
+# 基础画像字段由已验证输入映射生成。
+def _base_profile_payload(
+    dict_context: dict[str, Any],
+) -> dict[str, Any]:
+    """构造基础画像字段映射。
+
+    参数:
+        dict_context: 已验证问答、语言、目录、worker 和领域合同上下文。
+    返回:
+        尚未补充文档和发布白名单的基础画像。
+    """
+
+    # 从上下文对象读取画像字段所需的已验证输入。
+    answers = dict_context["answers"]  # 设计答案映射
+
+    # 读取画像类型字段。
+    str_kind = dict_context["str_kind"]  # 项目类型
+
+    # 读取画像名称字段。
+    str_name = dict_context["str_name"]  # 项目名称
+
+    # 读取已归一化会话语言。
+    str_default_language = dict_context["str_default_language"]  # canonical 会话语言
+
+    # 读取已归一化文档语言。
+    str_documentation_language = dict_context["str_documentation_language"]  # canonical 文档语言
+
+    # 读取类型补充说明键。
+    str_notes_key = dict_context["str_notes_key"]  # 补充说明键
+
+    # 读取目录合同映射。
+    dict_directory_contract = dict_context["dict_directory_contract"]  # 目录合同
+
+    # 读取 worker 安全默认状态。
+    str_disabled_state = dict_context["str_disabled_state"]  # worker 安全默认状态
+
+    # 读取项目身份元组。
+    tuple_identity = dict_context["tuple_identity"]  # 身份元组
+
+    # 读取领域合同集合。
+    dict_contracts = dict_context["dict_contracts"]  # 领域合同集合
+
+    # 主画像保持现有字段名和嵌套结构，避免破坏消费者。
+    dict_profile = {
+        "schema_version": 1,  # 画像模式版本
+        "kind": str_kind,  # 项目开发类型
+        "name": str_name,  # 项目标识
+        "default_conversation_language": str_default_language,  # 默认响应语言
+        "documentation_language": str_documentation_language,  # 当前文档语言
+    }
+
+    # canonical worker 默认授权字段保持全 disabled。
+    dict_profile["canonical_workers"] = {  # canonical worker 默认授权节点
+        "default_state": str_disabled_state,  # 新画像的安全默认状态
+        "states": {  # 按协议角色生成全 disabled 状态映射
+            str_worker_name: str_disabled_state  # 每个协议角色默认关闭
+            for str_worker_name in WORKER_NAMES  # 遍历协议角色集合
+        },  # 完成全 disabled 初始授权
+    }
+
+    # 项目身份与对齐字段。
+    dict_profile.update({
+        "purpose": tuple_identity[0],  # 项目用途
+        "reason": tuple_identity[1],  # 项目创建原因
+        "alignment_confirmed": bool(answers.get(ALIGNMENT_KEY)),  # 需求对齐状态
+        "audience_or_environment": tuple_identity[2],  # 受众或工程环境
+        "reference_materials_temporary": answers.get("reference_materials", []),  # 临时参考材料
+        "notes": answers.get(str_notes_key, ""),  # 类型对应补充说明
+    })
+
+    # Git、发布和目录治理字段。
+    dict_profile.update({
+        "git_management": answers["git_management"],  # Git 管理策略
+        "branch_model": answers["branch_model"],  # 分支协作模型
+        "git_branch_policy": git_branch_policy(),  # 分支治理合同
+        "release_contract": _release_contract(answers, str_name, str_kind),  # 发布安装合同
+        "existing_work": answers["has_existing_work"],  # 既有工作状态
+        "global_rule_overrides": global_rule_overrides_contract(),  # 全局规则覆盖合同
+        "directory_contract": dict_directory_contract,  # 完整目录合同
+        "dir_manager_contract": dir_manager_contract(),  # 目录管理合同
+    })
+
+    # 工程、远程和知识图谱合同字段。
+    dict_profile.update({
+        "engineering_rule_contract": dict_contracts["engineering_rule"],  # 工程规则合同
+        "remote_server_contract": dict_contracts["remote_servers"],  # 远程服务器合同
+        "use_codebase_memory_mcp": bool(answers[USE_CODEBASE_MEMORY_MCP_KEY]),  # 知识图谱显式选择
+        "codebase_memory_mcp_contract": codebase_memory_contract(bool(answers[USE_CODEBASE_MEMORY_MCP_KEY])),  # 知识图谱治理合同
+        "memory_enabled": bool(answers.get("memory_enabled")),  # 项目记忆启用状态
+        "memory_storage_backend": str(answers.get("memory_storage_backend", "")).strip(),  # 记忆存储后端
+        "memory_capture_scope": str(answers.get("memory_capture_scope", "")).strip(),  # 记忆采集范围
+        "memory_read_policy": str(answers.get("memory_read_policy", "")).strip(),  # 记忆读取规则
+        "memory_sensitivity_policy": str(answers.get("memory_sensitivity_policy", "")).strip(),  # 敏感信息规则
+        "memory_contract": memory_contract(answers),  # 完整记忆合同
+    })
+
+    # 开发要求与验证计划字段。
+    dict_profile.update({
+        "development_requirements": answers["development_requirements"],  # 开发要求
+        "extra_requirements": normalize_extra_requirements(answers.get(EXTRA_REQUIREMENTS_KEY, "none")),  # 附加要求
+        "expected_outcome": answers["expected_outcome"],  # 预期交付结果
+        "validation_method": answers["validation_method"],  # 验证方法
+        "validation_granularity": answers["validation_granularity"],  # 验证粒度
+        "resource_plan": answers["resource_plan"],  # 资源计划
+        "forward_testing_policy": answers["forward_testing_policy"],  # 前向测试规则
+    })
+
+    # 返回完成所有字段合并的基础画像。
+    return dict_profile
+
+# 组装目录、语言和 worker 默认值后委托基础画像字段 helper。
 def assemble_base_profile(
     answers: dict[str, Any],
     str_kind: str,
@@ -219,44 +333,41 @@ def assemble_base_profile(
         **directory_layout_policy(str_kind, str_name),  # 固定项目布局规则
     }
 
-    # 主画像保持现有字段名和嵌套结构，避免破坏消费者。
-    return {
-        "schema_version": 1,  # 画像模式版本
-        "kind": str_kind,  # 项目开发类型
-        "name": str_name,  # 项目标识
-        "default_conversation_language": str_default_language,  # 默认响应语言
-        "purpose": tuple_identity[0],  # 项目用途
-        "reason": tuple_identity[1],  # 项目创建原因
-        "alignment_confirmed": bool(answers.get(ALIGNMENT_KEY)),  # 需求对齐状态
-        "audience_or_environment": tuple_identity[2],  # 受众或工程环境
-        "reference_materials_temporary": answers.get("reference_materials", []),  # 临时参考材料
-        "notes": answers.get(str_notes_key, ""),  # 类型对应补充说明
-        "git_management": answers["git_management"],  # Git 管理策略
-        "branch_model": answers["branch_model"],  # 分支协作模型
-        "git_branch_policy": git_branch_policy(),  # 分支治理合同
-        "release_contract": _release_contract(answers, str_name, str_kind),  # 发布安装合同
-        "existing_work": answers["has_existing_work"],  # 既有工作状态
-        "global_rule_overrides": global_rule_overrides_contract(),  # 全局规则覆盖合同
-        "directory_contract": dict_directory_contract,  # 完整目录合同
-        "dir_manager_contract": dir_manager_contract(),  # 目录管理合同
-        "engineering_rule_contract": dict_contracts["engineering_rule"],  # 工程规则合同
-        "remote_server_contract": dict_contracts["remote_servers"],  # 远程服务器合同
-        "use_codebase_memory_mcp": bool(answers[USE_CODEBASE_MEMORY_MCP_KEY]),  # 知识图谱显式选择
-        "codebase_memory_mcp_contract": codebase_memory_contract(bool(answers[USE_CODEBASE_MEMORY_MCP_KEY])),  # 知识图谱治理合同
-        "memory_enabled": bool(answers.get("memory_enabled")),  # 项目记忆启用状态
-        "memory_storage_backend": str(answers.get("memory_storage_backend", "")).strip(),  # 记忆存储后端
-        "memory_capture_scope": str(answers.get("memory_capture_scope", "")).strip(),  # 记忆采集范围
-        "memory_read_policy": str(answers.get("memory_read_policy", "")).strip(),  # 记忆读取规则
-        "memory_sensitivity_policy": str(answers.get("memory_sensitivity_policy", "")).strip(),  # 敏感信息规则
-        "memory_contract": memory_contract(answers),  # 完整记忆合同
-        "development_requirements": answers["development_requirements"],  # 开发要求
-        "extra_requirements": normalize_extra_requirements(answers.get(EXTRA_REQUIREMENTS_KEY, "none")),  # 附加要求
-        "expected_outcome": answers["expected_outcome"],  # 预期交付结果
-        "validation_method": answers["validation_method"],  # 验证方法
-        "validation_granularity": answers["validation_granularity"],  # 验证粒度
-        "resource_plan": answers["resource_plan"],  # 资源计划
-        "forward_testing_policy": answers["forward_testing_policy"],  # 前向测试规则
-    }
+    # 文档语言独立归一化，确保所有画像都带有 English canonical ID。
+    str_documentation_input = str(answers.get("documentation_language", default_language("documentation")))  # 文档语言原始配置
+
+    # 将文档原始配置绑定为 catalog canonical ID。
+    str_documentation_language = canonical_language(str_documentation_input, "documentation")  # 校验并生成 profile 文档语言 ID
+
+    # Worker 默认状态从协议发现 disabled，并为所有角色写入显式安全值。
+    tuple_authorization_states = ROOT_AUTHORIZATION_STATES  # 协议授权状态集合
+
+    # 从协议状态集合筛选安全默认状态。
+    str_disabled_state = next(  # 解析协议 disabled 默认状态
+        str_state  # 当前候选授权状态文本
+        for str_state in tuple_authorization_states  # 遍历协议声明的授权状态
+        if str(str_state).casefold() == "disabled"  # 选择安全默认状态
+    )  # 完成 disabled 状态解析
+
+    # 为最终画像写入准备包含语言、目录合同和角色默认状态的完整载荷。
+    return _base_profile_payload(
+        dict(
+        answers=answers,  # 已验证设计答案
+        str_kind=str_kind,  # 规整项目类型
+        str_name=str_name,  # 规整项目名称
+        str_default_language=str_default_language,  # 传递 conversation canonical ID
+
+        # 传递文档语言和目录合同。
+        str_documentation_language=str_documentation_language,  # 传递已校验的文档语言 ID
+        str_notes_key=str_notes_key,  # 类型补充说明键
+        dict_directory_contract=dict_directory_contract,  # 已验证目录合同
+
+        # 传递 worker 默认状态和身份合同。
+        str_disabled_state=str_disabled_state,  # 传递 worker 安全默认状态
+        tuple_identity=tuple_identity,  # 传递项目身份上下文
+        dict_contracts=dict_contracts,  # 传递领域合同映射
+        )
+    )
 
 # 主入口先验证问答，再组合所有治理合同。
 def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
@@ -338,8 +449,11 @@ def build_profile(project: Path, answers: dict[str, Any]) -> tuple[dict[str, Any
         # 调用方得到完整目录阻断原因。
         return None, list_layout_errors
 
-    # 空语言回答回退到项目约定的中文。
-    str_default_language = str(answers.get("default_conversation_language", "中文")).strip() or "中文"  # 默认会话语言。
+    # 空语言回答使用 catalog 的 conversation 默认值。
+    str_default_language_input = str(answers.get("default_conversation_language", default_language("conversation")))  # 会话语言原始配置
+
+    # 将会话原始配置绑定为 catalog canonical ID。
+    str_default_language = canonical_language(str_default_language_input, "conversation")  # 生成 profile 会话语言 ID
 
     # 领域合同以具名映射传入基础画像组装器。
     dict_contracts = {

@@ -25,23 +25,44 @@ from codebase_memory_health import (
     path_is_ignored,
 )
 
+# codebase-memory 合同值统一来自机器可读配置 catalog。
+CODEBASE_MEMORY_CONTRACT_PATH = (  # 合同 catalog 文件路径
+    Path(__file__).resolve().parents[3] / "config" / "codebase-memory-contract.json"  # catalog 相对技能根路径
+)  # codebase-memory 合同 catalog 路径
+
+# 读取配置文件中的 scope、WAL 和 install 字段，作为后续合同唯一来源。
+def _load_codebase_memory_contract() -> dict[str, Any]:
+    """读取机器可读的 codebase-memory 合同 catalog。
+
+    参数:
+        无。
+    返回:
+        图谱目录、健康阈值和安装入口配置映射。
+    """
+
+    # catalog 文本是后续合同构造器的唯一配置来源。
+    return json.loads(CODEBASE_MEMORY_CONTRACT_PATH.read_text(encoding="utf-8"))
+
+# 在模块初始化时绑定配置载荷，供常量和合同函数复用。
+CODEBASE_MEMORY_CONTRACT = _load_codebase_memory_contract()  # 该载荷决定图谱目录、健康阈值和安装指令
+
 # 上游仓库地址是安装说明与发布入口的共同来源。
-REPOSITORY_URL = "https://github.com/DeusData/codebase-memory-mcp"  # 官方上游仓库地址
+REPOSITORY_URL = str(CODEBASE_MEMORY_CONTRACT["repository_url"])  # 官方上游仓库地址
 
 # 最新发布页用于引导用户选择平台对应的安装包。
 RELEASES_URL = "/".join((REPOSITORY_URL, "releases", "latest"))  # 官方最新发布页
 
 # 根级产物目录名称同时约束索引器、Git 和验证器。
-ARTIFACT_DIRECTORY = ".codebase-memory"  # 本地持久化知识图谱目录
+ARTIFACT_DIRECTORY = str(CODEBASE_MEMORY_CONTRACT["artifact_directory"])  # 本地持久化知识图谱目录
 
 # 根锚定忽略规则防止同名嵌套目录被意外放宽。
 IGNORE_RULE = f"/{ARTIFACT_DIRECTORY}/"  # 根级 Git 忽略规则
 
 # 平台安装脚本名称用于组装指导命令，避免把工作目录写死在合同里。
-WINDOWS_INSTALL_SCRIPT = Path("install.ps1")  # Windows 安装脚本相对路径
+WINDOWS_INSTALL_SCRIPT = Path(str(CODEBASE_MEMORY_CONTRACT["install_scripts"]["windows"]))  # Windows 安装脚本相对路径
 
 # Linux 入口只用于生成 chmod 与执行提示，不由治理流程直接调用。
-LINUX_INSTALL_SCRIPT = Path("install.sh")  # Linux 人工安装命令的文件名来源
+LINUX_INSTALL_SCRIPT = Path(str(CODEBASE_MEMORY_CONTRACT["install_scripts"]["linux"]))  # Linux 人工安装命令的文件名来源
 
 # 嵌套清单扫描模式由目录名和文件名组合，保持路径合同单一来源。
 ARTIFACT_MANIFEST_GLOB = (  # 任意层级知识图谱清单匹配模式
@@ -57,63 +78,44 @@ def codebase_memory_contract(enabled: bool) -> dict[str, Any]:
 
     参数:
         enabled: 是否启用知识图谱索引与调试路由。
-
     返回:
         可直接写入项目控制画像的知识图谱合同。
     """
 
-    # 启用态只改变执行与调试语义，磁盘和 Git 边界始终稳定。
-    return {
-        "enabled": enabled,
-        "project_root": ".",
-        "artifact_directory": ARTIFACT_DIRECTORY,
-        "index_mode": "full",
-        "persistence": True,
-        "debug_policy": "graph-first" if enabled else "disabled",
-        "git_policy": "ignored-untracked",
-        "releases_url": RELEASES_URL,
-        "scope_policy": {
-            "cbmignore_path": ".cbmignore",
-            "managed_start": "# codebase-memory-scope:start",
-            "managed_end": "# codebase-memory-scope:end",
-            "max_governance_ratio": 0.05,
-            "required_excludes": [
-                ".agents/",
-                ".codebase-memory/",
-                ".settings/remote-validation/",
-                "docs/development/history_development/",
-                "docs/dir_manager/history_dir_manager/",
-                "docs/experience/history_experience/",
-                "docs/git_manager/history_git_manager/",
-                "docs/handoff/history_handoff/",
-                "docs/memory/",
-                "dist/",
-                "*.zip",
-                "*.tar*",
-                "*.whl",
-                "*.db*",
-                "*.sqlite*",
-                "*.zst",
-            ],
-            "protected_paths": [
-                "skills/agents-md-generator/",
-                "tests/",
-                "AGENTS.md",
-                "README.md",
-                "docs/superpowers/plans/",
-            ],
-        },
-        "wal_health": {
-            "sample_count": 3,
-            "sample_interval_seconds": 2,
-            "absolute_limit_bytes": 1073741824,
-            "database_ratio_limit": 8,
-            "long_process_seconds": 1800,
-            "long_process_count": 2,
-            "long_wal_absolute_bytes": 268435456,
-            "long_wal_ratio_limit": 2,
-        },
+    # 复制配置节点，避免调用方修改全局 catalog。
+    dict_scope_policy = dict(CODEBASE_MEMORY_CONTRACT["scope_policy"])  # 作用域合同配置
+
+    # 复制 WAL 健康节点，隔离调用方对返回对象的修改。
+    dict_wal_health = dict(CODEBASE_MEMORY_CONTRACT["wal_health"])  # WAL 健康配置
+
+    # 根据启用状态选择配置声明的调试策略。
+    str_debug_policy_key = "debug_policy_enabled" if enabled else "debug_policy_disabled"  # 调试策略键
+
+    # 读取当前启用状态对应的调试策略文本。
+    str_debug_policy = str(dict_scope_policy.pop(str_debug_policy_key))  # 当前调试策略
+
+    # 移除未选择的调试策略键，保持输出合同与历史结构一致。
+    dict_scope_policy.pop("debug_policy_enabled", None)
+
+    # 删除另一项未选择的调试策略键。
+    dict_scope_policy.pop("debug_policy_disabled", None)
+
+    # 从 scope 配置中提取顶层兼容字段。
+    dict_contract = {  # 配置驱动的完整知识图谱合同
+        "enabled": enabled,  # 当前显式启用状态
+        "project_root": dict_scope_policy.pop("project_root"),  # 项目根合同
+        "artifact_directory": ARTIFACT_DIRECTORY,  # 根级产物目录
+        "index_mode": dict_scope_policy.pop("index_mode"),  # 索引模式
+        "persistence": dict_scope_policy.pop("persistence"),  # 持久化开关
+        "debug_policy": str_debug_policy,  # profile 调试语义
+        "git_policy": dict_scope_policy.pop("git_policy"),  # Git 边界策略
+        "releases_url": RELEASES_URL,  # 上游发布入口
+        "scope_policy": dict_scope_policy,  # 作用域排除和保护规则
+        "wal_health": dict_wal_health,  # WAL 健康阈值
     }
+
+    # 返回配置驱动的知识图谱合同。
+    return dict_contract
 
 # 根合同和图谱健康检查共享同一 .cbmignore 路径判定。
 def is_path_excluded_by_cbmignore(path_project: Path, path_candidate: Path) -> bool:
@@ -424,16 +426,26 @@ def detect_codebase_memory_mcp(
     # 复制环境映射，避免后续读取影响调用方持有的可变对象。
     dict_environment = dict(os.environ if environ is None else environ)  # 依赖发现环境快照
 
-    # CODEX_HOME 缺失时回退到标准用户级 Codex 目录。
-    path_codex_home = Path(  # Codex 配置根目录
-        dict_environment.get("CODEX_HOME", str(Path.home() / ".codex"))  # Codex 根目录文本
-    )
+    # 平台配置根由技能目录解析。
+    from agent_platform import load_agent_config, resolve_agent_home
+
+    # 当前文件向上三级定位技能源码根目录。
+    path_skill_root: Path = Path(__file__).resolve().parents[3]  # 当前技能根目录
+
+    # 档案提供用户根、安装目录和 agent 标识。
+    profile_agent = load_agent_config(path_skill_root)  # 当前平台配置档案
+
+    # 环境变量仅覆盖用户根，不改变档案布局。
+    str_raw_home = dict_environment.get("AGENT_HOME", "").strip() or dict_environment.get("CODEX_HOME", "").strip()  # 用户根覆盖文本
+
+    # 解析用户根，读取 Codex MCP 配置。
+    path_agent_home = resolve_agent_home(path_skill_root, str_raw_home, profile_agent.agent)  # 平台用户根目录
 
     # 环境覆盖具有最高优先级，便于受控部署与测试替身。
     str_override = dict_environment.get(ENVIRONMENT_BINARY_KEY, "").strip()  # 环境指定命令
 
     # Codex MCP 配置是持久化安装声明的主要来源。
-    path_config = path_codex_home / "config.toml"  # Codex 主配置路径。
+    path_config = path_agent_home / "config.toml"  # 当前平台主配置路径。
 
     # 目标 MCP 节中的命令决定 Codex 配置态。
     str_configured = _toml_command(path_config)  # 配置文件指定命令
@@ -596,7 +608,7 @@ def _parse_cli_json(str_stdout: str) -> dict[str, Any]:
         try:
 
             # 解码结果可能是标量或数组，后续只接受协议对象。
-            object_candidate = json.loads(str_candidate)  # 当前 JSON 解码结果
+            obj_object_candidate: object = json.loads(str_candidate)  # 当前 JSON 解码结果
 
         # 日志中类似 JSON 的普通文本不应中断结果发现。
         except json.JSONDecodeError:
@@ -605,10 +617,10 @@ def _parse_cli_json(str_stdout: str) -> dict[str, Any]:
             continue
 
         # MCP 工具协议只接受对象作为结构化结果。
-        if isinstance(object_candidate, dict):
+        if isinstance(obj_object_candidate, dict):
 
             # 最后出现的合法对象就是 CLI 最终响应。
-            return object_candidate
+            return obj_object_candidate
 
     # 没有合法对象时由调用方结合退出码生成失败证据。
     return {}
@@ -721,7 +733,7 @@ def _windows_mcp_processes(str_command: str) -> list[dict[str, Any]]:
     try:
 
         # 解码结果先保留为未知对象，再执行列表类型收窄。
-        object_processes = json.loads(completed_process.stdout)  # Windows 原始进程载荷。
+        obj_object_processes: object = json.loads(completed_process.stdout)  # Windows 原始进程载荷。
 
     # 损坏输出不能进入健康评估。
     except json.JSONDecodeError:
@@ -730,13 +742,19 @@ def _windows_mcp_processes(str_command: str) -> list[dict[str, Any]]:
         return []
 
     # 单进程输出可能是对象，多进程输出才是数组。
-    if isinstance(object_processes, dict):
+    if isinstance(obj_object_processes, dict):
 
         # 规范化为统一列表供调用方匿名化。
-        return [object_processes]
+        return [obj_object_processes]
 
     # 多进程数组只保留映射项，过滤异常标量。
-    return [item for item in object_processes if isinstance(item, dict)] if isinstance(object_processes, list) else []
+    if isinstance(obj_object_processes, list):
+
+        # 仅保留符合 MCP 进程证据合同的映射项。
+        return [item for item in obj_object_processes if isinstance(item, dict)]
+
+    # 标量或其他 JSON 类型不形成进程证据。
+    return []
 
 # POSIX 进程采集通过 ps 的稳定字段匹配可执行名称。
 def _posix_mcp_processes(str_command: str) -> list[dict[str, Any]]:
@@ -767,7 +785,7 @@ def _posix_mcp_processes(str_command: str) -> list[dict[str, Any]]:
     str_target_name = Path(str_command).name  # MCP 可执行文件名。
 
     # 当前 UTC 时间用于从 age_seconds 计算稳定启动时间。
-    datetime_now = datetime.now(timezone.utc)  # 进程采集时间。
+    datetime_now: datetime = datetime.now(timezone.utc)  # 进程采集时间。
 
     # 匹配结果保留原始命令行，随后由编排器统一匿名化。
     list_processes: list[dict[str, Any]] = []  # POSIX 匹配进程证据。
@@ -928,6 +946,59 @@ def _resolve_unmatched_project_state(project: Path, list_projects: list[Any]) ->
     # 冲突身份保持不可用，其他显式身份允许首次建立索引。
     return {"state": "unavailable" if bool_identity_conflict else "absent"}
 
+# 当前项目治理配置提供重复根记录的 preferred project name。
+def _preferred_index_project_name(project: Path) -> str:
+    """读取项目配置声明的 codebase-memory preferred project name。
+
+    参数：project 为当前受管项目根。
+    返回：preferred project name；配置缺失或损坏时返回空字符串。
+    """
+
+    # preferred name 只从当前项目治理配置读取，不从目录名猜测。
+    path_profile = project / ".agents" / "agents-control.json"  # 项目治理配置路径
+
+    # 缺失治理配置时不能安全消解重复根记录。
+    if not path_profile.is_file():
+
+        # 缺失配置无法消解重复索引身份。
+        return ""
+
+    # 读取配置并保留 JSON 错误的 fail-closed 边界。
+    try:
+
+        # 项目画像提供稳定的 canonical index name。
+        obj_profile = json.loads(path_profile.read_text(encoding="utf-8"))  # 项目治理对象
+
+    # 配置损坏时不使用任何候选名称。
+    except (OSError, UnicodeError, json.JSONDecodeError):
+
+        # 历史项目记录继续保留，当前写入保持阻断。
+        return ""
+
+    # 只有对象配置可以提供 preferred project name。
+    if not isinstance(obj_profile, dict):
+
+        # 非对象根不参与身份选择。
+        return ""
+
+    # 优先读取 codebase_memory_mcp_contract 的显式字段，再回退项目 name。
+    obj_contract = obj_profile.get("codebase_memory_mcp_contract", {})  # codebase-memory 合同节点
+
+    # 合同节点存在时优先读取 preferred name。
+    if isinstance(obj_contract, dict):
+
+        # 显式 preferred name 是重复缓存记录的唯一选择器。
+        str_preferred_name = str(obj_contract.get("preferred_project_name", "")).strip()  # 配置声明的首选项目名
+
+        # 非空首选名可以直接完成重复记录消歧。
+        if str_preferred_name:
+
+            # 返回经过配置确认的 preferred name。
+            return str_preferred_name
+
+    # 顶层 name 是已确认项目身份的兼容来源。
+    return str(obj_profile.get("name", "")).strip()
+
 # 官方项目列表解析器只接受根路径唯一匹配的索引记录。
 def _resolve_indexed_project_binding(
     project: Path,
@@ -956,7 +1027,20 @@ def _resolve_indexed_project_binding(
     # 独立解析官方根记录，避免损坏项被误判为当前项目不存在。
     list_matches = _collect_official_root_matches(project, dict_projects["projects"])  # 当前根匹配的官方项目记录。
 
-    # 损坏记录或重复根都无法提供唯一身份绑定。
+    # 重复根记录先尝试使用治理配置声明的 preferred project name 消歧。
+    if list_matches is not None and len(list_matches) > 1:
+
+        # 历史记录不删除，只收敛到当前配置的 canonical name。
+        str_preferred_name = _preferred_index_project_name(project)  # 配置声明的 preferred name
+
+        # 只保留与 preferred name 一致的历史记录。
+        list_matches = [  # 消歧后的官方项目记录
+            dict_match  # 保留匹配的完整项目记录
+            for dict_match in list_matches  # 遍历同根历史记录
+            if str(dict_match.get("name", "")).strip() == str_preferred_name  # 只保留配置首选名
+        ]  # 完成重复根记录消歧
+
+    # 损坏记录或消歧后仍重复都无法提供唯一身份绑定。
     if list_matches is None or len(list_matches) > 1:
 
         # unavailable 阻止错配项目继续索引。
@@ -1241,22 +1325,41 @@ def _dependency_gate(apply: bool) -> tuple[dict[str, Any], dict[str, Any] | None
     }
 
 # 索引阶段闭合 full、persistence、实时状态和架构分析四层证据。
-def _index_evidence_gate(project: Path, dict_dependency: dict[str, Any]) -> dict[str, Any]:
+def _index_evidence_gate(
+    project: Path,
+    dict_dependency: dict[str, Any],
+    *,
+    str_project_name: str | None = None,
+) -> dict[str, Any]:
     """执行全量持久化索引并核验实时图证据。
 
     参数:
         project: 待索引的项目根目录。
         dict_dependency: 已通过安装与配置检查的依赖证据。
+        str_project_name: 已绑定的索引项目名；首次索引时传 None。
 
     返回:
         索引、状态、架构与持久化一致性的最终载荷。
     """
 
     # 写入前强制 full 与 persistence，保证知识图谱覆盖整个项目并落盘。
+    dict_index_arguments: dict[str, Any] = {  # full/persistence 索引参数
+        "repo_path": str(project.resolve()),  # 绑定项目根路径
+        "mode": "full",  # 全量图谱模式
+        "persistence": True,  # 写入持久化图谱产物
+    }
+
+    # 已有绑定复用原名，避免同根重复项目。
+    if str_project_name:
+
+        # 仅传回已通过根路径校验的名称。
+        dict_index_arguments["name"] = str_project_name  # 复用已绑定项目名称
+
+    # 使用稳定参数索引，首次仍用官方默认名。
     dict_index = _run_tool(  # 全量持久化索引结果
         dict_dependency["command"],  # 已验证的 MCP 命令
         "index_repository",  # 全量索引工具名称
-        {"repo_path": str(project.resolve()), "mode": "full", "persistence": True},  # 索引参数
+        dict_index_arguments,  # 带稳定名称的 MCP 索引载荷
         dict_dependency.get("environment"),  # 全量索引的缓存隔离环境。
     )
 
@@ -1463,7 +1566,20 @@ def enforce_codebase_memory_write_gate(
         return dict_wal_baseline
 
     # 第六阶段执行 full persistent index 并核对基础证据。
-    dict_index_result = _index_evidence_gate(project, dict_dependency)  # full index 阶段证据。
+    str_index_name: str | None = None  # 首次索引不覆盖官方默认项目名
+
+    # 已有索引时复用根绑定名称，避免派生副本。
+    if dict_indexed_project.get("state") == "indexed":
+
+        # 名称已通过根路径校验，可复用。
+        str_index_name = str(dict_indexed_project.get("name", "")).strip()  # 已绑定项目名称
+
+    # 复用已绑定名称，避免 full index 产生同根重复项目。
+    dict_index_result = _index_evidence_gate(  # 使用稳定名称执行 full index
+        project,  # 绑定待更新的知识图谱根
+        dict_dependency,  # 已验证 MCP 依赖
+        str_project_name=str_index_name,  # 保持当前缓存文件名稳定
+    )  # full index 阶段证据。
 
     # 索引失败时不得用范围分类覆盖原始诊断。
     if not dict_index_result.get("ok", False):

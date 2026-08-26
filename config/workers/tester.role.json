@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "worker_id": "tester_worker",
+  "task_kind": "test",
+  "phases": ["RED", "GREEN", "FINAL"],
+  "allowed_read_roots": ["{skill_root}", "{tests_root}"],
+  "allowed_write_roots": ["{tests_root}"],
+  "forbidden_actions": ["modify_product_source", "release", "install", "delegate"],
+  "scope_rejection": "SCOPE_REJECTED",
+  "no_action_taken": true,
+  "receipt_verdicts": {"RED": ["RED", "BLOCKED", "SCOPE_REJECTED"], "GREEN": ["GREEN", "RED", "BLOCKED", "SCOPE_REJECTED"], "FINAL": ["FINAL", "RED", "BLOCKED", "SCOPE_REJECTED"]},
+  "failure_report_required_for": ["RED", "BLOCKED"],
+  "rejection_report_required_for": ["SCOPE_REJECTED"],
+  "rejection_report_required": true,
+  "expected_output": "strict tester receipt with failure_report for RED/BLOCKED/SCOPE_REJECTED; failure_stage, failure_kind, first_error, failure_summary, failure_count, failure_tests, expected_actual, root_cause_class, minimal_fix, evidence, residual_jobs, and modification_status are mandatory"
+}

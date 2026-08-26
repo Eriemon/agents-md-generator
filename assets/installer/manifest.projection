@@ -1,0 +1,36 @@
+# schema_version=1
+# manifest_json_sha256=dc6774756c6216afe6945a5ed61146deb0fe608acde04b828ee5dc013814b32a
+env_key	source_path	expected_value
+SCHEMA_VERSION	schema_version	1
+ALLOWED_PROJECT_KIND	allowed_project_kind	skill
+BUNDLE_ROOT_RELATIVE	bundle_root_relative	assets/installer
+CATALOG_RELATIVE_PATH	catalog_relative_path	../../config/agent-platforms.json
+OVERRIDES_RELATIVE_PATH	overrides_relative_path	../../config/installer/platform-overrides.json
+PROJECTION_RELATIVE_PATH	projection_relative_path	platforms.tsv
+MANIFEST_ENV_RELATIVE_PATH	manifest_env_relative_path	installer.manifest.env
+MANIFEST_JSON_RELATIVE_PATH	manifest_json_relative_path	config/installer/installer.manifest.json
+MANIFEST_PROJECTION_RELATIVE_PATH	manifest_projection_relative_path	manifest.projection
+PROJECTION_SCHEMA_RELATIVE_PATH	projection_schema_relative_path	../../config/installer/projection.schema.json
+PROJECTION_GENERATOR_RELATIVE_PATH	projection_generator_relative_path	../../scripts/python/release/build_installer_projection.py
+SOURCE_ROOT_RELATIVE	source_root_relative	../..
+BACKEND_RELATIVE_PATH	backend_relative_path	../../scripts/python/release/guided_installer.py
+RUNTIME_RELATIVE_PATH	runtime_relative_path	../../scripts/python/release/install_skill.py
+BACKUP_DIRECTORY_NAME	backup_directory_name	skill_backups
+LOCK_FILE_NAME	lock_file_name	.installer.lock
+STAGING_PREFIX	staging_prefix	.installer-staging-
+SOURCE_MANIFEST_PREFIX	source_manifest_prefix	.installer-source-manifest-
+QUARANTINE_DIRECTORY_NAME	quarantine_directory_name	.installer-quarantine
+RECOVERY_RECEIPT_SUFFIX	recovery_receipt_suffix	.receipt
+BATCH_ENTRY	batch_entry	install.ps1
+SHELL_RUNTIME	shell_runtime	bash
+SHELL_OUTPUT_FORMAT	output.shell_format	prefixed-human
+POWERSHELL_OUTPUT_FORMAT	output.powershell_format	machine-json
+CATALOG_SHA256	catalog_sha256	c4ba19e95ef5ad0d61acdae33a2202ea39a167ce02e167e9cc3ede4bb5522bf6
+PROJECTION_SHA256	projection_sha256	b37d466f3c65a106dd95403104ca29b0f92f6e32b460f3fd9ef3c55d4d5bb254
+ENTRYPOINTS	entrypoints	install.ps1,install.sh,install.bat
+POWERSHELL_CANDIDATES	powershell_candidates	powershell.exe,pwsh.exe
+PYTHON_CANDIDATES	python_candidates	python3,python
+HASH_COMMANDS	hash_commands	sha256sum,shasum
+SHELL_UTILITIES	shell_utilities	awk,sed,realpath,grep,stat,cp,mv,mkdir,basename,dirname,find,sort,wc,cmp
+PROJECTION_RECORD_CLASSES	projection_record_classes	META,SOURCE,RUNTIME,MENU,TRANSACTION,OUTPUT,BATCH_ENTRY,PLATFORM
+PROJECTION_REQUIRED_COLUMNS	projection_required_columns	platform_id,display_name,instruction_file,workspace_config_dir,generator_state_subdir,user_home_dir,skill_install_dir,home_env,home_env_mode,worker_support,skill_metadata

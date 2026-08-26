@@ -1,47 +1,49 @@
 ---
 name: agents-md-generator
-description: Use when creating, updating, compressing, reviewing, or verifying AGENTS.md and other AI coding-agent rules; when a managed root AGENTS.md is missing, malformed, stale, or version-incompatible; when the user explicitly mentions AGENTS.md, agent rules, or scoped AGENTS.md; when a managed skill README needs a functional illustration set; or when a request about the current workspace, repository, or work folder says 计划, 规划, or 准备 and therefore requires a root AGENTS.md check first.
+description: Use when creating, updating, compressing, reviewing, or verifying AGENTS.md and other AI coding-agent rules; when a managed root AGENTS.md is missing, malformed, stale, or version-incompatible; when the user explicitly mentions AGENTS.md, agent rules, or scoped AGENTS.md; when a managed skill README needs a functional illustration set; or when a request about the current workspace, repository, or work folder is a planning request and therefore requires a root AGENTS.md check first.
 ---
 
 # AGENTS.md Generator
 
-Generate operational agent rules from repository facts and confirmed human policy. Keep roots short, place local rules near their scope, preserve human text outside managed blocks, and verify every write.
+Generate operational agent rules from repository facts and confirmed policy. Keep roots short, place local rules near scope, preserve human text, and verify writes.
 
 ## Route
 
 - Explicit AGENTS creation, update, compression, review, or repair enters the full workflow even when the root is healthy.
-- A current-workspace `计划` / `规划` / `准备` request first checks root and global AGENTS state. If the managed root is healthy, report that result and return to the user's task; otherwise report the exact defect and continue to design or takeover.
-- Use `read_only` for explanation, planning, state checks, and read-only review; use `design` while collecting policy; use `write` for approved managed changes; use `governance_high_risk` for release or merge review. None of these modes authorizes a non-testing subagent. Only the user's proactive and explicit request in the current task does, and it must name the role or purpose.
-- If the user explicitly asks for Codex Token usage statistics, use registry instruction `detect.token-usage-review`; do not enter the AGENTS design interview. Use it only when `$CODEX_HOME/sessions` or `~/.codex/sessions` exists, and keep any sessions-root override inside that active sessions tree. Generic cost, optimization, and session-health questions do not trigger this branch.
+- A current-workspace planning request first checks root and global AGENTS state. If the managed root is healthy, report that result and return to the user's task; otherwise report the exact defect and continue to design or takeover.
+- Use `read_only` for explanation/planning/state checks/review; `design` for policy collection; `write` for approved changes; `governance_high_risk` for release/merge. None authorizes a non-testing subagent; only a current-task proactive explicit user request naming the role/purpose does.
+- If the user explicitly asks for Codex Token usage statistics, use registry instruction `detect.token-usage-review`; do not enter the AGENTS design interview. Use it only when the configured agent sessions directory exists, and keep any sessions-root override inside that active sessions tree.
 - External work folders call the installed skill runtime. Only this owner repository uses repo-local `python skills/agents-md-generator/scripts/python/...` paths.
-- 当技能开发需要链接 GitHub 仓库时，统一使用 `github/` 现有 checkout 合同：先完成版本化 `dist/` 发布与安装，再执行只写本地 checkout 的镜像、计划和复核；策略为 `existing-only`，工具不创建远程仓库或执行 push。
+- If no registered task route matches the requested task, stop unmatched tasks until agents.md/profile is updated; then update the current work folder AGENTS.md/profile before continuing.
+- When skill development must link a code-hosting repository, use the configured existing-checkout contract: complete versioned release and installation first, then mirror, plan, and review only the local checkout; tools do not create remote repositories or push.
 
 ## Inspect
 
-1. Read applicable AGENTS files, the latest handoff, memory guidance, and repository governance.
+1. Read applicable AGENTS files, the latest handoff, memory, and repository governance.
 2. Use registry instructions `detect.inspect-project` and `detect.detect-scopes`.
-3. Check global `~/.codex/AGENTS.md` or `$CODEX_HOME/AGENTS.md` for the managed baseline and version.
+3. Resolve the selected platform from `config/agent.json`, then check its configured global instruction file for the managed baseline and version. For Codex, that file is `$CODEX_HOME/AGENTS.md`; verify it before relying on user-level rules.
 4. Treat missing metadata as a full-design trigger. Use takeover only for a version-mismatched old workspace with landed content.
 5. For strong-control work, pass `memory-gate`; bootstrap exact-cwd Codex sessions when required.
 6. When codebase-memory MCP is enabled, require a ready `full` persistent index, successful architecture analysis, root-only artifacts, and matching live/disk counts before writes.
 
-The global v4 baseline owns only cross-repository defaults: instruction scope, managed entry, reuse-first execution, advisory task rating, frozen goal/success/in-scope/out-of-scope boundaries, decision-complete plans, user-opt-in-only non-testing subagents, executable-test-surface routing to one isolated TESTER that owns `tests/**`, comprehension-driven prose/table/Mermaid selection, the four-part `Coding Behavior Baseline`, `Done When`, dual Python/script preflight, comments/documentation, environment/dependency safety, installed-skill protection, and Markdown `$...$` / `$$...$$` formulas. Generic multi-agent requests, task complexity, ratings, risk, and agent judgment do not authorize non-testing subagents. Project thresholds, layouts, exceptions, long-task rules, language detail, and releases stay in project governance.
+The configured global file supplies the active baseline: scope, managed entry, reuse, rating, plans, opt-in subagents, one TESTER for `tests/**`, dual language preflight, docs, safety, install protection, and formulas. Local governance owns thresholds, layouts, exceptions, long tasks, and releases; roots inherit `Coding Behavior Baseline`. Review contradictions before `<proposed_plan>`; ask only when scope, security, cost, or external behavior changes.
 
 ## Design
 
 Use registry instruction `design.collect-profile`, resume unfinished state, and submit one returned group at a time.
 
-- Ask every returned question and show its options. Do not infer mandatory `default_conversation_language` (32), `use_remote_server` (45), or `use_codebase_memory_mcp` (55).
-- The selected language governs all natural-language replies, including Plan Mode `<proposed_plan>` content, unless the user switches languages.
-- Skill development groups are `[1,32,45,55]`, `[50,51,52,53,54]`, `[2,3,4]`, `[5,6,7]`, `[8,9,10]`, `[22,23,24]`, `[25,26,27]`, `[28,29,30]`, `[31]`, `[42,43,44,46,47,48,49]`, `[20,21]`.
-- Engineering development groups are `[1,32,45,55]`, `[50,51,52,53,54]`, `[11,12,13]`, `[14,15,16]`, `[17,18,19]`, `[33,34,35]`, `[36,37,38]`, `[39,40,41]`, `[42,43,44,46,47,48,49]`, `[20,21]`.
+- Ask every returned question and show its options. Do not infer mandatory answers; use the configured question identifiers and option sets.
+- The configured `default_conversation_language` governs all natural-language replies, including Plan Mode `<proposed_plan>` content, unless the user switches languages.
+- Skill and Engineering development groups come from the selected profile; never copy a current question list into source or comments.
 - After each group, show `review_summary` and `confirmed_so_far`, then obtain confirmation. Record `extra_requirements`, including explicit `none`, and require final alignment.
-- Read-only intent ends with `answers_snapshot` and `profile_preview`; it creates no design review. Write intent also defaults to no review subagent. Enter `design_review` only when the user proactively and explicitly requests a design-review subagent in the current task; an explicitly requested review still requires `reviewer_type="subagent"`, matching `reviewed_answers_hash` and `reviewed_profile_hash`, no unresolved findings, and no required user confirmations.
+- Read-only intent ends with `answers_snapshot` and `profile_preview`; it creates no design review. Write intent also defaults to no review subagent. Enter `design_review` only after the user explicitly requests a review subagent and the hashes, findings, and confirmations validate; record `reviewer_type="subagent"` only for that authorized review.
 - `--answers ... --write` rejects missing mandatory answers, alignment, extra requirements, or directory policy. When explicit review evidence is supplied, validate it rather than making it a default prerequisite.
-- If remote servers are enabled, require installed/configured `erie-remote-ssh`, explicit task routes, checked primary/fallback servers, and workspace checks. Resolve the matched route at runtime, automatically try registered fallbacks after primary failure, and stop unmatched tasks until AGENTS.md/profile is updated.
-- Detect an installed skill only from its directory and root `SKILL.md`. Treat CLI entry and settings discovery as separate capabilities; prefer the Python runtime `remote_ssh.py` entry, retain the legacy scripts-level entry only as a compatibility fallback, and never report a present skill as uninstalled because its internal layout changed.
+- Approved design reviews must bind `reviewed_answers_hash` and `reviewed_profile_hash` to the current answers and profile before write.
+- If remote servers are enabled, require configured `erie-remote-ssh`, explicit routes, checked primary/fallback servers, and workspace checks; resolve and fail closed at runtime.
+- Detect an installed skill from its directory and root `SKILL.md`; keep CLI and settings discovery separate, and retain the runtime entry with a compatibility fallback.
 - Remote structure governance is separate from remote-server enablement and task-route mapping. Validate relative conda/runtime/archive templates and reject traversal, wildcards, unsafe shell characters, empty values, and repeated separators.
 - If codebase-memory MCP is requested but unavailable, provide manual installation guidance, never download or execute the installer automatically, and require restart before resuming.
+- The design interview's `use_codebase_memory_mcp` (55) choice controls the official MCP gate; enabled writes require a ready full persistent root-only index, while missing dependencies require manual installation guidance and restart.
 
 ## Generate
 
@@ -51,6 +53,8 @@ Use registry instruction `design.collect-profile`, resume unfinished state, and 
 4. Keep the root an operational index. Put detailed remote registries in `.agents/agents-control.json`, directory policy in `docs/dir_manager/planned_structure.json`, and configurable coding/output rules in `.agents/global-rule-overrides.json`.
 5. Create scoped AGENTS only for verified local differences. Do not restate inherited root rules.
 6. Keep `.settings/` as work-folder configuration; allow remote `.settings/*.remote.json` and never copy `.settings/*.local.json`, including `.settings/server_list.local.json`, to remote systems.
+
+For a confirmed platform, read `config/agent.json` and its catalog before writing; render the configured instruction files and create only the selected state directory. Generate the configured native metadata; installation keeps the selected profile and resolved configuration/docs. Non-default migration requires the configured migration options and confirmation; retire only a managed prior-selection marker.
 
 ### README illustration contract
 
@@ -63,28 +67,31 @@ When a user asks this skill to update a skill README, reuse suitable existing vi
 5. Provide matching English and Chinese PNGs when the skill has bilingual READMEs, keep them local under `assets/readme/`, and reference every image from the README that explains it.
 6. Validate PNG signatures, dimensions, local paths, and absence of SVG/remote metadata before copying new images into the source package or `dist/`. Existing illustrations must not be redrawn merely to refresh README copy.
 
-The source README is the sole authoring surface. A versioned `dist/` package and an existing `github/` checkout consume its complete contents; neither may become a second README source. Functional illustrations remain local PNGs, while the original header may retain shields.io badges as metadata links.
+Source README is authoritative; versioned `dist/` and existing `github/` checkouts consume it and never become alternate sources. Illustrations stay local PNGs; the header may retain shields.io metadata links.
 
-Managed roots render `coding_behavior.language_skill_routing` exactly as `shared`, `python`, and `script`: shared think-first/in-process gates appear 只渲染一次; Python remains owned by `readable-python-generator`; bat/cmd, shell/bash, PowerShell, and Tcl remain owned by `readable-script-generator`; a script wrapper that invokes Python is still a script target. Preserve line separation, 严禁把代码压缩到一行, and reject 炫技代码. Render `script_output_policy` from configuration rather than hard-coded business enums.
+Roots render `shared`, `python`, `script` routes once: Python uses `readable-python-generator`; bat/cmd, shell/bash, PowerShell, Tcl, Node-only JavaScript (`.js`/`.mjs`), and static Dockerfile use `readable-script-generator`; wrappers remain script targets; browser JavaScript and Docker daemon/build stay out. Preserve separation; reject one-line/obfuscated code; load output policy from config.
 
 ## Safety
 
 - Do not invent commands, paths, owners, frameworks, CI rules, security policies, or coverage targets.
 - Keep every proposed solution and plan inside the frozen user goal. Include only requested behavior, minimal integration, and current mandatory gates; mark every speculative feature, refactor, abstraction, compatibility layer, optimization, or configuration as out of scope unless the user explicitly reopens the boundary.
 - Formal plans must be detailed enough to execute without additional design questions: name exact steps, inputs, outputs, files or interfaces, preconditions, failure handling, checks, and stop conditions. Use prose, tables, Mermaid, or a combination only where each form improves comprehension.
-- Do not dispatch non-testing subagents by default, including solution, design, or plan reviewers, implementation agents, and parallel workers. Only the user's proactive and explicit request in the current task authorizes them, and it must name the role or purpose. A generic request to use multi-agent, complexity, task ratings, risk, or agent judgment is not authorization. If the user omits the count, use exactly three authorized non-testing subagents; an explicit count overrides that default, and authorization never carries into another task.
-- When work has an executable test surface, use exactly one `fork_turns=none` TESTER. Pure read-only or planning work and documentation-only changes without a test surface do not require one.
-- Only that TESTER may inspect, change, or run `tests/**`. It reports symptoms, counts, feedback, and suggestions; the mother agent changes non-test product files and sends the result back to the same TESTER for revalidation. Routine test-hash confirmation is prohibited: the Agent autonomously confirms an authoritative agreement, corrects report-only mismatches, and stops for user review without autonomous rerun when provenance conflicts or is insufficient.
-- New test files use functional or behavioral semantic names; filename stems must not contain digits, including v1, v2, 1, 2, part1, and part2. Do not bulk-rename existing tests.
-- Every managed root must render exactly one `Workspace boundary` rule. Modify inside the current work folder and the verified remote-server work folder without additional confirmation; remote changes still require an exact configured task route. Official codebase-memory start, index refresh, rebuild, or recovery for the project bound to either work folder, including its configured runtime cache and root persistence artifact, also needs no additional confirmation. Necessary side-effect-free reads remain allowed beyond those boundaries. Every other external write is prohibited by default and enters the process only after the user proactively and explicitly requests the exact action; then disclose the normalized target, action, scope, risks, alternatives, and recovery limits and obtain exactly one explicit confirmation. A target or scope change invalidates that confirmation.
-- The canonical TESTER is `tester_worker` from `~/.codex/agents/tester_worker.toml`; generation and AGENTS refresh must create or validate that file, use `gpt-5.6-luna` with reasoning `max`, and preserve its backup before refreshing drifted content. Do not delegate `tests/**` to a generic or second test agent.
+- Do not dispatch non-testing subagents by default. Only a proactive current-task request naming the role/purpose authorizes one; generic multi-agent, complexity, rating, risk, or judgment requests do not. If count is omitted, use exactly three; an explicit count overrides it and authorization never carries into another task.
+- Canonical workers are narrow governance roles, not arbitrary subagents; automatic authorization requires Codex-native support, a managed root, explicit `enabled` state, and a matching event. Missing state is `unconfigured` and blocks; session state cannot authorize.
+- Test ownership follows project authorization: when tester is disabled, the main Agent owns `tests/**`; when tester is explicitly enabled, use exactly one isolated `fork_turns=none` TESTER. Pure read-only or planning work and documentation-only changes without a test surface do not require test ownership.
+- Only that TESTER may inspect, change, or run `tests/**`; gardener may read/list it for design evidence but never edits/deletes/runs tests. For RED/BLOCKED/SCOPE_REJECTED, TESTER must return `failure_report` with `failure_stage`, `failure_kind`, `first_error`, `failure_summary`, `failure_count`, `failure_tests`, `expected_actual`, `root_cause_class`, `minimal_fix`, `evidence`, `residual_jobs`, and `modification_status`; each failure item needs `test_id`, `expected`, `actual`, `observed`, and `source`. A bare count is invalid. Main changes product; tester revalidates. Use authoritative evidence and stop on provenance conflict.
+- New test files use functional or behavioral semantic names; filename stems must not contain version, case, or sequence literals. Do not bulk-rename existing tests.
+- Every managed root renders one `Workspace boundary` rule. Bound work-folder/codebase-memory refreshes need no extra confirmation; remote changes require the exact route. Reads are allowed, but other external writes require exact target disclosure, risk/recovery disclosure, and exactly one user confirmation; target/scope changes invalidate it.
+- Canonical tester/reviewer/gardener roles are available only when `config/agent.json` resolves a catalog profile with the configured native-worker capability; profile/tool paths come from its configured user-home directory. They preserve refresh backups and retain `tests/**` ownership and reviewer checkpoints. Other platforms do not claim these roles.
+- Gardener reports use `schema_version=1` with fixed findings/rejection/uncertainty/verdict fields. AST zero-call `function_candidates` are never deletion conclusions; corroborate graph, exports, dynamic references, tests, and Markdown before a user decision. Markdown edits or public/dynamic/test-dependent deletions require confirmation.
 - A single-task authorization receipt is confirmed once across the skill, AGENTS.md, and CLI; reuse it for the same target and scope, and re-confirm only when the target, scope, or material risk changes.
 - Generated roots always include a state-aware, fail-closed remote work-folder contract: resolve the exact configured route and verified workspace, and keep deployment, conda/runtime, backup, and archive lifecycle details in `docs/dir_manager/planned_structure.json`.
+- Remote upload is manifest-only: never upload the whole work folder or a bundle; `.git/`, `git/`, `github/`, `dist/`, and `ref/` are forbidden, and selected directories must be expanded and hashed. New tests use `tests/<feature>/test_<behavior>.<ext>`.
 - `allowed_root_files` governs root-level exceptions. Root-level files outside the governed primary project root require review; allow the conservative structure-fix attempt only after explicit confirmation, then rerun `structure-gate`.
 - Before local directory create/move/delete/rename, follow registry instruction `dirs.manage` in review mode. A blocked result stops by default; force-confirmed work archives prior governance before mutation.
 - Except for `__init__.py` and `__main__.py`, functional source and Python test file stems use lowercase English functional words, never start with `_`, contain no digits, and stay within 30 characters. Deterministic checks do not replace the required Agent semantic review evidence.
 - Keep exactly one `tests/` at the work-folder root. Root Python is limited to `tests/__init__.py`; place tests one level below by function as `tests/<feature>/*.py`, and never create nested `tests/` directories.
-- `remote_deployment.protected_path_classes` and `require_review_for_all_mutations=true` govern remote changes. Every remote `create`, `move`, `delete`, or `rename` must keep both source and target paths inside the governed remote plan, report path classes, keep unverified artifacts in active runs, move verified artifacts to backups, and block destructive protected-path actions by default.
+- `remote_deployment.protected_path_classes` and `require_review_for_all_mutations=true` govern remote changes; every remote `create`, `move`, `delete`, or `rename` must keep both source and target paths inside the governed remote plan, report path classes, and block protected destructive actions by default.
 - Do not deploy skill-development content to remote systems unless explicitly authorized; deploy only named runtime artifacts.
 - Keep `/.codebase-memory/` ignored and root-only. Ask before removing tracked entries from the Git index; preserve local files.
 - Always obtain exactly one explicit user confirmation before installing, replacing, or directly modifying an installed skill, even when the action appears necessary for the current task.
@@ -101,7 +108,7 @@ Managed roots render `coding_behavior.language_skill_routing` exactly as `shared
 
 ## Verify
 
-The skill document keeps only two outer command groups. The first is the managed lifecycle:
+The skill document keeps two outer command groups. The first is the managed lifecycle:
 
 ```text
 python skills/agents-md-generator/scripts/python/docs/manage_docs.py resume-check .
@@ -114,6 +121,7 @@ The second is the validation chain. Run the smallest relevant checks while editi
 
 ```text
 python skills/agents-md-generator/scripts/python/verify/quick_validate.py skills/agents-md-generator
+python -m pytest -q
 python -m unittest discover -s tests -t . -v
 python skills/agents-md-generator/scripts/python/verify/audit_skill.py skills/agents-md-generator
 python skills/agents-md-generator/scripts/python/verify/verify_agents.py . --installed-skill-dir skills/agents-md-generator
@@ -121,7 +129,15 @@ python skills/agents-md-generator/scripts/python/docs/manage_docs.py verify .
 python skills/agents-md-generator/scripts/python/verify/evaluate_skill.py skills/agents-md-generator .
 ```
 
-For release/merge risk also run `review_governance.py`; changed functional source or Python tests require `--semantic-review <evidence.json>` with matching base/head revisions, changed-path hash, functional summaries, and pass verdicts. For aggregate evidence run `run_confidence_gate.py`; for formal effectiveness run `run_skill_evals.py`. Release packaging, installation, commit, push, and remote mutation require their own explicit scope. Never claim an unrun check passed.
+Canonical worker coordination uses `workers/manage_workers.py dispatch-start`,
+`dispatch-check`, and `dispatch-record`; these commands emit one JSON object and
+never call `spawn_agent` themselves. `worker_dispatch.py` is the single source
+for event IDs, session state, target reuse, task envelopes, and fail-closed
+`unconfigured` handling.
+
+Release/install require one complete schema-2 pytest receipt: `runner=pytest`, `suite=full`, selector-free `python -m pytest -q`, counts, current tests/source SHA-256, test commit, and self-hash. Location never changes acceptance; schema-1/non-pytest receipts are history only. The gate also checks AGENTS freshness, manifest/cache exclusions, versioned dist parity, and `install_skill.py --target skip`.
+
+For release/merge risk run `review_governance.py`; changed functional source or Python tests require `--semantic-review <evidence.json>` with matching base/head, changed-path hash, summaries, and pass verdicts. For aggregate evidence run `run_confidence_gate.py`; for formal effectiveness run `run_skill_evals.py`. Release packaging, installation, commit, push, and remote mutation require explicit scope; never claim an unrun check passed.
 
 ## More Usage
 

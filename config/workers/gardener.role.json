@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "worker_id": "gardener_worker",
+  "task_kind": "garden",
+  "phases": ["POST_COMMIT", "AGENTS_REFRESH"],
+  "allowed_read_roots": ["{skill_root}", "{tests_root}"],
+  "allowed_write_roots": [],
+  "forbidden_actions": ["modify_anything", "delete_anything", "run_tests", "release", "install", "delegate"],
+  "scope_rejection": "SCOPE_REJECTED",
+  "no_action_taken": true,
+  "receipt_verdicts": ["NO_FINDINGS", "FINDINGS_REQUIRE_MAIN_REVIEW", "BLOCKED", "SCOPE_REJECTED"],
+  "blocking_verdicts": ["BLOCKED"],
+  "rejection_report_required": true,
+  "expected_output": "strict gardener receipt with rejection_report for SCOPE_REJECTED"
+}

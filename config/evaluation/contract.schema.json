@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "required": ["schema_version", "case_source_role", "required_case_ids", "allowed_patterns", "activation_operators", "handlers"],
+  "handler_required": ["handler_id", "module_name", "callable_name"],
+  "activation_operators": ["present"]
+}

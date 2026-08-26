@@ -3,32 +3,386 @@
   "category": "registry",
   "commands": [
     {
-      "id": "registry.build", "category": "registry", "entrypoint": "build_registry.py", "subcommand": "", "title": "检查或构建命令检索索引", "summary": "验证 JSON 源与 SQLite 的 schema、摘要和计数；仅 --write 时原子重建。", "when_to_use": "修改注册 JSON 后，或验证提交中的 registry.sqlite3 未漂移时。",
-      "aliases": {"zh": ["构建命令 RAG", "检查注册表索引", "重建 SQLite"], "en": ["build command registry", "check registry index", "rebuild SQLite RAG"]},
-      "parameters": [{"name": "skill_dir", "required": false, "description": "技能根目录"}, {"name": "--write", "required": false, "description": "原子重建 SQLite"}], "invocation_templates": ["python <skill>/scripts/python/registry/build_registry.py <skill-dir>", "python <skill>/scripts/python/registry/build_registry.py <skill-dir> --write"],
-      "examples": {"valid": ["python skills/agents-md-generator/scripts/python/registry/build_registry.py skills/agents-md-generator --write"], "invalid": ["不要手工编辑 registry.sqlite3"]},
-      "prerequisites": ["JSON 注册源通过字段校验", "本机 SQLite 支持 FTS5 trigram"], "outputs": {"format": "json", "success_exit_codes": [0], "failure_exit_codes": [3]}, "risk": {"level": "medium", "writes": true, "warning": "只有 --write 会替换生成式数据库"}, "boundaries": ["JSON 是唯一事实源", "默认模式只检查"], "related_command_ids": ["registry.ask"]
+      "id": "registry.build",
+      "category": "registry",
+      "entrypoint": "build_registry.py",
+      "subcommand": "",
+      "title": "检查或构建命令检索索引",
+      "summary": "验证 JSON 源与 SQLite 的 schema、摘要和计数；仅 --write 时原子重建。",
+      "when_to_use": "修改注册 JSON 后，或验证提交中的 registry.sqlite3 未漂移时。",
+      "aliases": {
+        "zh": [
+          "构建命令 RAG",
+          "检查注册表索引",
+          "重建 SQLite"
+        ],
+        "en": [
+          "build command registry",
+          "check registry index",
+          "rebuild SQLite RAG"
+        ]
+      },
+      "parameters": [
+        {
+          "name": "skill_dir",
+          "required": false,
+          "description": "技能根目录"
+        },
+        {
+          "name": "--write",
+          "required": false,
+          "description": "原子重建 SQLite"
+        }
+      ],
+      "invocation_templates": [
+        "python <skill>/scripts/python/registry/build_registry.py <skill-dir>",
+        "python <skill>/scripts/python/registry/build_registry.py <skill-dir> --write"
+      ],
+      "examples": {
+        "valid": [
+          "python skills/agents-md-generator/scripts/python/registry/build_registry.py skills/agents-md-generator --write"
+        ],
+        "invalid": [
+          "不要手工编辑 registry.sqlite3"
+        ]
+      },
+      "prerequisites": [
+        "JSON 注册源通过字段校验",
+        "本机 SQLite 支持 FTS5 trigram"
+      ],
+      "outputs": {
+        "format": "json",
+        "success_exit_codes": [
+          0
+        ],
+        "failure_exit_codes": [
+          3
+        ]
+      },
+      "risk": {
+        "level": "medium",
+        "writes": true,
+        "warning": "只有 --write 会替换生成式数据库"
+      },
+      "boundaries": [
+        "JSON 是唯一事实源",
+        "默认模式只检查"
+      ],
+      "related_command_ids": [
+        "registry.ask"
+      ]
     },
     {
-      "id": "registry.ask", "category": "registry", "entrypoint": "query_registry.py", "subcommand": "ask", "title": "问询更多命令用法", "summary": "从本地 SQLite FTS5 注册表召回命令、示例、前置条件和风险边界，不执行任何结果。", "when_to_use": "技能文档只保留核心入口，而你需要查询更多用法时。",
-      "aliases": {"zh": ["x 命令问询", "查询更多用法", "命令怎么用"], "en": ["ask command registry", "query more usage", "x command help"]},
-      "parameters": [{"name": "question", "required": true, "description": "中英文自然语言问题"}, {"name": "--kind", "required": false, "description": "command、workflow、document 或 knowledge，默认 command"}, {"name": "--category", "required": false, "description": "仅 command 使用的分类过滤"}, {"name": "--limit", "required": false, "description": "1 到 10，默认 5"}, {"name": "--json", "required": false, "description": "机器可读输出"}], "invocation_templates": ["python <skill>/scripts/python/registry/query_registry.py ask \"<question>\" [--kind <kind>] [--category <name>] [--limit 1..10] [--json]"],
-      "examples": {"valid": ["python skills/agents-md-generator/scripts/python/registry/query_registry.py ask \"如何开始文档治理会话\" --category docs"], "invalid": ["问询结果只提供指导，不能当作已执行证据"]},
-      "prerequisites": ["registry.sqlite3 存在且与 JSON 同步"], "outputs": {"format": "text-or-json", "success_exit_codes": [0], "failure_exit_codes": [1, 2, 3]}, "risk": {"level": "low", "writes": false, "warning": "高风险命令会显示警告但不会执行"}, "boundaries": ["永远不执行检索结果", "数据库缺失、损坏或过期时拒绝回答"], "related_command_ids": ["registry.build", "registry.document-governance"]
+      "id": "registry.ask",
+      "category": "registry",
+      "entrypoint": "query_registry.py",
+      "subcommand": "ask",
+      "title": "问询更多命令用法",
+      "summary": "从本地 SQLite FTS5 注册表召回命令、示例、前置条件和风险边界，不执行任何结果。",
+      "when_to_use": "技能文档只保留核心入口，而你需要查询更多用法时。",
+      "aliases": {
+        "zh": [
+          "x 命令问询",
+          "查询更多用法",
+          "命令怎么用"
+        ],
+        "en": [
+          "ask command registry",
+          "query more usage",
+          "x command help"
+        ]
+      },
+      "parameters": [
+        {
+          "name": "question",
+          "required": true,
+          "description": "中英文自然语言问题"
+        },
+        {
+          "name": "--kind",
+          "required": false,
+          "description": "command、workflow、document 或 knowledge，默认 command"
+        },
+        {
+          "name": "--category",
+          "required": false,
+          "description": "仅 command 使用的分类过滤"
+        },
+        {
+          "name": "--limit",
+          "required": false,
+          "description": "1 到 10，默认 5"
+        },
+        {
+          "name": "--json",
+          "required": false,
+          "description": "机器可读输出"
+        }
+      ],
+      "invocation_templates": [
+        "python <skill>/scripts/python/registry/query_registry.py ask \"<question>\" [--kind <kind>] [--category <name>] [--limit 1..10] [--json]"
+      ],
+      "examples": {
+        "valid": [
+          "python skills/agents-md-generator/scripts/python/registry/query_registry.py ask \"如何开始文档治理会话\" --category docs"
+        ],
+        "invalid": [
+          "问询结果只提供指导，不能当作已执行证据"
+        ]
+      },
+      "prerequisites": [
+        "registry.sqlite3 存在且与 JSON 同步"
+      ],
+      "outputs": {
+        "format": "text-or-json",
+        "success_exit_codes": [
+          0
+        ],
+        "failure_exit_codes": [
+          1,
+          2,
+          3
+        ]
+      },
+      "risk": {
+        "level": "low",
+        "writes": false,
+        "warning": "高风险命令会显示警告但不会执行"
+      },
+      "boundaries": [
+        "永远不执行检索结果",
+        "数据库缺失、损坏或过期时拒绝回答"
+      ],
+      "related_command_ids": [
+        "registry.build",
+        "registry.document-governance"
+      ]
     },
     {
-      "id": "registry.document-governance", "category": "registry", "entrypoint": "manage_document_registry.py", "subcommand": "<operation>", "title": "管理可选文档注册化门禁", "summary": "在用户明确启用后扫描 SKILL.md 与 references Markdown，登记唯一职责、重复裁决、脚本接口映射和知识指针。", "when_to_use": "用户明确要求把技能文档注册化过程纳入持久脚本门禁时。",
-      "aliases": {"zh": ["启用文档注册化", "检查文档重复", "登记知识索引", "文档门禁"], "en": ["enable document registry", "check document duplicates", "index skill knowledge", "document governance gate"]},
-      "parameters": [{"name": "operation", "required": true, "description": "scan、init、check、finalize 或 status"}, {"name": "skill_dir", "required": true, "description": "目标技能根目录"}, {"name": "--enable", "required": false, "description": "init 所需的用户显式启用信号"}, {"name": "--write", "required": false, "description": "init 或 finalize 的写入授权"}, {"name": "--confirm-user", "required": false, "description": "Agent 不确定裁决所需的当前用户确认"}, {"name": "--json", "required": false, "description": "单对象机器协议"}], "invocation_templates": ["python <skill>/scripts/python/registry/manage_document_registry.py scan <skill-dir> --json", "python <skill>/scripts/python/registry/manage_document_registry.py init <skill-dir> --enable --write --json", "python <skill>/scripts/python/registry/manage_document_registry.py check <skill-dir> --json", "python <skill>/scripts/python/registry/manage_document_registry.py finalize <skill-dir> --write [--confirm-user] --json"],
-      "examples": {"valid": ["python skills/agents-md-generator/scripts/python/registry/manage_document_registry.py status skills/agents-md-generator --json"], "invalid": ["未获得用户明确指定时不得执行 init --enable --write"]},
-      "prerequisites": ["init 前用户明确指定启用可选门禁", "finalize 前 Agent 已逐项复核职责、重复和接口事实"], "outputs": {"format": "json", "success_exit_codes": [0], "failure_exit_codes": [2, 3]}, "risk": {"level": "medium", "writes": true, "warning": "只有带 --write 的 init 和 finalize 会修改注册源"}, "boundaries": ["未配置技能的 check 成功跳过且不创建文件", "知识正文仍以 Markdown 为权威源", "Agent 不确定时必须请求用户确认"], "related_command_ids": ["registry.build", "registry.ask"]
+      "id": "registry.document-governance",
+      "category": "registry",
+      "entrypoint": "manage_document_registry.py",
+      "subcommand": "<operation>",
+      "title": "管理可选文档注册化门禁",
+      "summary": "在用户明确启用后扫描 SKILL.md 与 references Markdown，登记唯一职责、重复裁决、脚本接口映射和知识指针。",
+      "when_to_use": "用户明确要求把技能文档注册化过程纳入持久脚本门禁时。",
+      "aliases": {
+        "zh": [
+          "启用文档注册化",
+          "检查文档重复",
+          "登记知识索引",
+          "文档门禁"
+        ],
+        "en": [
+          "enable document registry",
+          "check document duplicates",
+          "index skill knowledge",
+          "document governance gate"
+        ]
+      },
+      "parameters": [
+        {
+          "name": "operation",
+          "required": true,
+          "description": "scan、init、check、finalize 或 status"
+        },
+        {
+          "name": "skill_dir",
+          "required": true,
+          "description": "目标技能根目录"
+        },
+        {
+          "name": "--enable",
+          "required": false,
+          "description": "init 所需的用户显式启用信号"
+        },
+        {
+          "name": "--write",
+          "required": false,
+          "description": "init 或 finalize 的写入授权"
+        },
+        {
+          "name": "--confirm-user",
+          "required": false,
+          "description": "Agent 不确定裁决所需的当前用户确认"
+        },
+        {
+          "name": "--json",
+          "required": false,
+          "description": "单对象机器协议"
+        }
+      ],
+      "invocation_templates": [
+        "python <skill>/scripts/python/registry/manage_document_registry.py scan <skill-dir> --json",
+        "python <skill>/scripts/python/registry/manage_document_registry.py init <skill-dir> --enable --write --json",
+        "python <skill>/scripts/python/registry/manage_document_registry.py check <skill-dir> --json",
+        "python <skill>/scripts/python/registry/manage_document_registry.py finalize <skill-dir> --write [--confirm-user] --json"
+      ],
+      "examples": {
+        "valid": [
+          "python skills/agents-md-generator/scripts/python/registry/manage_document_registry.py status skills/agents-md-generator --json"
+        ],
+        "invalid": [
+          "未获得用户明确指定时不得执行 init --enable --write"
+        ]
+      },
+      "prerequisites": [
+        "init 前用户明确指定启用可选门禁",
+        "finalize 前 Agent 已逐项复核职责、重复和接口事实"
+      ],
+      "outputs": {
+        "format": "json",
+        "success_exit_codes": [
+          0
+        ],
+        "failure_exit_codes": [
+          2,
+          3
+        ]
+      },
+      "risk": {
+        "level": "medium",
+        "writes": true,
+        "warning": "只有带 --write 的 init 和 finalize 会修改注册源"
+      },
+      "boundaries": [
+        "未配置技能的 check 成功跳过且不创建文件",
+        "知识正文仍以 Markdown 为权威源",
+        "Agent 不确定时必须请求用户确认"
+      ],
+      "related_command_ids": [
+        "registry.build",
+        "registry.ask"
+      ]
     },
     {
-      "id": "agents.render", "category": "agents", "entrypoint": "render_agents.py", "subcommand": "", "title": "渲染 AGENTS.md", "summary": "从项目事实和确认的治理配置渲染根及作用域 AGENTS.md，并在写入时验证唯一 tester_worker 配置。", "when_to_use": "创建、刷新、压缩或验证项目 AGENTS.md 时。",
-      "aliases": {"zh": ["渲染 AGENTS", "生成 AGENTS.md", "刷新代理规则"], "en": ["render AGENTS", "generate AGENTS.md", "refresh agent rules"]},
-      "parameters": [{"name": "project", "required": false, "description": "项目根目录，默认为当前目录"}, {"name": "--write", "required": false, "description": "写入生成的 AGENTS.md"}, {"name": "--template-dir", "required": false, "description": "根和作用域模板目录"}, {"name": "--profile", "required": false, "description": "agents-control.json 路径"}, {"name": "--confirm-docs-layout", "required": false, "description": "确认沿用现有 docs 布局写入治理文档"}, {"name": "--confirm-structure-fix", "required": false, "description": "确认应用结构规范化修复"}, {"name": "--confirm-branch-governance", "required": false, "description": "确认在分支治理阻塞后继续"}, {"name": "--confirm-codebase-memory-untrack", "required": false, "description": "确认从 Git 索引移除 .codebase-memory 但保留本地文件"}, {"name": "--migrate-redundant-scopes", "required": false, "description": "报告并在写入时移除仅由生成器创建的作用域文件"}, {"name": "--confirm-tester-worker-update", "required": false, "description": "确认显示备份后刷新现有 tester_worker 配置"}], "invocation_templates": ["python <skill>/scripts/python/render/render_agents.py [project] --help", "python <skill>/scripts/python/render/render_agents.py [project] --write --confirm-tester-worker-update"],
-      "examples": {"valid": ["python skills/agents-md-generator/scripts/python/render/render_agents.py . --write --confirm-tester-worker-update"], "invalid": ["未获得用户确认时不得覆盖漂移的 tester_worker.toml"]},
-      "prerequisites": ["项目事实和最近的 AGENTS.md 已读取", "写入前 tester_worker.toml 已显示、备份或验证"], "outputs": {"format": "markdown-or-json", "success_exit_codes": [0], "failure_exit_codes": [1, 2, 3]}, "risk": {"level": "medium", "writes": true, "warning": "--write 会更新 AGENTS.md，tester_worker 漂移刷新需要显式确认"}, "boundaries": ["AGENTS.md 只保留入口规则索引", "tests/** 只能由唯一 tester_worker 访问", "远端工作区必须先通过精确路由和 workspace-check"], "related_command_ids": ["registry.build", "registry.document-governance"]
+      "id": "agents.render",
+      "category": "agents",
+      "entrypoint": "render_agents.py",
+      "subcommand": "",
+      "title": "渲染 AGENTS.md",
+      "summary": "从项目事实和确认的治理配置渲染根及作用域 AGENTS.md，并在写入时验证唯一 tester_worker 配置。",
+      "when_to_use": "创建、刷新、压缩或验证项目 AGENTS.md 时。",
+      "aliases": {
+        "zh": [
+          "渲染 AGENTS",
+          "生成 AGENTS.md",
+          "刷新代理规则"
+        ],
+        "en": [
+          "render AGENTS",
+          "generate AGENTS.md",
+          "refresh agent rules"
+        ]
+      },
+      "parameters": [
+        {
+          "name": "project",
+          "required": false,
+          "description": "项目根目录，默认为当前目录"
+        },
+        {
+          "name": "--write",
+          "required": false,
+          "description": "写入生成的 AGENTS.md"
+        },
+        {
+          "name": "--agent-platform",
+          "required": false,
+          "description": "从平台代理目录选择 codex、claude、deepseek 或 gemini"
+        },
+        {
+          "name": "--template-dir",
+          "required": false,
+          "description": "根和作用域模板目录"
+        },
+        {
+          "name": "--profile",
+          "required": false,
+          "description": "agents-control.json 路径"
+        },
+        {
+          "name": "--confirm-docs-layout",
+          "required": false,
+          "description": "确认沿用现有 docs 布局写入治理文档"
+        },
+        {
+          "name": "--confirm-structure-fix",
+          "required": false,
+          "description": "确认应用结构规范化修复"
+        },
+        {
+          "name": "--confirm-branch-governance",
+          "required": false,
+          "description": "确认在分支治理阻塞后继续"
+        },
+        {
+          "name": "--confirm-codebase-memory-untrack",
+          "required": false,
+          "description": "确认从 Git 索引移除 .codebase-memory 但保留本地文件"
+        },
+        {
+          "name": "--migrate-redundant-scopes",
+          "required": false,
+          "description": "报告并在写入时移除仅由生成器创建的作用域文件"
+        },
+        {
+          "name": "--confirm-tester-worker-update",
+          "required": false,
+          "description": "确认显示备份后刷新现有 tester_worker 配置"
+        },
+        {
+          "name": "--migrate-platform-from",
+          "required": false,
+          "description": "迁移前一个已选平台的受管状态目录"
+        },
+        {
+          "name": "--confirm-platform-migration",
+          "required": false,
+          "description": "确认仅退休受管旧平台选择标记"
+        }
+      ],
+      "invocation_templates": [
+        "python <skill>/scripts/python/render/render_agents.py [project] --help",
+        "python <skill>/scripts/python/render/render_agents.py [project] --write --confirm-tester-worker-update"
+      ],
+      "examples": {
+        "valid": [
+          "python skills/agents-md-generator/scripts/python/render/render_agents.py . --write --confirm-tester-worker-update"
+        ],
+        "invalid": [
+          "未获得用户确认时不得覆盖漂移的 tester_worker.toml"
+        ]
+      },
+      "prerequisites": [
+        "项目事实和最近的 AGENTS.md 已读取",
+        "写入前 tester_worker.toml 已显示、备份或验证"
+      ],
+      "outputs": {
+        "format": "markdown-or-json",
+        "success_exit_codes": [
+          0
+        ],
+        "failure_exit_codes": [
+          1,
+          2,
+          3
+        ]
+      },
+      "risk": {
+        "level": "medium",
+        "writes": true,
+        "warning": "--write 会更新 AGENTS.md，tester_worker 漂移刷新需要显式确认"
+      },
+      "boundaries": [
+        "AGENTS.md 只保留入口规则索引",
+        "tests/** 只能由唯一 tester_worker 访问",
+        "远端工作区必须先通过精确路由和 workspace-check"
+      ],
+      "related_command_ids": [
+        "registry.build",
+        "registry.document-governance"
+      ]
     }
   ]
 }

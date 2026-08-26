@@ -2,11 +2,64 @@
 
 # 视图合同使用 JSON 标签、路径和结构化条目类型。
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 # 存储层提供契约、时间和相对路径公共能力。
 from memory_store import memory_contract, now_iso, rel
+
+# 历史非英语内容只投影为英文检索指针，SQLite/JSONL 权威记录保持不变。
+NON_ENGLISH_MEMORY_RE = re.compile(r"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]")  # 非英语字符检测器
+
+# 检查 memory 字段是否需要英文投影。
+def _contains_non_english_memory_text(*values: object) -> bool:
+    """判断待投影的 memory 字段是否包含非英语文本。
+
+    参数：values 为待检查的标题、摘要和标签文本。
+    返回：任一字段命中非英语字符时返回 True。
+    """
+
+    # 汇总所有字段的非英语命中状态。
+    return any(NON_ENGLISH_MEMORY_RE.search(str(value or "")) for value in values)  # 汇总字段命中状态
+
+# 将非英语 memory 条目转换为英文检索投影。
+def _project_memory_item(item: dict[str, Any]) -> dict[str, Any]:
+    """将非英语 memory 字段投影为英文检索元数据。
+
+    参数：item 为 SQLite/JSONL 读取的结构化 memory 条目。
+    返回：英文条目副本或原始英文条目。
+    """
+
+    # 提取条目标题以参与语言判断。
+    str_title = str(item.get("title", "Untitled memory"))  # 原始标题文本
+
+    # 提取摘要正文以参与语言判断。
+    str_summary = str(item.get("summary", ""))  # 原始摘要文本
+
+    # 提取标签 JSON 以参与语言判断。
+    str_tags = str(item.get("tags_json", ""))  # 原始标签 JSON 文本
+
+    # 英文判断只作用于当前投影字段。
+    if not _contains_non_english_memory_text(str_title, str_summary, str_tags):
+
+        # 英文条目无需改变权威字段。
+        return item
+
+    # 用稳定序号生成英文标题。
+    str_sequence = str(item.get("sequence") or 0)  # 生成投影标题序号
+
+    # 返回含英文标题、摘要和原始元数据的投影对象。
+    return {
+        **item,
+        "title": f"Memory item {str_sequence}",
+        "summary": (
+            "Historical non-English content is omitted from this current English "
+            "view. Retrieve the authoritative record by sequence, source reference, "
+            "or source timestamp."
+        ),
+        "tags_json": "[]",
+    }
 
 # 单个 memory 条目渲染为摘要文档中的固定 Markdown 分块。
 def memory_summary_lines(item: dict[str, Any], int_summary_limit: int = 600) -> list[str]:
@@ -20,11 +73,14 @@ def memory_summary_lines(item: dict[str, Any], int_summary_limit: int = 600) -> 
         包含元数据和摘要正文的 Markdown 行。
     """
 
+    # 当前条目的英文投影。
+    dict_projected_item = _project_memory_item(item)  # 读取条目的英文投影
+
     # 标签 JSON 转换为便于人工阅读的逗号分隔文本。
-    str_tags = ", ".join(json.loads(item.get("tags_json") or "[]"))  # memory 标签文本
+    str_tags = ", ".join(json.loads(dict_projected_item.get("tags_json") or "[]"))  # memory 标签文本
 
     # 单条正文遵循有界视图合同；完整内容仍保留在 SQLite/JSONL。
-    str_summary = str(item.get("summary", "")).strip()  # 原始记忆摘要正文。
+    str_summary = str(dict_projected_item.get("summary", "")).strip()  # 当前投影摘要正文
 
     # 超限正文保留前缀并明确标记截断，避免读者误认完整内容。
     if len(str_summary) > int_summary_limit:
@@ -34,13 +90,13 @@ def memory_summary_lines(item: dict[str, Any], int_summary_limit: int = 600) -> 
 
     # 固定字段顺序保证摘要文件 diff 稳定。
     return [
-        f"## {item.get('title', 'Untitled memory')}",
-        f"- Kind: {item.get('kind', 'note')}",
-        f"- Sequence: {item.get('sequence') or 0}",
-        f"- Updated: {item.get('updated_at', '')}",
-        f"- Source ref: {item.get('source_ref') or 'not recorded'}",
-        f"- Source timestamp: {item.get('source_timestamp') or 'not recorded'}",
-        f"- Source: {item.get('source_path') or 'not recorded'}",
+        f"## {dict_projected_item.get('title', 'Untitled memory')}",
+        f"- Kind: {dict_projected_item.get('kind', 'note')}",
+        f"- Sequence: {dict_projected_item.get('sequence') or 0}",
+        f"- Updated: {dict_projected_item.get('updated_at', '')}",
+        f"- Source ref: {dict_projected_item.get('source_ref') or 'not recorded'}",
+        f"- Source timestamp: {dict_projected_item.get('source_timestamp') or 'not recorded'}",
+        f"- Source: {dict_projected_item.get('source_path') or 'not recorded'}",
         f"- Tags: {str_tags or 'none'}",
         "",
         str_summary,
@@ -58,14 +114,26 @@ def memory_index_line(item: dict[str, Any]) -> str:
         包含序号、标题和来源引用的 Markdown 列表项。
     """
 
+    # 当前索引条目的英文投影。
+    dict_projected_item = _project_memory_item(item)  # 读取索引条目的英文投影
+
     # 来源引用优先于路径，二者都缺失时不生成空占位字段。
-    str_source = str(item.get("source_ref") or item.get("source_path") or "").strip()  # 可选来源。
+    str_source_ref = dict_projected_item.get("source_ref")  # 来源引用文本
+
+    # 缺少引用时回退到来源路径。
+    str_source_path = dict_projected_item.get("source_path")  # 来源路径文本
+
+    # 合并来源并去除外围空白。
+    str_source = str(str_source_ref or str_source_path or "").strip()  # 规范化来源文本
 
     # 后缀只承载真实来源，避免生成无信息的破折号。
     str_suffix = f" — {str_source}" if str_source else ""  # 仅在有信息时添加来源。
 
     # 序号让调用者可通过 memory-read 精确回查。
-    return f"- {int(item.get('sequence') or 0)}: {item.get('title', 'Untitled memory')}{str_suffix}"
+    int_sequence = int(dict_projected_item.get("sequence") or 0)  # 稳定序号
+
+    # 返回序号、标题和来源组成的稳定索引行。
+    return f"- {int_sequence}: {dict_projected_item.get('title', 'Untitled memory')}{str_suffix}"
 
 # 完整导出路径必须留在 memory 根内且不能覆盖默认摘要。
 def resolve_full_memory_output(

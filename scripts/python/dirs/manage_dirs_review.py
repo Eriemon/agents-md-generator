@@ -9,9 +9,12 @@ import re
 from pathlib import Path
 from typing import Any
 
-# 公共治理模块提供忽略目录、JSON 读取和用户决策载荷。
-from agents_common import SKIP_DIRS, read_json
+# 公共治理模块提供 JSON 读取和用户决策载荷。
+from agents_common import read_json
 from agents_decisions import decision_request
+from manage_dirs_upload import build_upload_manifest, review_upload_item
+# 兼容入口独立承载旧参数校验，核心编排继续留在本模块。
+from manage_dirs_compat import review_change_item
 
 # 远程目录策略负责路径白名单、运行时保护和设置文件边界。
 from manage_dirs_remote import (
@@ -31,10 +34,8 @@ from manage_dirs_state import (
     GOVERNANCE_PREFIXES,
     HISTORY_DIR_MANAGER,
     PLANNED_STRUCTURE,
-    TAKEOVER_PRESERVE_ROOT_FILES,
     # 路径策略函数负责规范化、白名单和错误原因计算。
     allowed_path,
-    archive_dir_manager,
     control_profile,
     display_rel,
     init_dir_manager,
@@ -47,6 +48,14 @@ from manage_dirs_state import (
     scan_structure,
     stamp,
     unapproved_root_files,
+)
+
+# 接管候选和迁移入口从拆分模块导入，保持旧调用方可直接导入。
+from manage_dirs_structure import (
+    _path_stays_inside_project,
+    obvious_structure_fix_candidate,
+    takeover_candidates,
+    takeover_fix,
 )
 
 # 工作区设置策略区分本地凭据配置与可部署远程配置。
@@ -88,10 +97,10 @@ def critical_move_reason(action: str, path: str, target: str | None) -> str | No
             return None
 
         # 顶层目录决定当前路径是否属于关键项目结构。
-        top = normalized.split("/", 1)[0]  # 源路径顶层目录
+        str_top: str = normalized.split("/", 1)[0]  # 源路径顶层目录
 
         # 关键目录只允许在自己的顶层边界内调整后代路径。
-        if top in CRITICAL_PREFIXES:
+        if str_top in CRITICAL_PREFIXES:
 
             # 删除或缺少目标的迁移动作会移除关键目录。
             if not target_norm:
@@ -103,7 +112,7 @@ def critical_move_reason(action: str, path: str, target: str | None) -> str | No
             target_top = target_norm.split("/", 1)[0]  # 目标路径顶层目录
 
             # 跨顶层移动会改变关键目录的计划位置。
-            if target_top != top:
+            if target_top != str_top:
 
                 # 明确指出源路径越出计划边界的风险。
                 return f"{action} would move critical directory `{normalized}` outside its planned boundary"
@@ -123,7 +132,7 @@ def change_facts(change: dict[str, Any]) -> dict[str, Any]:
     action = str(change.get("action", "")).strip().lower()  # 规范化动作值。
 
     # 未声明环境时按本地目录变更处理。
-    environment = (  # 空字符串也回退到 local。
+    str_environment: str = (  # 空字符串也回退到 local。
         str(change.get("environment", "local")).strip().lower()  # 读取环境文本。
         or "local"  # 空环境采用本地治理。
     )
@@ -143,13 +152,33 @@ def change_facts(change: dict[str, Any]) -> dict[str, Any]:
         str(change.get("artifact_state", "")).strip().lower()  # 规范状态文本。
     )
 
+    # 上传声明的本地源路径复用普通变更路径作为默认值。
+    local_path = str(change.get("local_path", path)).strip()  # 上传源路径。
+
+    # 上传声明的远程目标路径复用显式目标作为默认值。
+    remote_path = str(change.get("remote_path", target or "")).strip()  # 上传目标路径。
+
+    # 上传条目类型统一使用小写形式参与合同校验。
+    str_kind: str = str(change.get("kind", "")).strip().lower()  # 上传条目类型。
+
+    # 上传用途保留用户说明供审查证据回显。
+    str_purpose: str = str(change.get("purpose", "")).strip()  # 上传用途说明。
+
+    # 上传需求引用保留用户提供的治理追踪标识。
+    str_requirement_ref: str = str(change.get("requirement_ref", "")).strip()  # 上传需求或计划引用。
+
     # 返回供本地和远程审查共享的稳定字段协议。
     return {
-        "action": action,  # create、move、delete 或 rename。
-        "environment": environment,  # 本地或远程审查路由值。
+        "action": action,  # create、move、delete、rename 或 upload。
+        "environment": str_environment,  # 本地或远程审查路由值。
         "path": path,  # 变更源路径。
         "target": target,  # 可选目标路径。
         "artifact_state": artifact_state,  # 可选远程制品状态。
+        "local_path": local_path,  # 上传本地源路径。
+        "remote_path": remote_path,  # 上传远程目标路径。
+        "kind": str_kind,  # 输出上传条目类型。
+        "purpose": str_purpose,  # 上传用途。
+        "requirement_ref": str_requirement_ref,  # 上传需求引用。
     }
 
 # 通用路径检查在环境专属规则之前执行，并累计路径类别证据。
@@ -172,13 +201,13 @@ def review_common_paths(
     for value in [str_path, target] if target else [str_path]:
 
         # 路径检测器返回首个可解释的非法原因。
-        invalid = invalid_path_reason(value)  # None 表示路径语法安全。
+        str_invalid_reason: str | None = invalid_path_reason(value)  # None 表示路径语法安全。
 
         # 非法原因按输入顺序保留，便于定位具体字段。
-        if invalid:
+        if str_invalid_reason:
 
             # 追加诊断但继续收集同一变更的其他证据。
-            list_reasons.append(invalid)  # 保留检测器原始说明。
+            list_reasons.append(str_invalid_reason)  # 保留检测器原始说明。
 
     # 源路径存在时识别本地配置文件类别。
     if str_path:
@@ -288,7 +317,7 @@ def review_remote_change(
         )
 
     # 运行时目录和制品状态由专用远程策略统一判断。
-    runtime_reasons = remote_runtime_reasons(  # 可能返回多个独立阻断原因。
+    list_runtime_reasons: list[str] = remote_runtime_reasons(  # 可能返回多个独立阻断原因。
         str_action,  # 当前远程动作。
         str_path,  # 受管源路径。
         target,  # 可选迁移目标。
@@ -297,10 +326,10 @@ def review_remote_change(
     )
 
     # 仅在策略实际命中时登记规则标识。
-    if runtime_reasons:
+    if list_runtime_reasons:
 
         # 保留策略返回的稳定原因顺序。
-        list_reasons.extend(runtime_reasons)  # 合并全部运行时风险。
+        list_reasons.extend(list_runtime_reasons)  # 合并全部运行时风险。
 
         # 登记运行时制品治理规则命中。
         list_matched_rules.append(  # 标记远程运行时治理命中。
@@ -375,15 +404,15 @@ def review_local_change(
         )
 
     # 关键治理目录不得被移出其批准边界。
-    critical = critical_move_reason(  # None 表示边界安全。
+    str_critical_reason: str | None = critical_move_reason(  # None 表示边界安全。
         str_action, str_path, target  # 组合动作与源目标边界。
     )
 
     # 专用边界原因优先于一般目标白名单说明。
-    if critical:
+    if str_critical_reason:
 
         # 保存关键路径风险及命中规则。
-        list_reasons.append(critical)  # 保留具体关键目录名称。
+        list_reasons.append(str_critical_reason)  # 保留具体关键目录名称。
 
         # 登记关键目录边界规则命中。
         list_matched_rules.append(  # 标识关键边界规则。
@@ -405,23 +434,44 @@ def review_local_change(
         )
 
 # 单项编排负责动作验证，并把环境专属规则路由到对应职责。
-def review_change_item(
-    change: Any,
-    planned: dict[str, Any],
-    remote_plan: dict[str, Any],
-    list_reasons: list[str],
-    set_path_classes: set[str],
-    list_matched_rules: list[str],
-) -> None:
+def _review_change_item_context(dict_context: dict[str, Any]) -> None:
     """审查一个原始变更条目并累计结果。
 
-    参数：change 为原始条目，planned 为本地计划，remote_plan 为远程计划，
-    list_reasons、set_path_classes 和 list_matched_rules 为共享结果集合。
-    返回：无；所有诊断与证据写入传入集合。
+    参数:
+        dict_context: 包含项目、变更、计划和共享结果集合的审查上下文。
+    返回:
+        None；所有诊断与证据写入传入集合。
     """
 
+    # 从统一上下文中读取当前项目锚点。
+    path_project: Path = dict_context["project"]  # 当前项目根目录。
+
+    # 从统一上下文中读取当前原始变更。
+    obj_change: object = dict_context["change"]  # 当前原始变更条目。
+
+    # 从统一上下文中读取本地目录授权基线。
+    dict_planned: dict[str, Any] = dict_context["planned"]  # 本地目录计划。
+
+    # 从统一上下文中读取远程部署授权基线。
+    dict_remote_plan: dict[str, Any] = dict_context["remote_plan"]  # 远程部署子计划。
+
+    # 从统一上下文中读取共享阻断原因容器。
+    list_reasons: list[str] = dict_context["list_reasons"]  # 共享阻断原因列表。
+
+    # 从统一上下文中读取共享路径类别集合。
+    set_path_classes: set[str] = dict_context["set_path_classes"]  # 共享路径类别集合。
+
+    # 从统一上下文中读取共享命中规则列表。
+    list_matched_rules: list[str] = dict_context["list_matched_rules"]  # 共享命中规则列表。
+
+    # 从统一上下文中读取可选的不可覆盖阻断容器。
+    list_absolute_blockers: list[str] | None = dict_context.get("list_absolute_blockers")  # 可选不可覆盖阻断。
+
+    # 从统一上下文中读取可选的上传证据容器。
+    list_upload_reviews: list[dict[str, Any]] | None = dict_context.get("list_upload_reviews")  # 可选上传证据。
+
     # 每项变更必须是包含命名字段的 JSON 对象。
-    if not isinstance(change, dict):
+    if not isinstance(obj_change, dict):
 
         # 非对象条目无法安全解释为目录动作。
         list_reasons.append(  # 保持既有公开诊断文本。
@@ -432,10 +482,10 @@ def review_change_item(
         return
 
     # 规范化字段，避免各规则重复处理大小写和空白。
-    dict_facts = change_facts(change)  # 环境规则共享同一字段事实。
+    dict_facts = change_facts(obj_change)  # 环境规则共享同一字段事实。
 
     # 拒绝未声明的动作，防止规则对未知语义作出猜测。
-    if dict_facts["action"] not in {"create", "move", "delete", "rename"}:
+    if dict_facts["action"] not in {"create", "move", "delete", "rename", "upload"}:
 
         # 记录用户提供的规范化动作值。
         list_reasons.append(  # 保持原有错误协议。
@@ -443,6 +493,46 @@ def review_change_item(
         )
 
         # 未知动作不进入路径和环境规则。
+        return
+
+    # 上传动作只走 manifest-only 审查，不复用目录移动规则。
+    if dict_facts["action"] == "upload":
+
+        # 将规范化字段转换为上传审查器所需的最小载荷。
+        dict_upload_item = {  # 上传审查输入对象。
+            "local_path": dict_facts["local_path"],  # manifest 解析使用的本地源。
+            "remote_path": dict_facts["remote_path"],  # manifest 解析使用的远程目标。
+            "kind": dict_facts["kind"],  # manifest 规则使用的条目类型。
+            "purpose": dict_facts["purpose"],  # manifest 审查回显的用途。
+            "requirement_ref": dict_facts["requirement_ref"],  # manifest 追踪使用的需求引用。
+        }
+
+        # 对上传载荷执行 manifest-only 目录授权审查。
+        dict_upload = review_upload_item(  # 上传逐项审查结果。
+            path_project,  # upload 审查的项目锚点。
+            dict_upload_item,  # upload 审查的规范化输入。
+            dict_remote_plan,  # upload 审查的远程授权基线。
+        )
+
+        # 调用方需要时保留逐项上传审查证据。
+        if list_upload_reviews is not None:
+
+            # 追加当前上传条目的完整审查结果。
+            list_upload_reviews.append(dict_upload)
+
+        # 将每个上传阻断转换成公开原因并保留不可覆盖证据。
+        for str_blocker in dict_upload["blockers"]:
+
+            # 上传原因使用统一前缀，便于上层区分目录规则。
+            list_reasons.append(f"upload: {str_blocker}")
+
+            # 不可覆盖列表只在调用方提供时追加。
+            if list_absolute_blockers is not None:
+
+                # 保留原始阻断文本供 force-confirmation 策略判断。
+                list_absolute_blockers.append(str_blocker)
+
+        # 上传条目已经完成专属审查，不再进入普通目录规则。
         return
 
     # 通用路径语法和设置类别在环境路由前完成。
@@ -456,7 +546,7 @@ def review_change_item(
         # 路由到远程专属审查职责。
         review_remote_change(  # 保留远程规则的既有执行顺序。
             dict_facts,
-            remote_plan,
+            dict_remote_plan,
             list_reasons,
             set_path_classes,
             list_matched_rules,
@@ -467,30 +557,76 @@ def review_change_item(
 
     # 其他环境值延续既有行为，统一按本地变更审查。
     review_local_change(  # 本地计划和关键边界规则。
-        dict_facts, planned, list_reasons, list_matched_rules
+        dict_facts, dict_planned, list_reasons, list_matched_rules
     )
 
-# 结果构造集中维护批准和阻断两类公开 JSON 协议。
+# 上传审查结果在此展开为后续 JSON 载荷使用的 manifest。
+def _collect_upload_manifest(
+    list_upload_reviews: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """从上传审查证据中提取字典形式的文件清单。
+
+    参数:
+        list_upload_reviews: 上传逐项审查结果列表。
+    返回:
+        所有上传条目中可安全展开的 manifest 文件列表。
+    """
+
+    # 初始化展开结果，缺失上传证据时返回空清单。
+    list_manifest: list[dict[str, Any]] = []  # 已授权上传文件清单。
+
+    # 逐项读取上传审查器产生的 manifest 字段。
+    for dict_upload_review in list_upload_reviews or []:
+
+        # 缺失 manifest 时按空列表处理，不产生隐式文件。
+        value_manifest = dict_upload_review.get("manifest", [])  # 当前条目的 manifest 值。
+
+        # 只有列表容器可以展开为文件清单。
+        if isinstance(value_manifest, list):
+
+            # 只保留字典条目，避免把标量混入公开 manifest。
+            list_manifest.extend(  # 累计当前条目的有效文件。
+                item for item in value_manifest if isinstance(item, dict)
+            )
+
+    # 返回跨上传条目合并后的清单。
+    return list_manifest
+
+# 根据累计审查证据构造公开结果载荷。
 def build_change_review_result(
     list_reasons: list[str],
     set_path_classes: set[str],
     list_matched_rules: list[str],
     dry_run: bool,
+    list_absolute_blockers: list[str] | None = None,
+    list_upload_reviews: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """根据累计审查证据构造公开结果载荷。
 
-    参数：list_reasons 为原因列表，set_path_classes 为路径类别，
-    list_matched_rules 为规则列表，dry_run 为试运行标志。
-    返回：字段完整且尚未附加 review_file 的结果映射。
+    参数:
+        list_reasons: 原因列表。
+        set_path_classes: 路径类别集合。
+        list_matched_rules: 命中规则列表。
+        dry_run: 试运行标志。
+        list_absolute_blockers: 不可覆盖上传阻断列表。
+        list_upload_reviews: 上传逐项审查证据列表。
+    返回:
+        字段完整且尚未附加 review_file 的结果映射。
     """
 
+    # 上传绝对阻断不允许通过 force-confirmation 绕过。
+    list_absolute = list(dict.fromkeys(list_absolute_blockers or []))  # 不可覆盖阻断列表。
+
+    # 复用 manifest 展开器生成稳定的上传文件清单。
+    list_manifest = _collect_upload_manifest(list_upload_reviews)  # 上传清单汇总结果。
+
     # 没有阻断原因时批准目录变更。
-    approved = not list_reasons  # 决策布尔值驱动后续字段。
+    bool_approved: bool = not list_reasons  # 决策布尔值驱动后续字段。
 
     # 风险说明只在阻断结果中出现。
     list_risks = (  # 保持既有五项严重危害说明。
         []
-        if approved  # 批准结果没有风险项。
+        if bool_approved  # 批准结果没有风险项。
         else [  # 阻断结果公开固定风险集合。
             "Tests and imports can break because path references become stale.",  # 引用漂移风险。
             "Release packages can point at the wrong files or miss required assets.",  # 发布资产风险。
@@ -503,25 +639,30 @@ def build_change_review_result(
     # 返回机器决策、风险证据和强制确认请求。
     return {
         "project": "<PROJECT_ROOT>",  # 避免审查记录泄漏绝对路径。
-        "approved": approved,  # 最终批准状态。
-        "decision": "approved" if approved else "blocked",  # 决策枚举。
+        "approved": bool_approved,  # 最终批准状态。
+        "decision": "approved" if bool_approved else "blocked",  # 决策枚举。
         "reasons": list_reasons,  # 按检查顺序保存原因。
         "risks": list_risks,  # 阻断时的危害说明。
         "path_classes": sorted(set_path_classes),  # 稳定排序的路径类别。
         "matched_rules": sorted(dict.fromkeys(list_matched_rules)),  # 去重规则。
-        "force_confirmation_required": not approved,  # 阻断时要求明确确认。
+        "force_confirmation_required": not bool_approved,  # 阻断时要求明确确认。
+        "force_override_allowed": not bool(list_absolute),  # 上传绝对阻断永不允许强制绕过。
+        "absolute_blockers": list_absolute,  # 不可覆盖的上传阻断。
+        "upload_reviews": list_upload_reviews or [],  # 上传条目审查证据。
+        "manifest": list_manifest,  # 已批准上传文件的展开清单。
+        "manifest_only": True,  # 明确声明不允许工作区打包上传。
         "force_override_archive_required": (  # 提供强制执行前归档位置模板。
-            str(HISTORY_DIR_MANAGER / "YYYYMMDD-HHMMSS") if not approved else ""
+            str(HISTORY_DIR_MANAGER / "YYYYMMDD-HHMMSS") if not bool_approved else ""
         ),
         "user_message": (  # 阻断结果提供中文风险提示。
             ""
-            if approved
+            if bool_approved or list_absolute
             else "目录结构审查未通过，默认拒绝执行。若用户仍强制要求修改，必须明确确认强制执行该目录结构修改，并接受可能产生的严重危害。"
         ),
         "dry_run": dry_run,  # 回显调用方执行模式。
         "decision_request": (  # 批准时不构造交互请求。
             {}
-            if approved
+            if bool_approved
             else decision_request(
                 "force_confirmation",  # 稳定请求标识。
                 question="目录结构审查未通过。是否明确强制执行该目录结构修改并接受严重风险？",  # 用户问题。
@@ -585,7 +726,87 @@ def persist_change_review(
     # 文件成功写入后才公开其真实位置。
     dict_result["review_file"] = str(review_path)  # 调用方可追溯证据。
 
-# 公开审查入口按“初始化、读取、逐项审查、构造、持久化”编排职责。
+# 顶层 uploads 审查单独保持 manifest-only 证据边界。
+def _review_top_level_uploads(
+    project: Path,
+    raw: Any,
+    remote_plan: dict[str, Any],
+) -> dict[str, Any]:
+    """审查变更载荷中的顶层 uploads 字段。
+
+    参数:
+        project: 当前项目根目录。
+        raw: 已读取的顶层 JSON 载荷。
+        remote_plan: 远程部署子计划。
+    返回:
+        包含 reasons、absolute_blockers 和 reviews 的上传证据映射。
+    """
+
+    # 初始化顶层上传公开原因集合。
+    list_reasons: list[str] = []  # 顶层上传公开原因。
+
+    # 初始化顶层上传不可覆盖阻断集合。
+    list_absolute_blockers: list[str] = []  # 顶层上传不可覆盖阻断。
+
+    # 初始化顶层上传逐项证据集合。
+    list_upload_reviews: list[dict[str, Any]] = []  # 顶层上传逐项证据。
+
+    # 非对象载荷没有独立的 uploads 字段可审查。
+    if not isinstance(raw, dict):
+
+        # 返回空上传证据，顶层形状错误由 review_change 统一记录。
+        return {
+            "reasons": list_reasons,
+            "absolute_blockers": list_absolute_blockers,
+            "reviews": list_upload_reviews,
+        }
+
+    # 读取顶层上传声明，缺失字段按空列表处理。
+    value_uploads = raw.get("uploads", [])  # 顶层上传声明。
+
+    # 非数组 uploads 不能被静默降级为空清单。
+    if "uploads" in raw and not isinstance(value_uploads, list):
+
+        # 形状错误进入不可覆盖阻断集合。
+        list_absolute_blockers.append("uploads must be a JSON array")
+
+        # 公开原因沿用上传前缀，便于调用方统一展示。
+        list_reasons.append("upload: uploads must be a JSON array")
+
+    # 合法且非空的顶层上传声明才进入逐文件审查。
+    elif value_uploads:
+
+        # 顶层列表复用同一 manifest-only 审查器。
+        dict_upload_manifest = build_upload_manifest(  # 顶层上传 manifest 结果。
+            project,  # 顶层 manifest 的项目锚点。
+            value_uploads,  # 经过形状校验的 upload 列表。
+            remote_plan,  # 顶层 manifest 的授权基线。
+        )
+
+        # 保留上传逐项审查证据。
+        list_upload_reviews.extend(  # 累计顶层上传审查结果。
+            dict_upload_manifest["reviews"]
+        )
+
+        # 保留不可覆盖的上传阻断。
+        list_absolute_blockers.extend(  # 累计顶层上传阻断。
+            dict_upload_manifest["absolute_blockers"]
+        )
+
+        # 将不可覆盖阻断转换为公开上传原因。
+        list_reasons.extend(  # 累计顶层上传原因。
+            f"upload: {str_blocker}"
+            for str_blocker in dict_upload_manifest["absolute_blockers"]
+        )
+
+    # 返回顶层上传的结构化证据。
+    return {
+        "reasons": list_reasons,
+        "absolute_blockers": list_absolute_blockers,
+        "reviews": list_upload_reviews,
+    }
+
+# 审查本地或远程目录变更并保存结构化证据。
 def review_change(
     project: Path, input_path: str, *, dry_run: bool = False
 ) -> dict[str, Any]:
@@ -602,31 +823,43 @@ def review_change(
     # 输入路径按调用进程解析为绝对路径。
     raw = read_json(Path(input_path).resolve())  # 加载原始 JSON 载荷。
 
-    # 非对象输入或非列表 changes 按空变更集处理，保持既有兼容行为。
+    # 非对象输入不能形成可审查的变更载荷，后续会保留阻断原因。
     list_changes = (  # 提取候选变更列表。
         raw.get("changes", [])  # 从对象载荷读取变更序列。
         if isinstance(raw, dict)  # 仅对象载荷拥有 changes 字段。
         else []  # 非对象输入没有可审查变更。
     )
 
+    # 初始化跨变更共享的原因、类别与规则证据。
+    list_reasons: list[str] = []  # 保持诊断发现顺序。
+
+    # 非对象或非法 changes 必须 fail-closed，不能被空变更集掩盖。
+    if not isinstance(raw, dict):
+
+        # 顶层载荷不是对象时，无法验证任何变更合同。
+        list_reasons.append("change review input must be a JSON object")
+
+    # 对象载荷声明了非法 changes 类型时，拒绝静默降级。
+    elif "changes" in raw and not isinstance(raw["changes"], list):
+
+        # 公开原因说明非法容器形状。
+        list_reasons.append("changes must be a JSON array")
+
     # 非列表 changes 不能逐项解释，回退为空集合。
     if not isinstance(list_changes, list):
 
-        # 空集合产生批准结果，与旧实现保持一致。
+        # 清除非法容器，避免后续把标量当作变更项迭代。
         list_changes = []  # 清除非法容器。
 
     # 加载批准目录计划及其远程部署子合同。
-    planned = load_planned(project)  # 本地路径权威计划。
+    dict_planned: dict[str, Any] = load_planned(project)  # 本地路径权威计划。
 
     # 远程部署子合同必须是对象才能参与路径授权。
-    remote_plan = (  # 非对象远程配置按未规划处理。
-        planned.get("remote_deployment", {})  # 读取远程计划对象。
-        if isinstance(planned.get("remote_deployment"), dict)  # 验证映射类型。
+    dict_remote_plan: dict[str, Any] = (  # 非对象远程配置按未规划处理。
+        dict_planned.get("remote_deployment", {})  # 读取远程计划对象。
+        if isinstance(dict_planned.get("remote_deployment"), dict)  # 验证映射类型。
         else {}  # 非对象配置不授权任何远程路径。
     )
-
-    # 初始化跨变更共享的原因、类别与规则证据。
-    list_reasons: list[str] = []  # 保持诊断发现顺序。
 
     # 路径类别集合用于去重本地和远程设置分类。
     set_path_classes: set[str] = set()  # 自动去重路径类别。
@@ -634,18 +867,46 @@ def review_change(
     # 命中规则保留发现顺序，结果构造阶段再稳定去重。
     list_matched_rules: list[str] = []  # 最终稳定去重排序。
 
+    # 上传审查拥有不可覆盖的阻断集合。
+    list_absolute_blockers: list[str] = []  # 上传绝对阻断集合。
+
+    # 上传审查拥有逐项证据集合。
+    list_upload_reviews: list[dict[str, Any]] = []  # 上传逐项审查证据。
+
     # 按输入顺序审查每个目录变更。
     for change in list_changes:
 
+        # 组合单项审查所需的共享上下文，避免调用参数顺序漂移。
+        dict_item_context = {  # 单项目录变更审查上下文。
+            "project": project,  # 上下文使用的项目锚点。
+            "change": change,  # 上下文携带的原始变更。
+            "planned": dict_planned,  # 上下文使用的本地授权基线。
+            "remote_plan": dict_remote_plan,  # 上下文使用的远程授权基线。
+            "list_reasons": list_reasons,  # 上下文回写的原因容器。
+            "set_path_classes": set_path_classes,  # 上下文回写的路径集合。
+            "list_matched_rules": list_matched_rules,  # 上下文回写的规则集合。
+            "list_absolute_blockers": list_absolute_blockers,  # 上下文回写的绝对阻断。
+            "list_upload_reviews": list_upload_reviews,  # 上下文回写的上传证据。
+        }
+
         # 单项职责负责验证、环境路由和证据累计。
-        review_change_item(  # 不执行任何实际目录变更。
-            change,
-            planned,
-            remote_plan,
-            list_reasons,
-            set_path_classes,
-            list_matched_rules,
-        )
+        _review_change_item_context(dict_item_context)  # 不执行任何实际目录变更。
+
+    # 顶层 uploads 字段支持独立的 manifest-only 上传载荷。
+    dict_top_level_uploads = _review_top_level_uploads(  # 顶层上传审查结果。
+        project,  # 顶层审查使用的项目锚点。
+        raw,  # 顶层审查读取的 JSON 原文。
+        dict_remote_plan,  # 顶层审查使用的远程基线。
+    )
+
+    # 合并顶层上传公开原因。
+    list_reasons.extend(dict_top_level_uploads["reasons"])
+
+    # 合并顶层上传不可覆盖阻断。
+    list_absolute_blockers.extend(dict_top_level_uploads["absolute_blockers"])
+
+    # 合并顶层上传逐项证据。
+    list_upload_reviews.extend(dict_top_level_uploads["reviews"])
 
     # 根据全部审查证据构造公开决策载荷。
     dict_result = build_change_review_result(  # 尚未附加证据文件路径。
@@ -653,6 +914,8 @@ def review_change(
         set_path_classes,  # 已识别路径类别。
         list_matched_rules,  # 命中的治理规则。
         dry_run,  # 调用方试运行模式。
+        list_absolute_blockers,  # 结果载荷接收的绝对阻断。
+        list_upload_reviews,  # 结果载荷接收的上传证据。
     )
 
     # 按 dry-run 模式附加或写入审查记录。
@@ -660,331 +923,6 @@ def review_change(
 
     # 返回字段完整的最终审查结果。
     return dict_result
-
-# 自动修复候选只接受“单一未批准目录迁入尚不存在的主项目根”场景。
-def obvious_structure_fix_candidate(
-    project: Path, profile: dict, planned: dict
-) -> dict[str, str]:
-    """识别能够安全自动执行的单一结构修复候选。
-
-    参数：project 为项目根，profile 为控制配置，planned 为批准目录计划。
-    返回：候选动作字段；不存在唯一保守候选时返回空映射。
-    """
-
-    # 控制配置中的目录合同是主项目根的权威声明。
-    contract = (  # 当前项目目录合同
-        profile.get("directory_contract", {})  # 有效目录合同对象
-        if isinstance(profile.get("directory_contract"), dict)  # 拒绝非对象配置
-        else {}  # 非法配置按无合同处理
-    )
-
-    # 规范化目标根，防止路径表示差异影响存在性检查。
-    primary_root = normalize_rel(  # 自动修复目标根
-        str(contract.get("primary_project_root", "")).strip()  # 合同声明目标根
-    )
-
-    # 未声明目标根时不能构造保守移动方案。
-    if not primary_root:
-
-        # 空映射表示结构门禁需要人工处理。
-        return {}
-
-    # 自动修复仅创建尚不存在的主项目目录。
-    target = project / primary_root  # 计划中的迁入目标
-
-    # 目标已存在时移动可能覆盖用户内容，必须停止自动修复。
-    if target.exists():
-
-        # 已有目标交由人工确认具体合并方式。
-        return {}
-
-    # 已批准顶层根不应被误判为待迁移的旧工作区。
-    allowed_roots = {
-        normalize_rel(item).split("/", 1)[0]  # 批准路径的顶层根
-        for item in planned.get("allowed_top_level_roots", [])  # 计划允许的路径
-        if normalize_rel(item)  # 过滤空路径声明
-    }  # 已批准顶层目录集合
-
-    # 只有一个未批准业务目录时才满足无歧义自动修复条件。
-    list_candidates = []  # 潜在旧主项目目录
-
-    # 稳定扫描工作区根，排除治理和已批准目录。
-    for child in sorted(project.iterdir()):
-
-        # 工具缓存与固定治理目录绝不能迁入业务主项目根。
-        if child.name in SKIP_DIRS or child.name in {
-            ".agents",  # 代理控制目录
-            ".settings",  # 工作区设置目录
-            "docs",  # 治理文档目录
-            "dist",  # 发布历史目录
-            "tests",  # 测试目录
-            "ref",  # 参考材料目录
-        }:
-
-            # 保留成员不参与候选计数。
-            continue
-
-        # 根级普通文件不能作为需要整体迁移的项目目录。
-        if not child.is_dir():
-
-            # 继续检查其他根成员。
-            continue
-
-        # 计划已允许的目录不属于结构漂移。
-        if child.name in allowed_roots:
-
-            # 已批准目录无需修复。
-            continue
-
-        # 剩余目录可能是接管前的旧主项目根。
-        list_candidates.append(child)
-
-    # 多个候选存在歧义，零候选表示没有可修复对象。
-    if len(list_candidates) != 1 or not list_candidates[0].is_dir():
-
-        # 保守策略拒绝猜测用户希望迁移哪个目录。
-        return {}
-
-    # 唯一目录候选可以进入项目类型一致性检查。
-    candidate = list_candidates[0]  # 待迁移旧项目目录
-
-    # 技能项目必须由 SKILL.md 证明候选确实是技能根。
-    kind = str(profile.get("kind", "")).strip().lower()  # 项目控制类型
-
-    # 缺少技能身份文件时不能把普通目录当作技能项目迁移。
-    if kind == "skill" and not (candidate / "SKILL.md").is_file():
-
-        # 类型证据不足时要求人工处理。
-        return {}
-
-    # 返回最小移动计划，执行阶段仍会再次运行结构门禁。
-    return {
-        "source": display_rel(candidate, project),  # 工作区相对源目录
-        "target": primary_root,  # 合同声明目标目录
-    }
-
-# 接管候选扫描只选择主项目根之外且不属于治理保留面的成员。
-def takeover_candidates(project: Path, planned: dict) -> list[Path]:
-    """收集接管既有项目时需要迁移到主项目根的成员。
-
-    参数：project 为工作区根，planned 为批准目录计划。
-    返回：按名称稳定排序且未与目标冲突的候选路径列表。
-    """
-
-    # 计划中的主项目根决定所有接管成员的迁入目标。
-    primary_root = normalize_rel(  # 接管迁移目标根
-        str(planned.get("primary_project_root", "")).strip()  # 计划声明的主项目根
-    )
-
-    # 未配置主项目根时不能推断安全迁移边界。
-    if not primary_root:
-
-        # 空列表表示不存在可安全计算的候选。
-        return []
-
-    # 顶层主项目目录本身不得再次成为迁移候选。
-    top_primary = primary_root.split("/", 1)[0]  # 主项目根顶层名称
-
-    # 治理、发布、测试和主项目目录始终保留在工作区根。
-    set_preserve_roots = {
-        ".agents",  # 代理控制配置
-        ".settings",  # 本地与远程设置
-        "docs",  # 项目治理文档
-        "dist",  # 版本化发布历史
-        "tests",  # 项目测试根目录
-        "ref",  # 参考输入与审查材料
-        top_primary,  # 已批准主项目目录
-    }  # 接管时保留的根目录集合
-
-    # 候选列表保持 Path 对象，供执行阶段直接移动。
-    list_candidates: list[Path] = []  # 待迁入主项目根的成员
-
-    # 稳定遍历根成员，确保迁移和错误顺序可复现。
-    for child in sorted(project.iterdir()):
-
-        # Git 缓存和工具生成目录沿用公共忽略策略。
-        if child.name in SKIP_DIRS:
-
-            # 忽略成员不属于项目交付结构。
-            continue
-
-        # 明确保留的治理目录不能迁入业务主项目根。
-        if child.name in set_preserve_roots:
-
-            # 治理保留目录留在工作区根，不进入业务迁移阶段。
-            continue
-
-        # 根级代理说明和编辑器配置维持原位置。
-        if child.is_file() and child.name in TAKEOVER_PRESERVE_ROOT_FILES:
-
-            # 保留文件不进入迁移候选集。
-            continue
-
-        # 其余成员由 takeover_fix 在冲突检查后迁移。
-        list_candidates.append(child)
-
-    # 返回稳定排序的安全候选集合。
-    return list_candidates
-
-# 接管修复先保存既有治理证据，再把安全候选迁入批准的业务根目录。
-def takeover_fix(project: Path) -> dict[str, Any]:
-    """把既有工程或技能工作区迁移到批准的主项目目录。
-
-    参数：project 为待接管工作区根目录。
-    返回：包含批准状态、迁移成员和阻断原因的接管结果。
-    异常：目录创建、移动或归档失败时传播对应文件系统异常。
-    """
-
-    # 读取项目身份，用于识别需要拆平的同名旧包装目录。
-    profile = control_profile(project)  # 项目控制配置提供规范名称。
-
-    # 优先采用已批准计划，缺失时根据当前配置生成同等结构契约。
-    planned = load_planned(project) or planned_structure(project)  # 统一迁移依据。
-
-    # 规范化目标根，避免空白或路径表示差异绕过前置检查。
-    primary_root = normalize_rel(  # 迁移目标必须采用仓库相对路径。
-        str(planned.get("primary_project_root", "")).strip()  # 读取门禁要求的业务根。
-    )
-
-    # 没有明确业务根时禁止猜测目标位置。
-    if not primary_root:
-
-        # 返回可审计的阻断结果，不执行任何目录变更。
-        return {
-            "project": str(project),  # 标识被检查的工作区。
-            "moved": [],  # 阻断前没有迁移成员。
-            "errors": [  # 明确缺失的必需结构契约。
-                "takeover fix requires a configured primary_project_root"
-            ],
-            "archive_dir": "",  # 未触发治理归档。
-        }
-
-    # 空值表示本次接管前不存在需要归档的旧治理文件。
-    str_archive_dir = ""  # 供结果载荷稳定返回字符串字段。
-
-    # 发现旧目录治理文件时，先保存其完整历史再重建治理状态。
-    if any(
-        (project / rel).exists()  # 任一既有治理文件都要求归档。
-        for rel in [  # 仅检查由目录治理器拥有的三个事实文件。
-            DIR_MANAGER_MD,
-            CURRENT_STRUCTURE,
-            PLANNED_STRUCTURE,
-        ]
-    ):
-
-        # 归档原因固定记录为接管重构，便于后续审计来源。
-        archive = archive_dir_manager(  # 保存旧治理状态并返回归档位置。
-            project,  # 归档当前工作区根的治理文件。
-            reason="takeover directory restructuring",  # 记录变更动机。
-        )
-
-        # 提取归档路径作为接管结果证据。
-        str_archive_dir = str(archive.get("archive_dir", ""))  # 保持字段类型稳定。
-
-    # 将批准的相对业务根解析到当前工作区内。
-    target_root = project / primary_root  # 所有候选都迁入该目录。
-
-    # 在移动前创建完整目标路径，已有目录可安全复用。
-    target_root.mkdir(parents=True, exist_ok=True)  # 不覆盖其中既有成员。
-
-    # 分别记录成功迁移和名称冲突，形成完整执行证据。
-    list_moved: list[dict[str, str]] = []  # 每项描述一次源到目标移动。
-
-    # 冲突和重建错误独立于成功迁移清单累计。
-    list_errors: list[str] = []  # 冲突不终止其他独立候选的处理。
-
-    # 项目规范名称用于识别工作区根下遗留的同名包装目录。
-    project_name = str(profile.get("name", "")).strip()  # 空名称禁用拆平分支。
-
-    # 按稳定顺序处理经过保留规则过滤的安全候选。
-    for source in takeover_candidates(project, planned):
-
-        # 同名旧包装目录只迁移其子成员，避免产生重复嵌套层级。
-        if source.is_dir() and project_name and source.name == project_name:
-
-            # 稳定排序保证迁移日志和冲突顺序可复现。
-            for child in sorted(source.iterdir()):
-
-                # 子成员在批准业务根下保持原名称。
-                target = target_root / child.name  # 计算拆平后的目标位置。
-
-                # 目标已存在时保留双方并报告冲突，禁止隐式覆盖。
-                if target.exists():
-
-                    # 使用相对路径生成可移植的诊断信息。
-                    list_errors.append(
-                        f"takeover target already exists: "  # 冲突类别保持稳定。
-                        f"{display_rel(target, project)}"  # 指向实际冲突目标。
-                    )
-
-                    # 当前冲突不影响同一包装目录中的其他子成员。
-                    continue
-
-                # 名称无冲突后执行同一工作区内的原子移动。
-                child.rename(target)  # 保留子成员内容和元数据。
-
-                # 记录实际完成的拆平移动，供调用方核对。
-                list_moved.append(
-                    {
-                        "action": "move",  # 统一操作类型。
-                        "source": display_rel(child, project),  # 原子成员位置。
-                        "target": display_rel(target, project),  # 批准后的新位置。
-                    }
-                )
-
-            # 所有可迁成员处理完成后，仅删除已经为空的旧包装层。
-            if not any(source.iterdir()):
-
-                # rmdir 只允许空目录，天然保护未迁移或冲突成员。
-                source.rmdir()  # 清理冗余嵌套层级。
-
-            # 包装目录已独立处理，不再作为整体候选移动。
-            continue
-
-        # 普通候选在业务根下保持其顶层名称。
-        target = target_root / source.name  # 计算整体迁移目标。
-
-        # 目标冲突时保留源成员，避免数据覆盖或合并歧义。
-        if target.exists():
-
-            # 将冲突追加到统一错误列表并继续检查其他候选。
-            list_errors.append(
-                f"takeover target already exists: "  # 提供稳定诊断前缀。
-                f"{display_rel(target, project)}"  # 附加仓库相对目标路径。
-            )
-
-            # 跳过当前冲突源，继续处理互不依赖的候选。
-            continue
-
-        # 无冲突候选整体迁入批准业务根。
-        source.rename(target)  # 同一文件系统内保留目录内容。
-
-        # 保存普通候选的实际迁移证据。
-        list_moved.append(
-            {
-                "action": "move",  # 统一操作语义。
-                "source": display_rel(source, project),  # 原始根级位置。
-                "target": display_rel(target, project),  # 新业务根位置。
-            }
-        )
-
-    # 迁移完成后依据新结构重新初始化目录治理事实。
-    init_result = init_dir_manager(project)  # 返回重建阶段的独立诊断。
-
-    # 将重建错误合并到同一结果，避免成功移动掩盖治理失败。
-    list_errors.extend(  # 保持原有移动证据并追加初始化错误。
-        str(item)  # 规范化外部载荷中的错误文本。
-        for item in init_result.get("errors", [])  # 缺失错误字段视为空列表。
-    )
-
-    # 返回迁移范围、归档位置和所有未解决冲突。
-    return {
-        "project": str(project),  # 被接管的工作区根。
-        "primary_project_root": primary_root,  # 批准的业务根契约。
-        "archive_dir": str_archive_dir,  # 旧治理证据归档位置。
-        "moved": list_moved,  # 已完成的迁移清单。
-        "errors": list_errors,  # 冲突与治理重建错误。
-    }
 
 # 功能目录检查器隔离 tests 一级目录的命名合同。
 def append_test_feature_findings(
@@ -1304,20 +1242,20 @@ def structure_gate_payload(
     """
 
     # 任一结构偏差都必须阻断并请求明确处理决策。
-    approved = not list_reasons  # 布尔值驱动所有响应字段。
+    bool_approved: bool = not list_reasons  # 布尔值驱动所有响应字段。
 
     # 返回机器决策、人工说明和可选修复计划的完整协议。
     return {
         "project": str(project),
-        "approved": approved,
-        "decision": "approved" if approved else "blocked",
+        "approved": bool_approved,
+        "decision": "approved" if bool_approved else "blocked",
         "reasons": list_reasons,
         "default_confirmation": "yes",
         "recommended_option": "yes",
         "auto_fix_plan": list_auto_fix_plan,
-        "requires_user_confirmation": not approved,
-        "user_message": "" if approved else "目录结构不符合治理契约，默认应先按规范整理/迁移。若继续，请明确确认是否执行结构修复，默认推荐“是”。",
-        "decision_request": {} if approved else decision_request(
+        "requires_user_confirmation": not bool_approved,
+        "user_message": "" if bool_approved else "目录结构不符合治理契约，默认应先按规范整理/迁移。若继续，请明确确认是否执行结构修复，默认推荐“是”。",
+        "decision_request": {} if bool_approved else decision_request(
             "structure_normalization",
             question="目录结构不符合治理契约。是否按推荐方案执行结构修复？",
             options=[
@@ -1360,10 +1298,10 @@ def structure_gate(project: Path) -> dict[str, Any]:
         return structure_gate_payload(project, [], [])
 
     # 优先读取批准计划，缺失时从控制配置生成预期结构。
-    planned = load_planned(project) or planned_structure(project)  # 统一比较基准。
+    dict_planned: dict[str, Any] = load_planned(project) or planned_structure(project)  # 统一比较基准。
 
     # 扫描当前目录事实并生成全部结构偏差。
-    list_reasons = structure_gate_findings(scan_structure(project), planned)  # 当前结构诊断。
+    list_reasons = structure_gate_findings(scan_structure(project), dict_planned)  # 当前结构诊断。
 
     # 自动修复计划只承载经保守检测器证明无歧义的动作。
     list_auto_fix_plan: list[dict[str, str]] = []  # 默认要求人工规范化。
@@ -1372,7 +1310,7 @@ def structure_gate(project: Path) -> dict[str, Any]:
     dict_candidate = obvious_structure_fix_candidate(  # 空字典表示不可自动处理。
         project,  # 在受管工程内寻找明显嵌套候选。
         profile,  # 项目名称辅助识别嵌套目录。
-        planned,  # 提供批准目标根。
+        dict_planned,  # 提供批准目标根。
     )
 
     # 只有明确候选才进入公开自动修复计划。
@@ -1399,13 +1337,13 @@ def apply_structure_fix(project: Path) -> dict[str, Any]:
     profile = control_profile(project)  # 项目控制配置可能为空。
 
     # 自动修复只信任已落盘的批准计划，不临时推导目标结构。
-    planned = load_planned(project)  # 缺失计划时不会产生修复候选。
+    dict_planned: dict[str, Any] = load_planned(project)  # 缺失计划时不会产生修复候选。
 
     # 计算唯一可证明安全的源到目标移动。
     dict_candidate = obvious_structure_fix_candidate(  # 空字典表示需人工处理。
         project,  # 待检查的工作区根。
         profile,  # 用于识别项目同名目录。
-        planned,  # 提供批准的主项目根。
+        dict_planned,  # 提供批准的主项目根。
     )
 
     # 独立累计成功动作和冲突错误，便于调用方审计部分结果。
@@ -1422,6 +1360,23 @@ def apply_structure_fix(project: Path) -> dict[str, Any]:
 
         # 将批准的相对目标路径解析到同一工作区。
         target = project / dict_candidate["target"]  # 移动不得越出项目根。
+
+        # 执行前再次检查源和目标，阻断扫描后出现的链接竞态。
+        if not _path_stays_inside_project(project, source) or not _path_stays_inside_project(
+            project, target
+        ):
+
+            # 边界变化时不创建目录、不移动源路径。
+            list_errors.append(
+                "structure fix source or target contains a symbolic link or escapes the project"
+            )
+
+            # 边界失败只返回已记录的错误，不执行任何移动。
+            return {
+                "project": str(project),
+                "moved": list_moved,
+                "errors": list_errors,
+            }
 
         # 预先创建目标父目录，但不创建或覆盖最终目标。
         target.parent.mkdir(parents=True, exist_ok=True)  # 支持尚未存在的业务根。

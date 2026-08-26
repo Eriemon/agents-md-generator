@@ -69,6 +69,15 @@ def collect_release_gate_context(
     # 发布收据名称由治理配置控制。
     path_receipt = path_expected_release / receipt_filename(dict_profile)  # 预期发布收据路径。
 
+    # installer manifest 提供确认载荷使用的参数化备份目录名。
+    path_installer_manifest = path_skill_dir / "config" / "installer" / "installer.manifest.json"  # installer 配置路径。
+
+    # 读取 installer manifest，供备份目录确认和发布结果绑定。
+    dict_installer_manifest = read_json(path_installer_manifest) if path_installer_manifest.is_file() else {}  # installer 配置对象。
+
+    # 解析 manifest 声明的备份目录名，保持安装边界可追溯。
+    str_backup_directory_name = str(dict_installer_manifest.get("backup_directory_name", "")).strip()  # manifest 声明的备份目录名。
+
     # 源码声明版本必须与请求发布版本一致。
     str_source_version = read_skill_version(path_skill_dir)  # 技能源码声明版本。
 
@@ -101,6 +110,7 @@ def collect_release_gate_context(
         "expected_zip": path_expected_zip,  # 预期 ZIP 文件。
         "source_relative": str_source_relative,  # 收据源码相对路径。
         "receipt_path": path_receipt,  # 预期收据路径。
+        "backup_directory_name": str_backup_directory_name,  # 安装确认使用的备份目录名。
         "source_version": str_source_version,  # 源码声明版本。
         "git_branch": str_git_branch,  # 门禁执行时检出分支。
         "branches": list_branches,  # 本地分支集合。
@@ -130,6 +140,9 @@ def build_release_checks(dict_context: dict[str, Any]) -> dict[str, Any]:
     # 收据路径使用配置驱动的文件名。
     path_receipt = dict_context["receipt_path"]  # 发布收据路径。
 
+    # installer bundle 的 Skill-only guard 复用同一 manifest 事实。
+    list_installer_guard_errors = installer_bundle_release_guard(path_skill_dir, str(dict_context["project_kind"]))  # installer 发布边界诊断。
+
     # 返回值保持原有字段名供测试和 CLI 使用。
     return {
         "branch": dict_context["git_branch"],  # 发布治理目标分支。
@@ -147,6 +160,7 @@ def build_release_checks(dict_context: dict[str, Any]) -> dict[str, Any]:
         "expected_release_zip": path_expected_zip.relative_to(path_project).as_posix(),  # 预期 ZIP 相对路径。
         "receipt_path": path_receipt.relative_to(path_project).as_posix(),  # 预期收据相对路径。
         "status_lines": dict_context["status_lines"],  # 非例外 Git 状态。
+        "installer_bundle_guard": list_installer_guard_errors,  # Skill-only bundle 诊断。
     }
 
 # 共同门禁验证版本、文档、源码治理、内容策略和 Git 状态。
@@ -170,6 +184,15 @@ def validate_common_release_checks(
 
     # 技能源码目录用于内容扫描。
     path_skill_dir = dict_context["skill_dir"]  # 技能源码根。
+
+    # bundle guard 在生成或验证 dist 前 fail-closed。
+    list_installer_guard_errors = dict_checks.get("installer_bundle_guard", [])  # installer bundle 发布边界错误。
+
+    # guard 发现任何 installer 边界错误时立即加入发布阻断列表。
+    if list_installer_guard_errors:
+
+        # Engineering 不得物化 installer，Skill 缺失入口也不可发布。
+        list_errors.extend(str(item) for item in list_installer_guard_errors)
 
     # 请求版本先通过仓库版本策略。
     str_version_error = version_policy_error(dict_context["version"])  # 版本策略诊断。
@@ -424,8 +447,15 @@ def validate_post_release_artifacts(
     # 禁止路径必须为空才能形成可安装发布包。
     dict_checks["forbidden_release_paths"] = dict_release_content["forbidden_paths"]  # 发布包禁止路径。
 
-    # 源码成员清单作为发布奇偶性基准。
-    list_source_files = release_members(dict_context["skill_dir"], dict_context["skill_dir"])  # 技能源码成员。
+    # 源码成员清单必须与发布构建器的通用成员排除策略一致。
+    list_source_files = [  # 发布校验使用的通用源码成员。
+        str_relative  # 当前源码成员路径。
+        for str_relative in release_members(  # 发现源码发布成员。
+            dict_context["skill_dir"],  # 复用发布门禁已解析的技能目录。
+            dict_context["skill_dir"],  # 让成员路径继续以同一技能根作为相对基准。
+        )
+        if str_relative != "config/agent.json"  # 平台配置由安装投影重新生成。
+    ]
 
     # 发布文件清单排除自描述收据。
     list_release_files = sorted(  # 发布副本成员路径。
@@ -529,13 +559,38 @@ def build_release_gate_result(
         "release_content_policy_ok": bool_content_policy_ok,  # 内容策略总状态。
     }
 
-# 安装确认助手仅在 skill post 门禁且用户未声明意图时请求选择。
+# 构造安装确认请求，保持发布门禁只描述不写入。
+def build_install_confirmation_request(
+    dict_context: dict[str, Any],
+    dict_checks: dict[str, Any],
+) -> dict[str, Any]:
+    """构造有效 post Skill 的结构化安装确认请求。
+
+    参数：dict_context 为发布阶段和版本上下文；dict_checks 为已验证路径事实。
+    返回：供调用方展示并转发给唯一安装入口的确认请求。
+    """
+
+    # 确认上下文只绑定已通过 post gate 的发布目录和版本。
+    dict_confirmation_context = {"release_dir": dict_checks["expected_release_dir"], "version": dict_context["version"]}  # 安装确认的发布身份上下文。
+
+    # 安装入口负责真正写入，release gate 只返回用户可审查的下一步。
+    return decision_request(
+        "install_confirmation",
+        question="释放安装版本后，用户尚未说明是否需要安装。是否需要安装当前发布包？",
+        options=install_confirmation_options(),
+        default="skip",
+        risk="medium",
+        next_action="run install_skill.py with the selected target after release validation",
+        context=dict_confirmation_context,
+    )
+
+# 安装确认助手把未解析的安装选择延迟给唯一安装入口。
 def attach_install_confirmation(
     dict_context: dict[str, Any],
     dict_checks: dict[str, Any],
     dict_result: dict[str, Any],
 ) -> None:
-    """向发布结果附加可选安装确认请求。
+    """向发布结果附加安装确认延迟状态。
 
     参数：dict_context 和 dict_checks 为发布上下文与证据。
     参数：dict_result 为原位更新的发布结果。
@@ -558,31 +613,23 @@ def attach_install_confirmation(
         # 空请求避免消费者处理缺失字段。
         dict_result["decision_request"] = {}  # 无安装决策请求。
 
+        # 已有意图或非 Skill 阶段不需要延迟安装确认。
+        dict_result["install_confirmation_deferred"] = False  # 当前没有待处理的安装确认。
+
         # 中性字段写入完成。
         return
 
-    # 结果明确标记调用方必须询问用户。
-    dict_result["install_confirmation_required"] = True  # 当前需要安装确认。
+    # 有效 post Skill 发布必须明确要求一次安装确认。
+    dict_result["install_confirmation_required"] = True  # 当前发布包可安装但尚未获写入确认。
 
-    # 问题文本保持原有中文交互合同。
+    # 保留兼容的用户问题字段，供非结构化调用方展示。
     dict_result["confirmation_question"] = "释放安装版本后，用户尚未说明是否需要安装。是否需要安装当前发布包？"  # 安装确认问题。
 
-    # 安装选项由公共 helper 统一定义。
+    # 保留兼容的选项字段，供旧调用方读取同一安装目标集合。
     dict_result["install_options"] = install_confirmation_options()  # 可选安装目标。
 
-    # 结构化决策请求支持自动化客户端渲染。
-    dict_result["decision_request"] = decision_request(  # 结构化安装决策请求。
-        "install_confirmation",  # 决策类型。
-        question=dict_result["confirmation_question"],  # 用户可见问题。
-        options=dict_result["install_options"],  # 安装目标选项。
-        default="skip",  # 安全默认是不写入本地技能目录。
-        risk="medium",  # 本地安装具有中等文件变更风险。
-        next_action="run install_skill.py with the selected target after release validation",  # 选择后的执行动作。
-        context={  # 当前发布身份上下文。
-            "release_dir": dict_checks["expected_release_dir"],  # 已验证发布目录。
-            "version": dict_context["version"],  # 已验证发布版本。
-        },
-    )
+    # 问题文本与选项由同一 helper 生成，避免 confirmation 字段相互漂移。
+    dict_result["decision_request"] = build_install_confirmation_request(dict_context, dict_checks)  # 只描述确认，不执行写入。
 
 # 公共入口按 pre/post 阶段编排全部发布门禁。
 def release_gate(
@@ -598,7 +645,7 @@ def release_gate(
 
     参数：project、version 和 skill_dir_raw 定位目标发布。
     参数：phase 为 pre/post，install_intent 为用户安装意图。
-    参数：test_evidence_raw 非空时启用发布态远程测试收据验证。
+    参数：test_evidence_raw 非空时启用发布态完整 pytest 证据验证；执行位置由收据元数据描述且不影响合同。
     参数：bool_require_test_evidence 为 True 时拒绝缺失收据。
     返回：包含检查证据、错误和可安装状态的结果。
     """
@@ -624,7 +671,7 @@ def release_gate(
     list_errors: list[str] = []  # 发布门禁阻断诊断。
 
     # 提供收据时必须与当前 Git tests 树、非测试源码和 freshness 一致。
-    dict_test_evidence = validate_project_test_evidence(  # 不透明测试证据结果。
+    dict_test_evidence = validate_project_test_evidence(  # 本地或远程测试证据结果。
         project,  # 当前发布仓库。
         test_evidence_raw,  # 调用方收据输入。
         bool_required=bool_require_test_evidence,  # CLI 发布态拒绝缺失收据。

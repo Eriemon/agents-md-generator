@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "catalog_version": 1,
+  "platforms": {
+    "codex": {
+      "instruction_file": "AGENTS.md",
+      "workspace_config_dir": ".agents",
+      "generator_state_subdir": "",
+      "user_home_dir": ".codex",
+      "skill_install_dir": "skills",
+      "worker_support": "codex-native",
+      "skill_metadata": ["agents/openai.yaml"]
+    },
+    "claude": {
+      "instruction_file": "CLAUDE.md",
+      "workspace_config_dir": ".claude",
+      "generator_state_subdir": "agents-md-generator",
+      "user_home_dir": ".claude",
+      "skill_install_dir": "skills",
+      "worker_support": "unsupported",
+      "skill_metadata": ["agents/claude.yaml"]
+    },
+    "deepseek": {
+      "instruction_file": "AGENTS.md",
+      "workspace_config_dir": ".dsh",
+      "generator_state_subdir": "agents-md-generator",
+      "user_home_dir": ".dsh",
+      "skill_install_dir": "skills",
+      "worker_support": "unsupported",
+      "skill_metadata": ["agents/deepseek.yaml"]
+    },
+    "gemini": {
+      "instruction_file": "GEMINI.md",
+      "workspace_config_dir": ".gemini",
+      "generator_state_subdir": "agents-md-generator",
+      "user_home_dir": ".gemini",
+      "skill_install_dir": "skills",
+      "worker_support": "unsupported",
+      "skill_metadata": ["agents/gemini.yaml"]
+    }
+  }
+}

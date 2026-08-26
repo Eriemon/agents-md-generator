@@ -6,13 +6,19 @@ from __future__ import annotations
 # 标准库提供命令行解析、路径建模和可调用类型。
 import argparse
 from collections.abc import Callable
+import importlib
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 # 评估核心提供路径常量、夹具、配置读取和 JSON 输出协议。
-from eval_runtime_core import EvalFixtures, SCRIPTS_DIR, SKILL_DIR, emit_json, load_evals, run_json_script
+from eval_runtime_core import (
+    EvalFixtures, REPO_ROOT, SCRIPTS_DIR, SKILL_DIR,
+    emit_json, load_evals, load_evaluation_contract,
+    load_eval_handlers, run_json_script,
+)
 
-# 三个分片通过模块命名空间公开项目、基础治理和策略案例。
+# 分片通过模块命名空间公开配置声明的评估实现。
 import eval_runtime_project_cases as project_cases
 import eval_runtime_foundation_cases as foundation_cases
 import eval_runtime_policy_cases as policy_cases
@@ -48,118 +54,155 @@ def case_external_generic_health(path_skill_dir: Path, dict_case: dict[str, Any]
         # 调用结束恢复模块状态，避免替换泄漏到其他案例。
         project_cases.run_json_script = func_original_runner  # 恢复项目案例原脚本执行器。
 
-# 基础 handler 表集中项目发现、审计、安装和源码治理案例。
-def foundation_handlers() -> dict[str, EvalHandler]:
-    """返回基础技能效果案例的 handler 映射。
+# 读取 evaluation contract 并解析其 handler。
+def configured_handlers(dict_contract: dict[str, Any] | None = None) -> dict[str, EvalHandler]:
+    """加载 contract 声明的 handler 映射。
 
-    参数：无，handler 均来自基础评估分片。
-    返回：evals.json handler 名称到可调用对象的映射。
+    参数：dict_contract 为可选已解析评估合同；缺省时读取当前 runtime binding。
+    返回：handler ID 到可调用对象的映射。
+    异常：handler 模块、callable 或名称合同无效时抛出 SystemExit。
     """
 
-    # 每个公开名称必须与 evals.json 中登记的 handler 字段一致。
-    return {
-        "detect_missing_root_agents": project_cases.case_missing_root_agents,
-        "generator_version_takeover": project_cases.case_version_mismatch_takeover,
-        "root_level_whitelist_gate": project_cases.case_root_whitelist,
-        "evolution_removed_contract": project_cases.case_evolution_removed_contract,
-        "experience_removed_contract": project_cases.case_experience_removed_contract,
-        "generic_audit_split": project_cases.case_generic_audit_split,
-        "evaluate_failure_classification": project_cases.case_evaluate_classification,
-        "install_release_completeness": project_cases.case_install_release_completeness,
-        "review_governance_companion_checks": foundation_cases.case_review_governance_companion_checks,
-        "openai_metadata_standard_contract": foundation_cases.case_openai_metadata_standard_contract,
-        "design_review_gate": foundation_cases.case_design_review_gate,
-        "source_governance_test_boundary": foundation_cases.case_source_governance_test_boundary,
-        "source_governance_size_readability_contract": (
-            foundation_cases.case_source_governance_size_readability_contract
-        ),
-    }
+    # 缺省调用通过 runtime contract 解析当前合同。
+    dict_contract_data = dict_contract  # 当前评估合同
 
-# 策略 handler 表集中语言、发布、记忆和治理入口案例。
-def policy_handlers() -> dict[str, EvalHandler]:
-    """返回治理策略效果案例的 handler 映射。
+    # 只有缺省调用才需要从 runtime contract 读取合同。
+    if dict_contract_data is None:
 
-    参数：无，handler 均来自策略评估分片。
-    返回：evals.json handler 名称到可调用对象的映射。
+        # 从当前项目和技能根加载参数化评估合同。
+        dict_contract_data = load_evaluation_contract(REPO_ROOT, SKILL_DIR)["contract"]  # 当前运行时评估合同对象
+
+    # 保存合同声明的 handler 结果，拒绝隐式业务枚举。
+    dict_configured_handlers: dict[str, EvalHandler] = {}  # 配置 handler 映射
+
+    # 逐项解析模块和 callable，保持失败可定位。
+    for dict_binding in dict_contract_data.get("handlers", []):
+
+        # 每项必须是结构化对象。
+        if not isinstance(dict_binding, dict):
+
+            # 非对象 binding 无法提供模块和 callable 字段。
+            raise SystemExit("> ERR: [Python] evaluation handler binding is invalid")
+
+        # 读取合同声明的逻辑名称与 Python 标识符。
+        str_handler_id = str(dict_binding.get("handler_id", "")).strip()  # handler 逻辑名称
+
+        # 读取合同声明的模块名称。
+        str_module_name = str(dict_binding.get("module_name", "")).strip()  # handler 模块名称
+
+        # 读取合同声明的 callable 名称。
+        str_callable_name = str(dict_binding.get("callable_name", "")).strip()  # 合同模块中的处理器函数名称
+
+        # 只接受模块和 callable 标识符，避免合同驱动任意路径导入。
+        if (
+            not str_handler_id
+            or not str_module_name.isidentifier()
+            or not str_callable_name.isidentifier()
+            or not (str_module_name.startswith("eval_runtime_") or str_module_name == "run_skill_evals")
+        ):
+
+            # 名称越界或缺失时阻断动态导入。
+            raise SystemExit("> ERR: [Python] evaluation handler binding names are invalid")
+
+        # 当前 verify runtime 目录提供声明模块。
+        module_type_object_module: ModuleType = importlib.import_module(str_module_name)  # 动态加载合同声明的模块。
+
+        # 从模块中读取合同声明的 callable。
+        obj_object_handler: object = getattr(module_type_object_module, str_callable_name, None)  # 读取合同声明的处理器。
+
+        # 缺失 callable 或重复逻辑名称都阻断执行。
+        if not callable(obj_object_handler) or str_handler_id in dict_configured_handlers:
+
+            # handler 缺失、非 callable 或 ID 重复时停止执行。
+            raise SystemExit("> ERR: [Python] evaluation handler cannot be resolved")
+
+        # 保存已验证 handler 供执行循环使用。
+        dict_configured_handlers[str_handler_id] = obj_object_handler  # 已解析处理器映射。
+
+    # 返回完整配置驱动映射。
+    return dict_configured_handlers
+
+# 配置驱动的外部案例适配器保留统一 handler 签名。
+def case_external_generic_health_configured(
+    dict_case: dict[str, Any],
+    eval_fixtures: EvalFixtures,
+) -> dict[str, Any]:
+    """使用评估输入中的外部技能目录执行通用健康案例。
+
+    参数：dict_case 为评估案例；eval_fixtures 为当前执行夹具。
+    返回：外部技能健康案例的结构化结果。
+    异常：夹具未提供外部技能目录时抛出 SystemExit。
     """
 
-    # 策略映射保持评估清单与具体实现之间的显式连接。
-    return {
-        "additional_worktree_prohibition_contract": policy_cases.case_additional_worktree_prohibition_contract,
-        "root_version_sync_contract": policy_cases.case_root_version_sync_contract,
-        "source_repo_render_version_contract": policy_cases.case_source_repo_render_version_contract,
-        "language_skill_routing_contract": policy_cases.case_language_skill_routing_contract,
-        "script_output_policy_contract": policy_cases.case_script_output_policy_contract,
-        "plan_mode_language_lock_contract": policy_cases.case_plan_mode_language_lock_contract,
-        "codex_token_usage_review_contract": policy_cases.case_codex_token_usage_review_contract,
-        "governance_runtime_de_vendoring": release_cases.case_governance_runtime_de_vendoring,
-        "installed_runtime_owner_repo_local_commands": release_cases.case_installed_runtime_owner_repo_local_commands,
-        "handoff_naming_gate": release_cases.case_handoff_naming_gate,
-        "workspace_settings_gate": release_cases.case_workspace_settings_gate,
-        "release_content_evals_install_contract": release_cases.case_release_content_evals_install_contract,
-        "release_sanitizer_regex_constant": release_cases.case_release_sanitizer_regex_constant,
-        "workspace_boundary_authorization_contract": workspace_cases.case_workspace_boundary_authorization_contract,
-        "root_workspace_artifact_gate": workspace_cases.case_root_workspace_artifact_gate,
-        "task_rating_gate_contract": workspace_cases.case_task_rating_gate_contract,
-        "global_review_agent_opt_in_contract": workspace_cases.case_global_review_agent_opt_in_contract,
-        "memory_governance_gate": workspace_cases.case_memory_governance_gate,
-        "governance_cli_entrypoint_smoke": release_cases.case_governance_cli_entrypoint_smoke,
-    }
+    # 外部目录只从当前执行夹具注入，不从源码推断。
+    path_external_skill = getattr(eval_fixtures, "external_skill_dir", None)  # 夹具注入的外部技能根
 
-# Handler 聚合助手合并两类评估分片并检查命名覆盖边界。
-def all_handlers() -> dict[str, EvalHandler]:
-    """合并基础与策略评估 handler。
+    # 没有外部目录时当前条件案例不可执行。
+    if not isinstance(path_external_skill, Path):
 
-    参数：无，来源由两个分片映射固定。
-    返回：供评估执行循环查询的完整 handler 映射。
+        # 缺失外部输入必须保持 fail-closed。
+        raise SystemExit("> ERR: [Python] external evaluation input is unavailable")
+
+    # 复用项目案例模块的唯一外部健康实现。
+    return case_external_generic_health(path_external_skill, dict_case)
+
+# 根据 contract activation 判断一个案例是否启用。
+def case_is_enabled(
+    dict_case: dict[str, Any],
+    path_external_skill: Path | None,
+    dict_contract: dict[str, Any],
+) -> bool:
+    """根据 contract 声明的 activation 判断案例是否启用。
+
+    参数：dict_case 为案例配置；path_external_skill 为可选外部技能根；dict_contract 为 activation 合同。
+    返回：案例满足 activation 时返回 True。
+    异常：activation 结构或 operator 未被合同声明时抛出 SystemExit。
     """
 
-    # 基础映射作为合并结果的初始内容。
-    dict_handlers = foundation_handlers()  # 当前完整 handler 映射的基础部分。
+    # 读取当前案例的可选 activation 声明。
+    obj_object_activation: object = dict_case.get("activation")  # 当前案例 activation 声明。
 
-    # 策略映射追加到同一命名空间。
-    dict_handlers.update(policy_handlers())
+    # 没有 activation 的案例默认属于本地评估集合。
+    if obj_object_activation is None:
 
-    # 合并结果由案例执行入口只读使用。
-    return dict_handlers
+        # 本地案例不依赖外部输入。
+        return True
 
-# 外部技能案例助手按需追加真实通用技能健康检查。
-def append_external_skill_case(list_results: list[dict[str, Any]], path_external_skill: Path | None) -> None:
-    """在指定外部技能时追加通用路径健康案例。
+    # activation 必须保持对象形状。
+    if not isinstance(obj_object_activation, dict):
 
-    参数：list_results 为案例结果列表，path_external_skill 为可选技能目录。
-    返回：无业务返回值，外部案例结果原地追加到 list_results。
-    """
+        # 结构错误不能被解释为本地案例。
+        raise SystemExit("> ERR: [Python] evaluation case activation is invalid")
 
-    # 未指定外部技能时不扩展仓库本地评估范围。
-    if path_external_skill is None:
+    # 操作符和输入字段均必须来自独立合同。
+    str_operator = str(obj_object_activation.get("operator", "")).strip()  # 当前 activation 运算符条件。
 
-        # 保持调用方提供的本地案例结果不变。
-        return
+    # 读取 activation 绑定的输入字段。
+    str_input = str(obj_object_activation.get("input", "")).strip()  # activation 输入字段。
 
-    # 外部案例定义验证真实通用技能通过当前工具链。
-    dict_external_case = {  # 外部技能健康案例定义。
-        "id": "healthy_external_skill_generic_path",  # 外部健康案例稳定标识。
-        "kind": "external_smoke",  # 案例属于外部真实路径冒烟验证。
-        "patterns": ["Tool Wrapper", "Pipeline"],  # 通用技能覆盖的设计模式。
-        "description": "A healthy external skill should pass generic audit and evaluation.",  # 案例目标说明。
-    }
+    # 读取合同允许的 activation 运算符集合。
+    list_operators = dict_contract.get("activation_operators", [])  # 合同运算符列表
 
-    # 专用基础案例函数不需要 EvalFixtures 参数。
-    list_results.append(
-        case_external_generic_health(path_external_skill, dict_external_case)
-    )
+    # 只允许合同声明的外部技能输入条件。
+    if str_operator not in list_operators or str_input != "external_skill_dir":
+
+        # 不支持的 operator/input 组合不能启用案例。
+        raise SystemExit("> ERR: [Python] evaluation case activation is unsupported")
+
+    # 外部目录存在时才启用条件案例。
+    return path_external_skill is not None
 
 # 案例执行助手逐条解析 handler 并保留未知名称诊断。
 def execute_configured_cases(
     list_cases: list[object],
     dict_handlers: dict[str, EvalHandler],
     eval_fixtures: EvalFixtures,
+    dict_contract: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """执行评估配置中登记的全部案例。
 
     参数：list_cases 为案例定义，dict_handlers 为可调用映射。
-    参数：eval_fixtures 为共享临时工程夹具。
+    参数：eval_fixtures 为共享临时工程夹具；dict_contract 为 activation/handler 合同。
     返回：按配置顺序生成的案例结果列表。
     异常：案例不是对象或 handler 未知时抛出 SystemExit。
     """
@@ -175,6 +218,12 @@ def execute_configured_cases(
 
             # 结构错误使用固定前缀向 CLI 调用方报告。
             raise SystemExit("> ERR: [Python] eval case must be an object")
+
+        # 未满足 activation 的案例保持配置顺序但不进入执行结果。
+        if not case_is_enabled(object_case, getattr(eval_fixtures, "external_skill_dir", None), dict_contract):
+
+            # 条件未满足时跳过当前案例并继续保持配置顺序。
+            continue
 
         # Handler 名称经去空白后用于查询显式映射。
         str_handler_name = str(object_case.get("handler", "")).strip()  # 当前案例 handler 名称。
@@ -234,7 +283,10 @@ def evaluate_cases(
     """
 
     # 共享夹具以当前 verify 目录作为技能脚本定位基准。
-    eval_fixtures_eval_fixtures: EvalFixtures = EvalFixtures(SCRIPTS_DIR)  # 当前评估执行共享夹具。
+    eval_fixtures_eval_fixtures: EvalFixtures = EvalFixtures(  # 当前评估执行共享夹具
+        SCRIPTS_DIR,  # 当前技能脚本根
+        external_skill_dir=external_skill_dir,  # 可选外部技能根
+    )
 
     # cases 顶层字段必须是保持顺序的列表。
     object_cases = dict_evaluations.get("cases", [])  # 原始评估案例配置值。
@@ -245,15 +297,22 @@ def evaluate_cases(
         # 固定错误文本指向 evals.json 顶层字段。
         raise SystemExit("> ERR: [Python] evals.json cases must be a list")
 
-    # 本地案例通过完整 handler 映射逐条执行。
-    list_results = execute_configured_cases(  # 当前全部本地案例结果。
-        object_cases,  # evals.json 中的有序案例定义。
-        all_handlers(),  # 两个分片合并后的完整处理器映射。
-        eval_fixtures_eval_fixtures,  # 当前执行共享的临时工程夹具。
-    )  # 执行全部仓库本地评估案例。
+    # runtime contract 负责把 case 名称连接到实现模块。
+    dict_contract_result = load_evaluation_contract(REPO_ROOT, SKILL_DIR)  # 已校验的评估合同绑定
 
-    # 调用方指定外部技能时追加真实路径健康案例。
-    append_external_skill_case(list_results, external_skill_dir)
+    # 读取合同对象供 activation 和 handler 解析复用。
+    dict_evaluation_contract = dict_contract_result["contract"]  # 已校验的评估合同对象
+
+    # handler 映射从 contract 解析，避免在 Python 中枚举当前案例。
+    dict_configured_handlers = configured_handlers(dict_evaluation_contract)  # 合同声明的处理器映射
+
+    # 本地案例通过完整 handler 映射逐条执行。
+    list_results = execute_configured_cases(  # 执行全部本地案例并保持配置顺序
+        object_cases,  # 配置文件中的有序案例定义
+        dict_configured_handlers,  # 合同解析出的处理器映射
+        eval_fixtures_eval_fixtures,  # 当前执行共享的临时工程夹具
+        dict_evaluation_contract,  # 控制案例启用条件与处理器来源的合同
+    )  # 执行全部仓库本地评估案例。
 
     # 汇总与案例列表使用同一最终结果集合。
     dict_summary = build_evaluation_summary(list_results)  # 当前技能评估汇总。
@@ -264,6 +323,59 @@ def evaluate_cases(
         "evals_path": str(dict_evaluations.get("_path", "")),
         "cases": list_results,
         "summary": dict_summary,
+    }
+
+# 将评估运行时异常转换为稳定的机器可读失败报告。
+def _build_cli_failure_result(
+    dict_evaluations: dict[str, object],
+    object_error: BaseException,
+) -> dict[str, object]:
+    """构造评估 CLI 的结构化失败结果。
+
+    参数：
+        dict_evaluations 为本次已解析的评估配置；object_error 为评估执行异常。
+    返回：
+        包含脱敏错误载荷和失败汇总的机器可读映射。
+    异常：
+        本函数不主动抛出异常，确保失败路径仍能输出 JSON。
+    """
+
+    # RuntimeContractError 已经提供经过脱敏的字段级载荷，优先复用该事实。
+    object_payload = getattr(object_error, "payload", None)  # 合同异常的结构化错误载荷。
+
+    # 非合同异常使用稳定通用错误，不把 traceback 或本地路径写入 stdout。
+    if isinstance(object_payload, dict):
+
+        # 合同异常的载荷已通过 loader 脱敏，可以直接作为错误事实。
+        dict_error: dict[str, object] = object_payload  # 当前合同错误对象。
+
+    # 非合同异常必须转换为固定的通用错误对象。
+    else:
+
+        # 非合同异常不暴露内部文本，只返回固定错误类别。
+        dict_error = {  # 当前通用评估错误对象。
+            "error_code": "EVALUATION_RUNTIME_ERROR",  # 通用错误代码。
+            "field": "evaluation",  # 通用错误字段。
+            "message": "evaluation execution failed",  # 通用错误说明。
+            "path_class": "",  # 通用错误不绑定本地路径类别。
+        }
+
+    # 失败汇总保持与成功报告相同的字段形状，供 CLI caller 稳定解析。
+    dict_summary: dict[str, object] = {
+        "case_count": 0,  # 失败路径不伪造已执行的 case 数量。
+        "passed_cases": 0,  # 失败路径不伪造通过数量。
+        "improved_cases": 0,  # 失败路径不伪造改进数量。
+        "stable_cases": 0,  # 失败路径不伪造稳定数量。
+        "ok": False,  # 结构化失败必须明确不可用。
+    }  # 失败状态汇总。
+
+    # 返回 JSON 输出所需的最小事实集合，不伪造任何评估 case 结果。
+    return {
+        "version": int(dict_evaluations.get("version", 1)),
+        "evals_path": str(dict_evaluations.get("_path", "")),
+        "cases": [],
+        "summary": dict_summary,
+        "error": dict_error,
     }
 
 # CLI 主入口加载评估配置并输出正式技能效果报告。
@@ -309,10 +421,22 @@ def main() -> int:
     )  # 完成可选外部技能路径解析。
 
     # 正式评估报告是 JSON 输出和退出状态的共同真值。
-    dict_evaluation_result = evaluate_cases(  # 当前技能效果评估报告。
-        dict_evaluations,  # 当前评估配置及来源路径。
-        external_skill_dir=path_external_skill,  # 可选外部技能冒烟目标。
-    )  # 执行正式技能效果评估。
+    try:
+
+        # 当前评估配置及来源路径进入正式执行器。
+        dict_evaluation_result = evaluate_cases(  # 当前技能效果评估报告。
+            dict_evaluations,  # 当前评估配置及来源路径。
+            external_skill_dir=path_external_skill,  # 可选外部技能冒烟目标。
+        )  # 执行正式技能效果评估。
+
+    # runtime contract 或配置失败也必须落成结构化 JSON。
+    except (Exception, SystemExit) as object_error:
+
+        # 失败结果保持 stdout 机器协议完整，并由下方统一返回非零状态。
+        dict_evaluation_result = _build_cli_failure_result(  # 将异常转换为机器可读失败报告。
+            dict_evaluations,  # 保留本次评估配置版本。
+            object_error,  # 传入脱敏合同错误或通用异常。
+        )
 
     # 机器可读报告供置信度门禁和发布验证消费。
     emit_json(dict_evaluation_result)

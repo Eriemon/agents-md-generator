@@ -132,10 +132,14 @@ def inferred_skill_dir(project: Path, raw_skill_dir: str | Path | None = None) -
     if isinstance(profile, dict):
 
         # 非字典布局按空配置处理，防止畸形控制档案传播类型错误。
-        layout = profile.get("skill_layout") if isinstance(profile.get("skill_layout"), dict) else {}  # skill 布局配置
+        dict_layout: dict[str, Any] = (  # skill 布局配置
+            profile.get("skill_layout")  # 控制档案布局映射
+            if isinstance(profile.get("skill_layout"), dict)  # 仅接受对象配置
+            else {}  # 非对象配置安全回退
+        )
 
         # 布局中的 path 可以直接定位多 skill 仓库里的目标目录。
-        raw_path = str(layout.get("path") or "").strip()  # 配置中的 skill 相对路径
+        raw_path = str(dict_layout.get("path") or "").strip()  # 配置中的 skill 相对路径
 
         # 已配置路径无需再猜测目录名称。
         if raw_path:
@@ -165,13 +169,13 @@ def inferred_skill_dir(project: Path, raw_skill_dir: str | Path | None = None) -
     if skills_root.is_dir():
 
         # VERSION 文件将普通目录与可发布 skill 区分开。
-        candidates = [path for path in skills_root.iterdir() if (path / "VERSION").is_file()]  # 带版本的 skill 候选
+        list_candidates: list[Path] = [path for path in skills_root.iterdir() if (path / "VERSION").is_file()]  # 带版本的 skill 候选
 
         # 多候选仓库必须由显式路径或控制档案消除歧义。
-        if len(candidates) == 1:
+        if len(list_candidates) == 1:
 
             # 唯一候选具备足够的自动推断确定性。
-            return candidates[0].resolve()
+            return list_candidates[0].resolve()
 
     # 保留无法唯一解析的状态供上层决定是否跳过或报错。
     return None
@@ -208,13 +212,13 @@ def current_version_section(text: str) -> str:
         return ""
 
     # 标题后的剩余文本用于定位下一个同级章节边界。
-    rest = text[match.end() :]  # 当前标题之后的文本
+    str_rest: str = text[match.end() :]  # 当前标题之后的文本
 
     # 下一个二级标题结束当前版本章节。
-    next_section = re.search(r"^##\s+", rest, flags=re.MULTILINE)  # 后续二级标题匹配
+    next_section = re.search(r"^##\s+", str_rest, flags=re.MULTILINE)  # 后续二级标题匹配
 
     # 文档末尾没有后续标题时保留全部剩余正文。
-    return rest[: next_section.start()] if next_section else rest
+    return str_rest[: next_section.start()] if next_section else str_rest
 
 # 读取受管控制档案或兼容项目区块中的版本字段。
 def managed_control_profile_version(text: str) -> str:
@@ -266,13 +270,13 @@ def replace_managed_control_profile_version(text: str, version: str) -> str:
         return f"{match.group(1)}{body}{match.group(3)}"
 
     # 优先更新新版 control-profile 区块。
-    updated = CONTROL_PROFILE_BLOCK_RE.sub(replace_block, text, count=1)  # 新版区块替换结果
+    str_updated: str = CONTROL_PROFILE_BLOCK_RE.sub(replace_block, text, count=1)  # 新版区块替换结果
 
     # 新版区块发生变化时无需再触碰兼容区块。
-    if updated != text:
+    if str_updated != text:
 
         # 返回仅包含目标区块变化的完整文档。
-        return updated
+        return str_updated
 
     # 旧项目区块提供历史仓库的最小兼容路径。
     return PROJECT_BLOCK_RE.sub(replace_block, text, count=1)
@@ -286,25 +290,25 @@ def project_skill_version(project: Path, skill_dir_raw: str | Path | None = None
     """
 
     # 统一目录推断保证后续版本文件与报告路径指向同一目标。
-    skill_dir = inferred_skill_dir(project, skill_dir_raw)  # 目标 skill 目录
+    path_skill_dir: Path | None = inferred_skill_dir(project, skill_dir_raw)  # 目标 skill 目录
 
     # 无法解析目录时保持可跳过状态，不伪造版本。
-    if not skill_dir:
+    if not path_skill_dir:
 
         # unavailable 明确区分无版本与版本不匹配。
         return "", "unavailable", None
 
     # VERSION 文件是项目 skill 版本的唯一事实来源。
-    version = read_skill_version(skill_dir)  # 项目 skill 版本
+    str_version: str = read_skill_version(path_skill_dir)  # 项目 skill 版本
 
     # 空 VERSION 保留已解析目录，便于调用方给出准确诊断。
-    if not version:
+    if not str_version:
 
         # 目录存在但缺少有效版本时仍标记 unavailable。
-        return "", "unavailable", skill_dir
+        return "", "unavailable", path_skill_dir
 
     # 正常结果标记为 project-skill，区别于 installed fallback。
-    return version, "project-skill", skill_dir
+    return str_version, "project-skill", path_skill_dir
 
 # 选择根 AGENTS 元数据版本，同时保留项目 skill 版本供控制档案使用。
 def root_metadata_version(
@@ -341,13 +345,13 @@ def root_metadata_version(
         )
 
     # 外部项目使用安装副本版本校验生成器元数据。
-    metadata_version, version_source = preferred_skill_version(  # 生成器元数据版本与来源
+    str_metadata_version, version_source = preferred_skill_version(  # 生成器元数据版本与来源
         override_dir=installed_skill_dir_override  # 可选安装副本覆盖
     )
 
     # 两套版本事实分别服务生成器元数据和目标项目控制档案。
     return (
-        metadata_version,  # 外部项目根元数据的生成器版本
+        str_metadata_version,  # 外部项目根元数据的生成器版本
         version_source,  # 安装副本或覆盖目录来源
         tuple_project_version,  # 外部项目控制档案的业务版本
         tuple_project_version_source,  # 外部项目 VERSION 的读取来源
@@ -408,16 +412,16 @@ def version_alignment_gate(project: Path, skill_dir_raw: str | Path | None = Non
     list_checked.append(str_checked_version_path)
 
     # 根 AGENTS 的控制档案版本属于正式对齐范围。
-    agents = project / "AGENTS.md"  # 版本声明所在的根规则文件
+    path_agents: Path = project / "AGENTS.md"  # 版本声明所在的根规则文件
 
     # 缺少根文件由其他治理门禁处理，本函数只校验存在的声明。
-    if agents.is_file():
+    if path_agents.is_file():
 
         # 根文件已实际读取，加入覆盖清单。
         list_checked.append("AGENTS.md")
 
         # 容错解码保证历史文档中的坏字符不会中止版本审计。
-        agents_text = agents.read_text(encoding="utf-8", errors="ignore")  # 用于提取控制档案版本的规则文本
+        agents_text = path_agents.read_text(encoding="utf-8", errors="ignore")  # 用于提取控制档案版本的规则文本
 
         # 控制档案的标准 Version 字段承载项目 skill 版本。
         control_match = re.search(  # AGENTS 控制档案中待与 tuple_expected 比较的版本匹配项
@@ -469,10 +473,10 @@ def version_alignment_gate(project: Path, skill_dir_raw: str | Path | None = Non
             )
 
     # Git 管理说明只比较 Current Version 正式章节。
-    git_manager = project / "docs" / "git_manager" / "GIT_MANAGER.md"  # Git 管理说明路径
+    path_git_manager: Path = project / "docs" / "git_manager" / "GIT_MANAGER.md"  # Git 管理说明路径
 
     # 可选 Git 管理说明存在时才读取章节。
-    if git_manager.is_file():
+    if path_git_manager.is_file():
 
         # 将章节检查纳入可审计覆盖清单。
         list_checked.append("docs/git_manager/GIT_MANAGER.md")
@@ -480,7 +484,7 @@ def version_alignment_gate(project: Path, skill_dir_raw: str | Path | None = Non
         # 先隔离当前版本章节，再从中提取语义版本。
         str_actual = first_version(  # Git 管理文档当前版本
             current_version_section(  # 当前版本章节正文
-                git_manager.read_text(encoding="utf-8", errors="ignore")  # Git 管理文档内容
+                path_git_manager.read_text(encoding="utf-8", errors="ignore")  # Git 管理文档内容
             )
         )
 
@@ -552,7 +556,7 @@ def _root_sync_reasons(
     """
 
     # 结构化元数据决定版本与语言字段是否完整。
-    metadata = parse_agents_metadata(text)  # 根 AGENTS 元数据
+    dict_metadata: dict[str, str] = parse_agents_metadata(text)  # 根 AGENTS 元数据
 
     # 时间头同时承载更新时间和最近验证时间。
     last_updated_match = LAST_UPDATED_HEADER_RE.search(text)  # 时间头匹配
@@ -561,10 +565,10 @@ def _root_sync_reasons(
     last_updated_raw = last_updated_match.group(1).strip() if last_updated_match else ""  # 原更新时间
 
     # 历史文件没有验证时间时沿用 never 语义。
-    last_verified = last_updated_match.group(2).strip() if last_updated_match else "never"  # 原验证时间
+    str_last_verified: str = last_updated_match.group(2).strip() if last_updated_match else "never"  # 原验证时间
 
     # 空语言字段回退中文，但仍由原因清单要求补齐元数据。
-    default_language = metadata.get("default_language", "中文").strip() or "中文"  # 根默认语言
+    str_default_language: str = dict_metadata.get("default_language", "中文").strip() or "中文"  # 根默认语言
 
     # 原因顺序保持稳定，便于测试和调用方展示。
     list_reasons: list[str] = []  # 根元数据漂移原因
@@ -582,31 +586,31 @@ def _root_sync_reasons(
         list_reasons.append("legacy_last_updated_format")
 
     # agents_version 必须存在并等于当前生成器版本。
-    if not metadata.get("agents_version"):
+    if not dict_metadata.get("agents_version"):
 
         # 缺失与不匹配使用不同修复原因。
         list_reasons.append("missing_agents_version")
 
     # 已声明的旧 agents_version 需要同步升级。
-    elif metadata.get("agents_version") != metadata_version:
+    elif dict_metadata.get("agents_version") != metadata_version:
 
         # 版本漂移保留独立诊断代码。
         list_reasons.append("agents_version_mismatch")
 
     # generator_version 同样必须显式存在。
-    if not metadata.get("generator_version"):
+    if not dict_metadata.get("generator_version"):
 
         # 缺失生成器字段会使来源无法审计。
         list_reasons.append("missing_generator_version")
 
     # 生成器字段必须跟随当前元数据版本。
-    elif metadata.get("generator_version") != metadata_version:
+    elif dict_metadata.get("generator_version") != metadata_version:
 
         # 旧生成器版本需要重写受管元数据行。
         list_reasons.append("generator_version_mismatch")
 
     # 默认语言是强控制项目的必填元数据。
-    if not metadata.get("default_language"):
+    if not dict_metadata.get("default_language"):
 
         # 缺失时补入已经计算的语言回退值。
         list_reasons.append("missing_default_language")
@@ -621,7 +625,7 @@ def _root_sync_reasons(
         list_reasons.append("control_profile_version_mismatch")
 
     # 调用方需要原时间与语言来构造幂等更新。
-    return list_reasons, last_updated_raw, last_verified, default_language
+    return list_reasons, last_updated_raw, str_last_verified, str_default_language
 
 # 重写受管时间头和元数据行，并按需更新控制档案版本。
 def _rewrite_root_agents(
@@ -640,13 +644,13 @@ def _rewrite_root_agents(
     """
 
     # 时间二元组来自同一次根文件分析，避免字段交叉混用。
-    last_updated_raw, last_verified = timestamps  # 原更新时间与最近验证时间
+    last_updated_raw, str_last_verified = timestamps  # 原更新时间与最近验证时间
 
     # 发生漂移或缺少原时间时刷新更新时间，否则保持原值。
     updated_raw = current_timestamp() if sync_required or not last_updated_raw else last_updated_raw  # 新更新时间
 
     # 只有显式 mark_verified 才刷新验证时间。
-    verified_raw = current_timestamp() if mark_verified else last_verified  # 新验证时间
+    verified_raw = current_timestamp() if mark_verified else str_last_verified  # 新验证时间
 
     # 标准时间头合并两个生命周期时间戳。
     new_last_line = f"<!-- Last updated: {updated_raw} | Last verified: {verified_raw} -->"  # 新时间头
@@ -1009,7 +1013,7 @@ def sync_root_agents(
         return dict_preflight
 
     # 无论检查成功与否都向调用方提供可执行修复命令。
-    repair_command = root_agents_sync_command(  # 根元数据修复命令
+    str_repair_command: str = root_agents_sync_command(  # 根元数据修复命令
         project,  # 修复命令的目标仓库
         profile,  # 修复命令采用的规则档案
         installed_skill_dir_override,  # 可选安装副本
@@ -1019,7 +1023,7 @@ def sync_root_agents(
     dict_version_context = root_agents_sync_version_context(  # 根同步版本解析结果
         project,  # 版本解析所属仓库
         agents_path,  # 根规则目标文件
-        repair_command,  # 同步修复命令
+        str_repair_command,  # 同步修复命令
         installed_skill_dir_override,  # 安装版本查找覆盖值
     )
 
@@ -1093,7 +1097,7 @@ def sync_root_agents(
     dict_report = root_agents_sync_report(  # 将根 AGENTS 版本、治理门禁和写入状态交给 CLI 返回
         project,  # 根同步使用的项目根路径。
         agents_path,  # 受管根 AGENTS 的唯一落盘路径。
-        repair_command,  # 失败时提示用户复用的修复命令。
+        str_repair_command,  # 失败时提示用户复用的修复命令。
         dict_report_context,  # 版本、治理、写入状态的汇总证据。
     )
 
@@ -1141,61 +1145,61 @@ def replace_global_codex_block(text: str, rendered: str) -> str:
     """
 
     # 局部别名使后续切片表达式保持紧凑。
-    current = text  # 现有全局 AGENTS 内容
+    str_current: str = text  # 现有全局 AGENTS 内容
 
     # 起止标记共同限定生成器拥有的正文范围。
-    start = current.find(GLOBAL_CODEX_AGENTS_BLOCK_START)  # baseline 起始索引
+    int_start: int = str_current.find(GLOBAL_CODEX_AGENTS_BLOCK_START)  # baseline 起始索引
 
     # 结束位置暂时指向结束标记开头。
-    end = current.find(GLOBAL_CODEX_AGENTS_BLOCK_END)  # baseline 结束索引
+    int_end: int = str_current.find(GLOBAL_CODEX_AGENTS_BLOCK_END)  # baseline 结束索引
 
     # 标记缺失或倒置时禁止猜测替换范围。
-    if start == -1 or end == -1 or end < start:
+    if int_start == -1 or int_end == -1 or int_end < int_start:
 
         # 保留原文并由状态检查报告异常。
-        return current
+        return str_current
 
     # 向前搜索连续的生成器 preamble 和元数据，清理历史重复头。
-    search_end = start  # preamble 反向搜索上界
+    int_search_end: int = int_start  # preamble 反向搜索上界
 
     # 每轮只在确认中间没有人工内容后扩大边界。
     while True:
 
         # 查找当前边界之前最近的受管 preamble。
-        preamble_start = current.rfind(  # 最近 preamble 索引
+        int_preamble_start: int = str_current.rfind(  # 最近 preamble 索引
             GLOBAL_CODEX_AGENTS_PREAMBLE,  # 受管 preamble 文本
             0,  # 从文件开头搜索
-            search_end,  # 不越过当前替换边界
+            int_search_end,  # 不越过当前替换边界
         )
 
         # 没有更早 preamble 时停止扩大范围。
-        if preamble_start == -1:
+        if int_preamble_start == -1:
 
             # 当前 start 已是最早安全边界。
             break
 
         # preamble 与 baseline 之间只允许生成器元数据。
-        between = current[  # 候选边界之间的文本
-            preamble_start + len(GLOBAL_CODEX_AGENTS_PREAMBLE) : start  # 排除 preamble 本身
+        str_between: str = str_current[  # 候选边界之间的文本
+            int_preamble_start + len(GLOBAL_CODEX_AGENTS_PREAMBLE) : int_start  # 排除 preamble 本身
         ]
 
         # 人工内容阻止继续向前吞并。
-        if not global_codex_between_is_replaceable_meta(between):
+        if not global_codex_between_is_replaceable_meta(str_between):
 
             # 保留该 preamble 及其后人工内容。
             break
 
         # 已确认的 preamble 纳入本次模板替换。
-        start = preamble_start  # 扩大后的替换起点
+        int_start = int_preamble_start  # 扩大后的替换起点
 
         # 下一轮只搜索更早区域，避免重复命中同一位置。
-        search_end = preamble_start  # 新反向搜索上界
+        int_search_end = int_preamble_start  # 新反向搜索上界
 
     # 替换切片必须包含结束标记本身。
-    end += len(GLOBAL_CODEX_AGENTS_BLOCK_END)  # 将结束标记纳入替换切片
+    int_end += len(GLOBAL_CODEX_AGENTS_BLOCK_END)  # 将结束标记纳入替换切片
 
     # 文件尾规范化为单个换行，其他人工内容保持不变。
-    return (current[:start] + rendered + current[end:]).rstrip() + "\n"
+    return (str_current[:int_start] + rendered + str_current[int_end:]).rstrip() + "\n"
 
 # 检查或写入用户 Codex 全局 AGENTS baseline。
 def sync_global_codex_agents(
@@ -1247,14 +1251,14 @@ def sync_global_codex_agents(
     profile = project_profile(project)  # 当前项目控制档案
 
     # 初始状态决定能否自动写入或必须请求用户确认。
-    status = global_codex_agents_status(  # 同步前全局入口状态
+    dict_status: dict[str, Any] = global_codex_agents_status(  # 同步前全局入口状态
         codex_home,  # 状态检查使用的用户 Codex 根
         project_root=project,  # 为修复提示提供的 owner 项目
         profile=profile,  # 决定全局入口规则集的控制档案
     )
 
     # 修复命令随结果返回，供只读检查直接提示用户。
-    repair_command = global_codex_agents_sync_command(project, profile)  # 全局入口修复命令
+    str_repair_command: str = global_codex_agents_sync_command(project, profile)  # 全局入口修复命令
 
     # 基础报告合并共享状态和本次调用上下文。
     dict_result = {  # 全局入口同步报告
@@ -1262,11 +1266,11 @@ def sync_global_codex_agents(
         "target_path": str(target),  # 全局 AGENTS 路径
         "updated": False,  # 尚未发生写入
         "write_requested": write,  # 调用方写入意图
-        "requires_user_confirmation": status["requires_user_confirmation"],  # 是否需授权
-        "user_message": status["user_message"],  # 面向用户的状态说明
-        "repair_command": repair_command,  # 可执行修复命令
+        "requires_user_confirmation": dict_status["requires_user_confirmation"],  # 是否需授权
+        "user_message": dict_status["user_message"],  # 面向用户的状态说明
+        "repair_command": str_repair_command,  # 可执行修复命令
         "tester_worker": dict_tester_worker,  # 唯一测试智能体配置证据
-        **status,  # 完整共享状态字段
+        **dict_status,  # 完整共享状态字段
     }
 
     # 只读模式直接返回检查结果。
@@ -1285,22 +1289,22 @@ def sync_global_codex_agents(
         return {**dict_result, "errors": [f"global Codex AGENTS target is not a file: {target}"]}
 
     # 最新模板包含完整受管 preamble、元数据和 baseline。
-    rendered = render_global_codex_agents_template()  # 最新全局入口模板
+    str_rendered: str = render_global_codex_agents_template()  # 最新全局入口模板
 
     # 新文件以空文本进入写入分支，旧文件容错读取。
-    current = target.read_text(encoding="utf-8", errors="ignore") if target.is_file() else ""  # 原全局入口内容
+    str_current: str = target.read_text(encoding="utf-8", errors="ignore") if target.is_file() else ""  # 原全局入口内容
 
     # 缺失或空文件可以直接写入完整模板。
-    if not target.exists() or status["empty"]:
+    if not target.exists() or dict_status["empty"]:
 
         # 完整模板成为新文件全部内容。
-        str_new_text = rendered  # 待写入完整模板
+        str_new_text = str_rendered  # 待写入完整模板
 
     # 已受管文件仅替换生成器拥有的 baseline 区块。
-    elif status["managed"]:
+    elif dict_status["managed"]:
 
         # 人工维护内容保留在受管区块之外。
-        str_new_text = replace_global_codex_block(current, rendered)  # 替换后的全局入口
+        str_new_text = replace_global_codex_block(str_current, str_rendered)  # 替换后的全局入口
 
     # 未受管非空文件必须先获得用户确认并由其他流程接管。
     else:
@@ -1309,7 +1313,7 @@ def sync_global_codex_agents(
         return dict_result
 
     # 内容发生变化时才实际写入。
-    if str_new_text != current:
+    if str_new_text != str_current:
 
         # UTF-8 编码保持跨平台一致。
         target.write_text(str_new_text, encoding="utf-8")
@@ -1318,17 +1322,17 @@ def sync_global_codex_agents(
         dict_result["updated"] = True  # 已写入新内容
 
     # 写入后重新检查，以实际文件状态作为最终证据。
-    refreshed = global_codex_agents_status(  # 同步后全局入口状态
+    dict_refreshed: dict[str, Any] = global_codex_agents_status(  # 同步后全局入口状态
         codex_home,  # 写入后重新检查的 Codex 根
         project_root=project,  # 最终状态关联的 owner 仓库
         profile=profile,  # 写入后应满足的规则档案
     )
 
     # 最终报告覆盖同步前的状态字段。
-    dict_result.update(refreshed)
+    dict_result.update(dict_refreshed)
 
     # 共享状态可能不含项目上下文修复命令，因此显式恢复。
-    dict_result["repair_command"] = repair_command  # 写入后仍可重复执行的 baseline 同步命令
+    dict_result["repair_command"] = str_repair_command  # 写入后仍可重复执行的 baseline 同步命令
 
     # 调用方获得写入后的权威状态。
     return dict_result
@@ -1418,8 +1422,11 @@ def verify_docs(project: Path) -> dict[str, Any]:
         # 配置中的每个目录都属于验证范围。
         list_checked.append(rel_path)
 
-        # 非目录或缺失路径均违反治理结构。
-        if not (project / rel_path).is_dir():
+        # 当前治理目录必须存在；history_* 目录只在发生归档时按需创建。
+        bool_history_directory = "/history_" in rel_path  # 当前目录是否仅用于历史归档
+
+        # 新项目不因尚无历史归档而被误判为 docs 结构损坏。
+        if not bool_history_directory and not (project / rel_path).is_dir():
 
             # 诊断保留缺失的相对目录。
             list_errors.append(f"missing docs governance directory: {rel_path}")
@@ -1437,31 +1444,31 @@ def verify_docs(project: Path) -> dict[str, Any]:
             list_errors.append(f"missing docs governance file: {rel_path}")
 
     # handoff 命名审计覆盖当前文件和历史归档。
-    handoff_naming = audit_handoff_naming(project)  # handoff 命名审计结果
+    dict_handoff_naming: dict[str, Any] = audit_handoff_naming(project)  # handoff 命名审计结果
 
     # 去重合并 handoff 实际检查路径。
-    list_checked.extend(item for item in handoff_naming["checked"] if item not in list_checked)
+    list_checked.extend(item for item in dict_handoff_naming["checked"] if item not in list_checked)
 
     # 去重合并命名冲突，避免同一错误重复展示。
-    list_errors.extend(item for item in handoff_naming["errors"] if item not in list_errors)
+    list_errors.extend(item for item in dict_handoff_naming["errors"] if item not in list_errors)
 
     # 当前开发记录需要满足章节与状态合同。
-    development_current = project / "docs" / "development" / "DEVELOPMENT.md"  # 当前开发记录
+    path_development_current: Path = project / "docs" / "development" / "DEVELOPMENT.md"  # 当前开发记录
 
     # 文件存在时执行内容验证，缺失已由必需文件检查报告。
-    if development_current.exists():
+    if path_development_current.exists():
 
         # 共享验证器返回可直接合并的错误列表。
-        list_errors.extend(validate_development_record(development_current))
+        list_errors.extend(validate_development_record(path_development_current))
 
     # 当前 handoff 必须保留所有标准章节。
-    handoff = project / "docs" / "handoff" / "HANDOFF.md"  # 当前 handoff 路径
+    path_handoff: Path = project / "docs" / "handoff" / "HANDOFF.md"  # 当前 handoff 路径
 
     # 文件存在时检查章节，缺失仍由必需文件检查负责。
-    if handoff.exists():
+    if path_handoff.exists():
 
         # 容错读取支持迁移前的历史编码内容。
-        text = handoff.read_text(encoding="utf-8", errors="ignore")  # 当前 handoff 文本
+        text = path_handoff.read_text(encoding="utf-8", errors="ignore")  # 当前 handoff 文本
 
         # 标准章节顺序由共享合同定义。
         for section in HANDOFF_SECTIONS:
@@ -1473,22 +1480,22 @@ def verify_docs(project: Path) -> dict[str, Any]:
                 list_errors.append(f"docs/handoff/HANDOFF.md: missing section ## {section}")
 
     # 目录管理器验证实际结构、计划结构和审查记录。
-    dir_result = verify_dir_manager(project)  # 目录治理验证结果
+    dict_dir_result: dict[str, Any] = verify_dir_manager(project)  # 目录治理验证结果
 
     # 目录验证器已经提供稳定覆盖清单。
-    list_checked.extend(dir_result["checked"])
+    list_checked.extend(dict_dir_result["checked"])
 
     # 目录治理错误直接纳入文档总门禁。
-    list_errors.extend(dir_result["errors"])
+    list_errors.extend(dict_dir_result["errors"])
 
     # memory 验证确认数据库、事件流和摘要可恢复。
-    memory_result = verify_memory(project)  # 项目 memory 验证结果
+    dict_memory_result: dict[str, Any] = verify_memory(project)  # 项目 memory 验证结果
 
     # memory 路径去重后加入覆盖清单。
-    list_checked.extend(item for item in memory_result.get("checked", []) if item not in list_checked)
+    list_checked.extend(item for item in dict_memory_result.get("checked", []) if item not in list_checked)
 
     # memory 错误去重后加入总错误清单。
-    list_errors.extend(item for item in memory_result.get("errors", []) if item not in list_errors)
+    list_errors.extend(item for item in dict_memory_result.get("errors", []) if item not in list_errors)
 
     # 隐私审计防止治理记录泄露本地绝对路径。
     dict_privacy_result = audit_docs_private_paths(project)  # 受管文档的路径脱敏审计结果
@@ -1542,7 +1549,7 @@ def verify_docs(project: Path) -> dict[str, Any]:
         "project": str(project),  # 本次 docs 验证对应的项目
         "checked": list_checked,  # 完整覆盖清单
         "errors": list_errors,  # 聚合治理错误
-        "handoff_naming": handoff_naming,  # handoff 命名详情
+        "handoff_naming": dict_handoff_naming,  # handoff 命名详情
     }
 
 # 在项目根执行输出 JSON 的治理子命令。
@@ -1557,7 +1564,7 @@ def run_json_command(project: Path, argv: list[str]) -> dict[str, Any]:
     dict_environment = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")  # 子进程环境
 
     # 参数列表直接交给 subprocess，避免 shell 注入与转义差异。
-    command_result = subprocess.run(  # 治理命令执行结果
+    completed_process_command: subprocess.CompletedProcess[str] = subprocess.run(  # 治理命令执行结果
         argv,  # 完整参数列表
         cwd=project,  # 项目根工作目录
         text=True,  # 以文本形式捕获输出
@@ -1573,10 +1580,10 @@ def run_json_command(project: Path, argv: list[str]) -> dict[str, Any]:
     try:
 
         # 标准输出应当是单个 JSON 值。
-        loaded = json.loads(command_result.stdout)  # 子命令 JSON 值
+        obj_loaded: object = json.loads(completed_process_command.stdout)  # 子命令 JSON 值
 
         # 聚合门禁只接受对象形结果。
-        dict_parsed = loaded if isinstance(loaded, dict) else {}  # 结构化命令结果
+        dict_parsed = obj_loaded if isinstance(obj_loaded, dict) else {}  # 结构化命令结果
 
     # 非 JSON 输出由退出码和原始标准流共同诊断。
     except json.JSONDecodeError:
@@ -1587,9 +1594,9 @@ def run_json_command(project: Path, argv: list[str]) -> dict[str, Any]:
     # 完整执行证据供上层门禁判断。
     return {
         "argv": argv,  # 实际执行参数
-        "returncode": command_result.returncode,  # 子命令退出码
-        "stdout": command_result.stdout,  # 原始标准输出
-        "stderr": command_result.stderr,  # 原始标准错误
+        "returncode": completed_process_command.returncode,  # 子命令退出码
+        "stdout": completed_process_command.stdout,  # 原始标准输出
+        "stderr": completed_process_command.stderr,  # 原始标准错误
         "json": dict_parsed,  # 解析后的 JSON 对象
     }
 
@@ -1607,29 +1614,29 @@ def work_folder_gate(project: Path, skill_dir_raw: str, mode: str = "development
     from manage_docs_scaffold_session import resume_check
 
     # 目标 skill 目录用于版本对齐和发布模式约束。
-    skill_dir = inferred_skill_dir(project, skill_dir_raw)  # 发布与版本门禁共同采用的 skill 根
+    path_skill_dir: Path | None = inferred_skill_dir(project, skill_dir_raw)  # 发布与版本门禁共同采用的 skill 根
 
     # 活跃会话状态作为报告证据，但不会阻断当前进行中的会话。
-    resume = resume_check(project)  # 会话恢复检查结果
+    dict_resume: dict[str, Any] = resume_check(project)  # 会话恢复检查结果
 
     # 仅在已初始化 docs 治理时执行完整文档验证。
-    docs_verify = (  # 文档治理验证结果
+    dict_docs_verify: dict[str, Any] = (  # 文档治理验证结果
         verify_docs(project)  # 已初始化项目的完整验证
         if docs_governance_initialized(project)  # 是否存在正式治理结构
         else {"project": str(project), "checked": [], "errors": []}  # 未初始化兼容结果
     )
 
     # 结构门禁核对受管目录合同。
-    structure = structure_gate(project)  # 项目结构门禁结果
+    dict_structure: dict[str, Any] = structure_gate(project)  # 项目结构门禁结果
 
     # 目录管理器独立验证快照和计划状态。
-    dir_manager = verify_dir_manager(project)  # 目录管理验证结果
+    dict_dir_manager: dict[str, Any] = verify_dir_manager(project)  # 目录管理验证结果
 
     # 分支门禁阻止受保护分支上的高风险操作。
-    branch = branch_gate(project)  # Git 分支门禁结果
+    dict_branch: dict[str, Any] = branch_gate(project)  # Git 分支门禁结果
 
     # 项目 VERSION 必须与受管文档保持一致。
-    dict_version = version_alignment_gate(project, skill_dir)  # 版本对齐门禁结果
+    dict_version = version_alignment_gate(project, path_skill_dir)  # 版本对齐门禁结果
 
     # 源码治理根据当前控制档案检查生产文件边界。
     source_governance = source_governance_report(  # 源码治理报告
@@ -1653,11 +1660,13 @@ def work_folder_gate(project: Path, skill_dir_raw: str, mode: str = "development
     if str_freshness_script.startswith("<codex-home>") or not path_freshness_candidate.exists():
 
         # 环境覆盖优先，否则使用当前 owner skill 根。
-        fallback_dir = os.environ.get("AGENTS_MD_INSTALLED_SKILL_DIR") or Path(__file__).resolve().parents[3]  # freshness 运行时根
+        path_fallback_dir: Path = Path(  # freshness 运行时根
+            os.environ.get("AGENTS_MD_INSTALLED_SKILL_DIR") or Path(__file__).resolve().parents[3]  # 环境覆盖或标准 skill 根
+        )
 
         # 回退脚本使用当前 skill 的正式 scripts/python 布局。
         str_freshness_script = str(  # 可执行 freshness 脚本路径
-            Path(fallback_dir) / "scripts" / "python" / "detect" / "check_freshness.py"  # 标准检测入口
+            path_fallback_dir / "scripts" / "python" / "detect" / "check_freshness.py"  # 标准检测入口
         )
 
     # 子命令以当前 Python 解释器运行并返回 JSON 证据。
@@ -1667,7 +1676,7 @@ def work_folder_gate(project: Path, skill_dir_raw: str, mode: str = "development
     )
 
     # 空 JSON 将由非零退出码或缺失 stale 字段保持保守状态。
-    freshness = dict_freshness_command["json"]  # freshness 结构化结果
+    dict_freshness: dict[str, Any] = dict_freshness_command["json"]  # freshness 结构化结果
 
     # 所有子门禁错误合并到稳定顺序的清单。
     list_errors: list[str] = []  # 工作目录聚合错误
@@ -1682,28 +1691,28 @@ def work_folder_gate(project: Path, skill_dir_raw: str, mode: str = "development
     }
 
     # 真正的恢复阻断原因仍应进入聚合错误。
-    if resume.get("blocking"):
+    if dict_resume.get("blocking"):
 
         # 前缀保留错误所属子门禁。
-        list_errors.extend(f"resume-check: {item}" for item in resume.get("reasons", []))
+        list_errors.extend(f"resume-check: {item}" for item in dict_resume.get("reasons", []))
 
     # 文档验证错误始终参与聚合。
-    list_errors.extend(f"docs-verify: {item}" for item in docs_verify.get("errors", []))
+    list_errors.extend(f"docs-verify: {item}" for item in dict_docs_verify.get("errors", []))
 
     # 未批准结构意味着目录合同尚未闭合。
-    if not structure.get("approved", True):
+    if not dict_structure.get("approved", True):
 
         # 结构原因保留独立前缀。
-        list_errors.extend(f"structure-gate: {item}" for item in structure.get("reasons", []))
+        list_errors.extend(f"structure-gate: {item}" for item in dict_structure.get("reasons", []))
 
     # 目录快照与计划错误直接参与聚合。
-    list_errors.extend(f"dir-manager: {item}" for item in dir_manager.get("errors", []))
+    list_errors.extend(f"dir-manager: {item}" for item in dict_dir_manager.get("errors", []))
 
     # 未批准分支会阻止开发或发布操作。
-    if not branch.get("approved", True):
+    if not dict_branch.get("approved", True):
 
         # 分支原因保留独立前缀。
-        list_errors.extend(f"branch-gate: {item}" for item in branch.get("reasons", []))
+        list_errors.extend(f"branch-gate: {item}" for item in dict_branch.get("reasons", []))
 
     # VERSION 与文档声明漂移必须先修复。
     list_errors.extend(f"version-gate: {item}" for item in dict_version.get("errors", []))
@@ -1718,13 +1727,13 @@ def work_folder_gate(project: Path, skill_dir_raw: str, mode: str = "development
         list_errors.append("check_freshness command failed")
 
     # 成功执行但报告 stale 同样阻断继续工作。
-    if freshness.get("stale"):
+    if dict_freshness.get("stale"):
 
         # 需要先同步根 AGENTS 的时间和元数据。
         list_errors.append("AGENTS.md freshness check is stale")
 
     # 发布模式必须能够确定实际 skill 目录。
-    if mode == "release" and not skill_dir:
+    if mode == "release" and not path_skill_dir:
 
         # 无目标目录时无法证明发布内容边界。
         list_errors.append("release work-folder gate requires a resolved skill directory")
@@ -1733,16 +1742,16 @@ def work_folder_gate(project: Path, skill_dir_raw: str, mode: str = "development
     return {
         "project": str(project),  # 聚合门禁实际检查的工作目录
         "mode": mode,  # 当前门禁模式
-        "skill_dir": str(skill_dir) if skill_dir else "",  # 解析后的目标 skill
+        "skill_dir": str(path_skill_dir) if path_skill_dir else "",  # 解析后的目标 skill
         "ok": not list_errors,  # 无聚合错误时通过
         "errors": list_errors,  # 稳定顺序的聚合错误
-        "resume_check": resume,  # 会话恢复证据
+        "resume_check": dict_resume,  # 会话恢复证据
         "resume_policy": dict_resume_policy,  # 当前会话例外策略
-        "docs_verify": docs_verify,  # 文档治理证据
-        "structure_gate": structure,  # 结构合同证据
-        "dir_manager": dir_manager,  # 目录管理证据
-        "branch_gate": branch,  # 分支治理证据
+        "docs_verify": dict_docs_verify,  # 文档治理证据
+        "structure_gate": dict_structure,  # 结构合同证据
+        "dir_manager": dict_dir_manager,  # 目录管理证据
+        "branch_gate": dict_branch,  # 分支治理证据
         "version_gate": dict_version,  # 版本对齐证据
         "source_governance": source_governance,  # 源码治理证据
-        "freshness": freshness,  # AGENTS freshness 证据
+        "freshness": dict_freshness,  # AGENTS freshness 证据
     }

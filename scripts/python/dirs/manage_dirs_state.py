@@ -3,8 +3,7 @@
 # 延迟解析类型注解，避免运行期求值仅供静态检查使用的联合类型。
 from __future__ import annotations
 
-# 导入区分为标准库和项目公共治理依赖。
-# 标准库负责时间戳、路径匹配、JSON 读取和路径建模。
+# 导入区分标准库与项目公共治理依赖，覆盖时间戳、路径匹配和 JSON 建模。
 from datetime import datetime
 from fnmatch import fnmatch
 import json
@@ -184,9 +183,19 @@ def invalid_path_reason(raw: str) -> str | None:
         # 明确指出父级穿越风险，而非静默改写用户路径。
         return f"path must not contain parent traversal: {raw_value}"
 
-    # 精确点号只代表远程工作区根，其他点号或空片段会模糊目标边界。
-    if normalized != "." and any(
-        str_part in {"", "."} for str_part in normalized.split("/")
+    # 计划结构以末尾斜杠标识目录；校验分段时先移除该目录标记。
+    if normalized.endswith("//"):
+
+        # 重复目录标记仍属于模糊空路径段，不能静默归一化。
+        return f"path must not contain dot or empty segments: {raw_value}"
+
+    # 去除目录标记后得到用于分段校验的路径文本。
+    str_segment_path: str = normalized.rstrip("/")  # 去掉末尾目录标记的规范化路径。
+
+    # 中间空段、当前目录段和空路径仍然必须拒绝。
+    if str_segment_path != "." and (
+        not str_segment_path
+        or any(str_part in {"", "."} for str_part in str_segment_path.split("/"))
     ):
 
         # 拒绝可被路径归一化静默折叠的非精确写法。
@@ -239,25 +248,25 @@ def scan_structure(project: Path) -> dict[str, Any]:
             continue
 
         # 快照只保存可跨机器复用的项目相对路径。
-        rel = path.relative_to(project).as_posix()  # 当前成员的 POSIX 相对路径。
+        str_rel: str = path.relative_to(project).as_posix()  # 当前成员的 POSIX 相对路径。
 
         # 目录成员进入独立集合，供顶层和父子结构验证使用。
         if path.is_dir():
 
             # 记录目录本身，不重复展开其已由 rglob 返回的后代。
-            list_directories.append(rel)
+            list_directories.append(str_rel)
 
         # 普通文件需要进一步过滤活跃过程态证据。
         elif path.is_file():
 
             # 会话和发布临时文件由专用治理器验证，不参与布局比较。
-            if any(fnmatch(rel, pattern) for pattern in STRUCTURE_SKIP_FILE_PATTERNS):
+            if any(fnmatch(str_rel, pattern) for pattern in STRUCTURE_SKIP_FILE_PATTERNS):
 
                 # 忽略高频变化文件，避免无意义地刷新计划结构。
                 continue
 
             # 保留稳定文件路径供根文件与工作区设置检查使用。
-            list_files.append(rel)
+            list_files.append(str_rel)
 
     # 返回不含绝对工作区信息的可提交结构快照。
     return {
@@ -277,7 +286,7 @@ def dir_manager_doc(project: Path) -> str:
     """
 
     # 审查命令使用项目实际脚本布局，兼容迁移后的入口路径。
-    review_command = script_command(  # 当前布局对应的目录变更预审命令。
+    str_review_command: str = script_command(  # 当前布局对应的目录变更预审命令。
         project,  # 当前项目用于解析脚本入口。
         "manage_dirs.py",  # 目录治理命令模块名。
         "review",  # 变更预审子命令。
@@ -287,7 +296,7 @@ def dir_manager_doc(project: Path) -> str:
     )  # 目录变更预审命令。
 
     # 强制覆盖前必须先归档当前目录治理证据。
-    archive_command = script_command(  # 强制覆盖前的治理证据归档命令。
+    str_archive_command: str = script_command(  # 强制覆盖前的治理证据归档命令。
         project,  # 当前项目用于选择实际脚本路径。
         "manage_dirs.py",  # 目录治理 CLI 入口。
         "archive",  # 治理证据归档子命令。
@@ -308,7 +317,7 @@ def dir_manager_doc(project: Path) -> str:
             "",
             "## Required Review",
             "- Read this file before changing folder structure.",
-            f"- Run `{review_command}` before directory changes.",
+            f"- Run `{str_review_command}` before directory changes.",
             "- Do not move, rename, or delete governance folders without explicit user force-confirmation.",
             "- If review blocks a change, refuse default execution and explain the risk to the user.",
             (
@@ -346,7 +355,7 @@ def dir_manager_doc(project: Path) -> str:
                 "stale AGENTS.md scopes, broken history links, or failed skill installation."
             ),
             "- Ask the user to explicitly confirm forced directory structure modification.",
-            f"- Run `{archive_command}` before applying a force-confirmed folder change.",
+            f"- Run `{str_archive_command}` before applying a force-confirmed folder change.",
             "- Record confirmation and risk in the next handoff.",
             "",
         ]
@@ -398,14 +407,14 @@ def remote_structure(project: Path) -> str:
     dict_profile = control_profile(project)  # 远程隔离环境的控制档案来源。
 
     # directory_contract 缺失或类型错误时按空合同降级。
-    contract = (
+    dict_contract: dict[str, Any] = (
         dict_profile.get("directory_contract", {})  # 远程根所在的目录合同分区。
         if isinstance(dict_profile.get("directory_contract"), dict)  # 仅接受映射合同。
         else {}  # 损坏配置按未设置远程根处理。
     )  # 目录合同映射。
 
     # 去除人工编辑可能引入的首尾空白。
-    raw = str(contract.get("remote", "")).strip()  # 原始远程工作区声明。
+    raw = str(dict_contract.get("remote", "")).strip()  # 原始远程工作区声明。
 
     # 空声明与未配置状态等价。
     if not raw:
@@ -440,17 +449,17 @@ def remote_environment_policy(project: Path) -> dict[str, Any]:
     dict_profile = control_profile(project)  # 远程运行归档的控制档案来源。
 
     # 类型检查阻止损坏的控制档案向下游传播。
-    contract = (
+    dict_contract: dict[str, Any] = (
         dict_profile.get("directory_contract", {})  # 隔离环境所在的目录合同分区。
         if isinstance(dict_profile.get("directory_contract"), dict)  # 收窄环境合同类型。
         else {}  # 无效合同不提供环境策略。
     )  # 经过类型收窄的目录合同。
 
     # 提取环境管理器、路径模板和启用条件。
-    policy = contract.get("remote_environment_policy", {})  # 原始远程环境策略。
+    dict_policy: dict[str, Any] = dict_contract.get("remote_environment_policy", {})  # 原始远程环境策略。
 
     # 非对象策略不能作为具名配置消费。
-    return policy if isinstance(policy, dict) else {}
+    return dict_policy if isinstance(dict_policy, dict) else {}
 
 # 提取远程运行产物从活跃区到备份区的归档合同。
 def remote_runtime_archive_policy(project: Path) -> dict[str, Any]:
@@ -464,17 +473,17 @@ def remote_runtime_archive_policy(project: Path) -> dict[str, Any]:
     dict_profile = control_profile(project)  # 项目控制档案。
 
     # 损坏的 directory_contract 按未配置处理。
-    contract = (
+    dict_contract: dict[str, Any] = (
         dict_profile.get("directory_contract", {})  # 运行归档所在的目录合同分区。
         if isinstance(dict_profile.get("directory_contract"), dict)  # 收窄归档合同类型。
         else {}  # 无效合同不启用运行归档。
     )  # 经过类型确认的目录合同。
 
     # 提取活跃路径、备份路径和归档触发条件。
-    policy = contract.get("remote_runtime_archive_policy", {})  # 原始运行归档策略。
+    dict_policy: dict[str, Any] = dict_contract.get("remote_runtime_archive_policy", {})  # 原始运行归档策略。
 
     # 仅映射值可参与后续字段读取。
-    return policy if isinstance(policy, dict) else {}
+    return dict_policy if isinstance(dict_policy, dict) else {}
 
 # 展开远程根、环境模板和运行模板形成部署保护计划。
 def remote_deployment_plan(project: Path) -> dict[str, Any]:
@@ -494,13 +503,24 @@ def remote_deployment_plan(project: Path) -> dict[str, Any]:
     dict_runtime_policy = remote_runtime_archive_policy(project)  # 远程产物归档配置。
 
     # 未配置远程根时不得凭模板创建孤立路径。
-    planned = [] if str_workspace == "not configured" else [str_workspace]  # 远程受管路径候选。
+    list_planned: list[str] = [] if str_workspace == "not configured" else [str_workspace]  # 远程受管路径候选。
 
     # 只有有效远程根才能承载设置、环境和运行目录。
     if str_workspace != "not configured":
 
+        # 相对根、设置、归档和运行模板供上传与目录审查共同匹配。
+        list_planned.extend(
+            [
+                ".",
+                f"{SETTINGS_FOLDER}/",
+                "archives",
+                "archives/<run-id>",
+                "runs/<run-id>",
+            ]
+        )
+
         # 远程设置目录只允许部署非 local 配置。
-        planned.append(f"{str_workspace.rstrip('/')}/{SETTINGS_FOLDER}/")
+        list_planned.append(f"{str_workspace.rstrip('/')}/{SETTINGS_FOLDER}/")
 
         # 环境模板统一为相对路径，避免重复斜杠影响保护比较。
         str_conda_template = normalize_rel(  # 规范化后的隔离环境模板。
@@ -524,31 +544,31 @@ def remote_deployment_plan(project: Path) -> dict[str, Any]:
             if template:
 
                 # 拼接后的绝对远程路径同时进入允许和保护集合。
-                planned.append(f"{str_workspace.rstrip('/')}/{template}")
+                list_planned.append(f"{str_workspace.rstrip('/')}/{template}")
 
         # 备份层级的父目录也需要预先批准，才能逐级创建。
         if str_backup_template:
 
             # 路径分段用于由叶到根枚举备份父目录。
-            parts = str_backup_template.split("/")  # 备份模板的层级分段。
+            list_parts: list[str] = str_backup_template.split("/")  # 备份模板的层级分段。
 
             # 至少保留一个顶层分段，防止生成远程根自身的空后缀。
-            while len(parts) > 1:
+            while len(list_parts) > 1:
 
                 # 移除当前叶节点后得到下一层父目录。
-                parts.pop()
+                list_parts.pop()
 
                 # 父目录加入计划后可通过创建审查而不放宽其他路径。
-                planned.append(f"{str_workspace.rstrip('/')}/{'/'.join(parts)}")
+                list_planned.append(f"{str_workspace.rstrip('/')}/{'/'.join(list_parts)}")
 
     # 去重并排序，保证结构快照和发布收据可重复生成。
-    planned = sorted(dict.fromkeys(planned))  # 稳定的远程受管路径集合。
+    list_planned = sorted(dict.fromkeys(list_planned))  # 稳定的远程受管路径集合。
 
     # 返回远程部署的完整机器可读治理合同。
     return {
         "workspace_root": str_workspace,
-        "planned_structure": planned,
-        "protected_paths": planned,
+        "planned_structure": list_planned,
+        "protected_paths": list_planned,
         "workspace_settings": workspace_settings_contract(),
         "conda_environment": {
             "status": dict_environment_policy.get("status", "disabled"),
@@ -582,6 +602,20 @@ def remote_deployment_plan(project: Path) -> dict[str, Any]:
         "review_required_for": ["create", "move", "delete", "rename"],
         "block_on_failed_review": True,
         "force_override_requires_user_confirmation": True,
+        "upload_policy": {
+            "mode": "manifest-only",
+            "whole_work_folder_forbidden": True,
+            "workspace_bundle_forbidden": True,
+            "force_override_allowed": False,
+            "forbidden_source_roots": [".git/", "git/", "github/", "dist/", "ref/"],
+            "require_expanded_directory_manifest": True,
+            "allowed_kinds": [
+                "selected_file",
+                "selected_directory",
+                "task_input",
+                "runtime_artifact",
+            ],
+        },
     }
 
 # 合并显式目录合同与项目类型默认布局。
@@ -596,7 +630,7 @@ def profile_layout_policy(project: Path) -> tuple[str, list[str], bool]:
     dict_profile = control_profile(project)  # 布局推导使用的项目控制档案。
 
     # 无有效目录合同时仍可从项目种类推导兼容默认值。
-    contract = (
+    dict_contract: dict[str, Any] = (
         dict_profile.get("directory_contract", {})  # 本地布局所在的目录合同分区。
         if isinstance(dict_profile.get("directory_contract"), dict)  # 收窄本地布局合同类型。
         else {}  # 无效合同触发项目类型默认布局。
@@ -604,35 +638,35 @@ def profile_layout_policy(project: Path) -> tuple[str, list[str], bool]:
 
     # 显式主根配置优先于任何类型推导。
     str_primary = normalize_rel(  # 规范化主项目根。
-        str(contract.get("primary_project_root", "")).strip()  # 原始主根配置文本。
+        str(dict_contract.get("primary_project_root", "")).strip()  # 原始主根配置文本。
     )
 
     # 旧控制档案缺少主根字段时按项目类型恢复既有布局。
     if not str_primary:
 
         # 项目类型决定使用 skills 还是 engineering 前缀。
-        kind = str(dict_profile.get("kind", "")).strip().lower()  # 规范化项目类型。
+        str_kind: str = str(dict_profile.get("kind", "")).strip().lower()  # 规范化项目类型。
 
         # 项目名称用于构造默认工作目录。
         name = str(dict_profile.get("name", "")).strip()  # 控制档案项目名称。
 
         # skill_layout 可覆盖技能源码的默认 skills/<name> 路径。
-        skill_layout = (
+        dict_skill_layout: dict[str, Any] = (
             dict_profile.get("skill_layout", {})  # 技能源码目录覆盖配置。
             if isinstance(dict_profile.get("skill_layout"), dict)  # 仅映射可提供路径覆盖。
             else {}  # 无效技能布局回退到标准路径。
         )  # 技能项目布局映射。
 
         # 技能项目优先使用显式源码路径。
-        if kind == "skill":
+        if str_kind == "skill":
 
             # 缺少覆盖路径时回退到标准技能目录布局。
-            str_primary = normalize_rel(str(skill_layout.get("path", "")).strip()) or (  # 技能主根。
+            str_primary = normalize_rel(str(dict_skill_layout.get("path", "")).strip()) or (  # 技能主根。
                 f"skills/{name}" if name else ""  # 使用项目名称构造技能主根。
             )
 
         # 工程项目遵循 engineering/<name> 的标准主根。
-        elif kind == "engineering" and name:
+        elif str_kind == "engineering" and name:
 
             # 工程名称已去除空白，可直接组成相对路径。
             str_primary = f"engineering/{name}"  # 工程项目标准主根路径。
@@ -640,7 +674,7 @@ def profile_layout_policy(project: Path) -> tuple[str, list[str], bool]:
     # 显式允许路径逐项规范化并丢弃空值。
     list_allowed = [
         normalize_rel(item)  # 当前显式批准路径。
-        for item in contract.get("allowed_new_paths", [])  # 遍历显式允许路径。
+        for item in dict_contract.get("allowed_new_paths", [])  # 遍历显式允许路径。
         if str(item).strip()  # 忽略空配置项。
     ]  # 控制档案允许新增路径。
 
@@ -662,7 +696,7 @@ def profile_layout_policy(project: Path) -> tuple[str, list[str], bool]:
 
     # 显式开关或可推导主根任一存在时都执行主根布局约束。
     bool_enforce = bool(  # 是否执行主项目根存在性约束。
-        contract.get("enforce_primary_project_root", False)  # 显式强制开关。
+        dict_contract.get("enforce_primary_project_root", False)  # 显式强制开关。
         or str_primary  # 可推导主根时默认启用布局检查。
     )  # 主项目根布局强制状态。
 
@@ -773,10 +807,10 @@ def load_planned(project: Path) -> dict[str, Any]:
     """
 
     # 计划文件是结构验证和目录变更审查的共同基线。
-    planned = read_json(project / PLANNED_STRUCTURE)  # 原始计划结构 JSON。
+    dict_planned: dict[str, Any] = read_json(project / PLANNED_STRUCTURE)  # 原始计划结构 JSON。
 
     # 非对象 JSON 无法提供允许路径和保护字段。
-    return planned if isinstance(planned, dict) else {}
+    return dict_planned if isinstance(dict_planned, dict) else {}
 
 # 从深层批准路径推导创建过程必需的父目录。
 def allowed_parent_paths(planned: dict[str, Any]) -> set[str]:
@@ -794,6 +828,12 @@ def allowed_parent_paths(planned: dict[str, Any]) -> set[str]:
 
         # 统一分隔符后再按层级拆分。
         str_normalized = normalize_rel(item)  # 当前允许路径。
+
+        # 配置中的非法路径不能通过父级推导间接授权其他目录。
+        if invalid_path_reason(str(item)) is not None:
+
+            # 只为通过路径合同的计划项生成父目录白名单。
+            continue
 
         # 空配置项不产生可创建目录。
         if not str_normalized:
@@ -822,17 +862,21 @@ def configured_root_optional_work_dirs(planned: dict[str, Any]) -> set[str]:
     """
 
     # 项目计划可收紧或扩展默认测试与运行目录集合。
-    configured = planned.get("root_optional_work_dirs", [])  # 原始可选目录配置。
+    list_configured: list[Any] = (
+        planned.get("root_optional_work_dirs", [])  # 计划中的根级产物目录列表。
+        if isinstance(planned.get("root_optional_work_dirs", []), list)  # 列表类型才可遍历。
+        else []  # 非列表配置安全回退为空列表。
+    )  # 原始可选目录配置。
 
     # 去除空值并统一路径分隔符，便于顶层名称比较。
-    values = {  # 有效可选工作目录集合。
+    set_values: set[str] = {  # 有效可选工作目录集合。
         normalize_rel(item)  # 当前根级工作目录名。
-        for item in configured  # 遍历项目配置的工作目录名。
+        for item in list_configured  # 遍历项目配置的工作目录名。
         if normalize_rel(item)  # 过滤规范化后的空名称。
     }
 
     # 空配置保留历史默认行为，避免旧计划突然阻断测试目录。
-    return values or set(ROOT_OPTIONAL_WORK_DIRS)
+    return set_values or set(ROOT_OPTIONAL_WORK_DIRS)
 
 # 解析动态场景工作目录可使用的受控名称前缀。
 def configured_root_optional_work_dir_prefixes(
@@ -845,12 +889,16 @@ def configured_root_optional_work_dir_prefixes(
     """
 
     # 前缀配置支持 smoke-<scenario> 等动态夹具目录。
-    configured = planned.get("root_optional_work_dir_prefixes", [])  # 原始目录前缀配置。
+    list_configured: list[Any] = (
+        planned.get("root_optional_work_dir_prefixes", [])  # 计划中的动态目录前缀列表。
+        if isinstance(planned.get("root_optional_work_dir_prefixes", []), list)  # 仅接受计划前缀集合。
+        else []  # 错误结构不继承外部目录值。
+    )  # 原始目录前缀配置。
 
     # 元组保持计划给定顺序并过滤空前缀。
     tuple_values = tuple(  # 保留顺序的有效动态目录前缀。
         normalize_rel(item)  # 当前动态工作目录前缀。
-        for item in configured  # 遍历计划配置的动态前缀。
+        for item in list_configured  # 遍历计划配置的动态前缀。
         if normalize_rel(item)  # 过滤空前缀避免匹配所有目录。
     )  # 有效根级工作目录前缀。
 
@@ -912,22 +960,22 @@ def nested_workspace_artifact_reason(path: str, planned: dict[str, Any]) -> str 
         return None
 
     # 尾斜杠确保前缀匹配不会误伤同名相邻目录。
-    prefix = str_primary_root.rstrip("/") + "/"  # 主项目根后代路径前缀。
+    str_prefix: str = str_primary_root.rstrip("/") + "/"  # 主项目根后代路径前缀。
 
     # 主根自身或主根之外的路径不属于本规则范围。
-    if str_normalized == str_primary_root or not str_normalized.startswith(prefix):
+    if str_normalized == str_primary_root or not str_normalized.startswith(str_prefix):
 
         # 交给普通允许路径规则继续判断。
         return None
 
     # 去除主根前缀后检查内部各层目录名称。
-    relative = str_normalized[len(prefix) :]  # 相对主项目根的后缀路径。
+    str_relative: str = str_normalized[len(str_prefix) :]  # 相对主项目根的后缀路径。
 
     # 空分段不参与目录类别匹配。
-    components = [part for part in relative.split("/") if part]  # 主根内部路径分段。
+    list_components: list[str] = [part for part in str_relative.split("/") if part]  # 主根内部路径分段。
 
     # 没有内部成员时等价于主根自身。
-    if not components:
+    if not list_components:
 
         # 此边界不构成工作产物嵌套。
         return None
@@ -939,11 +987,11 @@ def nested_workspace_artifact_reason(path: str, planned: dict[str, Any]) -> str 
     tuple_prefixes = configured_root_optional_work_dir_prefixes(planned)  # 允许的产物目录前缀。
 
     # 任一内部层级出现工作目录都违反根级放置合同。
-    for component in components:
+    for str_component in list_components:
 
         # 同时检查固定名称和动态场景前缀。
-        if component in set_allowed_dirs or any(
-            component.startswith(prefix) for prefix in tuple_prefixes
+        if str_component in set_allowed_dirs or any(
+            str_component.startswith(prefix) for prefix in tuple_prefixes
         ):
 
             # 返回包含实际路径的可操作诊断。
@@ -967,6 +1015,12 @@ def allowed_path(path: str, planned: dict[str, Any]) -> bool:
     # 所有比较都使用无首尾斜杠的统一相对路径。
     str_normalized = normalize_rel(path)  # 规范化候选目录。
 
+    # 原始路径必须先拒绝父级、点号和绝对路径，再进入任何白名单匹配。
+    if invalid_path_reason(path) is not None:
+
+        # 不能让根级动态目录规则绕过项目内相对路径合同。
+        return False
+
     # 根级测试和运行产物按专用动态规则批准。
     if root_optional_work_dir_match(str_normalized, planned):
 
@@ -974,10 +1028,10 @@ def allowed_path(path: str, planned: dict[str, Any]) -> bool:
         return True
 
     # 显式允许路径过滤空项后参与精确和后代匹配。
-    allowed = [
+    list_allowed: list[str] = [
         normalize_rel(item)  # 当前批准路径。
         for item in planned.get("allowed_new_paths", [])  # 遍历计划允许路径。
-        if str(item).strip()  # 排除空路径声明。
+        if str(item).strip() and invalid_path_reason(str(item)) is None  # 排除空和非法路径声明。
     ]  # 计划批准的规范化路径。
 
     # 创建深层批准路径前，其父目录也必须可创建。
@@ -992,7 +1046,7 @@ def allowed_path(path: str, planned: dict[str, Any]) -> bool:
     # 显式路径及其全部后代继承批准状态。
     return any(
         str_normalized == item or str_normalized.startswith(item.rstrip("/") + "/")
-        for item in allowed
+        for item in list_allowed
     )
 
 # 读取项目根可保留的代理说明与工具配置文件白名单。
@@ -1004,23 +1058,27 @@ def allowed_root_files(planned: dict[str, Any]) -> list[str]:
     """
 
     # 项目计划可以覆盖默认代理说明和工具配置文件集合。
-    configured = planned.get("allowed_root_files", [])  # 原始根文件白名单。
+    list_configured: list[Any] = (
+        planned.get("allowed_root_files", [])  # 计划中的根级文件白名单列表。
+        if isinstance(planned.get("allowed_root_files", []), list)  # 仅从数组提取受控文件名。
+        else []  # 错误结构回退默认白名单流程。
+    )  # 原始根文件白名单。
 
     # 只有列表类型才可按元素解释为文件名。
-    if isinstance(configured, list):
+    if isinstance(list_configured, list):
 
         # 去除空白与空元素，保留配置顺序。
-        values = [  # 有效根文件名。
+        list_values: list[str] = [  # 有效根文件名。
             str(item).strip()  # 当前白名单文件名。
-            for item in configured  # 遍历根文件白名单配置。
+            for item in list_configured  # 遍历根文件白名单配置。
             if str(item).strip()  # 丢弃空文件名。
         ]
 
         # 至少一个有效值时尊重项目覆盖配置。
-        if values:
+        if list_values:
 
             # 返回新列表，避免调用方修改计划原对象。
-            return values
+            return list_values
 
     # 缺失或无效配置回退到受控默认集合。
     return list(ALLOWED_ROOT_FILES)
@@ -1204,6 +1262,24 @@ def remote_deployment_path_errors(remote: dict[str, Any]) -> list[str]:
             # 错误路径携带实际字段名，便于直接修复计划 JSON。
             list_errors.append(f"{str_prefix}.runtime_artifacts.{str_field} must be configured")
 
+    # 读取远程上传子合同，非对象按缺失处理。
+    dict_upload = remote.get("upload_policy", {}) if isinstance(remote.get("upload_policy"), dict) else {}  # 远程上传合同。
+
+    # 上传模式必须明确锁定为 manifest-only。
+    if dict_upload.get("mode") != "manifest-only":
+
+        # 非 manifest-only 模式可能扩大远程传输范围。
+        list_errors.append(f"{str_prefix}.upload_policy.mode must be manifest-only")
+
+    # 读取强制覆盖开关并保持严格布尔类型。
+    value_force_override = dict_upload.get("force_override_allowed")  # 强制覆盖开关值。
+
+    # 缺失、非布尔或真值都必须拒绝。
+    if not isinstance(value_force_override, bool) or value_force_override:
+
+        # 远程上传阻断不能通过强制覆盖绕过。
+        list_errors.append(f"{str_prefix}.upload_policy.force_override_allowed must be false")
+
     # 调用方把本列表合并到完整目录治理验证结果。
     return list_errors
 
@@ -1223,10 +1299,12 @@ def verify_remote_deployment_policy(
     """
 
     # 远程合同缺失时保留 None，以区分空映射和完全未配置。
-    remote = planned.get("remote_deployment") if planned else None  # 原始远程部署合同。
+    dict_remote: dict[str, Any] | None = (
+        planned.get("remote_deployment") if planned else None  # 读取可选远程部署合同。
+    )  # 原始远程部署合同。
 
     # 非空计划必须提供对象类型的 remote_deployment 分区。
-    if planned and not isinstance(remote, dict):
+    if planned and not isinstance(dict_remote, dict):
 
         # 顶层类型错误无法继续安全读取内部字段。
         list_errors.append(f"{PLANNED_STRUCTURE.as_posix()}: remote_deployment must be configured")
@@ -1235,10 +1313,10 @@ def verify_remote_deployment_policy(
         return
 
     # 有效映射的内部诊断统一追加到共享错误列表。
-    if isinstance(remote, dict):
+    if isinstance(dict_remote, dict):
 
         # helper 只返回诊断，不产生写入副作用。
-        list_errors.extend(remote_deployment_path_errors(remote))
+        list_errors.extend(remote_deployment_path_errors(dict_remote))
 
 # 确认目录治理的文档、快照和证据目录已经落地。
 def verify_manager_paths(project: Path, list_errors: list[str]) -> list[str]:
@@ -1262,6 +1340,12 @@ def verify_manager_paths(project: Path, list_errors: list[str]) -> list[str]:
     for rel in [DIR_MANAGER_DIR, CHANGE_REVIEWS, HISTORY_DIR_MANAGER]:
 
         # 缺失目录会使后续写入或审计无法完成。
+        if rel == HISTORY_DIR_MANAGER and not (project / rel).is_dir():
+
+            # 新项目尚无历史快照时，首次归档流程再创建该目录。
+            continue
+
+        # 其他当前治理目录缺失时仍然阻断验证。
         if not (project / rel).is_dir():
 
             # 保留相对路径使错误可跨工作区复现。
@@ -1353,20 +1437,20 @@ def verify_workspace_settings_policy(
     """
 
     # schema 验证后再次收窄类型，防止损坏输入引发异常。
-    settings_policy = (
+    dict_settings_policy: dict[str, Any] = (
         planned.get("workspace_settings", {})  # 原始工作区设置分区。
         if isinstance(planned.get("workspace_settings"), dict)  # 收窄设置策略类型。
         else {}  # 错误类型由 schema 验证记录。
     )  # 可安全读取的工作区设置策略。
 
     # 空策略的缺失错误已由顶层 schema 验证覆盖。
-    if not settings_policy:
+    if not dict_settings_policy:
 
         # 无可验证字段时直接返回，继续汇总其他结构问题。
         return
 
     # 设置目录必须与公共策略常量一致。
-    if str(settings_policy.get("folder", "")).strip() != SETTINGS_FOLDER:
+    if str(dict_settings_policy.get("folder", "")).strip() != SETTINGS_FOLDER:
 
         # 固定目录避免本地设置散落到源码或项目根。
         list_errors.append(
@@ -1376,7 +1460,7 @@ def verify_workspace_settings_policy(
 
     # 本地默认文件必须位于受管设置目录。
     if (
-        str(settings_policy.get("local_default_file", "")).strip()
+        str(dict_settings_policy.get("local_default_file", "")).strip()
         != f"{SETTINGS_FOLDER}/project.local.json"
     ):
 
@@ -1388,7 +1472,7 @@ def verify_workspace_settings_policy(
 
     # 远程默认文件路径由公共设置策略统一定义。
     if (
-        str(settings_policy.get("remote_default_file", "")).strip()
+        str(dict_settings_policy.get("remote_default_file", "")).strip()
         != REMOTE_DEFAULT_SETTINGS
     ):
 
@@ -1399,7 +1483,7 @@ def verify_workspace_settings_policy(
         )
 
     # local 文件必须明确禁止复制到远程工作区。
-    if not settings_policy.get("local_files_remote_blocked"):
+    if not dict_settings_policy.get("local_files_remote_blocked"):
 
         # 该开关保护本机账号、端口和路径等私有配置。
         list_errors.append(
@@ -1509,33 +1593,77 @@ def verify_dir_manager(project: Path) -> dict[str, Any]:
     list_checked = verify_manager_paths(project, list_errors)  # 已检查治理路径。
 
     # 只在文件存在时读取，缺失错误已由路径验证记录。
-    current = (
+    dict_current: dict[str, Any] = (
         verify_json(project / CURRENT_STRUCTURE, list_errors)  # 读取当前结构对象。
         if (project / CURRENT_STRUCTURE).exists()  # 文件存在时执行内容验证。
         else {}  # 缺失已由路径检查报告。
     )  # 当前目录结构快照。
 
     # 计划快照与当前快照独立读取并汇总解析错误。
-    planned = (
+    dict_planned: dict[str, Any] = (
         verify_json(project / PLANNED_STRUCTURE, list_errors)  # 读取计划结构对象。
         if (project / PLANNED_STRUCTURE).exists()  # 文件存在时执行计划验证。
         else {}  # 缺失时保持空计划安全继续。
     )  # 已批准目录结构计划。
 
     # 顶层 schema 和远程嵌套合同始终执行。
-    verify_structure_schema(current, planned, list_errors)
+    verify_structure_schema(dict_current, dict_planned, list_errors)
 
     # 只有两份有效快照同时存在时才能比较具体布局。
-    if current and planned:
+    if dict_current and dict_planned:
 
         # 设置策略先验证，保证本地与远程配置边界明确。
-        verify_workspace_settings_policy(planned, list_errors)
+        verify_workspace_settings_policy(dict_planned, list_errors)
 
         # 最后比较主根、目录、设置文件和根级文件布局。
-        verify_current_layout(current, planned, list_errors)
+        verify_current_layout(dict_current, dict_planned, list_errors)
 
     # 返回稳定 schema 供 CLI 决定退出码并渲染 JSON。
     return {"project": str(project), "checked": list_checked, "errors": list_errors}
+
+# 治理写入路径必须保持在项目声明的真实目录树内。
+def _safe_governance_path(project: Path, relative: Path) -> Path:
+    """解析治理路径并拒绝符号链接边界。
+
+    参数:
+        project: 项目根目录。
+        relative: 项目内治理相对路径。
+    返回:
+        通过边界检查的治理目标绝对路径。
+    异常:
+        RuntimeError: 路径解析失败或命中符号链接边界时抛出。
+    """
+
+    # 保留词法路径并解析祖先，用于发现目录链接和重解析逃逸。
+    path_candidate = project / relative  # 当前治理文件或目录路径。
+
+    # 解析路径身份前先进入受控异常边界。
+    try:
+
+        # 路径身份变化表示实际写入位置不同于治理载荷声明位置。
+        bool_unsafe = (
+            path_candidate.is_symlink()  # 目标本身是符号链接。
+            or path_candidate.absolute() != path_candidate.resolve()  # 祖先解析后发生路径逃逸。
+        )
+
+    # 无法解析的路径按不安全处理，避免写入边界不明的目标。
+    except (OSError, RuntimeError):
+
+        # 统一转换为目录治理错误，供 CLI 结构化报告。
+        raise RuntimeError(
+            f"> ERR: [Python] governance path is not a regular project path: {relative}"
+        )
+
+    # 符号链接或其祖先链接都不能承担治理写入。
+    if bool_unsafe:
+
+        # 阻断可能落到项目外部的创建、覆盖或归档操作。
+        raise RuntimeError(
+            f"> ERR: [Python] governance path is not a regular project path: {relative}"
+        )
+
+    # 返回已通过项目边界和链接检查的词法路径。
+    return path_candidate
 
 # 初始化治理目录并同步计划与当前结构快照。
 def init_dir_manager(project: Path) -> dict[str, Any]:
@@ -1546,22 +1674,31 @@ def init_dir_manager(project: Path) -> dict[str, Any]:
     """
 
     # 治理根目录是说明文档、快照和审查记录的共同父级。
-    target = project / DIR_MANAGER_DIR  # 目录治理文档绝对路径。
+    path_target: Path = _safe_governance_path(project, DIR_MANAGER_DIR)  # 目录治理文档绝对路径。
 
     # 初始化允许重复执行，不删除任何既有治理内容。
-    target.mkdir(parents=True, exist_ok=True)
+    path_target.mkdir(parents=True, exist_ok=True)
 
     # 审查记录目录独立于结构快照，便于逐次留证。
-    (project / CHANGE_REVIEWS).mkdir(parents=True, exist_ok=True)
+    path_change_reviews: Path = _safe_governance_path(project, CHANGE_REVIEWS)  # 审查记录目录路径。
+
+    # 创建审查记录目录，允许重复初始化而不清除历史证据。
+    path_change_reviews.mkdir(parents=True, exist_ok=True)
 
     # 强制覆盖前的历史快照统一归档到专用目录。
-    (project / HISTORY_DIR_MANAGER).mkdir(parents=True, exist_ok=True)
+    path_history_dir: Path = _safe_governance_path(project, HISTORY_DIR_MANAGER)  # 历史快照目录路径。
 
-    # 说明文档仅在缺失时生成，保留已有人工补充。
-    if not (project / DIR_MANAGER_MD).exists():
+    # 创建历史归档目录，供强制覆盖前保存证据。
+    path_history_dir.mkdir(parents=True, exist_ok=True)
+
+    # 解析目录治理文档路径，后续只检查其是否已经存在。
+    path_dir_manager_md: Path = _safe_governance_path(project, DIR_MANAGER_MD)  # 初始化阶段待检查文件。
+
+    # 说明文档缺失时才允许生成初始内容。
+    if not path_dir_manager_md.exists():
 
         # 使用当前项目脚本布局渲染可复制命令。
-        (project / DIR_MANAGER_MD).write_text(
+        path_dir_manager_md.write_text(
             dir_manager_doc(project), encoding="utf-8"
         )
 
@@ -1569,10 +1706,13 @@ def init_dir_manager(project: Path) -> dict[str, Any]:
     dict_desired_planned = planned_structure(project)  # 本次推导的目录计划。
 
     # 首次初始化直接写入完整计划结构。
-    if not (project / PLANNED_STRUCTURE).exists():
+    path_planned_structure: Path = _safe_governance_path(project, PLANNED_STRUCTURE)  # 计划快照路径。
+
+    # 计划快照缺失时写入当前推导的完整结构。
+    if not path_planned_structure.exists():
 
         # 排序键输出便于版本审查和确定性比较。
-        (project / PLANNED_STRUCTURE).write_text(
+        path_planned_structure.write_text(
             json.dumps(dict_desired_planned, indent=2, sort_keys=True),
             encoding="utf-8",
         )
@@ -1597,13 +1737,13 @@ def init_dir_manager(project: Path) -> dict[str, Any]:
         bool_changed = False  # 计划是否需要持久化。
 
         # 远程策略始终跟随当前项目控制档案同步。
-        remote_plan = dict_desired_planned.get("remote_deployment", {})  # 期望远程部署分区。
+        dict_remote_plan: dict[str, Any] = dict_desired_planned.get("remote_deployment", {})  # 期望远程部署分区。
 
         # 远程合同变化时更新对应分区而不影响本地允许路径。
-        if dict_rewritten.get("remote_deployment") != remote_plan:
+        if dict_rewritten.get("remote_deployment") != dict_remote_plan:
 
             # 替换完整远程分区，防止遗留已废弃嵌套字段。
-            dict_rewritten["remote_deployment"] = remote_plan  # 同步后的远程计划。
+            dict_rewritten["remote_deployment"] = dict_remote_plan  # 同步后的远程计划。
 
             # 标记需要写回计划文件。
             bool_changed = True  # 已检测到远程策略变化。
@@ -1636,26 +1776,26 @@ def init_dir_manager(project: Path) -> dict[str, Any]:
         else:
 
             # 现有允许路径用于重新推导顶层根清单。
-            current_allowed = [  # 当前计划中的有效允许路径。
+            list_current_allowed: list[str] = [  # 当前计划中的有效允许路径。
                 normalize_rel(item)  # 当前保留的批准路径。
                 for item in dict_rewritten.get("allowed_new_paths", [])  # 遍历旧计划路径。
                 if str(item).strip()  # 忽略旧计划空项。
             ]
 
             # 顶层清单由允许路径首分段稳定推导。
-            derived_top = sorted(  # 当前允许路径对应的顶层根。
+            list_derived_top: list[str] = sorted(  # 当前允许路径对应的顶层根。
                 {
                     item.split("/", 1)[0] + "/"  # 当前批准路径的顶层根。
-                    for item in current_allowed  # 遍历有效批准路径。
+                    for item in list_current_allowed  # 遍历有效批准路径。
                     if item  # 防止空值生成根斜杠。
                 }
             )
 
             # 派生顶层根变化时修复计划缓存字段。
-            if dict_rewritten.get("allowed_top_level_roots") != derived_top:
+            if dict_rewritten.get("allowed_top_level_roots") != list_derived_top:
 
                 # 保留 allowed_new_paths，仅更新其派生索引。
-                dict_rewritten["allowed_top_level_roots"] = derived_top  # 同步后的顶层根。
+                dict_rewritten["allowed_top_level_roots"] = list_derived_top  # 同步后的顶层根。
 
                 # 派生索引变化需要写回。
                 bool_changed = True  # 已修复顶层根清单。
@@ -1705,7 +1845,7 @@ def init_dir_manager(project: Path) -> dict[str, Any]:
             ]
 
             # 确定性 JSON 输出便于后续 freshness 和发布审计。
-            (project / PLANNED_STRUCTURE).write_text(
+            path_planned_structure.write_text(
                 json.dumps(dict_rewritten, indent=2, sort_keys=True), encoding="utf-8"
             )
 
@@ -1713,7 +1853,10 @@ def init_dir_manager(project: Path) -> dict[str, Any]:
     dict_structure = scan_structure(project)  # 最新项目目录结构。
 
     # 当前快照每次初始化都刷新，以反映实际文件系统状态。
-    (project / CURRENT_STRUCTURE).write_text(
+    path_current_structure: Path = _safe_governance_path(project, CURRENT_STRUCTURE)  # 当前结构快照路径。
+
+    # 将最新目录快照写入治理文件，供后续验证读取。
+    path_current_structure.write_text(
         json.dumps(dict_structure, indent=2, sort_keys=True), encoding="utf-8"
     )
 
@@ -1737,8 +1880,14 @@ def archive_dir_manager(
 ) -> dict[str, Any]:
     """归档当前目录治理文档、快照和变更审查证据。
 
-    参数：project 为项目根目录，reason 为归档原因，review_file 为关联审查文件。
-    返回：项目路径、归档目录和全部归档文件列表。
+    参数:
+        project: 项目根目录。
+        reason: 归档原因文本。
+        review_file: 关联的目录审查文件路径，可为空。
+    返回:
+        项目路径、归档目录和全部归档文件列表。
+    异常:
+        RuntimeError: 治理源文件或审查文件越过符号链接边界时抛出。
     """
 
     # 三个核心治理文件缺失时先初始化完整可归档状态。
@@ -1751,13 +1900,19 @@ def archive_dir_manager(
         init_dir_manager(project)
 
     # 历史根目录允许在首次强制覆盖前按需创建。
-    (project / HISTORY_DIR_MANAGER).mkdir(parents=True, exist_ok=True)
+    path_history_dir: Path = _safe_governance_path(project, HISTORY_DIR_MANAGER)  # 历史归档根目录。
+
+    # 创建历史归档根目录，保证本轮证据有稳定父级。
+    path_history_dir.mkdir(parents=True, exist_ok=True)
 
     # 秒级时间戳为每次归档生成独立且可排序的目录。
-    archive_root = project / HISTORY_DIR_MANAGER / stamp()  # 本次归档绝对路径。
+    path_archive_root: Path = _safe_governance_path(  # 本次归档绝对路径。
+        project,  # 项目根目录。
+        HISTORY_DIR_MANAGER / stamp(),  # 当前归档时间目录。
+    )
 
     # 同秒重复归档应显式失败，避免覆盖既有证据。
-    archive_root.mkdir(parents=True, exist_ok=False)
+    path_archive_root.mkdir(parents=True, exist_ok=False)
 
     # 清单使用项目相对路径写入公开返回和 manifest。
     list_archived: list[str] = []  # 已复制的归档文件路径。
@@ -1766,40 +1921,59 @@ def archive_dir_manager(
     for rel in [DIR_MANAGER_MD, CURRENT_STRUCTURE, PLANNED_STRUCTURE]:
 
         # 将项目相对路径解析为当前源文件。
-        source = project / rel  # 待归档治理文件。
+        path_source: Path = _safe_governance_path(project, rel)  # 待归档治理文件。
 
         # 初始化后仍仅复制实际存在的普通文件。
-        if source.is_file():
+        if path_source.is_symlink():
+
+            # 治理证据不能从项目外部链接读取。
+            raise RuntimeError(
+                f"> ERR: [Python] governance source is a symbolic link: {rel}"
+            )
+
+        # 只有普通文件才进入字节归档清单。
+        if path_source.is_file():
 
             # 核心文件在归档根保持扁平稳定名称。
-            target = archive_root / rel.name  # 核心治理文件归档目标。
+            path_target: Path = path_archive_root / rel.name  # 核心治理文件归档目标。
 
             # 字节复制保留原始编码和换行证据。
-            target.write_bytes(source.read_bytes())
+            path_target.write_bytes(path_source.read_bytes())
 
             # 记录可跨工作区展示的项目相对路径。
-            list_archived.append(str(target.relative_to(project).as_posix()))
+            list_archived.append(str(path_target.relative_to(project).as_posix()))
 
     # 变更审查目录存在时一并归档全部 JSON 证据。
-    if (project / CHANGE_REVIEWS).is_dir():
+    path_change_reviews: Path = _safe_governance_path(project, CHANGE_REVIEWS)  # 变更审查目录路径。
+
+    # 审查目录存在时将其 JSON 证据纳入本轮归档。
+    if path_change_reviews.is_dir():
 
         # 审查文件保持在同名子目录，避免与核心快照冲突。
-        reviews_target = archive_root / CHANGE_REVIEWS.name  # 审查证据归档目录。
+        path_reviews_target: Path = path_archive_root / CHANGE_REVIEWS.name  # 审查证据归档目录。
 
-        # 多个审查文件共享归档子目录。
-        reviews_target.mkdir(parents=True, exist_ok=True)
+        # 创建审查证据归档子目录，保持与核心文件分离且可排序。
+        path_reviews_target.mkdir(parents=True, exist_ok=True)
 
         # 文件名排序确保 manifest 清单跨运行稳定。
-        for review in sorted((project / CHANGE_REVIEWS).glob("*.json")):
+        for review in sorted(path_change_reviews.glob("*.json")):
+
+            # 审查证据也不能通过文件链接读取项目外部内容。
+            if review.is_symlink():
+
+                # 归档前停止并保留治理边界错误。
+                raise RuntimeError(
+                    f"> ERR: [Python] governance review is a symbolic link: {review.name}"
+                )
 
             # 每份审查证据保留原文件名。
-            target = reviews_target / review.name  # 当前审查文件归档目标。
+            path_target = path_reviews_target / review.name  # 当前审查文件归档目标。
 
             # 原始 JSON 字节作为强制覆盖前审计证据保存。
-            target.write_bytes(review.read_bytes())
+            path_target.write_bytes(review.read_bytes())
 
             # 追加审查归档相对路径到统一清单。
-            list_archived.append(str(target.relative_to(project).as_posix()))
+            list_archived.append(str(path_target.relative_to(project).as_posix()))
 
     # manifest 记录归档时刻、原因、关联审查与文件集合。
     dict_manifest = {
@@ -1813,19 +1987,19 @@ def archive_dir_manager(
     }  # 本次目录治理归档清单。
 
     # manifest 固定写入归档根，便于自动验证器发现。
-    manifest_path = archive_root / "archive_manifest.json"  # 归档清单文件路径。
+    path_manifest: Path = path_archive_root / "archive_manifest.json"  # 归档清单文件路径。
 
     # 排序键 JSON 便于人工审查和确定性测试。
-    manifest_path.write_text(
+    path_manifest.write_text(
         json.dumps(dict_manifest, indent=2, sort_keys=True), encoding="utf-8"
     )
 
     # manifest 自身也属于本次公开归档结果。
-    list_archived.append(str(manifest_path.relative_to(project).as_posix()))
+    list_archived.append(str(path_manifest.relative_to(project).as_posix()))
 
     # 返回既有归档 CLI 所依赖的稳定结果字段。
     return {
         "project": str(project),
-        "archive_dir": str(archive_root),
+        "archive_dir": str(path_archive_root),
         "archived": list_archived,
     }

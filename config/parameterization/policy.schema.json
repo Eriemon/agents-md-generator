@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "required": ["schema_version", "scan_roots", "excluded_roots", "consumer_surfaces", "scan_contexts", "value_sources", "allowed_protocol_literals", "comment_scan", "string_scan"],
+  "value_source_required": ["role", "pointers"]
+}

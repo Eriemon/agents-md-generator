@@ -35,6 +35,12 @@ def is_path_reference(raw: str) -> bool:
         # 这些外部链接或保留文件名不属于路径引用候选。
         return False
 
+    # 用户 home 路径和 Codex 安装占位符不属于当前仓库的相对路径。
+    if raw.startswith(("~/", "<codex-home>/")):
+
+        # 外部安装位置由运行环境解析，不应触发仓库内存在性警告。
+        return False
+
     # 含空白字符的片段通常不是路径字面量，直接排除可减少误判。
     if any(char.isspace() for char in raw):
 
@@ -96,7 +102,13 @@ def is_expected_contract_example_path(raw: str, profile: dict[str, Any]) -> bool
     tuple_extra_examples = (".local.json", ".remote.json", "RELEASE_RECEIPT.json")  # 额外允许的文件名样例
 
     # 汇总所有受控样例路径，后续只要命中这个白名单就不应再报路径不存在。
-    set_allowed_examples = {str_local_default, str_remote_default, str_server_list_example, *tuple_extra_examples}  # 允许出现在契约示例中的受控路径集合
+    set_allowed_examples = {str_local_default, str_remote_default, str_server_list_example}  # 受控路径集合
+
+    # 追加后缀样例，供发布收据和配置后缀引用复用。
+    set_allowed_examples.update(tuple_extra_examples)
+
+    # 根规则可只引用受控的服务器清单文件名。
+    set_allowed_examples.add("server_list.local.json")
 
     # 只接受落在受控样例白名单中的路径文本。
     return raw in set_allowed_examples

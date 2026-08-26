@@ -7,21 +7,36 @@ from __future__ import annotations
 from eval_runtime_core import (
     Any,
     EvalFixtures,
+
+    # 路径类型和仓库根用于隔离评估项目定位。
     Path,
     REPO_ROOT,
+
+    # Python 脚本目录常量用于发现 owner 资源。
     SCRIPTS_PYTHON_DIR,
     SCRIPT_DIR,
-    SKILL_DIR,
 
-    # 序列化、进程和临时目录模块支撑隔离策略场景。
+    # 技能根用于读取正式合同与模板。
+    SKILL_DIR,
+)
+
+# 序列化、进程和临时目录模块支撑隔离策略场景。
+from eval_runtime_core import (
     build_case_result,
     json,
+
+    # 两种脚本执行器分别返回 JSON 和完整进程结果。
     run_json_script,
     run_script,
+
+    # 评估 helper 读取脚本路径并隔离子进程。
     script_path,
     subprocess,
+
+    # 临时目录保证每个案例的文件树相互隔离。
     tempfile,
 )
+from routing_contract import _load_structured_route_defaults
 
 # Worktree 策略模块路径同时服务源码取证和案例详情。
 PATH_WORKTREE_POLICY = SCRIPTS_PYTHON_DIR / "common" / "git_worktree_policy.py"  # worktree 策略模块绝对路径
@@ -100,8 +115,8 @@ def build_worktree_prohibition_checks(
         encoding="utf-8"  # 按仓库统一编码读取发布治理实现
     )
 
-    # 渲染入口源码证明硬阻断不能被人工确认降级。
-    str_render_text = (SCRIPTS_PYTHON_DIR / "render" / "render_entrypoints.py").read_text(  # 渲染入口源码
+    # 渲染写计划源码证明硬阻断不能被人工确认降级。
+    str_render_text = (SCRIPTS_PYTHON_DIR / "render" / "render_write_plan.py").read_text(  # 渲染写计划源码
         encoding="utf-8"  # 按仓库统一编码读取渲染入口实现
     )
 
@@ -200,15 +215,6 @@ def case_additional_worktree_prohibition_contract(
         },
     )
 
-# 版本同步场景固定区分旧根规则、安装态生成器与项目技能三个版本。
-VERSION_ROOT_STALE = "v0.4.2"  # 同步前根 AGENTS 元数据版本
-
-# 安装态版本应写入 agents_version 与 generator_version 元数据。
-VERSION_GENERATOR_FIXTURE = "v0.4.3"  # 隔离安装态生成器版本
-
-# 项目技能版本只应写入 Control Profile 的 Version 字段。
-VERSION_PROJECT_SKILL = "v0.4.4"  # 项目控制档案应采用的技能版本
-
 # 根规则夹具故意制造生成器元数据和项目技能版本同时漂移。
 def prepare_root_version_sync_fixture(
     path_project: Path,
@@ -224,22 +230,34 @@ def prepare_root_version_sync_fixture(
         使用固定生成器版本构建的安装态技能目录。
     """
 
+    # 版本来源和技能名称均来自 fixture 合同，场景代码不携带当前值。
+    str_root_stale = str(helper.fixture_value("versions", "root_stale"))  # fixture 旧根版本
+
+    # 读取安装态生成器版本，供根元数据漂移场景使用。
+    str_generator_fixture = str(helper.fixture_value("versions", "generator_fixture"))  # 根元数据期望的 fixture 生成器版本
+
+    # 读取项目技能版本，供控制档案版本对照使用。
+    str_project_skill = str(helper.fixture_value("versions", "project_skill"))  # 控制档案期望的 fixture 项目版本
+
+    # 读取最小技能名称，保持目录和 frontmatter 来自同一 fixture。
+    str_skill_name = str(helper.fixture_value("names", "skill"))  # fixture 技能名称
+
     # 项目技能版本应独立于安装态生成器版本参与控制档案同步。
-    path_skill_directory = path_project / "skills" / "demo-skill"  # 项目技能目录
+    path_skill_directory = path_project / "skills" / str_skill_name  # 项目技能目录
 
     # 创建技能父目录以写入项目版本源文件。
     path_skill_directory.mkdir(parents=True)
 
     # VERSION 文件是控制档案项目版本的权威来源。
     (path_skill_directory / "VERSION").write_text(
-        f"{VERSION_PROJECT_SKILL}\n",  # 项目技能版本文本
+        f"{str_project_skill}\n",  # 项目技能版本文本
         encoding="utf-8",  # 仓库版本文件统一编码
     )
 
     # 安装态夹具提供生成器自身版本和可执行治理资产。
     path_installed_skill = helper.make_installed_skill_fixture(  # 版本同步场景安装态技能根
         path_project,  # 隔离项目根
-        version=VERSION_GENERATOR_FIXTURE,  # 与项目技能不同的生成器版本
+        version=str_generator_fixture,  # 与项目技能不同的生成器版本
     )
 
     # 旧根规则同时携带过期生成器元数据和控制档案版本。
@@ -247,13 +265,13 @@ def prepare_root_version_sync_fixture(
         "<!-- FOR AI AGENTS - Human readability is a side effect, not a goal -->",  # 根规则文件标识
         "<!-- Managed by agent: keep sections and order; edit content outside AGENTS-GENERATED blocks -->",  # 托管边界声明
         "<!-- Last updated: 2026-05-14T10:00:00 | Last verified: never -->",  # 固定旧鲜度元数据
-        f"<!-- AGENTS-METADATA: agents_version={VERSION_ROOT_STALE}; "  # 旧生成器元数据起始片段
-        f"generator_version={VERSION_ROOT_STALE}; default_language=中文 -->",  # 旧生成器元数据结束片段
+        f"<!-- AGENTS-METADATA: agents_version={str_root_stale}; "  # 旧生成器元数据起始片段
+        f"generator_version={str_root_stale}; default_language=中文 -->",  # 旧生成器元数据结束片段
         "# AGENTS.md",  # 根规则标题
         "<!-- AGENTS-GENERATED:START control-profile -->",  # 控制档案托管块起点
         "## Control Profile",  # 控制档案标题
         "- Strong control: complete.",  # 完整治理强度
-        f"- Version: {VERSION_ROOT_STALE}.",  # 故意过期的项目技能版本
+        f"- Version: {str_root_stale}.",  # 故意过期的项目技能版本
         "<!-- AGENTS-GENERATED:END control-profile -->",  # 控制档案托管块终点
         "",  # 文件结尾换行
     ]
@@ -356,10 +374,16 @@ def case_root_version_sync_contract(
             path_installed_skill,  # 固定生成器版本的安装态技能
         )
 
+    # 比较值从本次夹具使用的 fixture 合同读取。
+    str_generator_fixture = str(helper.fixture_value("versions", "generator_fixture"))  # fixture 生成器版本
+
+    # 读取项目技能版本，核对控制档案写入结果。
+    str_project_skill = str(helper.fixture_value("versions", "project_skill"))  # fixture 项目版本
+
     # 同步后根元数据必须采用安装态生成器版本。
     str_expected_metadata = (  # 根 AGENTS 应包含的生成器元数据片段
-        f"agents_version={VERSION_GENERATOR_FIXTURE}; "  # agents 规则生成器版本
-        f"generator_version={VERSION_GENERATOR_FIXTURE}; default_language=中文"  # 生成器版本与默认语言
+        f"agents_version={str_generator_fixture}; "  # agents 规则生成器版本
+        f"generator_version={str_generator_fixture}; default_language=中文"  # 生成器版本与默认语言
     )
 
     # 正向检查同时覆盖漂移发现、正确写入和幂等复检。
@@ -367,9 +391,9 @@ def case_root_version_sync_contract(
         "preview_detects_control_profile_drift": "control_profile_version_mismatch"  # 预览是否定位控制档案漂移
         in dict_evidence["preview"].get("reasons", []),  # 首次预览诊断原因
         "write_updates_root_metadata": str_expected_metadata in dict_evidence["synced_text"],  # 根元数据是否采用生成器版本
-        "write_updates_control_profile_to_project_skill_version": f"- Version: {VERSION_PROJECT_SKILL}."  # 控制档案是否采用项目版本
+        "write_updates_control_profile_to_project_skill_version": f"- Version: {str_project_skill}."  # 控制档案是否采用项目版本
         in dict_evidence["synced_text"],  # 项目版本应出现在控制档案块中
-        "write_does_not_force_control_profile_to_generator_version": f"- Version: {VERSION_GENERATOR_FIXTURE}."  # 是否避免混用生成器版本
+        "write_does_not_force_control_profile_to_generator_version": f"- Version: {str_generator_fixture}."  # 是否避免混用生成器版本
         not in dict_evidence["synced_text"],  # 生成器版本不应替代项目版本
         "second_preview_is_clean": not dict_evidence["after_sync"].get("sync_required")  # 二次预览是否无需同步
         and dict_evidence["after_sync"].get("reasons") == [],  # 二次预览是否无残留原因
@@ -399,12 +423,6 @@ def case_root_version_sync_contract(
         },
     )
 
-# 源码渲染场景使用明显不同的版本以检测安装态污染。
-VERSION_SOURCE_RENDER = "v9.9.9"  # 源码仓库 VERSION 声明值
-
-# 旧安装态版本不得泄漏进源码仓库生成的根规则。
-VERSION_STALE_INSTALLED = "v1.0.4"  # 隔离安装态技能的过期版本
-
 # 渲染夹具创建最小技能源码、控制档案与不同版本的安装态运行时。
 def prepare_source_render_fixture(
     path_root: Path,
@@ -420,7 +438,16 @@ def prepare_source_render_fixture(
         源码项目根与过期安装态技能根组成的元组。
     """
 
-    # workspace 子目录模拟包含 agents-md-generator 源码的真实项目。
+    # 源码与安装版本从 fixture 合同解析，避免把当前版本写进渲染场景。
+    str_source_render = str(helper.fixture_value("versions", "source_render"))  # 渲染来源的 fixture 源码版本
+
+    # 读取旧安装态版本，用于确认源码优先级确实生效。
+    str_stale_installed = str(helper.fixture_value("versions", "stale_installed"))  # 被源码版本替代的 fixture 旧安装版本
+
+    # 读取所有者技能名称，保持源码和安装态目录一致。
+    str_owner_name = str(helper.fixture_value("names", "owner_skill"))  # fixture 所有者名称
+
+    # workspace 子目录模拟包含受管技能源码的真实项目。
     path_project = path_root / "workspace"  # 源码渲染场景项目根
 
     # 技能源目录提供 VERSION 与最小公开技能说明。
@@ -435,7 +462,7 @@ def prepare_source_render_fixture(
     # 最小 SKILL 文档使项目被识别为 agents-md-generator 源码仓库。
     str_skill_document = (  # 源码技能识别文档
         "---\n"
-        "name: agents-md-generator\n"
+        f"name: {str_owner_name}\n"
         "description: Use when testing source render version\n"
         "---\n"
         "# Skill\n"
@@ -449,14 +476,14 @@ def prepare_source_render_fixture(
 
     # 源码 VERSION 应覆盖安装态技能携带的旧版本。
     (path_skill_directory / "VERSION").write_text(
-        f"{VERSION_SOURCE_RENDER}\n",  # 源码发布版本文本
+        f"{str_source_render}\n",  # 源码发布版本文本
         encoding="utf-8",  # 版本文件统一编码
     )
 
     # 最小控制档案选择 skill 项目与中文对话规则。
     dict_control_profile = {  # 渲染器输入控制档案
         "kind": "skill",  # 项目类型
-        "name": "agents-md-generator",  # 项目名称
+        "name": str_owner_name,  # 项目名称
         "default_conversation_language": "中文",  # 默认对话语言
         "git_management": "no-git-management",  # 关闭无关 Git 治理文本
     }
@@ -470,7 +497,7 @@ def prepare_source_render_fixture(
     # 安装态技能故意落后，以验证版本选择来自源码而非运行时位置。
     path_installed_skill = helper.make_installed_skill_fixture(  # 过期安装态技能根
         path_root,  # 隔离资产共同根
-        version=VERSION_STALE_INSTALLED,  # 与源码不同的旧版本
+        version=str_stale_installed,  # 与源码不同的旧版本
     )
 
     # 调用方需要项目根和安装态根执行公开渲染命令。
@@ -527,19 +554,36 @@ def case_source_repo_render_version_contract(
     # 标准错误保留公开命令失败时的诊断上下文。
     str_standard_error = tuple_process[2]  # render_agents 标准错误
 
+    # 根元数据比较值来自本次夹具使用的 fixture 合同。
+    str_source_render = str(helper.fixture_value("versions", "source_render"))  # fixture 源码版本
+
+    # 读取旧安装版本，确保输出中不会误用 stale runtime。
+    str_stale_installed = str(helper.fixture_value("versions", "stale_installed"))  # fixture 旧安装版本
+
+    # 根元数据中的两个生成器字段都必须采用源码 VERSION，语言 ID 从 catalog 解析。
+    dict_language_catalog = json.loads(  # 语言 catalog 权威对象
+        (SKILL_DIR / "config" / "languages.json").read_text(encoding="utf-8")  # 读取技能语言配置
+    )
+
+    # 源码版本案例用该 catalog ID 比较生成元数据的语言字段。
+    str_default_conversation_language = str(  # catalog conversation 默认语言 ID
+        dict_language_catalog["defaults"]["conversation"]  # 读取生成器默认语言键值
+    )
+
     # 根元数据中的两个生成器字段都必须采用源码 VERSION。
     str_expected_metadata = (  # 源码仓库应生成的根 AGENTS 元数据
-        f"<!-- AGENTS-METADATA: agents_version={VERSION_SOURCE_RENDER}; "
-        f"generator_version={VERSION_SOURCE_RENDER}; default_language=中文 -->"
+        f"<!-- AGENTS-METADATA: agents_version={str_source_render}; "
+        f"generator_version={str_source_render}; "
+        f"default_language={str_default_conversation_language} -->"
     )
 
     # 正向检查覆盖命令成功、两个源码版本落点和旧版本排除。
     dict_with_checks = {  # 源码版本渲染合同检查
         "render_succeeds": int_return_code == 0,  # 公开渲染命令是否成功
         "metadata_uses_source_version": str_expected_metadata in str_standard_output,  # 根元数据是否采用源码版本
-        "control_profile_uses_source_version": f"- Version: {VERSION_SOURCE_RENDER}."  # 控制档案是否采用源码版本
+        "control_profile_uses_source_version": f"- Version: {str_source_render}."  # 控制档案是否采用源码版本
         in str_standard_output,  # 完整渲染规则文本
-        "stale_installed_metadata_absent": f"agents_version={VERSION_STALE_INSTALLED}"  # 是否排除安装态旧版本
+        "stale_installed_metadata_absent": f"agents_version={str_stale_installed}"  # 是否排除安装态旧版本
         not in str_standard_output,  # 旧安装态 agents_version 不得出现在生成文本中
     }
 
@@ -565,18 +609,17 @@ def case_source_repo_render_version_contract(
 
 # 语言技能路由片段覆盖配置来源、代码可读性、共同门禁和语言所有权。
 REQUIRED_LANGUAGE_ROUTING_SNIPPETS = (  # 生成根规则必须包含的路由语义
-    "编码行为配置来源：`.agents/global-rule-overrides.json`",  # 编码行为配置来源
-    "注释质量：只允许非显然意图、不变量、风险、生成边界或公共 API 行为注释",  # 注释语义边界
-    "严禁把代码压缩到一行",  # 禁止压缩代码
-    "炫技代码",  # 禁止不可读技巧
-    "语言技能共同门禁：",  # 共同门禁标题
-    "两个技能组成当前可执行的语言门禁",  # 双技能共同门禁
-    "语言技能路由（Python）：",  # Python 路由标题
+    "Coding behavior source:",  # 编码行为配置来源
+    "Comment quality:",  # 注释语义边界
+    "Formatting:",  # 代码格式边界
+    "Shared language-skill gate:",  # 双技能共同门禁标题
+    "Before creating or modifying Python",  # 双技能共同门禁正文
+    "Language-skill route (Python):",  # Python 路由标题
     "readable-python-generator",  # Python 最终责任技能
-    "语言技能路由（脚本）：",  # 脚本路由标题
+    "Language-skill route (scripts):",  # 脚本路由标题
     "readable-script-generator",  # 脚本最终责任技能
-    "Python 目标继续使用 `readable-python-generator`",  # 跨语言冲突归属
-    "调用 Python 外部命令的脚本包装器",  # 脚本包装器归属
+    "Python remains on readable-python-generator",  # 跨语言冲突归属
+    "a script wrapper that invokes an external Python command remains a script target",  # 脚本包装器归属
 )
 
 # 解析公开命令输出时统一保留结构化错误，避免空 stdout 隐藏诊断。
@@ -627,7 +670,7 @@ def verify_missing_language_routing(
     # 只删除脚本路由整行，保留共同门禁和 Python 路由以定位单一缺失原因。
     str_script_route = rendered_language_route(  # 待删除的脚本路由整行
         str_agents_text,  # 渲染器生成的完整根规则
-        "- 语言技能路由（脚本）：",  # 脚本路由行前缀
+        "- Language-skill route (scripts):",  # 脚本路由行前缀
     )
 
     # 单次替换确保其他位置的脚本技能名称继续保留为独立治理证据。
@@ -678,10 +721,29 @@ def verify_weakened_language_config(
         json.dumps(dict_config, ensure_ascii=False)  # 保留中文路由文本
     )
 
-    # Python 路由被替换为不满足双技能合同的泛化指导。
-    dict_weakened_config.get("coding_behavior", {}).get("language_skill_routing", {})[  # 待弱化的路由映射
-        "python"  # Python 任务路由键
-    ] = "Python 任务使用通用代码助手。"
+    # structured Python full_text 或 legacy Python 投影均替换为泛化指导。
+    dict_weakened_language_routes = (  # 可验证的弱化语言路由映射
+        dict_weakened_config.get("coding_behavior", {}).get("language_skill_routing", {})  # 读取语言路由子对象
+    )
+
+    # custom structured 存在时优先修改其 Python full_text，否则修改 legacy 投影。
+    dict_weakened_routes = (  # custom structured 的弱化记录
+        dict_weakened_language_routes.get("structured", {})  # 读取显式 structured override
+        if isinstance(dict_weakened_language_routes, dict)  # 仅映射类型可继续读取
+        else {}  # 非映射配置使用空记录
+    )
+
+    # structured Python record 存在时替换其完整文案。
+    if isinstance(dict_weakened_routes, dict) and isinstance(dict_weakened_routes.get("python"), dict):
+
+        # 该替换必须被 structured/full_text 与 legacy 派生关系门禁拒绝。
+        dict_weakened_routes["python"]["full_text"] = "Python 任务使用通用代码助手。"  # 弱化后的 Python 文案
+
+    # 无 structured override 时直接弱化 legacy Python 字段。
+    elif isinstance(dict_weakened_language_routes, dict) and "python" in dict_weakened_language_routes:
+
+        # 无 structured override 时改写 legacy 投影，触发派生关系漂移诊断。
+        dict_weakened_language_routes["python"] = "Python 任务使用通用代码助手。"  # Python owner 的 fallback 投影弱化结果
 
     # 写回弱化配置供真实验证器发现源配置违约。
     path_config.write_text(
@@ -727,7 +789,10 @@ def collect_language_routing_evidence() -> dict[str, Any]:
         (path_skills_home / "readable-script-generator").mkdir()
 
         # 所有评测子进程共享同一 CODEX_HOME，保证生成与验证观察一致。
-        dict_environment = {"CODEX_HOME": str(path_codex_home)}  # 双 owner 安装态环境覆盖
+        dict_environment = {
+            "CODEX_HOME": str(path_codex_home),  # 子进程使用的 Codex 配置根
+            "AGENT_HOME": str(path_codex_home),  # 兼容旧入口的同一配置根
+        }  # 双 owner 安装态环境覆盖
 
         # workspace 子目录模拟包含 Python 源码的普通项目。
         path_project = Path(str_temporary_directory) / "workspace"  # 语言路由评估项目根
@@ -848,26 +913,75 @@ def build_language_routing_checks(dict_evidence: dict[str, Any]) -> dict[str, bo
     # 弱化错误证明配置内容不能被泛化助手文本替代。
     list_weakened_errors = dict_evidence["weakened_verify"].get("errors", [])  # 弱化配置后的错误
 
-    # 配置源必须显式区分共同门禁与两个目标语言字段。
+    # 配置源默认保持 shared/python/script 三字段，structured source 来自 packaged route manifest。
     dict_routing = dict_evidence["config"].get("coding_behavior", {}).get("language_skill_routing", {})  # 路由配置
 
+    # packaged route manifest 提供默认 structured record 和 legacy 派生比对基线。
+    dict_expected_routes = _load_structured_route_defaults().get("routes", {})  # packaged 路由默认记录
+
+    # 预期路由名称决定默认三字段投影和 structured record 的完整集合。
+    list_expected_route_names = sorted(dict_expected_routes) if isinstance(dict_expected_routes, dict) else []  # 预期路由名称
+
+    # 只有用户显式提供 structured override 时才从治理 JSON 读取该嵌套对象。
+    bool_has_structured_override = isinstance(dict_routing, dict) and "structured" in dict_routing  # 是否存在 custom structured
+
+    # custom structured 优先于 packaged defaults，默认配置仍保持三个 legacy 字段。
+    if bool_has_structured_override:
+
+        # 读取用户显式的结构化路由记录。
+        dict_structured_routes = dict_routing.get("structured", {})  # 用户显式的 structured 路由记录
+
+    # 没有 custom structured override 时继续使用 packaged 默认事实源。
+    else:
+
+        # 没有 custom override 时直接使用 owner-skill 内置 route manifest 记录。
+        dict_structured_routes = dict_expected_routes  # 默认 structured 路由事实源
+
+    # 默认 legacy 字段必须保持精确三字段形状；custom structured 允许额外嵌套记录。
+    list_actual_route_names = sorted(  # 当前 legacy 配置的字段名称
+        str_key for str_key in dict_routing if str_key != "structured"  # 过滤显式 structured 键
+    ) if isinstance(dict_routing, dict) else []  # 当前 legacy 路由字段名称
+
+    # 默认配置必须严格保持 shared/python/script 三个 legacy 字段。
+    bool_legacy_field_shape = list_actual_route_names == list_expected_route_names  # legacy 字段集合是否完整
+
+    # 逐项确认每个 structured record 都有 ID、双文案、目标族和边界。
+    bool_structured_route_records = (
+        isinstance(dict_structured_routes, dict)  # structured 根节点必须为对象
+        and sorted(dict_structured_routes) == list_expected_route_names  # 名称集合必须完整
+        and (bool_has_structured_override or bool_legacy_field_shape)  # 默认或 custom 来源合法
+        and all(  # 每个目标语言记录必须满足字段合同
+            isinstance(dict_structured_routes.get(str_route_name), dict)  # 当前记录必须为对象
+            and all(  # ID 和两种文案必须非空
+                str(dict_structured_routes[str_route_name].get(str_field_name, "")).strip()  # 当前字段非空
+                for str_field_name in ("id", "full_text", "compact_text")  # 检查三个必需字符串
+            )
+            and isinstance(dict_structured_routes[str_route_name].get("target_families"), list)  # 目标族列表
+            and isinstance(dict_structured_routes[str_route_name].get("boundaries"), list)  # 边界列表
+            for str_route_name in list_expected_route_names  # 遍历三类 structured route
+        )
+    )
+
     # Python 路由只承载目标范围、最终 owner 和跨技能边界。
-    str_python_route = rendered_language_route(str_agents_text, "- 语言技能路由（Python）：")  # Python 所有权行
+    str_python_route = rendered_language_route(str_agents_text, "- Language-skill route (Python):")  # Python 所有权行
 
     # 脚本路由独立提取，避免 Python 目标边界被共同门禁掩盖。
-    str_script_route = rendered_language_route(str_agents_text, "- 语言技能路由（脚本）：")  # 脚本所有权行
+    str_script_route = rendered_language_route(str_agents_text, "- Language-skill route (scripts):")  # 脚本所有权行
 
     # 共同标题的唯一性直接锁定单次渲染合同。
-    bool_shared_once = str_agents_text.count("- 语言技能共同门禁：") == 1  # 共同门禁唯一性
+    bool_shared_once = str_agents_text.count("- Shared language-skill gate:") == 1  # 共同门禁唯一性
 
     # 先确认两条所有权路由都由渲染器生成。
     bool_routes_present = bool(str_python_route and str_script_route)  # 两条所有权路由存在性
 
     # Python 路由只保留自身范围与所有权，不得复制 shared 加载句。
-    bool_python_route_clean = "两个技能组成当前可执行的语言门禁" not in str_python_route  # Python 路由未复制共同句
+    str_shared_route_text = str(dict_expected_routes["shared"].get("full_text", ""))  # packaged 共同门禁正文
+
+    # Python 路由比较使用 packaged shared 正文，确保共享门禁只投影一次。
+    bool_python_route_clean = str_shared_route_text not in str_python_route  # Python 路由未复制共同句
 
     # 脚本路由同样排除 shared 加载句，避免跨语言正文重复。
-    bool_script_route_clean = "两个技能组成当前可执行的语言门禁" not in str_script_route  # 脚本路由未复制共同句
+    bool_script_route_clean = str_shared_route_text not in str_script_route  # 脚本路由未复制共同句
 
     # 返回值覆盖生成、配置、正向接受和两种负向拒绝。
     return {
@@ -875,7 +989,7 @@ def build_language_routing_checks(dict_evidence: dict[str, Any]) -> dict[str, bo
         "rendered_language_skill_routing": "## Coding Behavior Baseline" in str_agents_text
         or "## Local conventions" in str_agents_text,
         "policy_rules": all(str_snippet in str_agents_text for str_snippet in REQUIRED_LANGUAGE_ROUTING_SNIPPETS),
-        "config_has_three_routing_fields": set(dict_routing) == {"shared", "python", "script"},
+        "config_has_three_routing_fields": bool_structured_route_records,
         "shared_gate_rendered_once": bool_shared_once,
         "language_routes_exclude_shared_gate": all(
             (bool_routes_present, bool_python_route_clean, bool_script_route_clean)
@@ -885,7 +999,12 @@ def build_language_routing_checks(dict_evidence: dict[str, Any]) -> dict[str, bo
         and any("language skill routing" in str_item for str_item in list_missing_errors),
         "verify_rejects_weakened_policy": bool(list_weakened_errors)
         and any("coding_behavior.language_skill_routing" in str_item for str_item in list_weakened_errors),
-        "config_written": bool(dict_routing),
+        "config_legacy_fields_are_derived": bool_structured_route_records
+        and all(
+            dict_routing.get(str_route_name) == dict_structured_routes[str_route_name].get("full_text")
+            for str_route_name in list_expected_route_names
+        ),
+        "config_written": bool_structured_route_records,
     }
 
 # 公开案例将多层语言路由证据转换为稳定能力键。

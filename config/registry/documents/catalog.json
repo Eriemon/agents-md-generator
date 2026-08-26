@@ -1,180 +1,204 @@
 {
   "documents": [
     {
-      "content_sha256": "19624f501629bfde9b2bccbb9fc500584fcb5263b55f1f3b6b6ae9bf2c2c24f7",
+      "content_sha256": "038ef3fe68ade67c67debec0d14e7c0eea24dccc35bfab5d672dfa9ffdd5b3c1",
       "id": "document.skill",
       "path": "SKILL.md",
-      "responsibility": "定义技能触发条件、工作流顺序、远程技能能力判定、工作区停止边界与渐进披露入口。",
+      "responsibility": "Defines skill triggers, workflow order, remote capability checks, workspace stop boundaries, and progressive-disclosure entry points.",
       "status": "reviewed",
-      "summary": "agents-md-generator 的执行合同、非测试智能体授权、远程能力路由与工作区单次确认边界。"
+      "summary": "Execution contract for agents-md-generator, non-testing-agent authorization, remote capability routing, and one-time workspace confirmation boundaries."
     },
     {
       "content_sha256": "984656e3bf4f5045c6d6a9123be6f5946b29a58f6202047da7235e79e65ada44",
       "id": "document.references-agents-md-guidance",
       "path": "references/agents-md-guidance.md",
-      "responsibility": "定义 AGENTS.md 的内容组织原则、根与作用域章节设计以及兼容性边界。",
+      "responsibility": "Defines AGENTS.md content organization, root and scoped section design, and compatibility boundaries.",
       "status": "reviewed",
-      "summary": "AGENTS.md 编写、压缩、分层与兼容性指导。"
+      "summary": "Guidance for writing, compressing, layering, and maintaining AGENTS.md compatibility."
     },
     {
       "content_sha256": "d4cde4c289d45e3f7ab8b0b2ce62d5a32994bd69f0d24f6fade8f6205fab1400",
       "id": "document.references-book-rules-coverage",
       "path": "references/book-rules-coverage.md",
-      "responsibility": "定义工程书籍规则集的选择、压缩、作用域与禁止复制策略。",
+      "responsibility": "Defines engineering-book rule-set selection, compression, scope, and non-copying policy.",
       "status": "reviewed",
-      "summary": "工程规则集覆盖范围与非复制决策。"
+      "summary": "Engineering rule-set coverage and deliberate non-copy decisions."
     },
     {
-      "content_sha256": "329886a39ff067e27fb5d664515b1c767830f3238ad0b167a370ca6305eba2e1",
+      "content_sha256": "7695e9cb748682e398ffbf07229c096c8728b5846001e4ab5c106e9a85014d8d",
       "id": "document.references-capability-coverage",
       "path": "references/capability-coverage.md",
-      "responsibility": "映射外部 AGENTS 生成器能力到本技能实现，并记录有意不纳入的能力。",
+      "responsibility": "Maps external AGENTS generators to this skill and records capabilities deliberately left out.",
       "status": "reviewed",
-      "summary": "项目检测、治理、验证与兼容能力覆盖地图。"
+      "summary": "Coverage map for project detection, governance, verification, and compatibility capabilities."
     },
     {
-      "content_sha256": "3d9f32ccc40dc19127a77386f4c07c215e2f2ea5fdc29f03000008995d406b30",
+      "content_sha256": "72591ca927f1f91f26dcdcfaae5c511732dbc533071e5c3280080789f18aa76b",
       "id": "document.references-coding-behavior-language-routing",
       "path": "references/coding-behavior-language-routing.md",
-      "responsibility": "定义 Python 与脚本族可读技能的安装感知路由、共同前置门禁和最终所有权。",
+      "responsibility": "Defines installation-aware routing, shared preflight gates, and final ownership for readable Python and script-family skills.",
       "status": "reviewed",
-      "summary": "编码行为中的 Python 与脚本技能路由合同。"
+      "summary": "Language-skill routing contract for Python and script coding behavior."
     },
     {
       "content_sha256": "1fa360a5ca2d25818e19ec6aa21b83a7e833427a44fa84b242872624268bf6c2",
       "id": "document.references-decomposition-common-project-facts-discovery",
       "path": "references/decomposition-plans/scripts/python/common/project_facts_discovery.py.md",
-      "responsibility": "记录项目事实发现模块超过源码大小门禁时的拆分边界与保持不变的事实键合同。",
+      "responsibility": "Records split boundaries and invariant fact-key contracts when the project fact-discovery module exceeds the source-size gate.",
       "status": "reviewed",
-      "summary": "项目事实发现模块的临时拆分计划与退出条件。"
+      "summary": "Temporary split plan and exit criteria for the project fact-discovery module."
     },
     {
       "content_sha256": "94b8a164eec163ca5f7d2b38a37824d485b4d5abea118cf87760b63c72ed995c",
       "id": "document.references-decomposition-design-design-questions",
       "path": "references/decomposition-plans/scripts/python/design/design_questions.py.md",
-      "responsibility": "记录设计问题合同模块的拆分边界，并保护问题标识、顺序和答案归一化语义。",
+      "responsibility": "Records split boundaries for the design-question contract module while preserving question IDs, ordering, and answer-normalization semantics.",
       "status": "reviewed",
-      "summary": "设计问题模块的临时拆分计划与退出条件。"
+      "summary": "Temporary split plan and exit criteria for the design-question module."
     },
     {
       "content_sha256": "b883452b6fa7187e1871b580a1c12b64c93de5703e5c50a76276235cfca7cc0f",
       "id": "document.references-decomposition-dirs-manage-dirs-state",
       "path": "references/decomposition-plans/scripts/python/dirs/manage_dirs_state.py.md",
-      "responsibility": "记录目录状态模块的扫描、规划、归档和持久化拆分边界及兼容性要求。",
+      "responsibility": "Records scan, plan, archive, persistence split boundaries, and compatibility requirements for the directory-state module.",
       "status": "reviewed",
-      "summary": "目录状态模块的临时拆分计划与退出条件。"
+      "summary": "Temporary split plan and exit criteria for the directory-state module."
+    },
+    {
+      "content_sha256": "e9e0f4da7e43cea5de18931aa8068c18dad536e70e25e8dc27948710f968fb91",
+      "id": "document.references-decomposition-plans-scripts-python-dirs-manage-dirs-review-py",
+      "path": "references/decomposition-plans/scripts/python/dirs/manage_dirs_review.py.md",
+      "responsibility": "Records split boundaries, compatibility requirements, and exit criteria for manage_dirs_review.py and manage_dirs_structure.py.",
+      "status": "reviewed",
+      "summary": "Exit criteria for directory-review orchestration, structure takeover, manifest-only upload, and remote/local path rules."
     },
     {
       "content_sha256": "fa6d1b3399c979a0dc0ff141c4c703ebc2b987fb98d6f70512e5acb47cffaacf",
       "id": "document.references-decomposition-docs-manage-docs-scaffold-session",
       "path": "references/decomposition-plans/scripts/python/docs/manage_docs_scaffold_session.py.md",
-      "responsibility": "记录文档治理脚手架与会话生命周期模块的拆分边界及状态文件兼容性要求。",
+      "responsibility": "Records split boundaries and state-file compatibility requirements for the document-governance scaffold and session-lifecycle modules.",
       "status": "reviewed",
-      "summary": "文档脚手架会话模块的临时拆分计划与退出条件。"
+      "summary": "Temporary split plan and exit criteria for the document-scaffold session module."
     },
     {
       "content_sha256": "bba39630a5203ba1b9461d7fed236a6a2ced3710107fa13f0d025536858591c0",
       "id": "document.references-decomposition-docs-manage-docs-sync-verify",
       "path": "references/decomposition-plans/scripts/python/docs/manage_docs_sync_verify.py.md",
-      "responsibility": "记录根同步、全局基线同步与文档验证模块的拆分边界及受管块保留合同。",
+      "responsibility": "Records split boundaries and managed-block preservation contracts for root sync, global-baseline sync, and document verification modules.",
       "status": "reviewed",
-      "summary": "文档同步验证模块的临时拆分计划与退出条件。"
+      "summary": "Temporary split plan and exit criteria for the document-sync verification module."
     },
     {
-      "content_sha256": "34a9f728ea50633838c8ba4d2a3bd483eeed23d945e9703dee25b00668ae8b58",
+      "content_sha256": "9633566947e66e962fe23f1a69f5e67532793b667af8011f0cd286b76c80abce",
       "id": "document.references-decomposition-docs-release-package",
       "path": "references/decomposition-plans/scripts/python/docs/release_package.py.md",
-      "responsibility": "记录发布准备、打包、分支清理和发布成员发现模块的拆分边界及收据合同。",
+      "responsibility": "Records split boundaries and receipt contracts for release preparation, packaging, branch cleanup, and release-member discovery modules.",
       "status": "reviewed",
-      "summary": "发布聚合模块的临时拆分计划与退出条件。"
+      "summary": "Temporary split plan and exit criteria for the release aggregation module."
     },
     {
-      "content_sha256": "76394e3a6a6a00760a3431fedcbe3bd342d4498e662a4a8e6901f544c1cf6d33",
+      "content_sha256": "dd5cfd90d9d944daeb2aa7942744affdca3c5dc92134c66c88f227c7ebbc8ab2",
       "id": "document.references-decomposition-registry-document-registry-common",
       "path": "references/decomposition-plans/scripts/python/registry/document_registry_common.py.md",
-      "responsibility": "记录文档注册公共兼容模块的扫描、布局、迁移和初始化拆分边界。",
+      "responsibility": "Records scan, layout, migration, and initialization split boundaries for the document-registry compatibility module.",
       "status": "reviewed",
-      "summary": "文档注册公共模块的临时拆分计划与退出条件。"
+      "summary": "Temporary split plan and exit criteria for the document-registry common module."
     },
     {
       "content_sha256": "7cf64afb1c03591bbbd9235f12578473ea9e0b69a74255de0abb97a618d65f1d",
       "id": "document.references-decomposition-verify-audit-skill",
       "path": "references/decomposition-plans/scripts/python/verify/audit_skill.py.md",
-      "responsibility": "记录技能审计模块的结构、评估、编译和源码治理职责拆分边界。",
+      "responsibility": "Records split boundaries for structure, evaluation, compilation, and source-governance responsibilities in the skill-audit module.",
       "status": "reviewed",
-      "summary": "技能审计模块的临时拆分计划与退出条件。"
+      "summary": "Temporary split plan and exit criteria for the skill-audit module."
     },
     {
       "content_sha256": "64788d5d9a689b2f6f12aad8e16aee380f5bb0272af5bcda17082e38ec032ee0",
       "id": "document.references-decomposition-verify-source-governance-config",
       "path": "references/decomposition-plans/scripts/python/verify/source_governance_config.py.md",
-      "responsibility": "记录源码治理配置兼容门面的默认值、验证、迁移和约束投影拆分边界。",
+      "responsibility": "Records split boundaries for defaults, validation, migration, and constraint projection in the source-governance configuration facade.",
       "status": "reviewed",
-      "summary": "源码治理配置模块的临时拆分计划与退出条件。"
+      "summary": "Temporary split plan and exit criteria for the source-governance configuration module."
     },
     {
-      "content_sha256": "5c47fa7adbfb979af6a7a144c6a11522403aee6441443c13e7eedfed24791b30",
+      "content_sha256": "2c95e7df35fc8e7bc29b43c71824d6af0309c2cd5d85a2a5a84aacfda2d0cb99",
+      "id": "document.references-decomposition-plans-skills-agents-md-generator-scripts-python-render-render-entrypoints",
+      "path": "references/decomposition-plans/skills/agents-md-generator/scripts/python/render/render_entrypoints.py.md",
+      "responsibility": "Records current size, split boundaries, dependency constraints, and later migration steps for the large render-entrypoint module.",
+      "status": "reviewed",
+      "summary": "Module split plan, current over-limit evidence, and later boundaries for render_entrypoints.py."
+    },
+    {
+      "content_sha256": "8494f1d0c8ccc118004ebc3580b04d2f25603bd74f72edbb991cf20c41558e21",
       "id": "document.references-evaluation-scenarios",
       "path": "references/evaluation-scenarios.md",
-      "responsibility": "定义技能变更后的前向测试场景及其预期结果。",
+      "responsibility": "Defines forward-test scenarios and expected results after skill changes.",
       "status": "reviewed",
-      "summary": "功能、工作区边界、治理、发布与兼容性的前向验证场景。"
+      "summary": "Forward-validation scenarios for functionality, workspace boundaries, governance, release, and compatibility."
     },
     {
-      "content_sha256": "55e3f0c9cb8d545239673538b92bd534a7799b1f7f628b916406e27c60054057",
+      "content_sha256": "21b4c76696534169a63dd685e9579b644ed5b58f618e47d910649db940c13be2",
       "id": "document.references-github-skill-release",
       "path": "references/github-skill-release.md",
-      "responsibility": "定义源 README、GitHub 镜像、版本发布与本地技能开发之间的单向同步和验证边界。",
+      "responsibility": "Defines one-way synchronization and verification boundaries among the source README, GitHub mirror, versioned release, and local skill development.",
       "status": "reviewed",
-      "summary": "GitHub 镜像与本地技能发布的源绑定、检查、镜像和验证合同。"
+      "summary": "Source binding, checking, mirroring, and verification contract for GitHub mirrors and local skill releases."
     },
     {
-      "content_sha256": "a4cb21fe6ee5b2ac157fe9232fe5959d4debd4eec3f9b25125a4bf22a4b833b4",
+      "content_sha256": "0546ea760e005a6d54ef7724aee939bc75517beede42ae07ded50175cfc131de",
       "id": "document.references-public-skill-package",
       "path": "references/public-skill-package.md",
-      "responsibility": "定义公开技能包的目录边界、元数据完整性、README 产品页面与功能插图要求。",
+      "responsibility": "Defines public skill-package directory boundaries, metadata completeness, README product-page, and functional-illustration requirements.",
       "status": "reviewed",
-      "summary": "公开技能包的内容、资产、本地化元数据和可审计发布边界。"
+      "summary": "Auditable release boundaries for public skill-package content, assets, and localized metadata."
     },
     {
-      "content_sha256": "ecb4ad440c67754bc0051d1c2b9f3afa3091a17f8c8460622802871147344a6b",
+      "content_sha256": "445b991a01bb52539ded57d38f7c5eb3bbe9cfe7120634f37270d1a7fbef69d3",
       "id": "document.references-question-bank",
       "path": "references/question-bank.md",
-      "responsibility": "定义仓库事实无法回答时使用的设计访谈问题、分支和确认流程。",
+      "responsibility": "Defines design-interview questions, branches, and confirmation flow for decisions repository facts cannot answer.",
       "status": "reviewed",
-      "summary": "AGENTS.md 设计访谈问题库与分支合同。"
+      "summary": "AGENTS.md design-interview question bank and branching contract."
     },
     {
-      "content_sha256": "5ed95e9329f1c39d7de549db73272c186f5552686bfc5f335b5e433d6bb41b7c",
+      "content_sha256": "d7965120010b42b7f3964f73d1c390c97f478831d9015565c3a2837de9ba6cfe",
       "id": "document.references-review-checklist",
       "path": "references/review-checklist.md",
-      "responsibility": "定义生成或修改治理规则时的人工审查证据和发布前检查清单。",
+      "responsibility": "Defines human-review evidence and the pre-release checklist for generating or modifying governance rules.",
       "status": "reviewed",
-      "summary": "内容、结构、运行时、工作区单次确认、验证与发布审查清单。"
+      "summary": "Review checklist for content, structure, runtime, one-time workspace confirmation, verification, and release."
     },
     {
-      "content_sha256": "49e3e041a35e949efcf8fbd000fd54e581bd6bb317a27a0ce01f21198965078b",
+      "content_sha256": "74f9a0edea8a21d007d19c5a33c5e16c2236150545be8e17643d3806d7f4701a",
       "id": "document.references-script-guide",
       "path": "references/script-guide.md",
-      "responsibility": "定义核心脚本生命周期、验证链和命令注册表问询入口。",
+      "responsibility": "Defines the core script lifecycle, verification chain, and command-registry query entry point.",
       "status": "reviewed",
-      "summary": "脚本核心用法与结构化命令注册表路由。"
+      "summary": "Core script usage and structured command-registry routing."
     },
     {
       "content_sha256": "1d99c9251046d527ab853978a8644d6d0002fc9264e644e0044c26ec69b3f859",
       "id": "document.references-script-output-policy",
       "path": "references/script-output-policy.md",
-      "responsibility": "定义人类可读过程输出前缀、可配置 Kind、quiet 行为与机器协议例外。",
+      "responsibility": "Defines human-readable process-output prefixes, configurable kinds, quiet behavior, and machine-protocol exceptions.",
       "status": "reviewed",
-      "summary": "脚本 INFO、WARNING、ERR 与机器输出政策。"
+      "summary": "Script INFO, WARNING, ERR, and machine-output policy."
     },
     {
-      "content_sha256": "838aacdd8b9232277bb1440b205412a20509694d403728e601e84a0c1482286a",
+      "content_sha256": "0bc8dafa6750abcfffc35079500f755a7db5b15a781a633f78e40cb27b62b169",
       "id": "document.references-skill-design-coverage",
       "path": "references/skill-design-coverage.md",
-      "responsibility": "映射 Skill 设计模式到权威实现，并定义渐进披露与设计合同覆盖。",
+      "responsibility": "Maps Skill design patterns to authoritative implementations and defines progressive disclosure and design-contract coverage.",
       "status": "reviewed",
-      "summary": "Tool Wrapper、Generator、Reviewer、Inversion 与 Pipeline 覆盖地图。"
+      "summary": "Coverage map for Tool Wrapper, Generator, Reviewer, Inversion, and Pipeline patterns."
+    },
+    {
+      "content_sha256": "9b4ed9f8fdfee90ead1bba5060df447785c5999844df1aa91a006cbe373bb4f8",
+      "id": "document.references-decomposition-plans-skills-agents-md-generator-scripts-python-workers-pycode-gardener-py",
+      "path": "references/decomposition-plans/skills/agents-md-generator/scripts/python/workers/pycode_gardener.py.md",
+      "responsibility": "Defines pycode_gardener read-only worker snapshots, source analysis, report boundaries, and later split exit criteria.",
+      "status": "reviewed",
+      "summary": "Records pycode_gardener Git snapshots, AST/Markdown analysis, report contract, and read-only permission boundaries."
     }
   ],
   "schema_version": 1,

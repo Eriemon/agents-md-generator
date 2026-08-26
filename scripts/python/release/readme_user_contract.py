@@ -334,13 +334,13 @@ def validate_user_readme_page(
             list_warnings.append(str_missing_issue)
 
     # 当前语言的 AI 安装句必须出现在安装章节。
-    pattern_install: re.Pattern[str]  # 安装句式正则
+    pattern_install_match: re.Pattern[str]  # 安装句式正则
 
     # 根据页面文件名选择对应语言的安装句式。
     if str_file_name == "README.md":
 
         # 英文句式要求 AI 助手从 GitHub 仓库安装技能。
-        pattern_install = re.compile(  # 英文 AI 安装句式
+        pattern_install_match = re.compile(  # 英文 AI 安装句式
             r"Ask your AI(?: assistant)? to install (?:the )?skill from "
             r"https://github\.com/",
             re.IGNORECASE,  # 英文句式忽略大小写
@@ -350,13 +350,13 @@ def validate_user_readme_page(
     else:
 
         # 中文句式要求 AI 从 GitHub URL 安装技能。
-        pattern_install = re.compile(  # 中文 AI 安装句式
+        pattern_install_match = re.compile(  # 中文 AI 安装句式
             r"让\s*AI\s*安装\s*https://github\.com/[^\s，。]+\s*中(?:的)?技能",  # 中文安装句正文
             re.IGNORECASE,  # 中文句式忽略大小写
         )
 
     # 检查用户是否得到可复制的 AI 安装表达。
-    bool_has_sentence = bool(pattern_install.search(str_install))  # AI 安装句状态
+    bool_has_sentence = bool(pattern_install_match.search(str_install))  # AI 安装句状态
 
     # 有 URL 或严格模式下不能缺少 AI 安装句。
     if not bool_has_sentence and (str_repository_url or strict_metadata):

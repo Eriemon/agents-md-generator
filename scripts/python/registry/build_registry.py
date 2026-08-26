@@ -48,18 +48,18 @@ def parse_args(list_arguments: list[str] | None = None) -> argparse.Namespace:
     """
 
     # 构建器默认只检查生成数据库是否与 JSON 同步。
-    object_parser = argparse.ArgumentParser(  # 命令注册索引参数解析器
+    argument_parser = argparse.ArgumentParser(  # 命令注册索引参数解析器
         description="Check or rebuild the command registry SQLite index."  # CLI 功能摘要
     )
 
     # 可选技能根支持所有者仓库和临时测试夹具。
-    object_parser.add_argument("skill_dir", nargs="?", type=Path)
+    argument_parser.add_argument("skill_dir", nargs="?", type=Path)
 
     # 写入开关是唯一允许替换数据库的显式信号。
-    object_parser.add_argument("--write", action="store_true", help="Rebuild registry.sqlite3 from JSON sources.")
+    argument_parser.add_argument("--write", action="store_true", help="Rebuild registry.sqlite3 from JSON sources.")
 
     # 返回解析结果供主编排器选择模式。
-    return object_parser.parse_args(list_arguments)
+    return argument_parser.parse_args(list_arguments)
 
 # JSON 输出器把机器协议直接写入标准输出，不混入人类日志前缀。
 def emit_json(dict_payload: dict[str, Any]) -> None:
@@ -396,16 +396,16 @@ def write_database(path_skill_root: Path) -> dict[str, Any]:
     path_temporary_journal = Path(f"{path_temporary}-journal")  # 临时事务 journal 路径
 
     # 连接变量允许异常路径先释放 Windows 文件句柄再清理。
-    connection_database: sqlite3.Connection | None = None  # 当前临时数据库连接
+    resource_connection_database: sqlite3.Connection | None = None  # 当前临时数据库连接
 
     # 所有写入在临时数据库连接内完成。
     try:
 
         # 新文件连接确保不存在旧表或残留行。
-        connection_database = sqlite3.connect(path_temporary)  # 临时数据库连接
+        resource_connection_database = sqlite3.connect(path_temporary)  # 临时数据库连接
 
         # schema 创建必须先于元数据和记录插入。
-        create_schema(connection_database)
+        create_schema(resource_connection_database)
 
         # 元数据把生成数据库绑定到当前源摘要和记录计数。
         dict_metadata = {  # 待写入数据库的可验证元数据
@@ -419,34 +419,34 @@ def write_database(path_skill_root: Path) -> dict[str, Any]:
         }
 
         # 键排序稳定 metadata 表的插入顺序。
-        connection_database.executemany(
+        resource_connection_database.executemany(
             "INSERT INTO metadata(key, value) VALUES (?, ?)",
             sorted(dict_metadata.items()),
         )
 
         # 命令记录进入主表和命令 FTS 表。
-        insert_commands(connection_database, tuple_registry[1])
+        insert_commands(resource_connection_database, tuple_registry[1])
 
         # 工作流记录进入主表和工作流 FTS 表。
-        insert_workflows(connection_database, tuple_registry[2])
+        insert_workflows(resource_connection_database, tuple_registry[2])
 
         # 文档职责记录进入文档关系表和 FTS 表。
-        insert_documents(connection_database, tuple_document_records[0])
+        insert_documents(resource_connection_database, tuple_document_records[0])
 
         # 知识记录只索引权威 Markdown 指针与摘要。
-        insert_knowledge(connection_database, tuple_document_records[1])
+        insert_knowledge(resource_connection_database, tuple_document_records[1])
 
         # 提交确保所有表在替换前持久化。
-        connection_database.commit()
+        resource_connection_database.commit()
 
         # VACUUM 规范页面布局并压缩临时数据库。
-        connection_database.execute("VACUUM")
+        resource_connection_database.execute("VACUUM")
 
         # Windows 原子替换前必须关闭文件句柄。
-        connection_database.close()
+        resource_connection_database.close()
 
         # 空值记录连接已释放，异常路径无需重复关闭。
-        connection_database = None  # 已释放的临时数据库连接
+        resource_connection_database = None  # 已释放的临时数据库连接
 
         # 只有完整构建成功后才替换正式数据库。
         os.replace(path_temporary, path_target)
@@ -455,10 +455,10 @@ def write_database(path_skill_root: Path) -> dict[str, Any]:
     except (OSError, sqlite3.Error, RegistryError):
 
         # Windows 必须先关闭连接，之后才能移除临时数据库。
-        if connection_database is not None:
+        if resource_connection_database is not None:
 
             # 释放仍存活的连接，解除 Windows 文件占用。
-            connection_database.close()
+            resource_connection_database.close()
 
         # 仅清理本次唯一临时数据库及其事务 journal。
         for path_temporary_artifact in (path_temporary, path_temporary_journal):

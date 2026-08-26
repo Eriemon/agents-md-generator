@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "required": ["schema_version", "versions", "names", "paths"],
+  "sections": ["versions", "names", "paths"]
+}

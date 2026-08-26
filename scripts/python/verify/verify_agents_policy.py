@@ -44,11 +44,11 @@ PLAN_LANGUAGE_LOCK_RE = re.compile(  # 匹配 Plan Mode 专用的默认语言锁
 
 # 收集编码行为段落必须保留的基础短语，供根 AGENTS 校验复用。
 CODING_BEHAVIOR_LANGUAGE_ROUTING_REQUIRED_SNIPPETS = (  # 编码行为基础短语用于本步校验判断
-    "编码行为配置来源：`.agents/global-rule-overrides.json`",  # 先固定配置来源指针
-    "注释质量：只允许非显然意图、不变量、风险、生成边界或公共 API 行为注释",  # 注释规则必须保留风险边界
-    "不能把语句、注释、函数粘连到一起",  # 代码排版不能退化成粘连块
-    "严禁把代码压缩到一行",  # 一行压缩规则必须继续保留
-    "炫技代码",  # 反花哨可读性约束必须保留
+    "Coding behavior source: `.agents/global-rule-overrides.json`",  # 配置来源指针
+    "Comment quality: Comments must explain",  # 注释规则保留语义边界
+    "preserve line and blank-line separation",  # 代码排版保持分隔
+    "must not start with digits or underscores",  # 文件命名边界
+    "File naming semantics:",  # 文件语义复核边界
 )
 
 # 复用共同门禁强制短语，确保跨语言前置要求只由 shared 行承载。
@@ -62,16 +62,16 @@ CODING_BEHAVIOR_LANGUAGE_ROUTING_SCRIPT_REQUIRED_SNIPPETS = SCRIPT_LANGUAGE_SKIL
 
 # 收集脚本输出策略必须保留的短语，供根 AGENTS 校验复用。
 SCRIPT_OUTPUT_POLICY_REQUIRED_SNIPPETS = (  # 脚本输出策略短语用于本步校验判断
-    "配置来源：`.agents/global-rule-overrides.json`",  # 先固定脚本输出配置来源
-    "`Kind` 列表只从该 JSON 读取",  # Kind 来源必须绑定到 JSON 配置
-    "代码不得内置业务枚举",  # 禁止把 Kind 列表硬编码进源码
+    "Configuration source:",  # 脚本输出配置来源
+    "the `Kind` catalog is read from this JSON",  # Kind 来源必须绑定到 JSON 配置
+    "must not be embedded in code",  # 禁止把 Kind 列表硬编码进源码
     "`> INFO: [{kind}]`",  # INFO 模板必须继续存在
     "`> WARNING: [{kind}]`",  # WARNING 行模板必须继续覆盖警告输出
     "`> ERR: [{kind}]`",  # ERR 行模板必须继续覆盖错误输出
-    "Python 过程性 INFO 默认打印",  # Python 默认输出规则必须保留
+    "Python process INFO is enabled by default",  # Python 默认输出规则必须保留
     "`--quiet`",  # quiet 开关语义必须继续存在
-    "WARNING 和 ERR 继续可见",  # 安静模式下仍需保留警告与错误
-    "机器可读输出不套前缀",  # 机器可读输出豁免必须继续存在
+    "WARNING and ERR remain visible",  # 安静模式下仍需保留警告与错误
+    "machine-readable output has no prefix",  # 机器可读输出豁免必须继续存在
 )
 
 # 用源码运行时命令特征拦截 non-owner 仓库复制 owner 侧开发命令。

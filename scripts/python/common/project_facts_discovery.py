@@ -36,6 +36,7 @@ from agents_common import (
 
 # 源码治理报告补充项目实现边界事实。
 from source_governance import source_governance_report
+from agent_platform import load_catalog
 
 # 源码治理配置模块保留兼容的公开转发符号。
 import source_governance_config
@@ -234,7 +235,7 @@ def session_message_rows(path: Path, limit: int = 48) -> list[dict[str, str]]:
                 message_type = str(payload.get("type", "")).strip()  # 原始消息类别。
 
                 # 仅公开用户和代理消息，其他事件映射为空角色。
-                role = (  # 标准对话角色。
+                str_role: str = (  # 标准对话角色。
                     "user"  # 用户输入角色。
                     if message_type == "user_message"  # 用户消息事件。
                     else "assistant"  # 代理输出角色。
@@ -243,17 +244,17 @@ def session_message_rows(path: Path, limit: int = 48) -> list[dict[str, str]]:
                 )
 
                 # 提取并清理可见消息文本。
-                message = str(payload.get("message", "")).strip()  # 空白消息视为空。
+                str_message: str = str(payload.get("message", "")).strip()  # 空白消息视为空。
 
                 # 无有效角色或文本的事件不构成对话行。
-                if not role or not message:
+                if not str_role or not str_message:
 
                     # 继续寻找下一条用户或助手消息。
                     continue
 
                 # 保存标准角色和完整消息文本。
                 list_rows.append(  # 保持原始事件顺序。
-                    {"role": role, "message": message}
+                    {"role": str_role, "message": str_message}
                 )
 
                 # 达到调用方上限后停止读取大体积会话文件。
@@ -330,19 +331,19 @@ def list_dirs(root: Path, max_depth: int = 2) -> list[str]:
             continue
 
         # 计算仓库相对路径供过滤和输出复用。
-        relative = path.relative_to(root)  # 当前目录相对位置。
+        path_relative: Path = path.relative_to(root)  # 当前目录相对位置。
 
         # 排除缓存、版本控制和构建产物目录。
-        if set(relative.parts) & SKIP_DIRS:
+        if set(path_relative.parts) & SKIP_DIRS:
 
             # 忽略目录及其后代不应成为项目结构事实。
             continue
 
         # 只保留调用方要求深度内的目录。
-        if len(relative.parts) <= max_depth:
+        if len(path_relative.parts) <= max_depth:
 
             # 输出统一使用正斜杠形式。
-            list_out.append(relative.as_posix())  # 当前有效目录。
+            list_out.append(path_relative.as_posix())  # 当前有效目录。
 
     # 稳定排序保证结构事实可比较。
     return sorted(list_out)
@@ -580,6 +581,12 @@ def automation_facts(root: Path) -> tuple[list[str], list[str]]:
         list_ci.append("gitlab_ci")
 
     # AI 规则和工具配置只公开真实存在项。
+    list_platform_dirs: list[str] = [  # 平台工作区配置目录列表
+        str_profile["workspace_config_dir"]  # 当前平台的项目配置目录
+        for str_profile in load_catalog()["platforms"].values()  # 已登记平台配置
+    ]
+
+    # 仅从仓库根目录存在性筛选代理工具配置候选。
     list_ai_configs = [
         str_name  # 输出调用方可直接展示的相对名称。
         for str_name in [  # 枚举受支持的代理工具配置候选。
@@ -588,8 +595,8 @@ def automation_facts(root: Path) -> tuple[list[str], list[str]]:
             "GEMINI.md",  # Gemini 仓库级指令。
             ".github/copilot-instructions.md",  # Copilot 指令证明 GitHub 助手已配置。
             ".cursor",  # Cursor 目录证明编辑器代理规则已配置。
-            ".claude",  # Claude 本地配置目录。
             ".windsurf",  # Windsurf 编辑器配置目录。
+            *list_platform_dirs,  # 平台配置目录候选
         ]
         if (root / str_name).exists()  # 仅公开实际配置。
     ]
@@ -1692,16 +1699,16 @@ def workflow_runs(root: Path) -> list[dict[str, str]]:
     list_rules: list[dict[str, str]] = []  # 最终命令条目列表。
 
     # GitHub Actions 的标准目录是唯一扫描边界。
-    workflow_dir = root / ".github" / "workflows"  # 工作流配置根。
+    path_workflow_dir: Path = root / ".github" / "workflows"  # 工作流配置根。
 
     # 项目没有工作流目录时直接返回空发现结果。
-    if not workflow_dir.exists():
+    if not path_workflow_dir.exists():
 
         # 空列表保持调用方聚合协议稳定。
         return list_rules
 
     # 按文件名稳定扫描 YAML 与 YML 工作流。
-    for workflow in sorted(workflow_dir.glob("*.y*ml")):
+    for workflow in sorted(path_workflow_dir.glob("*.y*ml")):
 
         # 宽容读取工作流文本，避免非 UTF-8 字节阻断项目发现。
         text = workflow.read_text(  # 当前工作流完整文本。

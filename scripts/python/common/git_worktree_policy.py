@@ -382,8 +382,7 @@ def inspect_worktree_policy(path_project: Path) -> dict[str, Any]:
     # 首个查询确定真实仓库顶层，并区分非 Git 目录。
     completed_process_toplevel = _run_git(path_project, ["rev-parse", "--show-toplevel"])  # Git 顶层查询结果。
 
-    # 标准非 Git 错误属于策略不适用而不是未知失败。
-    # 单独保存非 Git 判定，避免长条件掩盖退出码语义。
+    # 标准非 Git 错误属于策略不适用，单独保存该判定以避免长条件掩盖退出码语义。
     bool_non_git_directory = (  # 顶层查询是否返回 Git 的标准非仓库诊断。
         completed_process_toplevel.returncode != 0  # 查询没有得到仓库顶层。
         and "not a git repository" in completed_process_toplevel.stderr.lower()  # 错误文本明确表示普通目录。

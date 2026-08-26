@@ -59,12 +59,12 @@ def effective_source_governance(
     """
 
     # 项目覆盖文件在存在有效 source_governance 分区时优先。
-    overrides = load_global_rule_overrides(project, profile)  # 全局规则覆盖解析结果。
+    dict_overrides = load_global_rule_overrides(project, profile)  # 全局规则覆盖解析结果。
 
     # 读取原始 JSON 用于区分显式项目配置与合成默认值。
     raw = (  # 项目覆盖文件原始内容。
-        read_json(overrides["path"])  # 显式项目覆盖内容。
-        if overrides["path"].is_file()  # 覆盖文件存在时读取。
+        read_json(dict_overrides["path"])  # 显式项目覆盖内容。
+        if dict_overrides["path"].is_file()  # 覆盖文件存在时读取。
         else {}  # 缺失覆盖文件时使用空配置。
     )
 
@@ -73,25 +73,25 @@ def effective_source_governance(
 
         # 返回项目覆盖及仅属于源码治理的配置错误。
         return {
-            "config_path": overrides["path"],
+            "config_path": dict_overrides["path"],
             "config_source": "project-local",
-            "config": overrides["data"].get("source_governance", {}),
+            "config": dict_overrides["data"].get("source_governance", {}),
             "errors": [
                 item  # 当前源码治理配置错误。
-                for item in overrides["errors"]  # 遍历全部覆盖配置错误。
+                for item in dict_overrides["errors"]  # 遍历全部覆盖配置错误。
                 if item.startswith("source_governance")  # 排除其他规则分区诊断。
             ],
         }
 
     # 未显式覆盖时使用技能随版本发布的默认源码治理合同。
-    skill = load_skill_source_governance()  # 技能本地源码治理配置。
+    dict_skill = load_skill_source_governance()  # 技能本地源码治理配置。
 
     # 保留技能配置读取错误供报告阻断发布。
     return {
-        "config_path": skill["path"],
+        "config_path": dict_skill["path"],
         "config_source": "skill-local",
-        "config": skill["data"],
-        "errors": list(skill["errors"]),
+        "config": dict_skill["data"],
+        "errors": list(dict_skill["errors"]),
     }
 
 # 遍历扫描根并排除配置指定的顶层目录。
@@ -103,7 +103,7 @@ def iter_candidate_files(root: Path, config: dict[str, Any]) -> list[Path]:
     """
 
     # 排除项规范为无边界斜杠的顶层目录名。
-    excluded_roots = {  # 不参与源码扫描的顶层目录名。
+    set_excluded_roots = {  # 不参与源码扫描的顶层目录名。
         str(item).strip("/\\")  # 当前排除目录配置。
         for item in config.get("excluded_roots", [])  # 原始排除根列表。
     }
@@ -133,11 +133,11 @@ def iter_candidate_files(root: Path, config: dict[str, Any]) -> list[Path]:
         dir_names[:] = [
             name  # 当前允许继续遍历的子目录名。
             for name in dir_names  # 遍历 os.walk 返回的子目录。
-            if not tuple_relative_parts[:1] or name not in excluded_roots  # 根级排除判断。
+            if not tuple_relative_parts[:1] or name not in set_excluded_roots  # 根级排除判断。
         ]  # 原地更新 os.walk 后续遍历目录。
 
         # 已进入排除根时不收集其中任何文件。
-        if tuple_relative_parts and tuple_relative_parts[0] in excluded_roots:
+        if tuple_relative_parts and tuple_relative_parts[0] in set_excluded_roots:
 
             # 跳过排除目录当前层，防止报告产物或第三方代码。
             continue
@@ -185,12 +185,12 @@ def decomposition_plan_path(project_root: Path, relative_file: str) -> Path:
     """
 
     # 分解计划根来自项目全局规则覆盖。
-    overrides = load_global_rule_overrides(project_root)["data"]  # 全局规则覆盖数据。
+    dict_overrides = load_global_rule_overrides(project_root)["data"]  # 全局规则覆盖数据。
 
     # 尺寸分区决定计划根与必需章节。
     source_limits = (  # 经过类型收窄的源码尺寸合同。
-        overrides.get("source_file_limits", {})  # 原始尺寸限制分区。
-        if isinstance(overrides.get("source_file_limits", {}), dict)  # 仅接受映射配置。
+        dict_overrides.get("source_file_limits", {})  # 原始尺寸限制分区。
+        if isinstance(dict_overrides.get("source_file_limits", {}), dict)  # 仅接受映射配置。
         else {}  # 无效类型按未配置处理。
     )
 
@@ -207,10 +207,10 @@ def decomposition_plan_path(project_root: Path, relative_file: str) -> Path:
     )
 
     # 文件路径移除盘符冒号并统一分隔符，安全映射为计划文件名。
-    sanitized = relative_file.replace("\\", "/").replace(":", "")  # 计划文件安全后缀。
+    str_sanitized = relative_file.replace("\\", "/").replace(":", "")  # 计划文件安全后缀。
 
     # 每个源码文件使用自身相对路径加 .md 形成唯一计划位置。
-    return project_root / plan_root / f"{sanitized}.md"
+    return project_root / plan_root / f"{str_sanitized}.md"
 
 # 验证超限源码是否已有包含必需章节的分解计划。
 def has_valid_decomposition_plan(project_root: Path, relative_file: str) -> bool:
@@ -247,20 +247,20 @@ def has_valid_decomposition_plan(project_root: Path, relative_file: str) -> bool
     text = path_plan_path.read_text(encoding="utf-8", errors="ignore")  # 分解计划正文。
 
     # 必需章节来自项目源码尺寸治理配置。
-    overrides = load_global_rule_overrides(project_root)["data"]  # 当前全局规则覆盖数据。
+    dict_overrides = load_global_rule_overrides(project_root)["data"]  # 当前全局规则覆盖数据。
 
     # 章节合同只从合法映射分区读取。
     source_limits = (  # 经过类型确认的尺寸治理分区。
-        overrides.get("source_file_limits", {})  # 原始源码尺寸配置。
-        if isinstance(overrides.get("source_file_limits", {}), dict)  # 映射类型检查。
+        dict_overrides.get("source_file_limits", {})  # 原始源码尺寸配置。
+        if isinstance(dict_overrides.get("source_file_limits", {}), dict)  # 映射类型检查。
         else {}  # 损坏配置使用空合同。
     )
 
     # 章节名称不含 Markdown 标题前缀，检查时统一补齐。
-    required_sections = source_limits.get("required_plan_sections", [])  # 必需计划章节名。
+    list_required_sections = source_limits.get("required_plan_sections", [])  # 必需计划章节名。
 
     # 所有配置章节都出现时才允许超限文件继续存在。
-    return all(f"## {section}" in text for section in required_sections)
+    return all(f"## {section}" in text for section in list_required_sections)
 
 # 收集超过硬字节上限且没有有效分解计划的源码。
 def oversized_source_files(
@@ -281,7 +281,7 @@ def oversized_source_files(
     int_max_bytes = int(config.get("max_bytes", 0))  # 单文件允许的最大字节数。
 
     # 扩展名统一为小写，确保 Windows 和 Linux 扫描口径一致。
-    extensions = {  # 触发尺寸硬门禁的源码扩展名。
+    set_extensions = {  # 触发尺寸硬门禁的源码扩展名。
         str(item).lower()  # 当前配置扩展名。
         for item in config.get("hard_fail_extensions", [])  # 原始硬门禁扩展名。
     }
@@ -293,7 +293,7 @@ def oversized_source_files(
     for path in iter_candidate_files(root, config):
 
         # 非硬门禁扩展名不参与源码规模阻断。
-        if path.suffix.lower() not in extensions:
+        if path.suffix.lower() not in set_extensions:
 
             # 跳过文档、数据和其他未配置文件类别。
             continue
@@ -361,29 +361,29 @@ def readability_violations(
     """
 
     # readability_gate 分区控制阈值和总开关。
-    gate = config.get("readability_gate", {})  # 原始可读性门禁配置。
+    dict_gate = config.get("readability_gate", {})  # 原始可读性门禁配置。
 
     # 关闭或类型损坏的门禁不扫描文件内容。
-    if not isinstance(gate, dict) or not gate.get("enabled"):
+    if not isinstance(dict_gate, dict) or not dict_gate.get("enabled"):
 
         # 返回空诊断保持调用方聚合 schema 稳定。
         return []
 
     # 可读性检查沿用源码尺寸硬门禁的扩展名范围。
-    extensions = {  # 参与可读性扫描的源码扩展名。
+    set_extensions = {  # 参与可读性扫描的源码扩展名。
         str(item).lower()  # 当前可读性扩展名。
         for item in config.get("hard_fail_extensions", [])  # 可读性沿用的扩展列表。
     }
 
     # 物理行阈值按原始字节计数，覆盖多字节文本风险。
-    int_max_line_bytes = int(gate.get("max_physical_line_bytes", 0))  # 单行字节上限。
+    int_max_line_bytes = int(dict_gate.get("max_physical_line_bytes", 0))  # 单行字节上限。
 
     # 单行文件达到该规模后视为压缩源码。
-    int_single_line_min_bytes = int(gate.get("single_line_min_bytes", 0))  # 单行压缩判定下限。
+    int_single_line_min_bytes = int(dict_gate.get("single_line_min_bytes", 0))  # 单行压缩判定下限。
 
     # 密度分析只针对足够长的行，避免误报正常表达式。
     int_minified_line_min_bytes = int(  # 密集行分析最小字节数。
-        gate.get("minified_line_min_bytes", 1000)  # 原始密集行阈值。
+        dict_gate.get("minified_line_min_bytes", 1000)  # 原始密集行阈值。
     )
 
     # 每个文件可报告长行、单行压缩和密集行三类问题。
@@ -393,7 +393,7 @@ def readability_violations(
     for path in iter_candidate_files(root, config):
 
         # 未配置为源码硬门禁的扩展名不读取内容。
-        if path.suffix.lower() not in extensions:
+        if path.suffix.lower() not in set_extensions:
 
             # 跳过非源码或项目未纳入治理的文件。
             continue
@@ -417,7 +417,7 @@ def readability_violations(
         raw_lines = raw.splitlines()  # 当前文件物理字节行。
 
         # 长度列表与物理行号保持一一对应。
-        byte_lengths = [len(line) for line in raw_lines]  # 每行原始字节数。
+        list_byte_lengths = [len(line) for line in raw_lines]  # 每行原始字节数。
 
         # 空白行不计入单行压缩文件判定。
         non_empty_lines = [  # 解码文本中的非空物理行。
@@ -427,10 +427,10 @@ def readability_violations(
         ]
 
         # 文件总字节数用于单行压缩规模门槛。
-        total_bytes = len(raw)  # 当前源码总字节数。
+        int_total_bytes = len(raw)  # 当前源码总字节数。
 
         # 第一处物理长行足以证明该文件违反可读性门禁。
-        for line_no, length in enumerate(byte_lengths, start=1):
+        for line_no, length in enumerate(list_byte_lengths, start=1):
 
             # 阈值为正且当前行超限时登记诊断。
             if int_max_line_bytes > 0 and length > int_max_line_bytes:
@@ -447,13 +447,13 @@ def readability_violations(
                 break
 
         # 只有一个非空行的大文件属于明显压缩源码。
-        if len(non_empty_lines) == 1 and total_bytes >= int_single_line_min_bytes:
+        if len(non_empty_lines) == 1 and int_total_bytes >= int_single_line_min_bytes:
 
             # 单行压缩诊断记录文件总字节数。
             list_violations.append(
                 {
                     "path": str_rel_path,
-                    "message": f"one-line compressed source is not allowed ({total_bytes} bytes)",
+                    "message": f"one-line compressed source is not allowed ({int_total_bytes} bytes)",
                 }
             )
 
@@ -555,10 +555,10 @@ def numbered_python_module_reason(module_name: str) -> str:
     """
 
     # 去掉扩展名后检查纯数字、part 数字，以及下划线连接的 part 数字尾缀。
-    stem = Path(module_name).stem  # 用于识别顺序编号分片的模块名主体。
+    str_stem = Path(module_name).stem  # 用于识别顺序编号分片的模块名主体。
 
     # 编号式模块名缺少功能语义，后续维护者无法从文件名判断职责。
-    if NUMBERED_PYTHON_MODULE_RE.fullmatch(stem):
+    if NUMBERED_PYTHON_MODULE_RE.fullmatch(str_stem):
 
         # 返回调用方可以直接展示的命名错误说明。
         return "Python runtime module name uses a numbered shard suffix; use a functional name"
@@ -819,13 +819,13 @@ def python_assignment_comment_lines(text: str) -> set[int]:
             continue
 
         # 起始行缺失时使用零值，保持范围构造安全。
-        start = getattr(node, "lineno", 0) or 0  # 当前赋值起始行。
+        int_start = getattr(node, "lineno", 0) or 0  # 当前赋值起始行。
 
         # 旧解释器缺少 end_lineno 时退化为单行赋值。
-        end = getattr(node, "end_lineno", start) or start  # 当前赋值结束行。
+        int_end = getattr(node, "end_lineno", int_start) or int_start  # 当前赋值结束行。
 
         # 多行赋值的每个物理行都允许右侧用途注释。
-        set_assignment_lines.update(range(start, end + 1))
+        set_assignment_lines.update(range(int_start, int_end + 1))
 
     # 返回词法扫描可直接执行成员判断的行号集合。
     return set_assignment_lines
@@ -1004,35 +1004,35 @@ def extract_python_comment_violations(path: Path, config: dict[str, Any]) -> lis
     text = path.read_text(encoding="utf-8", errors="ignore")  # 待扫描源码文本。
 
     # 注释策略根分区提供语言策略与跨语言禁止标记。
-    gate = config.get("comment_policy_gate", {})  # 聚合扫描启用配置。
+    dict_gate = config.get("comment_policy_gate", {})  # 聚合扫描启用配置。
 
     # Python 分区必须为映射，损坏配置按空策略处理。
-    raw_python_gate = gate.get("python", {})  # 原始 Python 策略分区。
+    raw_python_gate = dict_gate.get("python", {})  # 原始 Python 策略分区。
 
     # 类型收窄后辅助函数无需重复防御配置结构。
-    python_gate = raw_python_gate if isinstance(raw_python_gate, dict) else {}  # Python 专用策略。
+    dict_python_gate = raw_python_gate if isinstance(raw_python_gate, dict) else {}  # Python 专用策略。
 
     # 统一为小写后执行不区分大小写的生成标记匹配。
     list_ai_markers = [  # 禁止出现在源码注释中的生成标记。
         str(item).lower()  # 当前规范化标记。
-        for item in gate.get("forbid_ai_comment_markers", [])  # 原始禁止标记列表。
+        for item in dict_gate.get("forbid_ai_comment_markers", [])  # 原始禁止标记列表。
     ]
 
     # 诊断顺序保持公共 API 检查先于词法注释检查。
     list_violations: list[str] = []  # 当前文件注释策略违规。
 
     # 仅在配置明确启用时解析公共定义的 docstring。
-    if python_gate.get("require_public_api_docstring", False):
+    if dict_python_gate.get("require_public_api_docstring", False):
 
         # 公共定义诊断先写入结果，保持历史排序合同。
         list_violations.extend(python_public_api_comment_violations(text))
 
     # 尾注释或生成标记任一启用时才运行 tokenize 扫描。
-    if python_gate.get("forbid_trailing_comment", False) or list_ai_markers:
+    if dict_python_gate.get("forbid_trailing_comment", False) or list_ai_markers:
 
         # 词法诊断追加在公共 API 诊断之后。
         list_violations.extend(
-            python_token_comment_violations(text, python_gate, list_ai_markers)
+            python_token_comment_violations(text, dict_python_gate, list_ai_markers)
         )
 
     # 返回公共 API、尾注释和标记三类有序诊断。
@@ -1050,26 +1050,26 @@ def extract_c_cpp_comment_violations(path: Path, config: dict[str, Any]) -> list
     text = path.read_text(encoding="utf-8", errors="ignore")  # 待扫描 C/C++ 文本。
 
     # 注释策略根分区提供跨语言共享的禁止标记。
-    gate = config.get("comment_policy_gate", {})  # C/C++ 扫描共享策略根。
+    dict_gate = config.get("comment_policy_gate", {})  # C/C++ 扫描共享策略根。
 
     # C/C++ 分区类型收窄后才参与尾注释判断。
-    c_cpp_gate = (  # 已验证的 C/C++ 策略映射。
-        gate.get("c_cpp", {})  # 配置中的 C/C++ 原始内容。
-        if isinstance(gate.get("c_cpp", {}), dict)  # 仅接受映射值。
+    dict_c_cpp_gate = (  # 已验证的 C/C++ 策略映射。
+        dict_gate.get("c_cpp", {})  # 配置中的 C/C++ 原始内容。
+        if isinstance(dict_gate.get("c_cpp", {}), dict)  # 仅接受映射值。
         else {}  # 非映射 C/C++ 配置关闭语言专用规则。
     )
 
     # 标记规范化后与注释子串执行不区分大小写匹配。
     list_ai_markers = [  # 禁止出现在 C/C++ 注释中的生成标记。
         str(item).lower()  # 当前 C/C++ 禁止标记的小写形式。
-        for item in gate.get("forbid_ai_comment_markers", [])  # 跨语言禁止标记源。
+        for item in dict_gate.get("forbid_ai_comment_markers", [])  # 跨语言禁止标记源。
     ]
 
     # 每条诊断只描述单个物理行上的单个策略失败。
     list_violations: list[str] = []  # 当前 C/C++ 文件策略违规。
 
     # 两类检查均关闭时无需读取行级结构。
-    if not c_cpp_gate.get("forbid_trailing_comment", False) and not list_ai_markers:
+    if not dict_c_cpp_gate.get("forbid_trailing_comment", False) and not list_ai_markers:
 
         # 空列表保持调用方聚合逻辑稳定。
         return list_violations
@@ -1113,7 +1113,7 @@ def extract_c_cpp_comment_violations(path: Path, config: dict[str, Any]) -> list
 
         # 宏定义允许保留同一行注释，避免误伤预处理器合同。
         if (
-            c_cpp_gate.get("forbid_trailing_comment", False)
+            dict_c_cpp_gate.get("forbid_trailing_comment", False)
             and str_line[:int_comment_index].strip()
             and not str_stripped.startswith("#define")
         ):
@@ -1148,10 +1148,10 @@ def comment_policy_violations(
     """
 
     # 根门禁决定是否启用所有语言的注释策略扫描。
-    gate = config.get("comment_policy_gate", {})  # 注释策略根配置。
+    dict_gate = config.get("comment_policy_gate", {})  # 注释策略根配置。
 
     # 缺失、损坏或关闭的配置均不产生注释诊断。
-    if not isinstance(gate, dict) or not gate.get("enabled"):
+    if not isinstance(dict_gate, dict) or not dict_gate.get("enabled"):
 
         # 返回空列表保持源码报告 schema 稳定。
         return []

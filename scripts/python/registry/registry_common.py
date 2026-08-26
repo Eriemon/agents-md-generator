@@ -640,10 +640,10 @@ def load_registry_manifest(path_registry_root: Path) -> dict[str, Any]:
         raise RegistryError("> ERR: [Python] registry manifest schema_version is incompatible")
 
     # command_schema 必须是非空相对路径文本。
-    object_command_schema = object_manifest.get("command_schema")  # 命令 schema 配置值
+    str_command_schema = object_manifest.get("command_schema")  # 命令 schema 配置值
 
     # 错误类型不能进入路径解析器。
-    if not isinstance(object_command_schema, str) or not object_command_schema:
+    if not isinstance(str_command_schema, str) or not str_command_schema:
 
         # 缺失结构合同阻止加载。
         raise RegistryError("> ERR: [Python] registry manifest command_schema must be a string")
@@ -679,31 +679,31 @@ def load_document_roles(
     """
 
     # 清单字段必须使用对象表达角色到路径的一一映射。
-    object_roles = dict_manifest.get("document_roles")  # 未收窄的文档角色字段
+    dict_declared_roles = dict_manifest.get("document_roles")  # 未收窄的文档角色字段
 
     # 列表或标量无法保持具名角色合同。
-    if not isinstance(object_roles, dict):
+    if not isinstance(dict_declared_roles, dict):
 
         # 构建器拒绝从 document_sources 顺序猜测业务身份。
         raise RegistryError("> ERR: [Python] registry manifest document_roles must be an object")
 
     # 角色集合必须与当前 schema v2 的四类事实完全一致。
-    if set(object_roles) != SET_DOCUMENT_ROLE_NAMES:
+    if set(dict_declared_roles) != SET_DOCUMENT_ROLE_NAMES:
 
         # 缺失或额外角色都可能让状态校验指向错误源。
         raise RegistryError("> ERR: [Python] registry manifest document_roles is incomplete")
 
     # 类型收窄后的角色映射交给路径校验循环。
-    dict_roles: dict[str, str] = {}  # 已验证的文档角色路径
+    dict_role_paths: dict[str, str] = {}  # 已验证的文档角色路径
 
     # 每个角色值都必须是 registry 内的子目录 JSON。
     for str_role_name in sorted(SET_DOCUMENT_ROLE_NAMES):
 
         # 当前角色路径保留清单原始文本。
-        object_role_path = object_roles[str_role_name]  # 当前角色未收窄路径
+        str_role_path = dict_declared_roles[str_role_name]  # 当前角色未收窄路径
 
         # 非空字符串是进入路径解析器的前置条件。
-        if not isinstance(object_role_path, str) or not object_role_path:
+        if not isinstance(str_role_path, str) or not str_role_path:
 
             # 错误绑定角色名称而不是猜测默认文件。
             raise RegistryError(
@@ -711,7 +711,7 @@ def load_document_roles(
             )
 
         # 共用解析器拒绝绝对路径、逃逸和非 JSON 后缀。
-        path_role = resolve_registry_source(path_registry_root, object_role_path)  # 当前角色规范路径
+        path_role = resolve_registry_source(path_registry_root, str_role_path)  # 当前角色规范路径
 
         # 角色 JSON 不能回到 registry 根目录。
         if path_role.parent == path_registry_root.resolve():
@@ -722,10 +722,10 @@ def load_document_roles(
             )
 
         # 通过全部路径边界后保留 POSIX 相对文本。
-        dict_roles[str_role_name] = object_role_path.replace("\\", "/")  # 规范角色相对路径
+        dict_role_paths[str_role_name] = str_role_path.replace("\\", "/")  # 规范角色相对路径
 
     # 调用方只接收完整安全的角色映射。
-    return dict_roles
+    return dict_role_paths
 
 # 命令 schema 加载器验证可发布结构文件可读取。
 def validate_command_schema(path_registry_root: Path, dict_manifest: dict[str, Any]) -> None:
@@ -746,7 +746,7 @@ def validate_command_schema(path_registry_root: Path, dict_manifest: dict[str, A
     try:
 
         # 运行时字段校验与可发布 schema 共享事实边界。
-        object_command_schema = json.loads(path_command_schema.read_text(encoding="utf-8"))  # 命令 schema 载荷
+        dict_command_schema = json.loads(path_command_schema.read_text(encoding="utf-8"))  # 命令 schema 载荷
 
     # 解析位置保留在错误文本中。
     except (OSError, json.JSONDecodeError) as object_error:
@@ -755,7 +755,7 @@ def validate_command_schema(path_registry_root: Path, dict_manifest: dict[str, A
         raise RegistryError(f"> ERR: [Python] cannot load command schema: {object_error}") from object_error
 
     # 顶层非对象不能表达 properties 合同。
-    if not isinstance(object_command_schema, dict):
+    if not isinstance(dict_command_schema, dict):
 
         # 数组或标量 schema 无效。
         raise RegistryError("> ERR: [Python] command schema must be a JSON object")
@@ -788,7 +788,7 @@ def load_command_workflow_sources(
         try:
 
             # UTF-8 解析保留中文注册内容。
-            object_document = json.loads(path_source.read_text(encoding="utf-8"))  # 当前注册源载荷
+            dict_document = json.loads(path_source.read_text(encoding="utf-8"))  # 当前注册源载荷
 
         # 不可读源阻止构建。
         except (OSError, json.JSONDecodeError) as object_error:
@@ -799,7 +799,7 @@ def load_command_workflow_sources(
             ) from object_error
 
         # 分类源顶层必须提供 schema_version 和记录容器。
-        if not isinstance(object_document, dict):
+        if not isinstance(dict_document, dict):
 
             # 非对象源不能安全提取记录。
             raise RegistryError(
@@ -807,7 +807,7 @@ def load_command_workflow_sources(
             )
 
         # 分类源版本必须与清单和代码一致。
-        if object_document.get("schema_version") != INT_SCHEMA_VERSION:
+        if dict_document.get("schema_version") != INT_SCHEMA_VERSION:
 
             # 禁止混合版本源。
             raise RegistryError(
@@ -815,13 +815,13 @@ def load_command_workflow_sources(
             )
 
         # 缺失单类记录时使用空列表。
-        object_commands = object_document.get("commands", [])  # 当前源命令容器
+        list_file_commands = dict_document.get("commands", [])  # 当前源命令容器
 
         # 工作流容器独立读取。
-        object_workflows = object_document.get("workflows", [])  # 当前源工作流容器
+        list_file_workflows = dict_document.get("workflows", [])  # 当前源工作流容器
 
         # 两类记录都必须使用列表。
-        if not isinstance(object_commands, list) or not isinstance(object_workflows, list):
+        if not isinstance(list_file_commands, list) or not isinstance(list_file_workflows, list):
 
             # 错误容器阻止聚合。
             raise RegistryError(
@@ -829,10 +829,10 @@ def load_command_workflow_sources(
             )
 
         # 当前分类命令追加到全局集合。
-        list_commands.extend(object_commands)
+        list_commands.extend(list_file_commands)
 
         # 当前源工作流追加到独立集合。
-        list_workflows.extend(object_workflows)
+        list_workflows.extend(list_file_workflows)
 
     # 返回完整记录集合供字段和关系校验。
     return list_commands, list_workflows
@@ -906,7 +906,7 @@ def validate_document_schema_files(
         try:
 
             # schema 作为对象参与摘要和发布。
-            object_schema = json.loads(path_schema.read_text(encoding="utf-8"))  # 当前文档 schema 载荷
+            dict_schema = json.loads(path_schema.read_text(encoding="utf-8"))  # 当前文档 schema 载荷
 
         # 诊断绑定具体 schema 文件。
         except (OSError, json.JSONDecodeError) as object_error:
@@ -917,7 +917,7 @@ def validate_document_schema_files(
             ) from object_error
 
         # 顶层非对象不能表达 JSON Schema。
-        if not isinstance(object_schema, dict):
+        if not isinstance(dict_schema, dict):
 
             # 文档结构合同不能使用数组或标量顶层。
             raise RegistryError(
@@ -1026,13 +1026,13 @@ def finalized_document_records(
         raise RegistryError("> ERR: [Python] document registry sources are not finalized")
 
     # 职责与知识记录使用独立列表容器。
-    object_documents = dict_sources[str_catalog_path].get("documents")  # 文档职责容器
+    list_source_documents = dict_sources[str_catalog_path].get("documents")  # 文档职责容器
 
     # 知识记录从权威指针索引提取。
-    object_knowledge = dict_sources[str_knowledge_path].get("records")  # 知识指针容器
+    list_source_knowledge = dict_sources[str_knowledge_path].get("records")  # 知识指针容器
 
     # 两个错误容器统一拒绝。
-    if not isinstance(object_documents, list) or not isinstance(object_knowledge, list):
+    if not isinstance(list_source_documents, list) or not isinstance(list_source_knowledge, list):
 
         # SQLite 构建只接受列表记录。
         raise RegistryError("> ERR: [Python] document registry records must be lists")
@@ -1040,7 +1040,7 @@ def finalized_document_records(
     # 文档主键必须非空且唯一。
     list_document_ids = [  # 文档记录标识集合
         str(dict_record.get("id", ""))  # 当前文档标识
-        for dict_record in object_documents  # 遍历职责记录
+        for dict_record in list_source_documents  # 遍历职责记录
     ]
 
     # 空值或重复值破坏 documents 主键。
@@ -1052,7 +1052,7 @@ def finalized_document_records(
     # 知识主键使用独立命名空间。
     list_knowledge_ids = [  # 知识记录标识集合
         str(dict_record.get("id", ""))  # 当前知识标识
-        for dict_record in object_knowledge  # 遍历知识指针
+        for dict_record in list_source_knowledge  # 遍历知识指针
     ]
 
     # 空知识标识或重复知识标识破坏 knowledge 主键。
@@ -1062,7 +1062,7 @@ def finalized_document_records(
         raise RegistryError("> ERR: [Python] knowledge ids must be non-empty and unique")
 
     # 返回已验证记录集合。
-    return object_documents, object_knowledge
+    return list_source_documents, list_source_knowledge
 
 # 文档记录加载器把完成态职责目录和知识指针纳入 schema v2。
 def load_document_records(
@@ -1077,19 +1077,19 @@ def load_document_records(
     """
 
     # 两个清单分别声明文档治理源和可发布 schema。
-    object_document_sources = dict_manifest.get("document_sources")  # 文档治理源路径容器
+    list_document_sources = dict_manifest.get("document_sources")  # 文档治理源路径容器
 
     # schema 路径使用独立容器。
-    object_document_schemas = dict_manifest.get("document_schemas")  # 文档结构约束路径容器
+    list_document_schemas = dict_manifest.get("document_schemas")  # 文档结构约束路径容器
 
     # 源文件清单必须是非空字符串列表。
-    if not is_string_list(object_document_sources, bool_allow_empty=False):
+    if not is_string_list(list_document_sources, bool_allow_empty=False):
 
         # 缺失文档源不能构建 schema v2。
         raise RegistryError("> ERR: [Python] registry manifest document_sources must be a string list")
 
     # schema 清单同样必须完整。
-    if not is_string_list(object_document_schemas, bool_allow_empty=False):
+    if not is_string_list(list_document_schemas, bool_allow_empty=False):
 
         # 缺失 schema 会让 JSON 合同不可审查。
         raise RegistryError("> ERR: [Python] registry manifest document_schemas must be a string list")
@@ -1101,10 +1101,10 @@ def load_document_records(
     dict_roles = load_document_roles(path_registry_root, dict_manifest)  # 已验证文档角色路径
 
     # 四份可发布 schema 必须是 JSON 对象。
-    validate_document_schema_files(path_registry_root, object_document_schemas)
+    validate_document_schema_files(path_registry_root, list_document_schemas)
 
     # 文档职责、知识和迁移源按清单加载。
-    dict_sources = load_document_source_objects(path_registry_root, object_document_sources)  # 治理源对象
+    dict_sources = load_document_source_objects(path_registry_root, list_document_sources)  # 治理源对象
 
     # 完成态校验后返回两类 SQLite 记录。
     return finalized_document_records(dict_sources, dict_roles)
@@ -1136,7 +1136,7 @@ def source_digest(path_skill_root: Path, dict_manifest: dict[str, Any]) -> str:
     ]
 
     # 单个摘要器按稳定路径顺序接收路径和内容。
-    object_digest = hashlib.sha256()  # 注册源内容摘要器
+    resource_digest = hashlib.sha256()  # 注册源内容摘要器
 
     # 排序消除清单排列以外的遍历不确定性。
     for str_relative_path in sorted(list_relative_paths):
@@ -1145,10 +1145,10 @@ def source_digest(path_skill_root: Path, dict_manifest: dict[str, Any]) -> str:
         path_source = resolve_registry_source(path_registry_root, str_relative_path)  # 当前摘要输入文件
 
         # 路径进入摘要可区分内容相同但职责不同的文件。
-        object_digest.update(str_relative_path.replace("\\", "/").encode("utf-8"))
+        resource_digest.update(str_relative_path.replace("\\", "/").encode("utf-8"))
 
         # 空字节划分路径和文件内容，避免拼接歧义。
-        object_digest.update(b"\0")
+        resource_digest.update(b"\0")
 
         # 规范 JSON 消除 Git 换行与缩进转换，同时保留全部语义值和列表顺序。
         obj_source_data = json.loads(path_source.read_text(encoding="utf-8"))  # 当前 JSON 语义值
@@ -1162,13 +1162,13 @@ def source_digest(path_skill_root: Path, dict_manifest: dict[str, Any]) -> str:
         ).encode("utf-8")
 
         # 当前规范 JSON 内容进入注册源摘要。
-        object_digest.update(bytes_canonical_json)
+        resource_digest.update(bytes_canonical_json)
 
         # 第二个分隔符划分相邻文件。
-        object_digest.update(b"\0")
+        resource_digest.update(b"\0")
 
     # 十六进制文本便于写入 SQLite 元数据和 JSON 输出。
-    return object_digest.hexdigest()
+    return resource_digest.hexdigest()
 
 # 检索文本投影器选择稳定且有召回价值的字段。
 def record_search_text(dict_record: dict[str, Any]) -> str:
@@ -1267,7 +1267,7 @@ def ensure_database_current(
     tuple_document_records = load_document_records(path_skill_root, tuple_registry[0])  # 文档与知识记录
 
     # SQLite 打开和元数据读取作为单一资源初始化步骤。
-    connection_database: sqlite3.Connection | None = None  # 失败路径也可关闭的连接
+    resource_connection_database: sqlite3.Connection | None = None  # 失败路径也可关闭的连接
 
     # 初始化只读连接并验证数据库元数据。
     try:
@@ -1276,22 +1276,22 @@ def ensure_database_current(
         str_database_uri = f"{path_database.resolve().as_uri()}?mode=ro"  # 禁止数据库写入的 SQLite URI
 
         # 连接在成功返回后由调用方关闭。
-        connection_database = sqlite3.connect(str_database_uri, uri=True)  # 注册表数据库连接
+        resource_connection_database = sqlite3.connect(str_database_uri, uri=True)  # 注册表数据库连接
 
         # query_only 为只读 URI 再增加 SQLite 运行时防线。
-        connection_database.execute("PRAGMA query_only = ON")
+        resource_connection_database.execute("PRAGMA query_only = ON")
 
         # 元数据读取同时验证 metadata 表存在。
-        dict_metadata = fetch_metadata(connection_database)  # 当前数据库元数据
+        dict_metadata = fetch_metadata(resource_connection_database)  # 当前数据库元数据
 
     # 无法打开数据库时转换为稳定错误状态。
     except (RegistryError, sqlite3.Error) as object_error:
 
         # 元数据读取失败时也必须释放已建立连接。
-        if connection_database is not None:
+        if resource_connection_database is not None:
 
             # 关闭失败连接，避免阻塞后续索引重建。
-            connection_database.close()
+            resource_connection_database.close()
 
         # 已归一化的领域异常保持原始含义。
         if isinstance(object_error, RegistryError):
@@ -1305,7 +1305,7 @@ def ensure_database_current(
         raise RegistryError(f"> ERR: [Python] cannot open registry database: {object_error}") from object_error
 
     # 防御不可达的空连接状态，避免依赖裸断言。
-    if connection_database is None:
+    if resource_connection_database is None:
 
         # 连接初始化未成功时拒绝继续读取索引。
         raise RegistryError("> ERR: [Python] registry database connection was not initialized")
@@ -1325,7 +1325,7 @@ def ensure_database_current(
     if any(dict_metadata.get(str_key) != str_value for str_key, str_value in dict_expected.items()):
 
         # 过期连接先关闭，避免 Windows 上阻塞重建替换。
-        connection_database.close()
+        resource_connection_database.close()
 
         # 调用方应运行构建器而不是继续查询旧内容。
         raise RegistryError("> ERR: [Python] registry database is stale or schema-incompatible")
@@ -1334,19 +1334,19 @@ def ensure_database_current(
     try:
 
         # count 查询不会读取或输出完整注册载荷。
-        connection_database.execute("SELECT count(*) FROM command_fts").fetchone()
+        resource_connection_database.execute("SELECT count(*) FROM command_fts").fetchone()
 
         # schema v2 同时验证知识 FTS 表可用。
-        connection_database.execute("SELECT count(*) FROM knowledge_fts").fetchone()
+        resource_connection_database.execute("SELECT count(*) FROM knowledge_fts").fetchone()
 
     # 表损坏或 FTS 扩展不可用时拒绝问询。
     except sqlite3.Error as object_error:
 
         # 失败连接在抛出前必须释放。
-        connection_database.close()
+        resource_connection_database.close()
 
         # 错误明确归类为 FTS5 索引不可用。
         raise RegistryError(f"> ERR: [Python] registry FTS5 index is unavailable: {object_error}") from object_error
 
     # 成功连接交给查询或状态读取方使用。
-    return connection_database, dict_metadata
+    return resource_connection_database, dict_metadata

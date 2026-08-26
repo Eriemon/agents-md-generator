@@ -79,10 +79,10 @@ def run_development_package_release(
     """
 
     # 聚合模块公开真实发布实现，默认参数保留开发态兼容。
-    module_release_runtime = load_development_release_runtime()  # 文档发布聚合运行时。
+    module_type_release_runtime = load_development_release_runtime()  # 文档发布聚合运行时。
 
     # 评估不声明正式发布态，因此不制造远程 pytest receipt。
-    return module_release_runtime.package_release(
+    return module_type_release_runtime.package_release(
         path_project,  # 临时发布仓库。
         str_version,  # 临时发布版本。
         str(path_skill_relative),  # 项目内技能相对路径文本。
@@ -108,10 +108,10 @@ def run_development_release_gate(
     """
 
     # 污染复核与打包共享同一实现来源，避免算法分叉。
-    module_release_runtime = load_development_release_runtime()  # 污染复核使用的发布运行时。
+    module_type_release_runtime = load_development_release_runtime()  # 污染复核使用的发布运行时。
 
     # 未声明 required 时底层 API 保持隔离评估所需的开发态语义。
-    return module_release_runtime.release_gate(
+    return module_type_release_runtime.release_gate(
         path_project,  # 已注入禁止内容的隔离仓库。
         str_version,  # 待复核污染产物的版本。
         str(path_skill_relative),  # 污染产物对应的源码路径。
@@ -451,11 +451,9 @@ def governance_cli_checks(
     # 评估帮助入口应可独立解析命令行。
     tuple_eval_help = dict_results["run_skill_evals_help"]  # 评估入口帮助进程结果
 
-    # 中英文范围词和三个触发词共同约束当前工作目录规划路由。
+    # 当前 English skill 入口的 planning trigger 由稳定语义片段约束。
     list_planning_terms = [  # 工作目录规划触发词
-        "计划",  # 中文计划触发词
-        "规划",  # 中文规划触发词
-        "准备",  # 中文准备触发词
+        "planning request",  # 规划请求触发语义
         "current workspace",  # 当前工作区范围词
         "repository",  # 当前仓库范围词
         "work folder",  # 当前工作目录范围词
@@ -620,10 +618,16 @@ def prepare_release_content_fixture(path_project: Path, helper: EvalFixtures) ->
         固定夹具版本与技能源码相对路径。
     """
 
+    # 所有者名称与发布版本由 fixture 合同提供，场景不绑定当前发布值。
+    str_owner_name = str(helper.fixture_value("names", "owner_skill"))  # 净化场景的 fixture 所有者标识
+
+    # 读取发布版本文本，供隔离发布目录使用。
+    str_release_version = str(helper.fixture_value("versions", "release_fixture"))  # fixture 发布版本
+
     # 所有者技能夹具提供正式发布目录布局。
     path_skill = helper.make_governed_skill_project(  # 待打包技能根
         path_project,  # 接收技能源码的隔离项目
-        name="agents-md-generator",  # 使用所有者技能名称
+        name=str_owner_name,  # 使用所有者技能名称
     )
 
     # 仓库级测试 harness 必须留在源码而不进入发布包。
@@ -650,11 +654,14 @@ def prepare_release_content_fixture(path_project: Path, helper: EvalFixtures) ->
         encoding="utf-8",
     )
 
+    # 自定义 evals 内容覆盖了复制的 role，必须同步 fixture manifest 摘要。
+    helper.refresh_runtime_manifest_hashes(path_skill)
+
     # 初始化受管 Git 历史满足发布命令的干净仓库前提。
     helper.init_governed_git_repo(path_project)
 
-    # 固定版本与相对路径由后续打包和门禁命令共同使用。
-    return "v0.4.3", Path("skills") / "agents-md-generator"
+    # 配置版本与相对路径由后续打包和门禁命令共同使用。
+    return str_release_version, Path("skills") / str_owner_name
 
 # 发布证据助手打包 eval 资产、执行安装预检并注入测试漂移。
 def collect_release_content_evidence(
@@ -827,10 +834,13 @@ def prepare_sanitizer_fixture(path_project: Path, helper: EvalFixtures) -> Path:
         待发布的 agents-md-generator 技能根。
     """
 
+    # 净化场景从 fixture 合同读取与其他发布场景不同的所有者名称。
+    str_owner_name = str(helper.fixture_value("names", "owner_skill"))  # fixture 所有者名称
+
     # 所有者项目夹具提供 scripts 和 references 发布目录。
     path_skill = helper.make_governed_skill_project(  # 净化场景技能根
         path_project,  # 隔离项目根
-        name="agents-md-generator",  # 所有者技能名称
+        name=str_owner_name,  # 所有者技能名称
     )
 
     # 正则代码包含看似秘密赋值的常量名，但必须保持原始语义。
@@ -875,14 +885,17 @@ def collect_sanitizer_evidence(path_project: Path, helper: EvalFixtures) -> dict
         包含打包、安装、文本、收据与编译结果的证据映射。
     """
 
-    # 夹具初始化后使用固定版本生成隔离发布目录。
+    # 夹具初始化后使用 fixture 版本生成隔离发布目录。
     prepare_sanitizer_fixture(path_project, helper)
 
-    # 固定版本保证发布目录与收据断言稳定。
-    str_version = "v0.4.3"  # 净化场景发布版本
+    # 配置版本保证发布目录与收据断言稳定。
+    str_version = str(helper.fixture_value("versions", "release_fixture"))  # fixture 净化场景版本
 
     # 所有者技能路径作为 package-release 的显式输入。
-    path_skill_relative = Path("skills") / "agents-md-generator"  # 所有者技能相对路径
+    str_owner_name = str(helper.fixture_value("names", "owner_skill"))  # 净化发布的 fixture 所有者标识
+
+    # 使用仓库布局的技能相对目录拼接发布源路径。
+    path_skill_relative = Path("skills") / str_owner_name  # 所有者技能相对路径
 
     # 开发态 API 生成净化与安装验证所需的版本目录。
     dict_package = run_development_package_release(  # 净化场景发布包生成结果。
@@ -892,7 +905,7 @@ def collect_sanitizer_evidence(path_project: Path, helper: EvalFixtures) -> dict
     )
 
     # 打包结果所在目录是安装与取证的共同输入。
-    path_release = path_project / "dist" / f"agents-md-generator-{str_version}"  # 净化产物取证根
+    path_release = path_project / "dist" / f"{str_owner_name}-{str_version}"  # 净化产物取证根
 
     # 安装 skip 模式验证发布包策略，不修改本地安装态。
     dict_install = run_json_script(  # 净化后发布包安装预检结果

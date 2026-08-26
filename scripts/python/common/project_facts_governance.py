@@ -293,12 +293,7 @@ def script_layout_path_result(
         # 直接位于脚本根的文件给出完整目标布局。
         if len(tuple_parts) == 1:
 
-            # 诊断包含期望家族、功能层和文件扩展名。
-            # 违规文本同时给出允许家族和实际散落路径。
-            # 诊断明确指出脚本落在未受支持的语言家族。
-            # 当前诊断描述散落脚本的非法家族位置。
-            # 散落脚本诊断在当前分支内生成后立即返回。
-            # 非法家族诊断保留允许范围和实际文件位置。
+            # 诊断同时说明允许家族、功能层、扩展名和实际散落路径。
             str_violation = (
                 f"script layout requires {str_required_root}/{str_expected_family}/"
                 f"<function>/<name>{str_suffix}: {str_relative_path}"

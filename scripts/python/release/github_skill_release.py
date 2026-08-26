@@ -587,8 +587,7 @@ def _manifest_hash(dict_manifest: dict[str, str]) -> str:
         无；输入映射只进行确定性序列化。
     """
 
-    # 排序键和紧凑分隔符消除平台与序列化格式漂移。
-    # 返回可写入本地计划的清单摘要。
+    # 用稳定排序和紧凑分隔符生成可写入本地计划的清单摘要。
     return hashlib.sha256(
         json.dumps(
             dict_manifest,
@@ -1089,6 +1088,57 @@ def _copy_release(path_release: Path, path_checkout: Path) -> None:
     异常:
         ContractError: dist 中存在符号链接。
     """
+
+    # 源发布树和 checkout 根都不能通过链接改变镜像边界。
+    path_checkout_absolute = path_checkout.absolute()  # checkout 的词法绝对路径
+
+    # 解析 checkout 根，供后续边界比较使用。
+    path_checkout_root = path_checkout.resolve()  # checkout 的规范路径
+
+    # 记录发布树的词法绝对路径，识别链接或重解析边界。
+    path_release_absolute = path_release.absolute()  # 发布树的词法绝对路径
+
+    # 解析发布树根，供发布成员校验使用。
+    path_release_root = path_release.resolve()  # 发布树的规范路径
+
+    # 只有两个根都是真实目录且保持在自身边界内时才允许镜像。
+    if (
+        path_checkout.is_symlink()
+        or path_checkout_absolute != path_checkout_root
+        or path_release.is_symlink()
+        or path_release_absolute != path_release_root
+        or not path_release.is_dir()
+    ):
+
+        # 在任何 checkout 清理或创建前阻断外部路径。
+        raise ContractError(
+            "> ERR: [Python] release or checkout root must not be a symbolic link"
+        )
+
+    # 先验证发布树全部成员，避免坏包先清空旧 checkout。
+    for path_entry in sorted(path_release.rglob("*")):
+
+        # 发布包不允许把任一符号链接投影到 GitHub checkout。
+        if path_entry.is_symlink():
+
+            # 失败发生在清理前，旧 checkout 仍保持完整。
+            str_relative = path_entry.relative_to(path_release).as_posix()  # 违规成员的发布树相对路径。
+
+            # 符号链接成员必须在清理旧 checkout 前阻断镜像。
+            raise ContractError(
+                f"> ERR: [Python] release contains symbolic link: {str_relative}"
+            )
+
+        # 特殊文件也不能进入可提交的公开镜像。
+        if not path_entry.is_dir() and not path_entry.is_file():
+
+            # 只接受普通目录和普通文件。
+            str_relative = path_entry.relative_to(path_release).as_posix()  # 特殊成员的发布树相对路径。
+
+            # 特殊文件成员不能被投影为公开发布内容。
+            raise ContractError(
+                f"> ERR: [Python] release contains unsupported entry: {str_relative}"
+            )
 
     # 首次镜像允许 checkout 目录已由 git clone 创建。
     path_checkout.mkdir(parents=True, exist_ok=True)

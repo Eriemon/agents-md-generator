@@ -132,14 +132,19 @@ def tool_script_path(script_name: str) -> Path:
     return SCRIPTS_PYTHON_DIR / str_task_name / script_name
 
 # 子进程结果在此转换成后续聚合器消费的稳定字段。
-def command_entry(name: str, argv: list[str], cwd: Path, result: subprocess.CompletedProcess[str]) -> dict[str, Any]:
+def command_entry(
+    name: str,
+    argv: list[str],
+    cwd: Path,
+    completed_process_result: subprocess.CompletedProcess[str],
+) -> dict[str, Any]:
     """把子命令进程结果转换为统一门禁记录。
 
     Args:
         name: 置信门禁中的稳定命令名称。
         argv: 已执行的完整命令参数。
         cwd: 子命令执行目录。
-        result: subprocess 返回的进程结果。
+        completed_process_result: subprocess 返回的进程结果。
 
     Returns:
         包含进程输出和可选 JSON 载荷的命令记录。
@@ -150,16 +155,16 @@ def command_entry(name: str, argv: list[str], cwd: Path, result: subprocess.Comp
         "name": name,  # 稳定门禁命令名称
         "argv": argv,  # 实际执行的完整参数列表
         "cwd": str(cwd),  # 子命令实际工作目录
-        "returncode": result.returncode,  # 子进程退出状态
-        "stdout": result.stdout,  # 捕获的标准输出文本
-        "stderr": result.stderr,  # 捕获的标准错误文本
+        "returncode": completed_process_result.returncode,  # 子进程退出状态
+        "stdout": completed_process_result.stdout,  # 捕获的标准输出文本
+        "stderr": completed_process_result.stderr,  # 捕获的标准错误文本
     }
 
     # 保护 command_entry 中允许失败的外部访问。
     try:
 
         # 成功解析的载荷用于后续结构化错误聚合。
-        dict_entry["json"] = json.loads(result.stdout)  # 可解析的机器报告
+        dict_entry["json"] = json.loads(completed_process_result.stdout)  # 可解析的机器报告
 
     # 非 JSON stdout 仍保留原文，结构化字段明确置空。
     except json.JSONDecodeError:
@@ -203,8 +208,7 @@ def run_command(name: str, argv: list[str], cwd: Path, *, installed_skill_dir: P
     # 统一转换返回码、输出和可选 JSON 载荷。
     return command_entry(name, argv, cwd, completed_process_command_result)
 
-# 跳过记录将策略状态与实际执行记录使用相同的数据形状。
-# 命名元组避免动态加载时 dataclass 依赖模块注册状态。
+# 跳过记录沿用实际执行记录的数据形状，并用命名元组避免动态加载时的 dataclass 注册依赖。
 SkippedCommandContext = namedtuple(  # runner 跳过证据的轻量不可变结构
     "SkippedCommandContext",  # 运行时类型名称
     "str_reason str_status int_returncode str_eval_kind str_runner_source",  # 跳过证据字段顺序
@@ -309,8 +313,7 @@ def resolve_eval_runner(eval_runner: Path | None, agents_generator_root: Path) -
         # 可用性单独返回，让策略层决定缺失是否阻断。
         return path_explicit_runner, "explicit_path", path_explicit_runner.is_file()
 
-    # 安装态 runner 是发布验证的首选运行时。
-    # 安装态路径来自调用方选择的治理技能根。
+    # 安装态 runner 来自调用方选择的治理技能根，是发布验证的首选运行时。
     path_installed_runner = installed_eval_runner_path(agents_generator_root)  # 安装包正式 runner
 
     # 已安装入口存在时不再探测源码仓兼容脚本。
@@ -319,8 +322,7 @@ def resolve_eval_runner(eval_runner: Path | None, agents_generator_root: Path) -
         # 来源标识进入最终置信报告。
         return path_installed_runner, "installed_runtime", True
 
-    # 开发仓允许回退到 tests wrapper，保持源码验证可运行。
-    # wrapper 回退只发生在安装态入口不存在时。
+    # 开发仓仅在安装态入口不存在时回退到 tests wrapper，保持源码验证可运行。
     path_repo_runner = repo_local_eval_runner_path()  # 源码仓兼容 runner
 
     # wrapper 存在时标记来源，避免把它误称为安装态证据。
@@ -460,8 +462,7 @@ def parsed_errors(entry: dict[str, Any]) -> list[str]:
         结构化 errors 字段的字符串列表。
     """
 
-    # JSON 字段可能为空或属于其他机器协议类型。
-    # 只有对象报告才能按 errors 键提取诊断。
+    # JSON 字段可能为空或属于其他机器协议类型，只有对象报告才能提取 errors 诊断。
     if not isinstance(entry.get("json"), dict):
 
         # 非对象报告没有可安全读取的错误集合。
@@ -519,8 +520,7 @@ def current_version(skill_dir: Path) -> str:
     # 缺失文件返回稳定占位值，由后续发布门禁形成诊断。
     return path_version.read_text(encoding="utf-8").strip() if path_version.is_file() else "unknown"
 
-# 不可变上下文防止命令序列在执行中发生路径漂移。
-# 字段顺序与关键字构造共同形成内部命令上下文合同。
+# 不可变上下文以固定字段顺序防止命令序列执行中的路径漂移。
 ConfidenceGateContext = namedtuple(  # 全部门禁命令共享的规范化执行上下文
     "ConfidenceGateContext",  # 置信闭环上下文运行时类型名称
     (
@@ -554,8 +554,7 @@ def confidence_context(
         ValueError: eval runner 策略不受支持。
     """
 
-    # 治理生成器可以与被检查技能分离，默认使用当前技能源码。
-    # 规范化路径确保所有子命令引用相同治理运行时。
+    # 治理生成器可与被检查技能分离；规范化路径确保子命令引用同一运行时。
     path_agents_generator = Path(dict_options.get("agents_generator_dir") or SKILL_DIR).resolve()  # 治理生成器绝对路径
 
     # 旧 require 标志只允许把策略收紧为 required。
@@ -1265,8 +1264,7 @@ def collect_gate_evidence(
         # 非对象载荷使用空报告参与通用退出码判断。
         dict_report = object_report if isinstance(object_report, dict) else {}  # 安全结构化报告
 
-        # 没有结构化错误或 reasons 时保留非零退出码。
-        # 已有结构化明细时不再追加重复的退出码消息。
+        # 没有结构化错误或 reasons 时保留非零退出码，已有明细则避免重复消息。
         bool_has_detail = bool(dict_report.get("errors")) or (  # 是否已有可解释失败明细
             str_name == "branch_gate"  # 分支门禁使用 reasons 而非 errors
             and not dict_report.get("approved")  # 未批准分支需要检查 reasons

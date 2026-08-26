@@ -1,23 +1,173 @@
 """实现根级与作用域 AGENTS.md 的渲染入口。"""
 
+# CLI 参数和标准输出依赖用于稳定暴露渲染入口。
+import argparse
+import json
+import os
+import sys
+
+# 路径类型用于渲染项目根和可选模板目录。
+from pathlib import Path
+from typing import Any
+
 # 共享忽略目录保证 scoped 扫描与项目发现一致。
 from agents_common import SKIP_DIRS
+from agent_platform import (
+    global_instruction_file_label,
+    load_agent_config,
+    load_catalog,
+    resolve_agent_profile,
+    write_agent_config,
+)
+
+# Codebase-memory 写入门禁和 worker 画像负责渲染前的受管能力检查。
 from codebase_memory_mcp import enforce_codebase_memory_write_gate
+
+# 语言路由校验器仍由独立模块负责，渲染器只投影压缩后的稳定合同。
+from reviewer_worker_profile import REVIEWER_WORKER_SHA256, ensure_reviewer_worker_profile
 from tester_worker_profile import ensure_tester_worker_profile
+from gardener_worker_profile import ensure_gardener_worker_profile
+# 从 render_platform_state 导入拆分后的公共合同函数。
+from render_platform_state import (
+    _skill_root_from_entrypoint,
+    selected_agent_profile,
+    _platform_selection_paths,
+    _snapshot_platform_path,
+    _restore_platform_path,
+)
+
+from render_platform_state import (
+    _read_selection_state,
+    _resolve_migration_state_paths,
+    _validate_existing_platform_states,
+    _validate_unselected_platform_roots,
+    _validate_platform_request,
+)
+
+from render_platform_state import (
+    _collect_platform_shim_paths,
+    _build_platform_selection,
+    _write_platform_files,
+    _apply_platform_shims,
+)
+
+from render_platform_state import (
+    _retire_platform_migration,
+    _platform_conflict_warnings,
+    _filter_platform_shim_paths,
+    _merge_platform_warnings,
+    ensure_platform_artifacts,
+)
+
+# 从 render_write_plan 导入拆分后的公共合同函数。
+from render_write_plan import (
+    enforce_structure_confirmation,
+    apply_confirmed_structure_fix,
+    enforce_branch_gate,
+    prepare_controlled_write,
+    _ensure_worker_profiles_for_write,
+)
+
+# 根正文之外的合同引用区保存完整高风险合同，避免受管提示词预算被长句撑大。
+def contract_reference_notes(dict_values: dict[str, str] | None = None) -> str:
+    """生成根 AGENTS.md 的完整 workspace 与 TESTER 合同引用区。
+
+    参数：dict_values 为当前 profile 渲染出的动态合同映射，可选。
+    返回：位于受管区块之外、每次渲染都会替换的完整合同正文。
+    """
+
+    # workspace 长合同保留精确授权、路由、图谱和单次确认边界。
+    str_workspace_contract = (
+        "- **Workspace boundary:** current work folder; verified remote-server work folder. "
+        "Changes inside either work folder require no additional confirmation; remote changes remain allowed only "
+        "when the configured task route matches that folder. Official codebase-memory start, index refresh, rebuild, "
+        "or recovery for the project bound to either work folder, including its configured runtime cache and root "
+        "persistence artifact, also requires no additional confirmation. External reads beyond those boundaries must "
+        "be necessary and side-effect free. Every other external write is prohibited by default; only after the user "
+        "proactively and explicitly requests the exact action. Disclose exact normalized target, action, scope, risks, "
+        "alternatives, and recovery limits; obtain exactly one explicit user confirmation. Any target or scope change "
+        "invalidates that confirmation. installed skill always requires exactly one explicit user confirmation. "
+        "Routine test-hash confirmation is prohibited. The agent may confirm when an authoritative current tests "
+        "result agrees with the authoritative current tests tree or receipt. A report-only hash mismatch is "
+        "corrected to the authoritative value. Conflicting or insufficient provenance stops for user review "
+        "without an autonomous rerun."
+    )
+
+    # profile 相关合同必须使用本次渲染结果，避免根文件继续投影旧的静态文案。
+    dict_contract_values = dict_values or {}  # 当前动态合同映射
+
+    # 编码行为合同跟随治理 JSON 的注释、命名和路由门禁。
+    str_coding_behavior = dict_contract_values.get(  # 编码行为与语言路由合同
+        "CODING_BEHAVIOR_BASELINE",  # 编码行为合同字段
+        "- 编码行为配置来源：`.agents/global-rule-overrides.json`; `Kind` 列表只从该 JSON 读取；"
+        "代码不得内置业务枚举。\n"
+        "- 注释质量：只允许非显然意图、不变量、生成边界或公共 API 行为注释；"
+        "风险边界需明确；严禁未经明确要求的批量 AI 注释。",
+    )  # 当前编码行为合同正文
+
+    # 编码行为配置路径是 verifier 的稳定锚点，必须在引用区保留一次。
+    str_reference_coding_behavior = "\n".join(  # 保留完整编码行为引用
+        line  # 保留编码行为正文行
+        for line in str_coding_behavior.splitlines()  # 遍历编码行为引用行
+    )
+
+    # 脚本输出合同跟随治理 JSON 的机器可读与人类可读边界。
+    str_script_output_policy = dict_contract_values.get(  # 脚本输出合同
+        "SCRIPT_OUTPUT_POLICY",  # 脚本输出合同字段
+        "- Script Output Policy: source `.agents/global-rule-overrides.json`; read the `Kind` catalog from that JSON "
+        "instead of embedding business enums; use `> INFO: [{kind}]`, `> WARNING: [{kind}]`, and `> ERR: [{kind}]`; "
+        "Python process INFO is enabled by default, `--quiet` disables it, WARNING and ERR remain visible, and "
+        "machine-readable output has no prefix.",
+    )  # 当前脚本输出合同正文
+
+    # 脚本输出来源行是 verifier 的第二个稳定配置锚点，必须保留。
+    str_reference_script_output_policy = "\n".join(  # 保留完整脚本输出引用
+        line  # 保留脚本输出正文行
+        for line in str_script_output_policy.splitlines()  # 遍历脚本输出引用行
+    )
+
+    # 自定义引用标记让下一次渲染能够安全移除旧引用而不触碰人工笔记。
+    return "\n".join(
+        [
+            "<!-- AGENTS-CONTRACT-REFERENCE:START -->",
+            "## Contract reference notes",
+            str_workspace_contract,
+            str_reference_coding_behavior,  # 当前治理 JSON 的编码行为和路由合同。
+            str_reference_script_output_policy,  # 当前治理 JSON 的脚本输出合同。
+            "<!-- AGENTS-CONTRACT-REFERENCE:END -->",
+        ]
+    )
 
 # 根正文按稳定顺序连接项目事实、命令和局部约束。
 def generated_root_body(
     project: Path,
     dict_values: dict[str, str],
     manual: str = "",
+    agent_profile: Any | None = None,
 ) -> str:
-    """生成默认模板和自定义模板共享的根正文。
-
-    参数：project 为仓库根。
-    参数：dict_values 为已发现并渲染的项目事实。
-    参数：manual 为受管块之外的人工文本。
-    返回：以单个换行结尾的根 AGENTS.md 正文。
     """
+    生成默认模板和自定义模板共享的根正文。
+
+    参数:
+        project: 用于生成 scoped 索引和项目摘要的仓库根目录。
+        dict_values: 已发现并渲染的项目事实、命令和门禁文本。
+        manual: 受管块之外需要保留的人工维护文本。
+        agent_profile: 可选平台配置，用于渲染平台相关摘要。
+    返回:
+        以单个换行结尾的根 AGENTS.md 正文。
+    """
+
+    # 修改前阅读段在组装前合并纯文档指针，保留工具和样例规则。
+    str_read_before_changing = compact_read_before_changing(  # 修改前阅读入口
+        dict_values["READ_BEFORE_CHANGING"]  # 原始修改前阅读规则
+    )  # 压缩后的修改前阅读规则
+
+    # 先构造受管阅读段，列表组装只引用已命名的段落结果。
+    str_read_section = compact_section(  # 修改前阅读受管段结果
+        "read-before-changing",  # 修改前阅读段落标识
+        "Read before changing",  # 修改前阅读段落标题
+        str_read_before_changing,  # 已压缩的修改前阅读内容
+    )  # 修改前阅读受管段
 
     # 固定段落顺序保证重新生成时 diff 稳定。
     list_parts = [
@@ -34,17 +184,17 @@ def generated_root_body(
             "**Precedence:** the closest `AGENTS.md` to the files being changed wins. "
             "Explicit user prompts override this file."
         ),
-        compact_section("project", "Project", project_section(dict_values)),  # 项目身份受管段。
+        compact_section("project", "Project", project_section(dict_values, agent_profile)),  # 项目身份受管段。
         commands_section(dict_values),  # 已发现命令受管段。
         compact_section("task-specific-gates", "Task-specific gates", dict_values["TASK_SPECIFIC_GATES"]),  # 项目专用门禁段。
         compact_section("local-conventions", "Local conventions", local_conventions_section(dict_values)),  # 本地执行约定段。
-        compact_section("read-before-changing", "Read before changing", dict_values["READ_BEFORE_CHANGING"]),  # 修改前必读段。
+        str_read_section,  # 列表引用已预先压缩的阅读段
         compact_section("scoped-instructions", "Scoped instructions", scoped_instructions(project)),  # 下级规则索引段。
         (
             "## When Instructions Conflict\n"
-            "Use this order: explicit user prompt, closest AGENTS.md, "
-            "parent AGENTS.md, general repository docs."
+            "- Conflicts: explicit user prompt > closest `AGENTS.md` > parent > repository docs."
         ),
+        contract_reference_notes(dict_values),  # 当前 profile 的完整高风险合同引用区
     ]  # 根文件候选段落。
 
     # 人工文本只在实际存在时附加，避免空段落改变末尾格式。
@@ -57,11 +207,15 @@ def generated_root_body(
     return "\n".join(str_part for str_part in list_parts if str(str_part).strip()).rstrip() + "\n"
 
 # 项目摘要只保留影响代理执行的身份和控制字段。
-def project_section(dict_values: dict[str, str]) -> str:
-    """渲染项目身份和控制摘要。
+def project_section(dict_values: dict[str, str], agent_profile: Any | None = None) -> str:
+    """
+    渲染项目身份和控制摘要。
 
-    参数：dict_values 为项目事实映射。
-    返回：去重后的项目摘要行。
+    参数:
+        dict_values: 包含项目概览和强控制摘要的事实映射。
+        agent_profile: 可选平台配置，用于生成全局指令文件标签。
+    返回:
+        按输入顺序去重后的项目摘要文本。
     """
 
     # 输出行按项目概览在前、控制配置在后的顺序累积。
@@ -80,13 +234,16 @@ def project_section(dict_values: dict[str, str]) -> str:
             continue
 
         # 全局基线状态需要统一为当前工作文件夹的读取提示。
-        elif str_stripped.startswith("Global .codex/AGENTS.md:"):
+        elif (
+            str_stripped.startswith("Global ")
+            and str_stripped.endswith(": managed; read current work folder root AGENTS.md.")
+        ):
 
             # 统一后的状态行避免把完整全局文件正文复制到项目摘要。
             str_stripped = (
-                "Global .codex/AGENTS.md: present with a managed baseline; "
-                "read the current work folder root AGENTS.md first."
-            )  # 规范化后的全局基线行
+                f"{global_instruction_file_label(agent_profile or selected_agent_profile())}: managed; "
+                "read current work folder root AGENTS.md."
+            )  # 紧凑全局基线行
 
         # 仅保留非空且非根 AGENTS 状态的事实。
         if str_stripped and "Root AGENTS.md:" not in str_stripped:
@@ -100,6 +257,7 @@ def project_section(dict_values: dict[str, str]) -> str:
         "- Name:",  # 项目标识名称。
         "- Version:",  # 项目声明版本。
         "- Default conversation language:",  # 默认对话语言。
+        "- Local governance detail source:",  # 本地治理配置来源。
     )  # 可公开控制字段前缀。
 
     # 控制配置逐行筛选，避免把完整 profile 复制进 AGENTS.md。
@@ -122,6 +280,12 @@ def project_section(dict_values: dict[str, str]) -> str:
 
                 # 用短用途说明代替重复的设计解释。
                 str_stripped = "- Purpose: govern AGENTS.md rules and reduce drift."  # 精简用途说明
+
+            # 根摘要只保留本地治理配置路径，避免复制解释性长文。
+            elif str_stripped.startswith("- Local governance detail source:"):
+
+                # 配置路径由合同引用区统一声明，项目摘要只保留导航语义。
+                str_stripped = "- Rules: see `AGENTS-CONTRACT-REFERENCE`."  # 精简治理导航摘要
 
             # 控制摘要保持 profile 原始措辞。
             list_lines.append(str_stripped)
@@ -158,173 +322,209 @@ def commands_section(dict_values: dict[str, str]) -> str:
         ]
     )
 
-# 单行本地约定压缩保留 verifier 所需的固定短语。
+# 压缩常规本地约定，保留 verifier 所需的固定短语。
+def _compact_basic_convention_line(str_line: str) -> str:
+    """将常规本地约定映射为短规则或吸收标记。
+
+    参数:
+        str_line: 已去除空白合同块中的一行。
+    返回:
+        压缩后的规则行；被上层合同吸收的行返回 None。
+    """
+
+    # 会话语言规则只替换旧短语，不改变其他技术字面量。
+    if str_line.startswith("- Natural-language replies"):
+
+        # 会话语言已由项目元数据承载，根级 local-conventions 不重复输出。
+        return None
+
+    # 其他常规规则使用前缀到固定输出的映射，避免重复分支。
+    if str_line.startswith("- 配置来源："):
+
+        # 编码行为配置行已经声明脚本输出共用同一来源，删除重复入口。
+        return None
+
+    # 固定前缀映射承载不依赖跨行状态的本地约定压缩规则。
+    tuple_fixed_lines = (  # 常规本地约定映射
+        ("- Natural-language replies", None),  # 会话语言已由项目元数据承载。
+        ("- Finish feasible requested work", None),  # 吸收完成解释行。
+        (
+            "- Run narrow then final checks",  # 完成检查前缀。
+            None,  # 检查合同已由 task-specific fast-convergence 规则承载。
+        ),
+        (
+            "- 注释质量：",  # 注释合同前缀。
+            "- 注释质量：只允许非显然意图、不变量、风险、生成边界或公共 API 行为注释；"
+            "严禁把代码压缩到一行；炫技代码。",
+        ),
+        (
+            "- 格式：",  # 输出格式合同前缀。
+            None,  # 输出模板由 Script Output Policy 行统一承载。
+        ),
+        (
+            "- 编码行为配置来源：",  # 编码行为配置前缀。
+            "- 编码行为配置来源：`.agents/global-rule-overrides.json`。",  # 编码配置来源短文本。
+        ),
+        ("- 配置来源：", None),  # 配置来源已由上方脚本输出分支处理。
+        ("- 生成代码须", None),  # 生成合同前缀。
+        ("- 文件命名：", "- 文件命名：功能语义英文名≤30字符；Agent复核。"),  # 命名规则映射。
+        ("- 文件命名语义：", None),  # 语义复核已并入文件命名规则。
+    )
+
+    # 按原始合同顺序匹配一条常规压缩规则。
+    for str_prefix, str_replacement in tuple_fixed_lines:
+
+        # 只有前缀命中时才替换或吸收当前行。
+        if str_line.startswith(str_prefix):
+
+            # None 表示当前语义已由上层合同完整承载。
+            return str_replacement
+
+    # 未命中的常规行保持原文，交给后续路由判断。
+    return str_line
+
+# 压缩双语言技能路由合同，保留两技能共同门禁和最终所有权。
+def _compact_skill_route_line(str_line: str) -> str | None:
+    """将双技能路由行转换为固定短合同。
+
+    参数:
+        str_line: 已去除空白合同块中的一行。
+        返回:
+        压缩后的路由规则行、原始行或已合并的 None。
+    """
+
+    # 三类路由的 compact_text 从 packaged structured config 读取。
+    list_route_config_paths: list[Path] = [
+        Path.cwd() / ".agents" / "global-rule-overrides.json",  # 当前项目的治理覆盖配置。
+        Path(__file__).resolve().parents[3] / "config" / "language-routes.json",  # Skill 内置路由配置。
+    ]  # 项目覆盖优先于 packaged 默认。
+
+    # 只解析第一个存在的 structured route 配置，不使用渲染代码内的固定短文案。
+    try:
+
+        # 优先读取当前项目覆盖，缺失时使用 Skill 内置配置。
+        path_route_config: Path = next(  # 受管语言路由配置文件。
+            path_item  # 当前候选配置路径。
+            for path_item in list_route_config_paths  # 按优先级遍历配置候选。
+            if path_item.is_file()  # 仅接受存在的普通文件。
+        )
+
+        # JSON 路由对象是压缩文案的唯一事实来源。
+        obj_route_config: object = json.loads(path_route_config.read_text(encoding="utf-8"))  # 已读取的路由配置对象。
+
+    # 配置缺失或损坏时保留原始行，避免生成未经批准的替代文本。
+    except (OSError, UnicodeError, json.JSONDecodeError):
+
+        # 无法证明配置完整时不压缩当前文案。
+        return str_line
+
+    # packaged 路由直接位于 routes 根，项目覆盖使用嵌套 structured 节点。
+    dict_route_records: dict[str, object] = (  # 优先使用 packaged 路由记录。
+        obj_route_config.get("routes", {})  # 读取 packaged routes 根节点。
+        if isinstance(obj_route_config, dict) and isinstance(obj_route_config.get("routes", {}), dict)  # 仅接受对象路由映射。
+        else {}  # 非对象路由退回空映射。
+    )
+
+    # 项目 override 可能把结构化路由放在 coding_behavior 下。
+    if not dict_route_records and isinstance(obj_route_config, dict):
+
+        # 读取项目编码行为覆盖映射。
+        obj_coding_behavior: object = obj_route_config.get("coding_behavior", {})  # 项目编码行为配置。
+
+        # 读取嵌套的语言技能路由节点。
+        obj_language_routes: object = (  # 项目语言技能路由节点。
+            obj_coding_behavior.get("language_skill_routing", {})  # 从项目编码行为读取语言路由。
+            if isinstance(obj_coding_behavior, dict)  # 仅对象配置允许读取嵌套字段。
+            else {}  # 非对象配置退回空节点。
+        )
+
+        # 读取结构化路由记录，禁止回退到旧字符串字段。
+        dict_route_records = (  # 项目结构化路由记录。
+            obj_language_routes.get("structured", {})  # 从语言路由节点读取 structured 记录。
+            if isinstance(obj_language_routes, dict) and isinstance(obj_language_routes.get("structured", {}), dict)  # 仅对象节点允许读取结构化字段。
+            else {}  # 非对象节点退回空记录。
+        )
+
+    # 路由前缀到结构化记录键的映射由合同固定。
+    dict_prefix_keys: dict[str, str] = {
+        "- 语言技能共同门禁：": "shared",  # shared 双技能共同门禁。
+        "- 语言技能路由（Python）：": "python",  # Python 最终 owner 路由。
+        "- 语言技能路由（脚本）：": "script",  # 脚本最终 owner 路由。
+    }
+
+    # 逐类判断路由前缀，并保持未安装双技能时的原始文本。
+    for str_prefix, str_route_key in dict_prefix_keys.items():
+
+        # 非当前路由行继续尝试下一个合同前缀。
+        if not str_line.startswith(str_prefix):
+
+            # 当前行没有命中该路由前缀。
+            continue
+
+        # 路由正文必须同时出现两个语言技能名称才能被压缩。
+        str_route_body: str = str_line.split("：", 1)[1].strip()  # 当前路由正文。
+
+        # 分别记录 Python 和脚本技能是否存在。
+        bool_python_skill: bool = "readable-python-generator" in str_route_body  # Python 技能存在状态。
+
+        # 读取脚本技能标记是否存在。
+        bool_script_skill: bool = "readable-script-generator" in str_route_body  # 脚本技能存在状态。
+
+        # 只有双技能齐全时才允许替换为固定合同。
+        bool_both_skills: bool = bool_python_skill and bool_script_skill  # 双技能可用状态。
+
+        # 双技能齐全时使用配置 compact_text，否则保留原始配置行。
+        dict_route_record: dict[str, object] = (  # 当前 owner 的路由记录。
+            dict_route_records.get(str_route_key, {})  # 读取当前 owner 的结构化记录。
+            if isinstance(dict_route_records.get(str_route_key, {}), dict)  # 仅对象记录允许按 owner 查询。
+            else {}  # 非对象记录不参与压缩。
+        )
+
+        # 读取当前 owner 在双技能安装态下的 compact 文案。
+        str_compact_text: str = (  # 当前 owner 的精简路由正文。
+            str(dict_route_record.get("compact_text", "")).strip()  # 读取并清理 compact 文案。
+            if isinstance(dict_route_record, dict)  # 当前记录提供 compact_text。
+            else ""  # 非对象记录不能生成压缩文案。
+        )
+
+        # 只有两个 owner 都存在且文案非空时才替换原行。
+        return f"{str_prefix}{str_compact_text}" if bool_both_skills and str_compact_text else str_line
+
+    # 未命中的其他行保持原文。
+    return str_line
+
+# 统一派发常规与技能路由两类合同压缩。
 def _compact_local_convention_line(str_line: str) -> str | None:
     """压缩一条本地约定，保留机器校验所需的固定短语。
 
-    参数：str_line 为已经去除空白合同块中的一行。
-    返回：压缩后的规则行；被上层合同吸收的行返回 None。
+    参数:
+        str_line: 已去除空白合同块中的一行。
+    返回:
+        压缩后的规则行；被上层合同吸收的行返回 None。
     """
 
-    # 会话合同压缩为语言、完成和证据三条可执行规则。
-    if str_line.startswith("- Natural-language replies"):
+    # 常规前缀集合用于把普通合同和路由合同分流到各自 helper。
+    tuple_basic_prefixes = (
+        "- Natural-language replies",  # 会话语言前缀。
+        "- Finish feasible requested work",  # 完成解释前缀。
+        "- Run narrow then final checks",  # 最终检查合同前缀。
+        "- 注释质量：",  # 注释质量前缀。
+        "- 格式：",  # 输出格式前缀。
+        "- 编码行为配置来源：",  # 编码配置来源前缀。
+        "- 配置来源：",  # 配置来源前缀。
+        "- 生成代码须",  # 代码生成合同入口。
+        "- 文件命名：",  # 文件命名前缀。
+        "- 文件命名语义：",  # 命名语义前缀。
+    )
 
-        # 技术字面量保持不变，只修正当前项目要求的语言表述。
-        str_line = (
-            str_line.replace(  # 先替换会话语言规则中的旧表述
-                "unless the user switches languages",  # 待替换的旧语言短语
-                "unless the user switches language",  # 当前项目的语言短语
-            ).replace(
-                "; keep technical literals unchanged",  # 被移除的冗余后缀
-                "",  # 后缀删除结果
-            )
-        )  # 修正后的会话语言规则
+    # 常规合同由固定前缀 helper 处理，返回 None 表示已被吸收。
+    if str_line.startswith(tuple_basic_prefixes):
 
-        # 当前分支已完成会话规则压缩。
-        return str_line
+        # 普通约定压缩不会再进入语言技能路由分支。
+        return _compact_basic_convention_line(str_line)
 
-    # 已被完成规则覆盖的解释行不再进入根级文件。
-    if str_line.startswith("- Finish feasible requested work"):
-
-        # None 表示当前行由完成合同的权威入口承载。
-        return None
-
-    # 完成检查规则保留阻断、跳过和用户修改保护。
-    if str_line.startswith("- Run narrow then final checks"):
-
-        # 压缩文本保留交付后仍需公开的证据边界。
-        str_line = (  # 精简后的完成检查规则
-            "- Run narrow then final checks; report blockers, skipped checks, next steps; "
-            "preserve user changes"
-        )
-
-        # 当前分支已完成完成检查规则压缩。
-        return str_line
-
-    # 注释规则保留硬门禁，省略不会改变执行的解释性修饰语。
-    if str_line.startswith("- 注释质量："):
-
-        # 根级规则必须直接暴露注释的允许范围和禁止行为。
-        str_line = (  # 精简后的注释质量规则
-            "- 注释质量：只允许非显然意图、不变量、风险、生成边界或公共 API 行为注释；"
-            "禁止复述代码；禁止未经明确要求的批量 AI 注释；不能把语句、注释、函数粘连到一起；"
-            "严禁把代码压缩到一行；炫技代码"
-        )
-
-        # 当前分支已完成注释规则压缩。
-        return str_line
-
-    # 输出格式规则保留人读前缀与机器输出边界。
-    if str_line.startswith("- 格式："):
-
-        # 根级规则必须保留三类消息级别和 quiet 行为。
-        str_line = (  # 精简后的输出格式规则
-            "- 格式：`> INFO: [{kind}]`/`> WARNING: [{kind}]`/`> ERR: [{kind}]`；"
-            "Python 过程性 INFO 默认打印，`--quiet` 关闭，WARNING 和 ERR 继续可见；"
-            "机器可读输出不套前缀。"
-        )
-
-        # 当前分支已完成输出格式规则压缩。
-        return str_line
-
-    # 已被更高层的生成合同覆盖的行不再重复输出。
-    if str_line.startswith("- 生成代码须"):
-
-        # 生成合同已经在上层负责该行的执行语义。
-        return None
-
-    # 文件命名规则只保留长度与语义复核这两个硬条件。
-    if str_line.startswith("- 文件命名："):
-
-        # 根级摘要不复制完整命名治理说明。
-        str_line = "- 文件命名：不超过 30 个英文字符；Agent 语义复核。"  # 精简后的文件命名规则
-
-        # 当前行已经转换为根级可执行的命名摘要。
-        return str_line
-
-    # 已被文件命名规则吸收的语义细则不再重复输出。
-    if str_line.startswith("- 文件命名语义："):
-
-        # None 表示当前行由上一条命名规则承载。
-        return None
-
-    # 双技能共同门禁必须仍能被逐行校验器识别。
-    if str_line.startswith("- 语言技能共同门禁："):
-
-        # 共同门禁正文用于判断是否已同时安装两个语言技能。
-        str_route_body = str_line.split("：", 1)[1].strip()  # 当前语言共同门禁正文
-
-        # 共同门禁仅在两个语言技能都可用时替换。
-        bool_both_skills = (
-            "readable-python-generator" in str_route_body  # Python 技能共同门禁标记
-            and "readable-script-generator" in str_route_body  # 脚本技能共同门禁标记
-        )  # 共同门禁双技能可用状态
-
-        # 双技能已安装时投影完整共同门禁，否则保留原始配置行。
-        if bool_both_skills:
-
-            # 共同门禁文本必须保留先思考、同时加载和不得事后补做。
-            str_line = (  # 固定的双技能共同门禁
-                "- 语言技能共同门禁：创建或修改 Python、bat/cmd、shell/bash、PowerShell、Tcl 代码时必须先思考并同时加载 "
-                "`readable-python-generator` 与 `readable-script-generator`；两个技能组成当前可执行的语言门禁，"
-                "两个技能的门禁必须在过程中满足，全部通过后才能继续，不得事后补做。"
-            )
-
-        # 共同门禁分支已经决定当前规则的最终文本。
-        return str_line
-
-    # Python 路由必须保留最终所有权和共同门禁边界。
-    if str_line.startswith("- 语言技能路由（Python）："):
-
-        # Python 路由正文用于判断是否已同时安装两个语言技能。
-        str_route_body = str_line.split("：", 1)[1].strip()  # 当前 Python 路由正文
-
-        # Python 路由仅在两个语言技能都可用时替换。
-        bool_both_skills = (
-            "readable-python-generator" in str_route_body  # Python 路由安装标记
-            and "readable-script-generator" in str_route_body  # 脚本路由安装标记
-        )  # Python 路由双技能可用状态
-
-        # 双技能已安装时投影 Python 的最终所有权。
-        if bool_both_skills:
-
-            # Python 仍由 Python 技能负责，脚本技能不能接管。
-            str_line = (  # 固定的 Python 路由门禁
-                "- 语言技能路由（Python）：进行 Python 代码生成、修改、注释和规范化时，Python 最终仍由 "
-                "`readable-python-generator` 负责；任务分类、注释质量、变量命名、质量门禁；"
-                "创建或修改时必须加载该技能；不得由 `readable-script-generator` 接管。"
-            )
-
-        # Python 路由分支已经决定当前规则的最终文本。
-        return str_line
-
-    # 脚本路由必须保留脚本技能的最终所有权和 Python 边界。
-    if str_line.startswith("- 语言技能路由（脚本）："):
-
-        # 脚本分支先剥离规则前缀，再判断双技能是否齐全。
-        str_route_body = str_line.split("：", 1)[1].strip()  # 当前脚本路由正文
-
-        # 脚本目标的双技能判定决定是否投影脚本所有权。
-        bool_both_skills = (
-            "readable-python-generator" in str_route_body  # 脚本分支的 Python 安装标记
-            and "readable-script-generator" in str_route_body  # 脚本分支的脚本安装标记
-        )  # 脚本路由双技能可用状态
-
-        # 双技能已安装时投影脚本语言的最终所有权。
-        if bool_both_skills:
-
-            # 脚本包装器按脚本目标路由，不能被 Python 技能接管。
-            str_line = (  # 固定的脚本路由门禁
-                "- 语言技能路由（脚本）：bat/cmd、shell/bash、PowerShell、Tcl 脚本目标最终由 "
-                "`readable-script-generator` 负责；Python 目标继续使用 `readable-python-generator`；"
-                "Python 专属技能边界：调用 Python 外部命令的脚本包装器仍按脚本目标处理。"
-            )
-
-        # 脚本路由输出在此返回，避免回落到默认规则。
-        return str_line
-
-    # 未命中特殊合同时保留原始规则行。
-    return str_line
+    # 其他合同交给双技能路由 helper 处理并保留未命中的原文。
+    return _compact_skill_route_line(str_line)
 
 # 本地约定段落只负责组合合同和稳定去重。
 def local_conventions_section(dict_values: dict[str, str]) -> str:
@@ -334,48 +534,56 @@ def local_conventions_section(dict_values: dict[str, str]) -> str:
     返回：按合同顺序连接的本地约定。
     """
 
-    # 三个合同分别约束完成行为、编码方式和脚本输出。
-    list_blocks = [
-        dict_values["CONVERSATION_COMPLETION_CONTRACT"],  # 对话完成合同。
-        dict_values["CODING_BEHAVIOR_BASELINE"],  # 编码行为合同。
-        dict_values["SCRIPT_OUTPUT_POLICY"],  # 脚本输出合同。
-    ]  # 本地约定候选块。
+    # 会话语言锁属于本地执行约定，必须与导航指针位于同一受管段。
+    str_conversation_contract = dict_values.get("CONVERSATION_COMPLETION_CONTRACT", "")  # 会话完成合同正文
 
-    # 根 AGENTS 只携带可执行的最小合同，详细解释仍由 JSON 和参考文档承载。
-    list_compact_lines: list[str] = []  # 精简后的本地约定行。
+    # 详细规则由合同引用区和 JSON 配置承载，本段保留导航指针和会话锁。
+    return "\n".join(
+        part
+        for part in [
+            "- Local conventions: see `AGENTS-CONTRACT-REFERENCE`.",
+            str_conversation_contract,
+        ]
+        if str(part).strip()
+    )
 
-    # 按稳定顺序压缩每条合同，保留 verifier 所需的固定短语。
-    for str_block in list_blocks:
+# 仅文档指针合并为单一入口，避免根索引重复占用预算。
+def compact_read_before_changing(str_rules: str) -> str:
+    """合并仅由文档指针组成的修改前阅读规则。
 
-        # 空合同不进入输出，避免预算被占位内容消耗。
-        if not str_block.strip():
+    参数:
+        str_rules: 当前项目探测得到的修改前阅读规则。
+    返回:
+        文档指针的紧凑入口；包含工具或样例事实时保留原始规则。
+    """
 
-            # 当前块没有可执行规则时继续读取下一块。
-            continue
+    # 过滤空行和低信息量目录候选，只压缩真实文档指针。
+    list_lines = [
+        str_line.strip()  # 规则行去除两端空白
+        for str_line in str_rules.splitlines()  # 遍历修改前阅读规则
+        if str_line.strip() and "Directory coverage candidate:" not in str_line  # 排除目录候选
+    ]  # 当前项目的修改前阅读规则
 
-        # 逐行处理时保留原始顺序，便于受管块稳定更新。
-        for str_line in str_block.splitlines():
+    # 判断当前规则是否全部是文档指针。
+    bool_pointer_only = bool(list_lines) and all(  # 纯文档指针状态
+        str_line.startswith("- Use `docs/") and "as a pointer" in str_line  # 单条文档指针判断
+        for str_line in list_lines  # 当前规则行集合
+    )  # 所有规则均为文档指针
 
-            # 空行只承担源码格式，不需要复制到根级索引。
-            if not str_line.strip():
+    # 混入其他事实时继续保留逐条规则，维护具体阅读顺序。
+    if not bool_pointer_only:
 
-                # 受管根统一由 compact_section 负责段落分隔。
-                continue
+        # 非文档事实不能被合并，否则会丢失工具或样例入口。
+        return str_rules
 
-            # 单行 helper 统一处理固定文本和路由分支。
-            str_compact_line = _compact_local_convention_line(str_line)  # 单行压缩结果
+    # 文档路径从反引号中提取，避免硬编码当前项目的发现结果。
+    list_paths = [str_line.split("`", 2)[1] for str_line in list_lines]  # 文档指针路径
 
-            # 被更高层合同吸收的行不进入结果。
-            if str_compact_line is None:
+    # 路径列表用短逗号格式保持根规则可读。
+    str_paths = ", ".join(f"`{str_path}`" for str_path in list_paths)  # 合并后的路径文本
 
-                # 当前行没有独立执行价值。
-                continue
-
-            # 压缩后的行仍保持一行一个规则，避免改变机器读取边界。
-            list_compact_lines.append(str_compact_line)
-
-    # 非空合同去除边缘空白后连接，避免重复生成解释段落。
-    return "\n".join(str_line.strip() for str_line in list_compact_lines if str_line.strip())
+    # 一个入口保留所有文档路径和禁止复制正文的约束。
+    return f"- Use {str_paths} as pointers; do not copy long documentation into AGENTS.md."
 
 # scoped 索引只包含已有且具有真实局部覆盖的文件。
 def scoped_instructions(project: Path) -> str:
@@ -543,12 +751,14 @@ def render_root(
     project: Path,
     template_dir: Path | None = None,
     profile: dict | None = None,
+    agent_profile: Any | None = None,
 ) -> str:
     """渲染根 AGENTS.md。
 
     参数：project 为仓库根。
     参数：template_dir 为可选自定义模板目录。
     参数：profile 为可选强控制配置。
+    参数：agent_profile 为本次显式解析的平台画像。
     返回：完整根规则文本。
     """
 
@@ -563,13 +773,13 @@ def render_root(
     )  # 人工区域提取来源文本。
 
     # 项目事实由共享发现器统一生成。
-    dict_values = template_values(project, profile, template_dir)  # 根模板替换事实。
+    dict_values = template_values(project, profile, template_dir, agent_profile)  # 根模板替换事实。
 
     # 人工区域去除边缘空白后进入统一正文。
     str_manual = manual_content(str_existing).strip()  # 待保留人工文本。
 
     # 默认和自定义模板路径共享完全相同的生成正文。
-    str_generated_body = generated_root_body(project, dict_values, str_manual)  # 统一根正文。
+    str_generated_body = generated_root_body(project, dict_values, str_manual, agent_profile)  # 统一根正文。
 
     # 默认路径直接返回统一正文。
     if template_dir is None:
@@ -672,6 +882,29 @@ def build_render_parser() -> argparse.ArgumentParser:
         help="Path to .agents/agents-control.json for strong-control rendering.",
     )
 
+    # 平台选择从 agent-platforms.json 读取，不在 CLI 内嵌目录名称。
+    parser.add_argument(
+        "--agent-platform",
+        choices=tuple(load_catalog()["platforms"]),
+        default=None,
+        help="Select the native agent platform for workspace state and shims.",
+    )
+
+    # 平台迁移必须同时给出旧平台和显式确认，禁止静默退休旧状态。
+    parser.add_argument(
+        "--migrate-platform-from",
+        choices=tuple(load_catalog()["platforms"]),
+        default=None,
+        help="Retire a managed-only prior platform selection after explicit confirmation.",
+    )
+
+    # 单独的确认开关控制来源平台状态的退休动作。
+    parser.add_argument(
+        "--confirm-platform-migration",
+        action="store_true",
+        help="Confirm retiring the prior platform selection during a platform migration.",
+    )
+
     # 文档布局确认只覆盖 docs 脚手架创建决策。
     parser.add_argument(
         "--confirm-docs-layout",
@@ -692,8 +925,7 @@ def build_render_parser() -> argparse.ArgumentParser:
         ),
     )
 
-    # 普通分支治理确认不能覆盖 worktree 硬阻断。
-    # 显式确认参数只授权解除 Git 索引跟踪，不删除本地产物。
+    # 分支治理确认仅解除 Git 索引跟踪，不能覆盖 worktree 阻断或删除本地产物。
     parser.add_argument(
         "--confirm-branch-governance",
         action="store_true",
@@ -722,6 +954,20 @@ def build_render_parser() -> argparse.ArgumentParser:
         "--confirm-tester-worker-update",
         action="store_true",
         help="Confirm refreshing an existing tester_worker profile after its backup is shown.",
+    )
+
+    # gardener 配置刷新同样要求在展示备份后取得显式确认。
+    parser.add_argument(
+        "--confirm-gardener-worker-update",
+        action="store_true",
+        help="Confirm refreshing an existing gardener_worker profile after its backup is shown.",
+    )
+
+    # 三个 profile 与 gardener 工具的新写入流程共用 bundle 收据。
+    parser.add_argument(
+        "--confirm-profile-bundle-sha256",
+        default="",
+        help="Confirm the exact tester/reviewer/gardener profile bundle SHA-256.",
     )
 
     # 调用方负责执行 parse_args，便于测试解析器合同。
@@ -797,217 +1043,6 @@ def migrate_redundant_scopes(project: Path, bool_write: bool) -> dict[str, objec
         "preserved": list_preserved,
         "errors": [],
     }
-
-# 初始结构检查只负责确认门禁，不提前执行文件迁移。
-def enforce_structure_confirmation(
-    project: Path,
-    bool_confirm_fix: bool,
-) -> None:
-    """验证结构阻断是否已获得用户确认。
-
-    参数：project 为仓库根。
-    参数：bool_confirm_fix 表示用户是否确认推荐修复。
-    返回：已批准或已确认时返回；否则输出 JSON 并退出。
-    异常：治理阻断时抛出 SystemExit(1)。
-    """
-
-    # 初始门禁必须在分支检查之前保持只读。
-    dict_structure = structure_gate(project)  # 写入前结构检查。
-
-    # 已批准结构或显式确认修复都可进入分支门禁。
-    if dict_structure.get("approved", True) or bool_confirm_fix:
-
-        # 此阶段不执行迁移，避免污染后续分支检查。
-        return
-
-    # 未确认的阻断不得修改 AGENTS.md 或 docs。
-    emit_json(
-        {
-            "errors": [
-                "structure governance requires user confirmation before writing AGENTS.md or docs governance"
-            ],
-            "structure_gate": dict_structure,
-            "requires_user_confirmation": True,
-        }
-    )
-
-    # 非零退出阻止调用方误判写入成功。
-    raise SystemExit(1)
-
-# 已确认结构修复在分支门禁通过后执行并复检。
-def apply_confirmed_structure_fix(
-    project: Path,
-    bool_confirm_fix: bool,
-) -> None:
-    """执行可选结构修复并验证最终状态。
-
-    参数：project 为仓库根。
-    参数：bool_confirm_fix 表示用户是否要求执行修复。
-    返回：未请求或修复通过时返回；失败时输出 JSON 并退出。
-    异常：修复或复检失败时抛出 SystemExit(1)。
-    """
-
-    # 未确认修复时保持文件系统不变。
-    if not bool_confirm_fix:
-
-        # 普通批准路径无需迁移。
-        return
-
-    # 用户确认后执行结构治理器给出的修复。
-    dict_fix = apply_structure_fix(project)  # 结构修复执行报告。
-
-    # 文件操作错误必须在任何规则写入前返回。
-    if dict_fix.get("errors"):
-
-        # 错误载荷保留修复器的具体诊断。
-        emit_json(
-            {
-                "errors": [
-                    "structure governance fix failed before writing AGENTS.md or docs governance"
-                ],
-                "structure_fix": dict_fix,
-            }
-        )
-
-        # 修复失败终止渲染写入。
-        raise SystemExit(1)
-
-    # 修复后重新检查，不能依赖操作成功即推断门禁通过。
-    dict_structure = structure_gate(project)  # 修复后的结构检查。
-
-    # 复检通过后继续文档预检。
-    if dict_structure.get("approved", True):
-
-        # 最终结构已满足治理合同。
-        return
-
-    # 同时返回修复报告和复检报告便于定位残留问题。
-    emit_json(
-        {
-            "errors": [
-                "structure governance remains blocked after the confirmed structure fix attempt"
-            ],
-            "structure_fix": dict_fix,
-            "structure_gate": dict_structure,
-        }
-    )
-
-    # 复检失败保持非零退出。
-    raise SystemExit(1)
-
-# 分支门禁保持 worktree 硬阻断不可确认覆盖。
-def enforce_branch_gate(
-    project: Path,
-    bool_confirm_governance: bool,
-) -> None:
-    """验证分支与单工作树治理合同。
-
-    参数：project 为仓库根。
-    参数：bool_confirm_governance 表示是否确认普通分支整理风险。
-    返回：通过时无返回；阻断时输出 JSON 并退出。
-    异常：硬阻断或未确认普通阻断时抛出 SystemExit(1)。
-    """
-
-    # 分支检查先返回 hard_blocking 与普通批准状态。
-    dict_branch = branch_gate(project)  # 当前 Git 治理报告。
-
-    # 硬阻断始终失败；普通阻断可由显式确认继续。
-    bool_blocked = dict_branch.get("hard_blocking", False) or (  # Git 治理是否禁止本次写入。
-        not dict_branch.get("approved", True)  # 普通分支门禁未批准。
-        and not bool_confirm_governance  # 未获得普通分支风险确认。
-    )  # 当前写入是否被 Git 治理阻断。
-
-    # 已批准或已确认普通风险时继续。
-    if not bool_blocked:
-
-        # 单工作树政策已满足。
-        return
-
-    # worktree 硬阻断与普通分支确认使用不同错误文本。
-    str_error = (
-        "Git worktree governance is hard-blocking and cannot be confirmed away"  # worktree 硬阻断摘要。
-        if dict_branch.get("hard_blocking", False)  # 按硬阻断类型选择诊断。
-        else "branch governance requires user confirmation before writing AGENTS.md or docs governance"  # 普通阻断摘要。
-    )  # Git 治理阻断摘要。
-
-    # 机器载荷说明普通阻断是否仍可确认。
-    emit_json(
-        {
-            "errors": [str_error],
-            "branch_gate": dict_branch,
-            "requires_user_confirmation": not dict_branch.get("hard_blocking", False),
-        }
-    )
-
-    # 阻断状态不允许进入文档脚手架或文件写入。
-    raise SystemExit(1)
-
-# 强控制写入前完成结构、分支和文档布局治理。
-def prepare_controlled_write(
-    project: Path,
-    profile: dict,
-    args: argparse.Namespace,
-) -> None:
-    """执行强控制项目写入前治理。
-
-    参数：project 为仓库根。
-    参数：profile 为已加载的强控制配置。
-    参数：args 提供三个用户确认开关。
-    返回：所有门禁通过并完成必要脚手架后返回。
-    异常：任一治理门禁失败时抛出 SystemExit(1)。
-    """
-
-    # 初始结构检查仅确认风险，不在分支检查前迁移文件。
-    enforce_structure_confirmation(project, args.confirm_structure_fix)
-
-    # worktree 与分支治理必须在任何项目文件修改之前通过。
-    enforce_branch_gate(project, args.confirm_branch_governance)
-
-    # 分支门禁通过后再闭合知识图谱门禁，避免其 `.gitignore` 写入污染预检事实。
-    dict_codebase_gate = enforce_codebase_memory_write_gate(  # 根规则写入前知识图谱门禁结果
-        project,  # 待写入根规则的项目
-        profile,  # 已加载的强控制画像
-        apply=True,  # 执行必要忽略规则修复
-        confirm_untrack=args.confirm_codebase_memory_untrack,  # 用户解除跟踪确认
-    )
-
-    # 未通过依赖、索引或 Git 边界时阻止任何后续文件迁移。
-    if not dict_codebase_gate.get("ok"):
-
-        # 输出精确机器可读门禁诊断。
-        emit_json(dict_codebase_gate)
-
-        # 写入路径以非零状态终止。
-        raise SystemExit(1)
-
-    # 分支门禁通过后才执行用户确认的结构迁移。
-    apply_confirmed_structure_fix(project, args.confirm_structure_fix)
-
-    # docs preflight 判断现有布局是否需要用户确认。
-    dict_docs = preflight_docs(project)  # 文档布局预检报告。
-
-    # 未确认的新文档布局不能自动创建。
-    if dict_docs["requires_user_confirmation"] and not args.confirm_docs_layout:
-
-        # JSON 载荷保留预检证据和确认标记。
-        emit_json(
-            {
-                "errors": [
-                    "docs layout requires user confirmation before writing AGENTS.md or docs governance"
-                ],
-                "docs_preflight": dict_docs,
-                "requires_user_confirmation": True,
-            }
-        )
-
-        # 文档布局阻断保持非零退出。
-        raise SystemExit(1)
-
-    # 全局规则覆盖文件在文档脚手架之前建立。
-    ensure_global_rule_overrides_file(project, profile)
-
-    # 治理目录和文档按项目配置创建或同步。
-    scaffold_docs(project)
 
 # 待写入集合只新增具有真实局部配置的缺失 scoped 文件。
 def collect_pending_writes(
@@ -1119,25 +1154,11 @@ def main() -> None:
         # 独立迁移完成后停止进入普通渲染流程。
         return
 
-    # 每次受管生成写入前都检查并自动引导唯一 tester_worker 配置。
-    if args.write:
+    # 解析平台后才能决定是否需要 Codex worker 生命周期。
+    profile_agent = selected_agent_profile(args.agent_platform)  # 当前 agent 平台配置
 
-        # 生成前确保唯一 tester_worker 配置可用并记录结果。
-        dict_tester_result = ensure_tester_worker_profile(  # tester_worker 配置结果。
-            write=True,  # 写入或刷新 tester_worker 配置。
-            confirm_update=args.confirm_tester_worker_update,  # 复用单次授权收据。
-        )
-
-        # 写回验证失败必须阻止 AGENTS 落盘，保留明确失败证据。
-        dict_final_validation = dict_tester_result.get("final_validation", {})  # 最终 TOML 验证。
-
-        # 无效配置不得进入 AGENTS.md 写入流程。
-        if isinstance(dict_final_validation, dict) and not dict_final_validation.get("valid", False):
-
-            # 以稳定错误前缀报告配置验证失败。
-            raise SystemExit(
-                "> ERR: [Python] tester_worker.toml failed TOML or role validation"
-            )
+    # 写入路径由独立 helper 完成 worker 生命周期校验。
+    _ensure_worker_profiles_for_write(args, profile_agent, path_project)
 
     # 自定义模板目录转换为绝对位置。
     path_template_dir = (
@@ -1150,7 +1171,7 @@ def main() -> None:
     profile = load_profile(path_project, args.profile)  # 当前强控制配置。
 
     # 初始根文本支持默认只读草稿路径。
-    str_root_text = render_root(path_project, path_template_dir, profile)  # 当前根规则草稿。
+    str_root_text = render_root(path_project, path_template_dir, profile, profile_agent)  # 当前根规则草稿。
 
     # 未请求写入时只打印草稿并停止。
     if not args.write:
@@ -1168,7 +1189,7 @@ def main() -> None:
         prepare_controlled_write(path_project, profile, args)
 
         # 重新发现事实，确保根规则反映脚手架后的状态。
-        str_root_text = render_root(path_project, path_template_dir, profile)  # 治理后的根规则文本。
+        str_root_text = render_root(path_project, path_template_dir, profile, profile_agent)  # 治理后的根规则文本。
 
     # 根文件和必要 scoped 文件形成原子校验候选。
     list_pending = collect_pending_writes(path_project, str_root_text, path_template_dir)  # 待写入文件。
@@ -1176,20 +1197,75 @@ def main() -> None:
     # 所有文本在落盘前共同通过大小门禁。
     validate_pending_sizes(path_project, list_pending)
 
-    # 非强控制项目仍需要默认全局规则覆盖文件。
-    if profile is None:
+    # shim 冲突在任何 AGENTS.md 写入前阻断，保证根文件与兼容入口事务一致。
+    ensure_platform_artifacts(
+        path_project,
+        args.agent_platform,
+        bool_commit=False,
+        str_migrate_from=args.migrate_platform_from,
+        bool_confirm_migration=args.confirm_platform_migration,
+    )
 
-        # 空 profile 触发默认覆盖配置初始化。
-        ensure_global_rule_overrides_file(path_project, profile)
+    # 根、作用域、默认覆盖配置和平台 shim 共享同一回滚快照。
+    path_global_overrides = path_project / ".agents" / "global-rule-overrides.json"  # 全局规则覆盖文件
 
-    # 门禁全部通过后按候选顺序写入。
-    for path_file, str_text in list_pending:
+    # 记录候选写入文件和默认覆盖文件的原始节点状态。
+    dict_write_snapshots = {  # 根写入事务的回滚快照
+        path_file: _snapshot_platform_path(path_file)  # 当前候选文件的原始节点
+        for path_file in [path_file for path_file, _ in list_pending] + [path_global_overrides]  # 待回滚文件路径
+    }
 
-        # UTF-8 写入保持生成文件跨平台一致。
-        path_file.write_text(str_text, encoding="utf-8")
+    # 进入根文件与平台 shim 的统一提交事务。
+    try:
 
-# 直接执行 shard 时进入 CLI；被 render_agents.py exec 时同样保留入口合同。
-if __name__ == "__main__":
+        # 非强控制项目仍需要默认全局规则覆盖文件。
+        if profile is None:
 
-    # 模块入口只调用已拆分的编排函数。
+            # 在非强控制路径补齐根级全局规则覆盖文件。
+            ensure_global_rule_overrides_file(path_project, profile)
+
+        # 门禁全部通过后按候选顺序写入。
+        for path_file, str_text in list_pending:
+
+            # 按候选清单顺序写入每个受管文本文件。
+            path_file.write_text(str_text, encoding="utf-8")
+
+        # 根与作用域写入完成后，再同步平台状态目录和兼容入口。
+        ensure_platform_artifacts(
+            path_project,
+            args.agent_platform,
+            str_migrate_from=args.migrate_platform_from,
+            bool_confirm_migration=args.confirm_platform_migration,
+        )
+
+    # 写入或 shim 同步失败时恢复所有候选节点。
+    except Exception:
+
+        # 按事务开始时的快照逐项恢复文件状态。
+        for path_file, object_snapshot in dict_write_snapshots.items():
+
+            # 当前文件恢复到写入事务开始前的内容或节点类型。
+            _restore_platform_path(path_file, object_snapshot)
+
+        # 将原始异常继续交给 CLI 顶层处理，并保留原始类型和回溯。
+        raise
+
+# 直接执行分片时由此函数控制唯一的 CLI 入口。
+def _run_direct_entrypoint() -> None:
+    """在直接执行分片时启动 CLI，聚合加载阶段保持安静。
+
+    参数：无；模块状态由当前执行上下文提供。
+    返回：无；符合直接执行条件时调用公开 CLI。
+    """
+
+    # 聚合加载时的哨兵阻止分片提前执行命令入口。
+    if __name__ != "__main__" or globals().get("_RENDER_SHARD_LOADING", False):
+
+        # 导入或聚合加载路径不产生命令副作用。
+        return
+
+    # 直接运行分片时进入 CLI。
     main()
+
+# 公开入口通过小型函数隔离导入期的条件判断。
+_run_direct_entrypoint()

@@ -24,4 +24,4 @@
 - The current module drops below `65536` bytes.
 - Public document-governance CLI behavior and import contracts remain backward compatible.
 - Manifest role paths and schema paths remain filename-independent and registry-root safe.
-- Strict current-project quality, registry tests, audit, and full unittest discovery pass.
+- Strict current-project quality, registry tests, audit, and full `python -m pytest -q` pass.

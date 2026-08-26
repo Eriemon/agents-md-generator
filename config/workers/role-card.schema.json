@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "worker_id",
+    "task_kind",
+    "phases",
+    "allowed_read_roots",
+    "allowed_write_roots",
+    "forbidden_actions",
+    "scope_rejection",
+    "no_action_taken",
+    "expected_output"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "minimum": 1},
+    "worker_id": {"type": "string", "minLength": 1},
+    "task_kind": {"type": "string", "minLength": 1},
+    "phases": {"type": "array", "minItems": 1},
+    "allowed_read_roots": {"type": "array"},
+    "allowed_write_roots": {"type": "array"},
+    "forbidden_actions": {"type": "array"},
+    "scope_rejection": {"type": "string", "minLength": 1},
+    "no_action_taken": {"type": "boolean"},
+    "expected_output": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": true
+}

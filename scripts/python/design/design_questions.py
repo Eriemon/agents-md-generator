@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 # 设计访谈状态文件位置用于保持后续处理语义明确。
-STATE_PATH = ".agents/design-interview-state.json"  # 设计访谈状态文件位置
+STATE_PATH = Path(".agents") / "design-interview-state.json"  # 设计访谈状态文件位置
 
 # 设计访谈终态集合用于保持后续处理语义明确。
 TERMINAL_STATUSES = {"completed", "completed_read_only", "abandoned"}  # 设计访谈终态集合
@@ -222,17 +222,17 @@ DIRECTORY_QUESTIONS = [  # 目录治理设计问题
     (
         "46",  # 远程环境问题编号
         "remote_conda_environment_layout",  # 远程环境布局答案字段
-        "如果远端工作区需要 conda 环境，请明确该前缀环境固定放在哪里；推荐 `.conda/<env-name>/`。如果远端未配置，可保持 disabled。",  # 远程环境布局提示
+        "如果远端工作区需要 conda 环境，请明确该前缀环境固定放在哪里；使用参数化的远端环境前缀占位符。如果远端未配置，可保持 disabled。",  # 远程环境布局提示
     ),  # 远程环境布局
     (
         "47",  # 第三百三题编号
         "remote_run_artifact_active_layout",  # 第三百八题答案字段
-        "如果远端会产生运行产物，请明确活动运行目录结构；推荐 `runs/<run-id>/`。如果远端未配置，可保持 disabled。",  # 第三百十三题访谈提示
+        "如果远端会产生运行产物，请明确活动运行目录结构；使用参数化的活动产物根占位符。如果远端未配置，可保持 disabled。",  # 第三百十三题访谈提示
     ),  # 用于采集“remote_run_artifact_active_layout”对应的设计答案；问卷第六十项
     (
         "48",  # 第三百十八题编号
         "remote_run_artifact_backup_layout",  # 第三百二十二题答案字段
-        "如果远端会归档运行产物，请明确归档目录结构；推荐 `backups/runs/<run-id>/`。如果远端未配置，可保持 disabled。",  # 第三百二十六题访谈提示
+        "如果远端会归档运行产物，请明确归档目录结构；使用参数化的运行归档根占位符。如果远端未配置，可保持 disabled。",  # 第三百二十六题访谈提示
     ),  # 远程归档布局
     (
         "49",  # 第三百二十九题编号
@@ -473,8 +473,8 @@ QUESTION_OPTIONS: dict[str, list[dict[str, Any]]] = {  # 答案字段对应的�
     ],
     "remote_conda_environment_layout": [  # 用于声明“remote_conda_environment_layout”设计合同项；问卷第一百二十七项
         {
-            "label": ".conda/<env-name>/",  # 第三百七十八项展示标签
-            "value": ".conda/<env-name>/",  # 第三百七十九项提交值
+            "label": "<remote-environment-prefix>/",  # 第三百七十八项展示标签
+            "value": "<remote-environment-prefix>/",  # 第三百七十九项提交值
             "description": "远端 conda 前缀环境固定放在对应工作区根下。",  # 第三百八十项选择说明
             "recommended": True,  # 第三百八十一项推荐状态
         },  # Conda 环境目录
@@ -493,9 +493,9 @@ QUESTION_OPTIONS: dict[str, list[dict[str, Any]]] = {  # 答案字段对应的�
     ],
     "remote_run_artifact_active_layout": [  # 用于声明“remote_run_artifact_active_layout”设计合同项；问卷第一百三十一项
         {
-            "label": "runs/<run-id>/",  # 第三百九十项展示标签
-            "value": "runs/<run-id>/",  # 第三百九十一项提交值
-            "description": "远端运行中的活动产物按运行编号进入 runs 目录。",  # 第三百九十二项选择说明
+            "label": "<active-run-artifact-root>/",  # 第三百九十项展示标签
+            "value": "<active-run-artifact-root>/",  # 第三百九十一项提交值
+            "description": "远端运行中的活动产物按运行标识进入参数化活动目录。",  # 第三百九十二项选择说明
             "recommended": True,  # 第三百九十三项推荐状态
         },  # 活动运行目录
         {
@@ -513,9 +513,9 @@ QUESTION_OPTIONS: dict[str, list[dict[str, Any]]] = {  # 答案字段对应的�
     ],
     "remote_run_artifact_backup_layout": [  # 用于声明“remote_run_artifact_backup_layout”设计合同项；问卷第一百三十五项
         {
-            "label": "backups/runs/<run-id>/",  # 第四百二项展示标签
-            "value": "backups/runs/<run-id>/",  # 第四百三项提交值
-            "description": "验证完成后的远端运行产物归档到 backups/runs。",  # 第四百四项选择说明
+            "label": "<run-artifact-backup-root>/",  # 第四百二项展示标签
+            "value": "<run-artifact-backup-root>/",  # 第四百三项提交值
+            "description": "验证完成后的远端运行产物归档到参数化备份目录。",  # 第四百四项选择说明
             "recommended": True,  # 第四百五项推荐状态
         },  # 备份运行目录
         {
@@ -566,17 +566,22 @@ QUESTION_OPTIONS: dict[str, list[dict[str, Any]]] = {  # 答案字段对应的�
         },  # 用于定义“否，需要修正”回答选项的提交合同；问卷第一百四十八项
     ],
     "default_conversation_language": [  # 用于声明“default_conversation_language”设计合同项；问卷第一百四十九项
-        {"label": "中文", "value": "中文", "description": "默认后续对话使用中文。", "recommended": True},  # 用于定义“中文”回答选项的提交合同；问卷第一百五十项
+        {
+            "label": "Chinese",  # 会话语言选项展示标签
+            "value": "Chinese",  # 会话语言选项提交值
+            "description": "Use Chinese for future conversation replies.",  # 会话语言用途说明
+            "recommended": True,  # catalog conversation 默认推荐状态
+        },  # catalog conversation canonical 选项
         {
             "label": "English",  # 第五百一项展示标签
             "value": "English",  # 第五百二项提交值
-            "description": "默认后续对话使用英文。",  # 第五百三项选择说明
+            "description": "Use English for future conversation replies.",  # 第五百三项选择说明
             "recommended": False,  # 第五百四项推荐状态
         },  # 用于定义“English”回答选项的提交合同；问卷第一百五十一项
         {
-            "label": "用户自定义",  # 第五百五项展示标签
+            "label": "Custom",  # 第五百五项展示标签
             "value": "__user_input__",  # 第五百六项提交值
-            "description": "由用户输入其他默认语言。",  # 第五百七项选择说明
+            "description": "Enter another conversation language.",  # 第五百七项选择说明
             "recommended": False,  # 第五百八项推荐状态
         },  # 用于定义“用户自定义”回答选项的提交合同；问卷第一百五十二项
     ],
@@ -801,10 +806,10 @@ QUESTION_OPTIONS: dict[str, list[dict[str, Any]]] = {  # 答案字段对应的�
 }
 
 # 需要区分项目类型的问题集合用于保持后续处理语义明确。
-_branched_questions = SKILL_QUESTIONS + ENGINEERING_QUESTIONS  # 需要区分项目类型的问题集合
+list_branched_questions = SKILL_QUESTIONS + ENGINEERING_QUESTIONS  # 需要区分项目类型的问题集合
 
 # 跨项目类型共享的问题集合用于保持后续处理语义明确。
-_shared_questions = DIRECTORY_QUESTIONS + MEMORY_QUESTIONS + EXISTING_WORK_QUESTIONS  # 跨项目类型共享的问题集合
+list_shared_questions = DIRECTORY_QUESTIONS + MEMORY_QUESTIONS + EXISTING_WORK_QUESTIONS  # 跨项目类型共享的问题集合
 
 # 问题标识到完整问题记录的索引用于保持后续处理语义明确。
 QUESTION_MAP: dict[str, dict[str, Any]] = {  # 问题标识到完整问题记录的索引
@@ -819,7 +824,7 @@ QUESTION_MAP: dict[str, dict[str, Any]] = {  # 问题标识到完整问题记录
             else "engineering",  # 用于限定适用分支engineering_rule_scope 的“未命名”选项；问卷第一百七十二项
             "ask": prompt,  # 用于提供交互提示engineering_rule_scope 的“未命名”选项；问卷第一百七十三项
         }
-        for question in _branched_questions  # 用于构建设计访谈的结构化合同项；问卷第一百七十四项
+        for question in list_branched_questions  # 用于构建设计访谈的结构化合同项；问卷第一百七十四项
         for question_id, answer_key, prompt in (question,)  # 用于构建设计访谈的结构化合同项；问卷第一百七十五项
     },
     **{  # 用于合并分支问题记录到统一索引；问卷第一百七十六项
@@ -830,7 +835,7 @@ QUESTION_MAP: dict[str, dict[str, Any]] = {  # 问题标识到完整问题记录
             "branch": "all",  # 用于限定适用分支engineering_rule_scope 的“未命名”选项；问卷第一百八十一项
             "ask": prompt,  # 展示共享问题的交互提示；问卷第一百八十二项
         }
-        for question_id, answer_key, prompt in _shared_questions  # 用于构建设计访谈的结构化合同项；问卷第一百八十三项
+        for question_id, answer_key, prompt in list_shared_questions  # 用于构建设计访谈的结构化合同项；问卷第一百八十三项
     },
 }
 
@@ -1081,14 +1086,14 @@ def remote_directory_policy_required(answers: dict[str, Any] | None) -> bool:
     """
 
     # 空值归一后的设计答案对象用于保持后续处理语义明确。
-    answers = answers or {}  # 空值归一后的设计答案对象
+    dict_answers = answers or {}  # 空值归一后的设计答案对象
 
     # 是否明确启用远程服务器用于保持后续处理语义明确。
-    bool_uses_remote_server = bool(answers.get(USE_REMOTE_SERVER_KEY))  # 是否明确启用远程服务器
+    bool_uses_remote_server = bool(dict_answers.get(USE_REMOTE_SERVER_KEY))  # 是否明确启用远程服务器
 
     # 是否存在有效远程目录配置用于保持后续处理语义明确。
     bool_has_remote_directory = remote_directory_configured(  # 是否存在有效远程目录配置
-        answers.get("remote_directory_structure", "")  # 用于读取远程目录答案
+        dict_answers.get("remote_directory_structure", "")  # 用于读取远程目录答案
     )
 
     # 任一远程信号成立都必须继续收集远程目录治理合同。

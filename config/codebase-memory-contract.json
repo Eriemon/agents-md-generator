@@ -1,0 +1,55 @@
+{
+  "repository_url": "https://github.com/DeusData/codebase-memory-mcp",
+  "artifact_directory": ".codebase-memory",
+  "install_scripts": {
+    "windows": "install.ps1",
+    "linux": "install.sh"
+  },
+  "scope_policy": {
+    "project_root": ".",
+    "index_mode": "full",
+    "persistence": true,
+    "debug_policy_enabled": "graph-first",
+    "debug_policy_disabled": "disabled",
+    "git_policy": "ignored-untracked",
+    "cbmignore_path": ".cbmignore",
+    "managed_start": "# codebase-memory-scope:start",
+    "managed_end": "# codebase-memory-scope:end",
+    "max_governance_ratio": 0.05,
+    "required_excludes": [
+      ".agents/",
+      ".codebase-memory/",
+      ".settings/remote-validation/",
+      "docs/development/history_development/",
+      "docs/dir_manager/history_dir_manager/",
+      "docs/experience/history_experience/",
+      "docs/git_manager/history_git_manager/",
+      "docs/handoff/history_handoff/",
+      "docs/memory/",
+      "dist/",
+      "*.zip",
+      "*.tar*",
+      "*.whl",
+      "*.db*",
+      "*.sqlite*",
+      "*.zst"
+    ],
+    "protected_paths": [
+      "skills/agents-md-generator/",
+      "tests/",
+      "AGENTS.md",
+      "README.md",
+      "docs/superpowers/plans/"
+    ]
+  },
+  "wal_health": {
+    "sample_count": 3,
+    "sample_interval_seconds": 2,
+    "absolute_limit_bytes": 1073741824,
+    "database_ratio_limit": 8,
+    "long_process_seconds": 1800,
+    "long_process_count": 2,
+    "long_wal_absolute_bytes": 268435456,
+    "long_wal_ratio_limit": 2
+  }
+}

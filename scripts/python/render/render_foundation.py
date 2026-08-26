@@ -11,6 +11,9 @@ from pathlib import Path
 import re
 import sys
 
+# 语言 catalog 提供 conversation/documentation 的 canonical ID。
+from language_contract import canonical_language, default_language
+
 # 渲染脚本会被 CLI 多次调用，关闭 pycache 能减少治理工作区的临时文件噪音。
 sys.dont_write_bytecode = True  # 禁止写入 pycache
 
@@ -40,6 +43,7 @@ from agents_common import (
 )
 from manage_dirs import apply_structure_fix, structure_gate
 from manage_docs import branch_gate, preflight_docs, scaffold as scaffold_docs
+from agent_platform import global_instruction_file_label, load_agent_config
 
 # 受管段起始前缀必须与增量替换器使用的标记一致。
 GENERATED_START = "<!-- AGENTS-GENERATED:START"  # 受管段起始标记前缀
@@ -470,13 +474,21 @@ def project_overview(facts: dict, target_version: str = "") -> str:
         ),
     ]  # 项目概览正文行
 
+    # 定位当前技能根目录，作为平台配置的权威来源。
+    path_skill_root = Path(__file__).resolve().parents[3]  # 当前技能根目录
+
+    # 读取当前选定平台的配置画像。
+    profile_agent = load_agent_config(path_skill_root)  # 当前平台配置
+
+    # 生成当前平台全局规则的显示标签。
+    str_global_label = global_instruction_file_label(profile_agent)  # 当前平台全局规则标签
+
     # 健康的全局基线说明根规则仍是当前工作目录的第一入口。
     if facts.get("global_codex_agents_baseline_ok"):
 
-        # 状态描述只写入口职责，不复制全局基线正文。
+        # 健康基线入口只输出当前平台标签和根规则指针，不复制全局正文。
         list_lines.append(
-            "Global .codex/AGENTS.md: present with a managed baseline that requires "
-            "reading the current work folder root `AGENTS.md` first."
+            f"{str_global_label}: managed baseline; read the current work-folder `AGENTS.md` first."
         )
 
     # 需要修复时把探测原因写入概览，禁止误报全局治理完成。
@@ -488,10 +500,18 @@ def project_overview(facts: dict, target_version: str = "") -> str:
         # 修复提示明确要求先同步全局入口再做完成声明。
         list_lines.append(
             (
-                f"Global .codex/AGENTS.md: trigger-required for entry-point baseline repair "  # AGENTS 长文本片段
-                f"({str_repair_reasons}); sync it before treating user-level AGENTS governance as "
-                f"complete."
+                f"{str_global_label}: present with a managed baseline; "
+                f"refresh required ({str_repair_reasons}); sync before relying on user-level governance."
             )
+        )
+
+    # 缺少基线事实时仍保留平台全局入口，避免渲染结果丢失治理起点。
+    else:
+
+        # 未知状态必须保留平台全局入口并提示重新核验。
+        list_lines.append(
+            f"{str_global_label}: present with a managed baseline; "
+            "verify current status before relying on it."
         )
 
     # 根 AGENTS.md 已存在时进一步区分健康状态与重建要求。
@@ -1049,13 +1069,38 @@ def control_profile(profile: dict | None, project: Path, project_version: str = 
             "- Until configured, ask the mandatory design questions before writing controlled AGENTS.md output.",
         ])
 
+    # profile 语言通过 catalog 归一化，避免渲染旧中文 alias。
+    str_default_language_input = str(profile.get("default_conversation_language", default_language("conversation")))  # 会话语言原始配置
+
+    # 将会话语言原始值归一化为 catalog canonical ID。
+    str_default_language = canonical_language(str_default_language_input, "conversation")  # canonical 会话语言
+
+    # 文档摘要使用独立的 documentation catalog 默认值。
+    str_documentation_catalog_language = default_language("documentation")  # documentation catalog 默认语言
+
+    # profile 存在时优先使用显式文档语言配置。
+    if profile:
+
+        # 缺失字段时仍回到 documentation catalog 默认值。
+        str_documentation_input = str(profile.get("documentation_language", str_documentation_catalog_language))  # 读取 profile 覆盖值供 documentation 摘要
+
+    # profile 缺失时直接沿用 documentation catalog 默认值。
+    else:
+
+        # 无 profile 渲染路径的文档语言来源保持可追溯。
+        str_documentation_input = str_documentation_catalog_language  # 记录无 profile 时的 catalog 语言来源
+
+    # 将文档语言原始值归一化为 catalog canonical ID。
+    str_documentation_summary = canonical_language(str_documentation_input, "documentation")  # canonical 文档摘要语言
+
     # 基础身份字段始终先输出，便于快速核对配置对象。
     list_lines = [
         "- Strong control: complete.",  # 强控制设计已完成标记
         f"- Development type: {profile.get('kind', 'unknown')}.",  # 开发类型摘要
         f"- Name: {profile.get('name', 'unknown')}.",  # 项目名称摘要
         f"- Version: {project_version or 'unknown'}.",  # 项目版本摘要
-        f"- Default conversation language: {profile.get('default_conversation_language', '中文')}.",  # 默认语言摘要
+        f"- Default conversation language: {str_default_language}.",  # 默认语言摘要
+        f"- Documentation language: {str_documentation_summary}.",  # 当前文档语言摘要
         (
             f"- Local governance detail source: `{local_rule_config_path(project, profile)}` "
             f"for long-task, maintainability, and tool-layout rules."
@@ -1125,7 +1170,8 @@ def directory_contract(profile: dict | None, project: Path) -> str:
         # 单行提示保留必须先确认目录合同的写入边界。
         return (
             "- Directory contract: not confirmed. Do not freeze structure until the user "
-            "confirms local, remote, and feature-addition layout."
+            "confirms local, remote, and feature-addition layout.\n"
+            "- Remote workspace state: profile-missing."
         )
 
     # 主目录合同保存本地、远程、设置和项目根事实。
@@ -1155,6 +1201,15 @@ def directory_contract(profile: dict | None, project: Path) -> str:
     )
 
     # 根规则按确认状态、结构、设置安全和变更门禁顺序输出。
+    str_settings_folder = str(dict_settings_policy.get("folder", "")).strip() or "not configured"  # 工作区设置目录
+
+    # 读取配置声明的本地默认文件，不再猜测路径。
+    str_local_default_file = str(dict_settings_policy.get("local_default_file", "")).strip() or "not configured"  # 本地默认配置文件
+
+    # 读取配置声明的远端默认文件，不再猜测路径。
+    str_remote_default_file = str(dict_settings_policy.get("remote_default_file", "")).strip() or "not configured"  # 远端默认配置文件
+
+    # 将目录合同摘要按固定顺序组织为文档行。
     list_lines = [
         f"- Confirmed: {dict_contract.get('confirmed', False)}.",  # 目录合同确认状态
         f"- Local structure: {dict_contract.get('local', 'not specified')}.",  # 本地目录结构摘要
@@ -1162,12 +1217,9 @@ def directory_contract(profile: dict | None, project: Path) -> str:
         str_primary_root_line,  # 主项目根摘要
         (
             f"- Workspace settings: keep work-folder project config under "
-            f"`{dict_settings_policy.get('folder', '.settings')}/`; local-only files use "
-            f"`{dict_settings_policy.get('local_default_file', '.settings/project.local.json')}` "
-            f"or `{dict_settings_policy.get('folder', '.settings')}/<name>.local.json`, and "
-            f"remote workspaces use "
-            f"`{dict_settings_policy.get('remote_default_file', '.settings/project.remote.json')}` "
-            f"or `{dict_settings_policy.get('folder', '.settings')}/<name>.remote.json`."
+            f"`{str_settings_folder}/`; local-only files use `{str_local_default_file}` "
+            f"or a configured local profile under that folder, and remote workspaces use "
+            f"`{str_remote_default_file}` or a configured remote profile under that folder."
         ),
         (
             f"- Security rule: never copy "

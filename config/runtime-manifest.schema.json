@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "required": ["schema_version", "bootstrap_base", "roles"],
+  "role_required": [
+    "name",
+    "base_kind",
+    "relative_path",
+    "schema_relative_path",
+    "required",
+    "hash_mode",
+    "content_sha256",
+    "schema_sha256"
+  ],
+  "base_kinds": ["skill_root", "project_root", "reports_root"],
+  "hash_modes": ["canonical_json", "sha256_bytes"]
+}

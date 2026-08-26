@@ -1,0 +1,19 @@
+# META schema_version=1
+# SOURCE catalog_sha256=c4ba19e95ef5ad0d61acdae33a2202ea39a167ce02e167e9cc3ede4bb5522bf6 catalog_path=../../config/agent-platforms.json
+# RUNTIME backend=../../scripts/python/release/guided_installer.py runtime=../../scripts/python/release/install_skill.py shell=bash shell_utils=awk,sed,realpath,grep,stat,cp,mv,mkdir,basename,dirname,find,sort,wc,cmp
+# MENU selection_source=projection confirmation_required=True
+# TRANSACTION lock_required=True same_volume_required=True preserve_failure_evidence=True
+# OUTPUT format=entrypoint-specific stdout=configured-per-entrypoint
+# BATCH_ENTRY value=install.ps1
+# PLATFORM_COUNT value=4
+# schema_version=1
+# catalog_sha256=c4ba19e95ef5ad0d61acdae33a2202ea39a167ce02e167e9cc3ede4bb5522bf6
+platform_id	display_name	instruction_file	workspace_config_dir	generator_state_subdir	user_home_dir	skill_install_dir	home_env	home_env_mode	worker_support	skill_metadata
+# PLATFORM platform_id=claude display_name=Claude
+claude	Claude	CLAUDE.md	.claude	agents-md-generator	.claude	skills	HOME	os_home	unsupported	agents/claude.yaml
+# PLATFORM platform_id=codex display_name=Codex
+codex	Codex	AGENTS.md	.agents		.codex	skills	CODEX_HOME	platform_root	codex-native	agents/openai.yaml
+# PLATFORM platform_id=deepseek display_name=DeepSeek
+deepseek	DeepSeek	AGENTS.md	.dsh	agents-md-generator	.dsh	skills	HOME	os_home	unsupported	agents/deepseek.yaml
+# PLATFORM platform_id=gemini display_name=Gemini
+gemini	Gemini	GEMINI.md	.gemini	agents-md-generator	.gemini	skills	HOME	os_home	unsupported	agents/gemini.yaml

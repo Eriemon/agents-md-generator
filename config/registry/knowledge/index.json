@@ -1,7 +1,7 @@
 {
   "records": [
     {
-      "content_sha256": "19624f501629bfde9b2bccbb9fc500584fcb5263b55f1f3b6b6ae9bf2c2c24f7",
+      "content_sha256": "038ef3fe68ade67c67debec0d14e7c0eea24dccc35bfab5d672dfa9ffdd5b3c1",
       "id": "knowledge.skill",
       "keywords": [
         "route",
@@ -15,7 +15,7 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "SKILL.md",
-      "summary": "技能触发条件、非测试智能体授权、远程技能能力路由与工作区单次确认边界。",
+      "summary": "Skill triggers, non-testing-agent authorization, remote capability routing, and one-time workspace confirmation boundaries.",
       "title": "AGENTS.md Generator"
     },
     {
@@ -31,7 +31,7 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/agents-md-guidance.md",
-      "summary": "AGENTS.md 编写、压缩、分层、根与作用域章节以及兼容性指导。",
+      "summary": "Guidance for writing, compressing, layering, and maintaining root/scoped AGENTS.md compatibility.",
       "title": "AGENTS.md Guidance"
     },
     {
@@ -47,11 +47,11 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/book-rules-coverage.md",
-      "summary": "工程书籍规则集的选择、压缩、作用域、追溯和非复制策略。",
+      "summary": "Engineering rule-set selection, compression, scope, traceability, and deliberate non-copy policy.",
       "title": "Book Rules Coverage"
     },
     {
-      "content_sha256": "329886a39ff067e27fb5d664515b1c767830f3238ad0b167a370ca6305eba2e1",
+      "content_sha256": "7695e9cb748682e398ffbf07229c096c8728b5846001e4ab5c106e9a85014d8d",
       "id": "knowledge.references-capability-coverage",
       "keywords": [
         "capability",
@@ -63,22 +63,24 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/capability-coverage.md",
-      "summary": "项目检测、治理、验证、发布与兼容能力的实现覆盖地图。",
+      "summary": "Implementation coverage map for project detection, governance, verification, release, and compatibility.",
       "title": "Capability Coverage"
     },
     {
-      "content_sha256": "3d9f32ccc40dc19127a77386f4c07c215e2f2ea5fdc29f03000008995d406b30",
+      "content_sha256": "72591ca927f1f91f26dcdcfaae5c511732dbc533071e5c3280080789f18aa76b",
       "id": "knowledge.references-coding-behavior-language-routing",
       "keywords": [
         "readable-python-generator",
         "readable-script-generator",
         "routing",
-        "owner"
+        "owner",
+        "脚本路由",
+        "Python 与脚本族可读技能"
       ],
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/coding-behavior-language-routing.md",
-      "summary": "Python 与脚本族可读技能的安装感知路由、共同门禁和最终所有权。",
+      "summary": "Installation-aware routing, shared gates, and final ownership for readable Python and script-family skills.",
       "title": "Coding Behavior Language Skill Routing"
     },
     {
@@ -93,7 +95,7 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/decomposition-plans/scripts/python/common/project_facts_discovery.py.md",
-      "summary": "项目事实发现模块的临时拆分计划、事实键合同与退出条件。",
+      "summary": "Temporary split plan, fact-key contract, and exit criteria for the project fact-discovery module.",
       "title": "Project Facts Discovery Decomposition Plan"
     },
     {
@@ -108,7 +110,7 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/decomposition-plans/scripts/python/design/design_questions.py.md",
-      "summary": "设计问题模块的临时拆分计划、问题标识顺序与答案归一化合同。",
+      "summary": "Temporary split plan, question ordering, and answer-normalization contract for the design-question module.",
       "title": "Design Questions Decomposition Plan"
     },
     {
@@ -123,8 +125,25 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/decomposition-plans/scripts/python/dirs/manage_dirs_state.py.md",
-      "summary": "目录状态模块的临时拆分计划、扫描与持久化边界及兼容性要求。",
+      "summary": "Temporary split plan, scan and persistence boundaries, and compatibility requirements for the directory-state module.",
       "title": "Directory State Decomposition Plan"
+    },
+    {
+      "content_sha256": "e9e0f4da7e43cea5de18931aa8068c18dad536e70e25e8dc27948710f968fb91",
+      "id": "knowledge.references-decomposition-plans-scripts-python-dirs-manage-dirs-review-py",
+      "keywords": [
+        "decomposition plan",
+        "manage_dirs_review",
+        "manage_dirs_structure",
+        "manifest-only upload",
+        "remote regression",
+        "directory review"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/decomposition-plans/scripts/python/dirs/manage_dirs_review.py.md",
+      "summary": "Directory-review orchestration, structure takeover, target files, compatibility, and remote-regression exit criteria.",
+      "title": "Directory Review Decomposition Plan"
     },
     {
       "content_sha256": "fa6d1b3399c979a0dc0ff141c4c703ebc2b987fb98d6f70512e5acb47cffaacf",
@@ -138,7 +157,7 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/decomposition-plans/scripts/python/docs/manage_docs_scaffold_session.py.md",
-      "summary": "文档脚手架会话模块的临时拆分计划、状态文件与会话生命周期合同。",
+      "summary": "Temporary split plan, state files, and session-lifecycle contract for the document-scaffold session module.",
       "title": "Documentation Scaffold Session Decomposition Plan"
     },
     {
@@ -153,11 +172,11 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/decomposition-plans/scripts/python/docs/manage_docs_sync_verify.py.md",
-      "summary": "文档同步验证模块的临时拆分计划、根同步与受管块保留合同。",
+      "summary": "Temporary split plan, root synchronization, and managed-block preservation contract for document-sync verification.",
       "title": "Documentation Sync Verify Decomposition Plan"
     },
     {
-      "content_sha256": "34a9f728ea50633838c8ba4d2a3bd483eeed23d945e9703dee25b00668ae8b58",
+      "content_sha256": "9633566947e66e962fe23f1a69f5e67532793b667af8011f0cd286b76c80abce",
       "id": "knowledge.references-decomposition-docs-release-package",
       "keywords": [
         "decomposition plan",
@@ -168,11 +187,11 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/decomposition-plans/scripts/python/docs/release_package.py.md",
-      "summary": "发布聚合模块的临时拆分计划、发布收据合同与成员发现边界。",
+      "summary": "Temporary split plan, release-receipt contract, and member-discovery boundaries for release aggregation.",
       "title": "Release Package Decomposition Plan"
     },
     {
-      "content_sha256": "76394e3a6a6a00760a3431fedcbe3bd342d4498e662a4a8e6901f544c1cf6d33",
+      "content_sha256": "dd5cfd90d9d944daeb2aa7942744affdca3c5dc92134c66c88f227c7ebbc8ab2",
       "id": "knowledge.references-decomposition-registry-document-registry-common",
       "keywords": [
         "decomposition plan",
@@ -183,7 +202,7 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/decomposition-plans/scripts/python/registry/document_registry_common.py.md",
-      "summary": "文档注册公共模块的临时拆分计划、扫描布局与迁移初始化边界。",
+      "summary": "Temporary split plan, scan layout, and migration-initialization boundaries for the document-registry common module.",
       "title": "Document Registry Common Decomposition Plan"
     },
     {
@@ -198,7 +217,7 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/decomposition-plans/scripts/python/verify/audit_skill.py.md",
-      "summary": "技能审计模块的临时拆分计划、评估与源码治理职责边界。",
+      "summary": "Temporary split plan and evaluation/source-governance responsibility boundaries for the skill-audit module.",
       "title": "Skill Audit Decomposition Plan"
     },
     {
@@ -213,11 +232,26 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/decomposition-plans/scripts/python/verify/source_governance_config.py.md",
-      "summary": "源码治理配置门面的临时拆分计划、默认值验证与约束投影边界。",
+      "summary": "Temporary split plan, default validation, and constraint-projection boundaries for the source-governance configuration facade.",
       "title": "Source Governance Config Decomposition Plan"
     },
     {
-      "content_sha256": "5c47fa7adbfb979af6a7a144c6a11522403aee6441443c13e7eedfed24791b30",
+      "content_sha256": "2c95e7df35fc8e7bc29b43c71824d6af0309c2cd5d85a2a5a84aacfda2d0cb99",
+      "id": "knowledge.references-decomposition-plans-skills-agents-md-generator-scripts-python-render-render-entrypoints",
+      "keywords": [
+        "decomposition plan",
+        "render entrypoints",
+        "platform rendering",
+        "transactional writes"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/decomposition-plans/skills/agents-md-generator/scripts/python/render/render_entrypoints.py.md",
+      "summary": "Module split plan, current over-limit evidence, and later boundaries for render_entrypoints.py.",
+      "title": "Render Entrypoints Decomposition Plan"
+    },
+    {
+      "content_sha256": "8494f1d0c8ccc118004ebc3580b04d2f25603bd74f72edbb991cf20c41558e21",
       "id": "knowledge.references-evaluation-scenarios",
       "keywords": [
         "evaluation",
@@ -229,11 +263,11 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/evaluation-scenarios.md",
-      "summary": "技能功能、非测试智能体授权、工作区单次确认、治理、运行时、发布与兼容性的前向测试场景。",
+      "summary": "Forward-test scenarios for skill behavior, non-testing-agent authorization, workspace confirmation, governance, runtime, release, and compatibility.",
       "title": "Evaluation Scenarios"
     },
     {
-      "content_sha256": "55e3f0c9cb8d545239673538b92bd534a7799b1f7f628b916406e27c60054057",
+      "content_sha256": "21b4c76696534169a63dd685e9579b644ed5b58f618e47d910649db940c13be2",
       "id": "knowledge.references-github-skill-release",
       "keywords": [
         "GitHub mirror",
@@ -245,11 +279,11 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/github-skill-release.md",
-      "summary": "GitHub 镜像与本地技能发布的源绑定、检查、镜像和验证合同。",
+      "summary": "Source binding, checking, mirroring, and verification contract for GitHub mirrors and local skill releases.",
       "title": "GitHub Skill Release"
     },
     {
-      "content_sha256": "a4cb21fe6ee5b2ac157fe9232fe5959d4debd4eec3f9b25125a4bf22a4b833b4",
+      "content_sha256": "0546ea760e005a6d54ef7724aee939bc75517beede42ae07ded50175cfc131de",
       "id": "knowledge.references-public-skill-package",
       "keywords": [
         "public package",
@@ -261,11 +295,11 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/public-skill-package.md",
-      "summary": "公开技能包的内容、资产、本地化元数据和可审计发布边界。",
+      "summary": "Auditable release boundaries for public skill-package content, assets, and localized metadata.",
       "title": "Public Skill Package"
     },
     {
-      "content_sha256": "ecb4ad440c67754bc0051d1c2b9f3afa3091a17f8c8460622802871147344a6b",
+      "content_sha256": "445b991a01bb52539ded57d38f7c5eb3bbe9cfe7120634f37270d1a7fbef69d3",
       "id": "knowledge.references-question-bank",
       "keywords": [
         "question bank",
@@ -276,11 +310,11 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/question-bank.md",
-      "summary": "设计访谈问题、技能与工程分支、逐组确认和回答持久化合同。",
+      "summary": "Design-interview questions, skill/engineering branches, per-group confirmation, and answer-persistence contract.",
       "title": "AGENTS.md Question Bank"
     },
     {
-      "content_sha256": "5ed95e9329f1c39d7de549db73272c186f5552686bfc5f335b5e433d6bb41b7c",
+      "content_sha256": "d7965120010b42b7f3964f73d1c390c97f478831d9015565c3a2837de9ba6cfe",
       "id": "knowledge.references-review-checklist",
       "keywords": [
         "review",
@@ -292,11 +326,11 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/review-checklist.md",
-      "summary": "内容、结构、工作区单次确认、运行时、验证与发布所需人工审查证据。",
+      "summary": "Human-review evidence required for content, structure, workspace confirmation, runtime, verification, and release.",
       "title": "AGENTS.md Review Checklist"
     },
     {
-      "content_sha256": "49e3e041a35e949efcf8fbd000fd54e581bd6bb317a27a0ce01f21198965078b",
+      "content_sha256": "74f9a0edea8a21d007d19c5a33c5e16c2236150545be8e17643d3806d7f4701a",
       "id": "knowledge.references-script-guide",
       "keywords": [
         "script",
@@ -308,7 +342,7 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/script-guide.md",
-      "summary": "核心文档生命周期、验证链和结构化命令注册表问询方式。",
+      "summary": "Core document lifecycle, verification chain, and structured command-registry query method.",
       "title": "Script Guide"
     },
     {
@@ -324,11 +358,11 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/script-output-policy.md",
-      "summary": "INFO、WARNING、ERR 前缀、可配置 Kind、quiet 与机器输出例外。",
+      "summary": "INFO, WARNING, and ERR prefixes, configurable kinds, quiet behavior, and machine-output exceptions.",
       "title": "Script Output Policy"
     },
     {
-      "content_sha256": "838aacdd8b9232277bb1440b205412a20509694d403728e601e84a0c1482286a",
+      "content_sha256": "0bc8dafa6750abcfffc35079500f755a7db5b15a781a633f78e40cb27b62b169",
       "id": "knowledge.references-skill-design-coverage",
       "keywords": [
         "Tool Wrapper",
@@ -340,8 +374,24 @@
       "kind": "knowledge",
       "source_anchor": "",
       "source_path": "references/skill-design-coverage.md",
-      "summary": "Skill 设计模式、渐进披露、权威实现与设计合同覆盖地图。",
+      "summary": "Coverage map for Skill design patterns, progressive disclosure, authoritative implementations, and design contracts.",
       "title": "Skill Design Coverage"
+    },
+    {
+      "content_sha256": "9b4ed9f8fdfee90ead1bba5060df447785c5999844df1aa91a006cbe373bb4f8",
+      "id": "knowledge.references-decomposition-plans-skills-agents-md-generator-scripts-python-workers-pycode-gardener-py",
+      "keywords": [
+        "pycode_gardener",
+        "snapshot",
+        "AST",
+        "Markdown",
+        "read-only worker"
+      ],
+      "kind": "knowledge",
+      "source_anchor": "",
+      "source_path": "references/decomposition-plans/skills/agents-md-generator/scripts/python/workers/pycode_gardener.py.md",
+      "summary": "Snapshot, source-analysis, reporting, and read-only permission split boundaries for pycode_gardener.",
+      "title": "pycode_gardener decomposition plan"
     }
   ],
   "schema_version": 1,

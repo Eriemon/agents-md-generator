@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "required": ["schema_version", "defaults", "languages", "document_exceptions"],
+  "default_keys": ["conversation", "documentation"],
+  "language_required": ["aliases", "document_allowed"],
+  "exception_required": ["path", "language"]
+}

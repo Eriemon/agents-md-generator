@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "defaults": {
+    "conversation": "Chinese",
+    "documentation": "English"
+  },
+  "languages": {
+    "English": {
+      "aliases": ["English", "英文"],
+      "document_allowed": true
+    },
+    "Chinese": {
+      "aliases": ["Chinese", "中文"],
+      "document_allowed": false
+    }
+  },
+  "document_exceptions": [
+    {
+      "path": "README-CN.md",
+      "language": "Chinese"
+    }
+  ]
+}

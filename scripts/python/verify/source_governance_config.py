@@ -8,6 +8,12 @@ import json
 from pathlib import Path
 from typing import Any
 
+# 本地治理路径由 Path 组合得到，避免在业务文案中重复猜测。
+DEFAULT_GLOBAL_OVERRIDES_PATH = (Path(".agents") / "global-rule-overrides.json").as_posix()  # 本地覆盖配置路径
+
+# GUI 例外清单路径同样由治理目录和文件名组合得到。
+DEFAULT_GUI_EXCEPTION_MANIFEST = (Path(".agents") / "script-governance-exceptions.json").as_posix()  # GUI 例外清单路径
+
 # 复用语言技能路由默认文案与强制短语，保持渲染和校验一致。
 from routing_contract import (
     DEFAULT_LANGUAGE_SKILL_ROUTING_PYTHON,
@@ -22,6 +28,7 @@ from routing_contract import (
     SCRIPT_LANGUAGE_SKILL_ROUTE_FORBIDDEN_SNIPPETS,
     managed_language_skill_route_defaults,
     missing_language_skill_route_snippets,
+    _load_structured_route_defaults,
 )
 
 # 读取 JSON 文件，失败时回退为空映射。
@@ -177,9 +184,7 @@ def default_implementation_constraints() -> dict[str, Any]:
         旧实现约束视图，供兼容层和历史 profile 继续复用。
     """
 
-    # 读取源码治理默认值，后续需要从中抽出大小限制和排除目录。
-    # 再读取一份源码治理默认值，后续既要回填原始块也要拆出大小限制字段。
-    # 再读取一份源码治理默认值，后续还要拆给 source_file_limits 继续复用。
+    # 读取源码治理默认值，供兼容视图回填原始块并拆出可复用的限制字段。
     dict_source_governance = default_source_governance()  # 默认源码治理配置
 
     # 返回兼容旧字段命名的默认实现约束视图。
@@ -196,7 +201,7 @@ def default_implementation_constraints() -> dict[str, Any]:
                 "bat": ".bat",
                 "powershell": ".ps1",
             },
-            "required_pattern": "scripts/<family>/<function>/<name>.<ext>",
+            "required_pattern": (Path("<script-root>") / "<family>" / "<function>" / "<name>.<extension>").as_posix(),
             "require_full_triad": True,
             "gui_exception_mode": "explicit-manifest",
         },
@@ -222,15 +227,48 @@ def default_global_rule_overrides() -> dict[str, Any]:
     # 这份默认树既要回填 source_governance 主块，也要借出扩展名和排除目录给兼容字段复刻。
     dict_source_governance_defaults = default_source_governance()  # 源码治理默认树
 
+    # 结构化 route records 作为渲染、compact、audit 和 evaluation 的共享事实源。
+    dict_structured_routes = _load_structured_route_defaults().get("routes", {})  # 结构化语言路由
+
+    # 提取三条 full_text，避免默认配置字典中的长表达式挤在单行。
+    str_default_shared_route = str(  # 共同门禁默认文案
+        dict_structured_routes.get("shared", {}).get("full_text", DEFAULT_LANGUAGE_SKILL_ROUTING_SHARED)  # 共享路由全文来源
+    )
+
+    # Python 路由默认全文沿用 structured record 的 full_text。
+    str_default_python_route = str(  # Python 默认文案
+        dict_structured_routes.get("python", {}).get("full_text", DEFAULT_LANGUAGE_SKILL_ROUTING_PYTHON)  # Python 路由全文来源
+    )
+
+    # 脚本路由默认全文沿用 structured record 的 full_text。
+    str_default_script_route = str(  # 脚本默认文案
+        dict_structured_routes.get("script", {}).get("full_text", DEFAULT_LANGUAGE_SKILL_ROUTING_SCRIPT)  # 脚本路由全文来源
+    )
+
+    # 默认注释规则同时保留渲染器和审计器要求的兼容短语。
+    str_comment_quality = (
+        "Comments must explain non-obvious intent, invariants, risk boundaries, "
+        "generation boundaries, or public API behavior; do not restate code or "
+        "perform bulk AI commenting without explicit request; update stale "
+        "comments when behavior changes."
+    )
+
+    # 格式规则拆成可读片段，供根配置和 verifier 共用。
+    str_formatting = (
+        "Generated code must preserve line and blank-line separation; "
+        "do not glue statements, comments, and functions together, "
+        "compress code into one line, or use clever obfuscation."
+    )  # 代码格式治理文案
+
     # 把前面准备好的默认片段组装成根 AGENTS 与 verifier 共用的完整治理配置。
     return {
         "coding_behavior": {
-            "comment_quality": "只允许非显然意图、不变量、风险、生成边界或公共 API 行为注释；禁止复述代码；禁止未经明确要求的批量 AI 注释；行为变化时必须更新旧注释。",
-            "formatting": "生成代码必须保留回车/空行分隔，不能把语句、注释、函数粘连到一起；严禁把代码压缩到一行，严禁生成人看不懂的炫技代码。",
+            "comment_quality": str_comment_quality,
+            "formatting": str_formatting,
             "language_skill_routing": {
-                "shared": DEFAULT_LANGUAGE_SKILL_ROUTING_SHARED,
-                "python": DEFAULT_LANGUAGE_SKILL_ROUTING_PYTHON,
-                "script": DEFAULT_LANGUAGE_SKILL_ROUTING_SCRIPT,
+                "shared": str_default_shared_route,
+                "python": str_default_python_route,
+                "script": str_default_script_route,
             },
         },
         "script_output_policy": default_script_output_policy(),
@@ -255,7 +293,7 @@ def default_global_rule_overrides() -> dict[str, Any]:
             "max_bytes": dict_constraints["source_file_max_bytes"],
             "included_extensions": list(dict_source_governance_defaults.get("hard_fail_extensions", [])),
             "excluded_roots": list(dict_source_governance_defaults.get("excluded_roots", [])),
-            "decomposition_plan_root": "docs/development/decomposition-plans",
+            "decomposition_plan_root": (Path("docs") / "development" / "decomposition-plans").as_posix(),
             "required_plan_sections": [
                 "Current Size",
                 "Split Boundaries",
@@ -268,7 +306,7 @@ def default_global_rule_overrides() -> dict[str, Any]:
             "families": dict(dict_script_layout["families"]),
             "required_pattern": dict_script_layout["required_pattern"],
             "require_full_triad": bool(dict_script_layout["require_full_triad"]),
-            "gui_exception_manifest": ".agents/script-governance-exceptions.json",
+            "gui_exception_manifest": DEFAULT_GUI_EXCEPTION_MANIFEST,
         },
     }
 
@@ -287,7 +325,7 @@ def global_rule_overrides_reference(profile: dict[str, Any] | None) -> str:
     if not isinstance(profile, dict):
 
         # 返回默认的本地治理配置路径。
-        return ".agents/global-rule-overrides.json"
+        return DEFAULT_GLOBAL_OVERRIDES_PATH
 
     # 先读取新结构中的路径覆盖值，优先尊重显式配置。
     dict_inline_overrides = profile.get("global_rule_overrides", {})  # 新结构中的治理配置覆盖块
@@ -308,7 +346,7 @@ def global_rule_overrides_reference(profile: dict[str, Any] | None) -> str:
     str_legacy_path = str(profile.get("global_rule_overrides_config", "")).strip()  # 旧结构里的治理配置路径
 
     # 返回旧路径或默认路径，保证调用方总能拿到可解析的目标。
-    return str_legacy_path or ".agents/global-rule-overrides.json"
+    return str_legacy_path or DEFAULT_GLOBAL_OVERRIDES_PATH
 
 # 把治理配置路径文本解析成绝对路径对象。
 def global_rule_overrides_path(
@@ -596,20 +634,20 @@ def validate_code_comment_policy_data(comment_policy: dict[str, Any], *, require
     # 为不同语言和策略块定义必须保留的治理短语。
     dict_required_snippets = {  # 各字段必须保留的治理短语
         "default_policy": [  # 默认注释策略的必备短语
-            "非显然意图",  # 注释必须解释非显然意图
-            "不变量",  # 注释必须覆盖不变量
-            "风险",  # 注释必须说明风险点
-            "生成边界",  # 注释必须声明生成边界
-            "公共 API 行为",  # 注释必须说明公共 API 行为
-            "禁止复述代码",  # 禁止注释简单复述代码
-            "禁止未经明确要求的批量 AI 注释",  # 禁止未请求的批量 AI 注释
-            "行为变化时必须更新旧注释",  # 行为变化时必须同步更新旧注释
+            "non-obvious intent",  # 注释必须解释非显然意图
+            "invariants",  # 注释必须覆盖不变量
+            "risk boundaries",  # 注释必须说明风险点
+            "generation boundaries",  # 注释必须声明生成边界
+            "public API behavior",  # 注释必须说明公共 API 行为
+            "do not restate code",  # 禁止注释简单复述代码
+            "without explicit request",  # 禁止未请求的批量 AI 注释
+            "update stale comments",  # 行为变化时必须同步更新旧注释
         ],
         "formatting": [  # 格式治理必备短语
-            "回车/空行分隔",  # 代码需要保留回车和空行
-            "不能把语句、注释、函数粘连到一起",  # 语句和注释之间必须有分隔
-            "严禁把代码压缩到一行",  # 禁止输出单行压缩源码
-            "炫技代码",  # 禁止可读性差的炫技写法
+            "line and blank-line separation",  # 代码需要保留回车和空行
+            "do not glue statements",  # 语句和注释之间必须有分隔
+            "compress code into one line",  # 禁止输出单行压缩源码
+            "clever obfuscation",  # 禁止可读性差的炫技写法
         ],
         "python": [  # Python 注释策略必备短语
             "docstring",  # Python 公共 API 使用 docstring 说明
@@ -627,7 +665,7 @@ def validate_code_comment_policy_data(comment_policy: dict[str, Any], *, require
         ],
         "verilog_systemverilog": [  # Verilog/SystemVerilog 规则强调端口、时序块与注释落点
             "module",  # Verilog 需要说明模块职责
-            "input/output/inout/parameter/localparam/integer/logic/wire/reg/real",  # Verilog 需要覆盖端口与声明语义
+            "input, output, inout, parameter, localparam, integer, logic, wire, reg, real",  # Verilog 需要覆盖端口与声明语义
             "assign",  # Verilog 需要说明连续赋值职责
             "always",  # Verilog 需要说明时序或组合块行为
             "右侧",  # Verilog 允许右侧注释时要说明边界
@@ -655,8 +693,7 @@ def validate_code_comment_policy_data(comment_policy: dict[str, Any], *, require
     # 位置枚举和 Python 赋值例外由独立校验器追加诊断。
     list_errors.extend(validate_code_comment_positions(comment_policy, require_explicit=require_explicit))
 
-    # 返回完整诊断列表，保持与其他治理校验函数一致的接口契约。
-    # 把 coding_behavior 的诊断结果返回给调用方。
+    # 返回 coding_behavior 的完整诊断列表，保持治理校验函数的接口契约。
     return list_errors
 
 # 把旧版 code_comment_policy 兼容迁移到新的 coding_behavior 结构。
@@ -682,6 +719,18 @@ def migrate_code_comment_policy_to_coding_behavior(raw: dict[str, Any]) -> dict[
         # 读取新编码行为默认值，供缺项和弱化场景统一回退。
         dict_default_coding_behavior = default_global_rule_overrides()["coding_behavior"]  # 新编码行为默认值
 
+        # 读取旧配置中可能携带的 custom structured route，避免迁移时丢失用户字段形状。
+        dict_legacy_route_source = dict_legacy_policy.get("language_skill_routing", {})  # 旧语言路由来源
+
+        # 非映射旧值不能作为结构化路由来源继续传播。
+        if not isinstance(dict_legacy_route_source, dict):
+
+            # 兼容旧配置直接把 structured 放在 code_comment_policy 下的写法。
+            dict_legacy_route_source = dict_legacy_policy  # 旧配置根对象作为兼容来源
+
+        # 读取用户显式的 structured route，迁移时保持其字段形状。
+        dict_custom_structured_routes = dict_legacy_route_source.get("structured")  # 用户自定义 structured 路由记录
+
         # 旧格式规则仍然有效，优先沿用原值并在空白场景回退到新默认。
         str_formatting = str(dict_legacy_policy.get("formatting", dict_default_coding_behavior["formatting"])).strip()  # 兼容后的格式规则文本
 
@@ -694,17 +743,33 @@ def migrate_code_comment_policy_to_coding_behavior(raw: dict[str, Any]) -> dict[
             # 用新默认 Python 路由覆盖弱化后的旧文本。
             str_python_route = dict_default_coding_behavior["language_skill_routing"]["python"]  # 回退后的 Python 路由文本
 
-        # 写入新的 coding_behavior 结构，并用默认脚本路由补齐旧配置缺口。
+        # 先构造现代路由，再根据 custom structured 是否存在决定是否保留默认平面字段。
+        dict_migrated_language_routing = {  # 迁移后的默认语言路由映射
+            "shared": dict_default_coding_behavior["language_skill_routing"]["shared"],  # 共同门禁派生文本
+            "python": str_python_route,  # Python legacy 派生文本
+            "script": dict_default_coding_behavior["language_skill_routing"]["script"],  # 脚本 legacy 派生文本
+        }
+
+        # 存在 custom structured 时，才切换到用户明确提供的结构化记录。
+        if isinstance(dict_custom_structured_routes, dict):
+
+            # custom structured route 只保留显式 legacy 平面字段和自定义结构化记录。
+            dict_migrated_language_routing = {  # custom route 的兼容投影
+                str_route_name: dict_legacy_route_source[str_route_name]  # 保留用户显式 legacy 文案
+                for str_route_name in ("shared", "python", "script")  # 只复制三个兼容键
+                if str_route_name in dict_legacy_route_source  # 忽略未显式提供的键
+            }
+
+            # 结构化记录仍是 custom route 的唯一事实源。
+            dict_migrated_language_routing["structured"] = dict_custom_structured_routes  # 用户自定义结构化记录
+
+        # 写入新的 coding_behavior 结构，并保留 custom route 的原始形状。
         dict_migrated["coding_behavior"] = {
             "comment_quality": str(  # 兼容后的注释质量文本
                 dict_legacy_policy.get("default_policy", dict_default_coding_behavior["comment_quality"]),  # 旧版默认注释策略文本
             ).strip(),
             "formatting": str_formatting or dict_default_coding_behavior["formatting"],  # 兼容后的格式治理文本
-            "language_skill_routing": {  # 兼容后的语言技能路由映射
-                "shared": dict_default_coding_behavior["language_skill_routing"]["shared"],  # 共同门禁文本
-                "python": str_python_route,  # Python 技能路由文本
-                "script": dict_default_coding_behavior["language_skill_routing"]["script"],  # 脚本技能路由文本
-            },
+            "language_skill_routing": dict_migrated_language_routing,  # 兼容后的语言技能路由映射
         }
 
     # 旧键只作为兼容输入存在，迁移完成后不再保留到新输出结构。
@@ -783,7 +848,25 @@ def language_skill_routing_errors(
     # 当前 helper 的错误仅覆盖语言技能路由分区。
     list_errors: list[str] = []  # 语言路由诊断列表
 
-    # 共同门禁和两个语言目标都必须存在且给出非空路由文本。
+    # structured records 是路由唯一事实源，旧字符串字段只作为派生兼容输出。
+    dict_structured_routes = dict_routing.get("structured")  # 当前输入中的结构化路由记录
+
+    # 缺少 structured 时回读 packaged defaults，避免验证阶段误用旧平面字段。
+    if dict_structured_routes is None:
+
+        # 公共治理 JSON 只保留三字段，结构化校验回读 packaged route source。
+        dict_structured_routes = _load_structured_route_defaults().get("routes", {})  # packaged 结构化路由默认值
+
+    # 显式 structured 非映射时必须保留错误并切换为空映射。
+    elif not isinstance(dict_structured_routes, dict):
+
+        # 显式提供但类型错误的 structured 字段仍必须报告。
+        list_errors.append("coding_behavior.language_skill_routing.structured must be an object")
+
+        # 空映射让后续三类路由检查继续返回完整诊断。
+        dict_structured_routes = {}  # 无效 structured 的安全空值
+
+    # 共同门禁和两个语言目标都必须存在 full/compact 两种结构化文案。
     for str_route_key in ("shared", "python", "script"):
 
         # 显式模式下缺少子键本身就是治理漂移。
@@ -792,11 +875,53 @@ def language_skill_routing_errors(
             # 回显缺少的目标语言键。
             list_errors.append(f"coding_behavior.language_skill_routing.{str_route_key} must be explicitly set")
 
-        # 空白路由文本会让技能边界失效。
-        if not str(dict_routing.get(str_route_key, "")).strip():
+        # 结构化记录的两种文案都必须非空，避免渲染时回退旧字符串。
+        dict_route_record = dict_structured_routes.get(str_route_key, {})  # 当前目标语言的 structured record
+
+        # legacy 字段必须与当前 structured.full_text 一致，防止弱化只改平面投影。
+        str_expected_route_text = (
+            str(dict_route_record.get("full_text", ""))  # structured source 的当前全文
+            if isinstance(dict_route_record, dict)  # 合法记录才提供派生全文
+            else ""  # 无效记录使用空文本触发后续错误
+        )
+
+        # 读取配置中对应的 legacy 字段，供派生关系比较使用。
+        str_legacy_route_text = str(dict_routing.get(str_route_key, "")).strip()  # 当前 legacy 投影文本
+
+        # 显式路由的派生关系一旦断裂，验证器必须报告而不是回退默认文案。
+        if require_explicit and str_legacy_route_text != str_expected_route_text:
+
+            # 回显目标字段，定位用户配置与 structured source 的漂移。
+            list_errors.append(
+                f"coding_behavior.language_skill_routing.{str_route_key} must derive from structured.full_text"
+            )
+
+        # 非映射记录不能表达完整路由合同，先报告并跳过本目标的后续字段检查。
+        if not isinstance(dict_route_record, dict):
+
+            # 记录结构错误后继续检查其他目标语言，集中返回全部缺口。
+            list_errors.append(f"coding_behavior.language_skill_routing.structured.{str_route_key} must be an object")
+
+            # 当前目标没有可继续读取的 full/compact 字段。
+            continue
+
+        # full_text 和 compact_text 必须同时存在，避免渲染器回退旧字符串。
+        list_route_text_values = [  # 当前语言路由的两种文案值
+            str(dict_route_record.get(str_text_key, "")).strip()  # 读取当前文案字段
+            for str_text_key in ("full_text", "compact_text")  # 依次检查 full_text 与 compact_text
+        ]
+
+        # full_text 与 compact_text 均非空才允许该路由进入必需短语校验。
+        bool_route_text_complete = all(list_route_text_values)  # 当前路由文案完整性结果
+
+        # 两种文案任一缺失都必须报告结构化路由合同不完整。
+        if not bool_route_text_complete:
 
             # 空字符串不能代替路由合同。
-            list_errors.append(f"coding_behavior.language_skill_routing.{str_route_key} must be set")
+            list_errors.append(
+                f"coding_behavior.language_skill_routing.structured.{str_route_key} "
+                "full_text and compact_text must be set"
+            )
 
     # 三类路由分别绑定必需短语与禁用技能名。
     list_route_contracts = [  # 语言目标合同表
@@ -808,8 +933,11 @@ def language_skill_routing_errors(
     # 合同顺序保持共同门禁先于 Python 和脚本。
     for str_route_name, tuple_required, tuple_forbidden in list_route_contracts:
 
-        # 路由文本供必需和禁用规则复用。
-        str_route_text = str(dict_routing.get(str_route_name, ""))  # 当前目标路由文本
+        # full/compact 文案共同接受必需短语与禁用技能名检查。
+        dict_route_record = dict_structured_routes.get(str_route_name, {})  # 当前目标的 structured record
+
+        # 仅从合法 structured record 提取 full_text，避免把任意对象转成路由正文。
+        str_route_text = str(dict_route_record.get("full_text", "")) if isinstance(dict_route_record, dict) else ""  # 当前目标路由全文
 
         # 公共 helper 逐项追加必需短语缺口。
         append_missing_language_route_snippets(
@@ -841,10 +969,10 @@ def formatting_rule_errors(str_formatting: str) -> list[str]:
 
     # 必需短语覆盖分隔、粘连、一行压缩和炫技写法。
     tuple_required_snippets = (  # 格式规则必备短语
-        "回车/空行分隔",  # 多行分隔要求
-        "不能把语句、注释、函数粘连到一起",  # 结构分隔要求
-        "严禁把代码压缩到一行",  # 禁止一行压缩
-        "炫技代码",  # 禁止晦涩写法
+        "line and blank-line separation",  # 多行分隔要求
+        "do not glue statements",  # 结构分隔要求
+        "compress code into one line",  # 禁止一行压缩
+        "clever obfuscation",  # 禁止晦涩写法
     )
 
     # 列表推导保持错误顺序与既有循环一致。
@@ -1656,6 +1784,32 @@ def load_global_rule_overrides(root: Path, profile: dict[str, Any] | None = None
     # 合并默认值与本地覆盖，得到后续所有调用方消费的最终治理配置。
     dict_merged = merge_object(dict_defaults, obj_migrated_raw) if isinstance(obj_migrated_raw, dict) else dict_defaults  # 合并后的治理配置
 
+    # 自定义 structured route 只保留用户显式配置，禁止深度合并自动注入旧三字段。
+    dict_raw_coding_behavior = (  # 原始 coding_behavior 配置映射
+        obj_migrated_raw.get("coding_behavior", {})  # 从迁移后的 JSON 读取配置块
+        if isinstance(obj_migrated_raw, dict)  # 仅对象根节点可提供配置
+        else {}  # 非对象根节点使用空配置
+    )  # 原始编码行为配置。
+
+    # 从 coding_behavior 中提取用户显式语言路由，保留其原始字段形状。
+    dict_raw_language_routing = (  # 原始 language_skill_routing 配置
+        dict_raw_coding_behavior.get("language_skill_routing", {})  # 读取语言路由子对象
+        if isinstance(dict_raw_coding_behavior, dict)  # 仅映射类型可继续读取
+        else {}  # 非映射配置使用空路由
+    )  # 原始语言路由配置。
+
+    # 只有用户显式提供非空语言路由且合并结果可写时才保留其字段形状。
+    if (
+        isinstance(dict_raw_language_routing, dict)
+        and dict_raw_language_routing
+        and isinstance(dict_merged.get("coding_behavior"), dict)
+    ):
+
+        # 保留 custom structured override 的原始字段形状，交给显式校验报告缺失项。
+        dict_merged["coding_behavior"]["language_skill_routing"] = dict(  # 保留 custom route 原始字段形状
+            dict_raw_language_routing  # 复制用户显式路由映射
+        )  # 不自动生成 shared/python/script 平面字段。
+
     # 先校验合并后的整体配置，保证默认值和覆盖值组合后仍满足契约。
     list_errors = validate_global_rule_overrides_data(dict_merged)  # 合并后配置的错误列表
 
@@ -1772,49 +1926,64 @@ def refresh_managed_language_skill_routes(dict_existing_raw: dict[str, Any]) -> 
         # 未发生安全刷新时保持磁盘内容不变。
         return False
 
-    # 四种安装组合和历史固定文本共同构成可安全升级的默认集合。
-    tuple_managed_defaults = managed_language_skill_route_defaults()  # 三类受管路由默认集合
+    # structured route records 是唯一受管输入，旧字符串只从其 full_text 派生。
+    dict_default_structured = _load_structured_route_defaults().get("routes", {})  # packaged 结构化路由默认记录
 
-    # 三类默认集合分别约束共同门禁和两个语言所有权字段。
-    set_shared_defaults, set_python_defaults, set_script_defaults = tuple_managed_defaults  # 受管路由默认集合
+    # 缺少完整默认记录时不猜测受管字段的替代内容。
+    if not isinstance(dict_default_structured, dict) or not dict_default_structured:
 
-    # 缺少 shared 且两条语言路由均受管时，允许从旧两字段合同整体升级。
-    bool_legacy_pair_managed = (  # 旧两字段合同是否可安全迁移
-        "shared" not in dict_existing_routing  # 历史结构没有共同门禁字段
-        and dict_existing_routing.get("python") in set_python_defaults  # Python 路由属于受管默认
-        and dict_existing_routing.get("script") in set_script_defaults  # 脚本路由属于受管默认
-    )
-
-    # 已有三字段配置只有在三项均受管时才允许随安装状态整体刷新。
-    bool_current_triple_managed = (  # 当前三字段合同是否可安全刷新
-        dict_existing_routing.get("shared") in set_shared_defaults  # 共同门禁属于受管默认
-        and dict_existing_routing.get("python") in set_python_defaults  # Python owner 文案仍由生成器管理
-        and dict_existing_routing.get("script") in set_script_defaults  # 脚本 owner 文案仍由生成器管理
-    )
-
-    # 任一字段自定义都会阻止整组自动迁移或刷新。
-    if not (bool_legacy_pair_managed or bool_current_triple_managed):
-
-        # 用户自定义路由必须原样保留。
+        # 保持磁盘治理配置不变，交给上游配置校验器报告缺口。
         return False
 
-    # 当前安装态三字段默认值作为原子更新目标。
-    dict_current_routes = {  # 当前三字段受管默认
-        "shared": DEFAULT_LANGUAGE_SKILL_ROUTING_SHARED,  # 当前共同门禁
-        "python": DEFAULT_LANGUAGE_SKILL_ROUTING_PYTHON,  # 当前 Python 路由
-        "script": DEFAULT_LANGUAGE_SKILL_ROUTING_SCRIPT,  # 当前脚本路由
-    }
+    # 读取三类 legacy 文案的历史默认集合，用于判断是否仍由生成器管理。
+    tuple_managed_defaults = managed_language_skill_route_defaults()  # legacy 默认文案集合
 
-    # 磁盘值已经等于当前默认时不产生无意义写回。
+    # 分别展开 shared、Python 和脚本的历史默认集合。
+    set_shared_defaults, set_python_defaults, set_script_defaults = tuple_managed_defaults  # 三类 legacy 集合
+
+    # 只有三个旧字段都命中默认集合时才允许自动刷新。
+    bool_legacy_managed = (  # legacy 三字段是否仍属于生成器管理范围
+        dict_existing_routing.get("shared") in set_shared_defaults  # 共同门禁采用当前受管默认文案
+        and dict_existing_routing.get("python") in set_python_defaults  # Python owner 采用当前受管默认文案
+        and dict_existing_routing.get("script") in set_script_defaults  # 脚本 owner 采用当前受管默认文案
+    )
+
+    # 读取现有 structured 记录，空对象或默认对象都属于可安全刷新范围。
+    dict_existing_structured = dict_existing_routing.get("structured")  # 当前 structured 路由记录
+
+    # 判断 structured 是否仍保持受管默认形状。
+    bool_structured_managed = dict_existing_structured in ({}, dict_default_structured)  # structured 可刷新状态
+
+    # 自定义 structured 或 legacy 文案必须由用户显式维护，禁止自动覆盖。
+    if not bool_legacy_managed and not bool_structured_managed:
+
+        # 保持用户自定义治理事实不变。
+        return False
+
+    # 将内置路由投影为 legacy 字段和完整 structured records。
+    dict_current_routes: dict[str, Any] = {}  # 待写回的治理路由字段
+
+    # 逐个读取内置 full_text，保持默认治理 JSON 的三字段兼容形状。
+    for str_route_name in ("shared", "python", "script"):
+
+        # 当前目标的 full_text 是 legacy 字段唯一允许的派生来源。
+        dict_current_routes[str_route_name] = str(  # 将当前目标的 packaged full_text 写入兼容字段
+            dict_default_structured[str_route_name].get("full_text", "")  # 读取当前目标的 packaged 全文
+        )  # 当前目标的 legacy 路由文案
+
+    # structured records 必须作为旧字段的唯一派生来源同时写回。
+    dict_current_routes["structured"] = dict_default_structured  # 完整结构化路由记录
+
+    # 只有内容实际漂移时才触发治理 JSON 写回。
     if dict_existing_routing == dict_current_routes:
 
         # 相同合同不属于实际刷新。
         return False
 
-    # 清空旧键后整体写入三字段，避免残留未知受管字段。
+    # 清空旧键后整体写入三个派生字段，避免残留未知受管字段。
     dict_existing_routing.clear()
 
-    # 原子更新确保 shared 与两条语言路由始终来自同一安装状态。
+    # 原子更新确保三个 legacy projection 同时刷新。
     dict_existing_routing.update(dict_current_routes)
 
     # 返回真实变化供调用方决定是否写盘和重载。
@@ -1895,7 +2064,7 @@ def ensure_global_rule_overrides_file(root: Path, profile: dict[str, Any] | None
     str_gui_manifest_relpath = str(  # GUI 例外 manifest 的相对路径
         dict_loaded["data"]["tool_script_layout"].get(  # 从脚本布局配置里读取 manifest 相对路径
             "gui_exception_manifest",  # GUI 例外 manifest 的配置键
-            ".agents/script-governance-exceptions.json",  # GUI 例外 manifest 默认相对路径
+            DEFAULT_GUI_EXCEPTION_MANIFEST,  # GUI 例外 manifest 默认相对路径
         ),
     ).strip()
 
@@ -1971,7 +2140,7 @@ def implementation_constraints_from_profile(profile: dict[str, Any] | None, root
                 ),
                 "gui_exception_mode": "explicit-manifest",
                 "gui_exception_manifest": str(
-                    dict_script_layout.get("gui_exception_manifest", ".agents/script-governance-exceptions.json"),
+                    dict_script_layout.get("gui_exception_manifest", DEFAULT_GUI_EXCEPTION_MANIFEST),
                 ),
             },
         }

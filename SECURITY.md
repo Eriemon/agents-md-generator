@@ -1,14 +1,12 @@
-# Security Policy
+# Security policy
 
-## Reporting a vulnerability
+Do not publish exploitable security details in a public issue. Use a private channel approved by the maintainers and include the impact, reproduction steps, minimal sample, affected versions, and suggested remediation.
 
-请不要在公开 issue 中发布可利用的安全细节。请通过项目维护者认可的私密渠道提交：影响范围、复现步骤、最小样例、受影响版本和建议修复方向。
+Include:
 
-## What to include
+- affected skill versions and runtime environments
+- reproducible inputs and expected/actual behavior
+- whether local files, remote checkouts, or credentials are involved
+- mitigations already applied
 
-- 受影响的技能版本与运行环境
-- 可重复的输入和预期/实际行为
-- 是否涉及本地文件、远程 checkout 或凭据
-- 已采取的缓解措施
-
-维护者会先确认报告收到，再根据影响范围安排修复、回归验证和公开说明。安全修复也必须遵守现有 dist 回执和 GitHub 关联发布合同。
+Maintainers will acknowledge the report and schedule remediation, regression verification, and public communication according to impact. Security fixes must also follow the existing distribution receipt and GitHub release contracts.

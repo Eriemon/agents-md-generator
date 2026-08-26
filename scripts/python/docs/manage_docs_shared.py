@@ -437,16 +437,90 @@ def save_state(project: Path, state: dict[str, Any]) -> None:
 
     Unit:
         状态值无统一物理单位，各字段按治理 schema 解释。
+
+    Raises:
+        RuntimeError: 状态路径含符号链接或越出项目根目录时抛出。
+        OSError: 创建目录或写入状态文件失败时传播。
     """
 
     # 状态父目录在首次治理时可能尚未创建。
     path_agents_dir = project / ".agents"  # 项目本地治理目录
 
+    # 状态路径不能越出项目。
+    path_state = state_file(project)  # 文档治理状态文件路径
+
+    # 写入前确认路径边界。
+    if not path_stays_inside_project(project, path_agents_dir) or not path_stays_inside_project(
+        project, path_state
+    ):
+
+        # 在创建目录或写入状态前阻断不安全路径。
+        raise RuntimeError(
+            "> ERR: [Python] state path contains a symbolic link or escapes the project"
+        )
+
     # 项目根已存在，当前层只需创建 .agents。
     path_agents_dir.mkdir(exist_ok=True)
 
     # 稳定排序和缩进便于 diff、审计与人工恢复。
-    state_file(project).write_text(json.dumps(state, indent=2, sort_keys=True, default=str), encoding="utf-8")
+    path_state.write_text(json.dumps(state, indent=2, sort_keys=True, default=str), encoding="utf-8")
+
+# 历史路径清理共用项目边界检查，拒绝绝对路径和符号链接组件。
+def path_stays_inside_project(path_project: Path, path_candidate: Path) -> bool:
+    """判断候选路径及其已存在父级是否保持在项目根内。
+
+    Args:
+        path_project: 已确认的项目根目录。
+        path_candidate: 待检查的目录或文件候选路径。
+
+    Returns:
+        候选路径安全且位于项目根内时为 True，否则为 False。
+    """
+
+    # 解析项目根和候选路径，覆盖绝对路径与父级片段输入。
+    path_project_absolute = path_project.absolute()  # 项目根的词法绝对路径。
+
+    # 解析项目根的真实路径，作为后续相对关系的边界。
+    path_project_root = path_project.resolve()  # 规范化的项目边界。
+
+    # 项目根自身若由链接承载，清理边界无法形成可靠证明。
+    if path_project_absolute != path_project_root:
+
+        # 即使候选仍落在解析后的项目内也保持 fail-closed。
+        return False
+
+    # 非严格解析和相对关系计算形成候选路径的安全证明。
+    try:
+
+        # 非严格解析允许检查尚未创建的历史目录候选。
+        path_resolved_candidate = path_candidate.resolve(strict=False)  # 候选规范路径。
+
+        # 相对路径计算确认候选没有越出项目边界。
+        path_relative = path_resolved_candidate.relative_to(path_project_root)  # 项目内相对分量。
+
+    # 外部路径或无法解析的候选必须按不安全处理。
+    except (OSError, RuntimeError, ValueError):
+
+        # 清理操作不能依赖异常路径的字符串前缀判断。
+        return False
+
+    # 任一已存在的符号链接组件都可能把删除目标导向其他目录。
+    path_cursor = path_project_root  # 逐级检查的项目内路径。
+
+    # 只要路径链包含链接就停止清理授权。
+    for str_part in path_relative.parts:
+
+        # 逐级恢复候选路径分量。
+        path_cursor = path_cursor / str_part  # 当前路径分量。
+
+        # 符号链接不能作为历史目录清理边界。
+        if path_cursor.is_symlink():
+
+            # 即使链接目标仍在项目内也保持 fail-closed。
+            return False
+
+    # 规范路径和每个已存在分量都通过项目边界检查。
+    return True
 
 # 历史演进目录覆盖根资产、档案指定 skill 和 skills 子目录。
 def legacy_evolution_roots(project: Path) -> list[Path]:
@@ -482,19 +556,25 @@ def legacy_evolution_roots(project: Path) -> list[Path]:
         if str_raw_path:
 
             # 候选存在性在清理阶段判断。
-            list_roots.append(project / str_raw_path / "assets" / "templates" / "evolution")
+            path_configured_root = project / str_raw_path / "assets" / "templates" / "evolution"  # 配置演进模板根
+
+            # 配置根通过项目边界证明后才进入清理候选。
+            if path_stays_inside_project(project, path_configured_root):
+
+                # 只有项目内且无符号链接组件的配置根才可进入清理列表。
+                list_roots.append(path_configured_root)
 
     # 标准 skills 目录可能含多个历史 skill 根。
     path_skills_root = project / "skills"  # 标准 skills 根目录
 
     # 只扫描真实目录，避免不存在根触发异常。
-    if path_skills_root.is_dir():
+    if path_skills_root.is_dir() and path_stays_inside_project(project, path_skills_root):
 
         # 每个 skill 子目录映射到其演进资产位置。
         list_roots.extend(
             path_skill / "assets" / "templates" / "evolution"
             for path_skill in path_skills_root.iterdir()
-            if path_skill.is_dir()
+            if path_skill.is_dir() and path_stays_inside_project(project, path_skill)
         )  # 从治理档案提取的 skill 布局对象
 
     # 去重列表保留最先发现的路径表达。
@@ -505,6 +585,12 @@ def legacy_evolution_roots(project: Path) -> list[Path]:
 
     # 候选按发现顺序规范化并去重。
     for path_root in list_roots:
+
+        # 固定根、配置根和扫描根统一经过最终项目边界检查。
+        if not path_stays_inside_project(project, path_root):
+
+            # 不安全候选不得交给后续 rmtree。
+            continue
 
         # 已存在路径使用解析后绝对值，未存在路径保留词法表达。
         str_normalized = str(path_root.resolve()) if path_root.exists() else str(path_root)  # 路径去重键
@@ -563,7 +649,7 @@ def cleanup_legacy_evolution_artifacts(
     for path_request in tuple_request_paths:
 
         # 缺失请求无需写入报告。
-        if path_request.exists():
+        if path_request.exists() and path_stays_inside_project(project, path_request):
 
             # 请求文件不再参与当前演进流程。
             path_request.unlink()
@@ -575,7 +661,7 @@ def cleanup_legacy_evolution_artifacts(
     path_export_root = evolution_export_root(project)  # 演进导出目录
 
     # 目录存在时递归清除退役产物。
-    if path_export_root.exists():
+    if path_export_root.exists() and path_stays_inside_project(project, path_export_root):
 
         # ignore_errors 保持清理操作幂等。
         shutil.rmtree(path_export_root, ignore_errors=True)
@@ -836,16 +922,40 @@ def handoff_paths(project: Path) -> dict[str, Path]:
 
     Returns:
         handoff 根目录、当前文件和历史目录路径映射。
+
+    Raises:
+        RuntimeError: 任一路径含符号链接或越出项目根目录时抛出。
     """
 
-    # 根路径只构造不创建，调用方决定是否执行写操作。
+    # 根路径只构造，不在此处创建。
     path_handoff_root = project / "docs" / "handoff"  # 当前与历史 handoff 的共同父目录
+
+    # handoff 路径均在项目内。
+    path_handoff_history = path_handoff_root / HANDOFF_HISTORY_DIRNAME  # handoff 历史目录
+
+    # 当前 handoff 文件路径。
+    path_handoff_current = path_handoff_root / HANDOFF_CURRENT_FILENAME  # 当前 handoff 文件
+
+    # handoff 路径边界检查。
+    if not all(
+        path_stays_inside_project(project, path_candidate)
+        for path_candidate in (
+            path_handoff_root,
+            path_handoff_history,
+            path_handoff_current,
+        )
+    ):
+
+        # 任何链接组件都可能把 handoff 写入项目外部。
+        raise RuntimeError(
+            "> ERR: [Python] handoff path contains a symbolic link or escapes the project"
+        )
 
     # 稳定键名由审计、归档和恢复流程共同消费。
     return {
         "root": path_handoff_root,
-        "current": path_handoff_root / HANDOFF_CURRENT_FILENAME,
-        "history": path_handoff_root / HANDOFF_HISTORY_DIRNAME,
+        "current": path_handoff_current,
+        "history": path_handoff_history,
     }
 
 # 任一治理资产存在即表示项目不能按全新目录重新初始化。
@@ -1225,7 +1335,7 @@ def current_handoff_entry(project: Path) -> dict[str, Any] | None:
     """
 
     # 当前文件路径来自统一 handoff 路径合同。
-    path = handoff_paths(project)["current"]  # 当前 handoff 文件路径
+    path = handoff_paths(project)["current"]  # 读取当前记录
 
     # 缺失或类型错误的路径不能作为当前 handoff。
     if not path.is_file():

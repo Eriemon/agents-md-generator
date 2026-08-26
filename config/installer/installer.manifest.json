@@ -1,0 +1,172 @@
+{
+  "schema_version": 1,
+  "allowed_project_kind": "skill",
+  "bundle_root_relative": "assets/installer",
+  "catalog_relative_path": "../../config/agent-platforms.json",
+  "overrides_relative_path": "../../config/installer/platform-overrides.json",
+  "projection_relative_path": "platforms.tsv",
+  "projection_schema_relative_path": "../../config/installer/projection.schema.json",
+  "projection_generator_relative_path": "../../scripts/python/release/build_installer_projection.py",
+  "projection_record_classes": [
+    "META",
+    "SOURCE",
+    "RUNTIME",
+    "MENU",
+    "TRANSACTION",
+    "OUTPUT",
+    "BATCH_ENTRY",
+    "PLATFORM"
+  ],
+  "projection_required_columns": [
+    "platform_id",
+    "display_name",
+    "instruction_file",
+    "workspace_config_dir",
+    "generator_state_subdir",
+    "user_home_dir",
+    "skill_install_dir",
+    "home_env",
+    "home_env_mode",
+    "worker_support",
+    "skill_metadata"
+  ],
+  "manifest_env_relative_path": "installer.manifest.env",
+  "manifest_json_relative_path": "config/installer/installer.manifest.json",
+  "manifest_projection_relative_path": "manifest.projection",
+  "env_projection": {
+    "SCHEMA_VERSION": "schema_version",
+    "ALLOWED_PROJECT_KIND": "allowed_project_kind",
+    "BUNDLE_ROOT_RELATIVE": "bundle_root_relative",
+    "CATALOG_RELATIVE_PATH": "catalog_relative_path",
+    "OVERRIDES_RELATIVE_PATH": "overrides_relative_path",
+    "PROJECTION_RELATIVE_PATH": "projection_relative_path",
+    "MANIFEST_ENV_RELATIVE_PATH": "manifest_env_relative_path",
+    "MANIFEST_JSON_RELATIVE_PATH": "manifest_json_relative_path",
+    "MANIFEST_PROJECTION_RELATIVE_PATH": "manifest_projection_relative_path",
+    "PROJECTION_SCHEMA_RELATIVE_PATH": "projection_schema_relative_path",
+    "PROJECTION_GENERATOR_RELATIVE_PATH": "projection_generator_relative_path",
+    "SOURCE_ROOT_RELATIVE": "source_root_relative",
+    "BACKEND_RELATIVE_PATH": "backend_relative_path",
+    "RUNTIME_RELATIVE_PATH": "runtime_relative_path",
+    "BACKUP_DIRECTORY_NAME": "backup_directory_name",
+    "LOCK_FILE_NAME": "lock_file_name",
+    "STAGING_PREFIX": "staging_prefix",
+    "SOURCE_MANIFEST_PREFIX": "source_manifest_prefix",
+    "QUARANTINE_DIRECTORY_NAME": "quarantine_directory_name",
+    "RECOVERY_RECEIPT_SUFFIX": "recovery_receipt_suffix",
+    "BATCH_ENTRY": "batch_entry",
+    "SHELL_RUNTIME": "shell_runtime",
+    "SHELL_OUTPUT_FORMAT": "output.shell_format",
+    "POWERSHELL_OUTPUT_FORMAT": "output.powershell_format",
+    "CATALOG_SHA256": "catalog_sha256",
+    "PROJECTION_SHA256": "projection_sha256",
+    "ENTRYPOINTS": "entrypoints",
+    "POWERSHELL_CANDIDATES": "powershell_candidates",
+    "PYTHON_CANDIDATES": "python_candidates",
+    "HASH_COMMANDS": "hash_commands",
+    "SHELL_UTILITIES": "shell_utilities",
+    "PROJECTION_RECORD_CLASSES": "projection_record_classes",
+    "PROJECTION_REQUIRED_COLUMNS": "projection_required_columns"
+  },
+  "env_path_bases": {
+    "skill_root": [
+      "BUNDLE_ROOT_RELATIVE",
+      "MANIFEST_JSON_RELATIVE_PATH"
+    ],
+    "bundle_root": [
+      "CATALOG_RELATIVE_PATH",
+      "OVERRIDES_RELATIVE_PATH",
+      "PROJECTION_RELATIVE_PATH",
+      "MANIFEST_PROJECTION_RELATIVE_PATH",
+      "MANIFEST_ENV_RELATIVE_PATH",
+      "PROJECTION_SCHEMA_RELATIVE_PATH",
+      "PROJECTION_GENERATOR_RELATIVE_PATH",
+      "BACKEND_RELATIVE_PATH",
+      "RUNTIME_RELATIVE_PATH",
+      "BATCH_ENTRY"
+    ],
+    "bundle_local": [
+      "MANIFEST_ENV_RELATIVE_PATH",
+      "PROJECTION_RELATIVE_PATH",
+      "MANIFEST_PROJECTION_RELATIVE_PATH",
+      "BATCH_ENTRY"
+    ],
+    "source_root": [
+      "SOURCE_ROOT_RELATIVE"
+    ]
+  },
+  "source_root_relative": "../..",
+  "backend_relative_path": "../../scripts/python/release/guided_installer.py",
+  "runtime_relative_path": "../../scripts/python/release/install_skill.py",
+  "backup_directory_name": "skill_backups",
+  "batch_entry": "install.ps1",
+  "powershell_candidates": [
+    "powershell.exe",
+    "pwsh.exe"
+  ],
+  "shell_runtime": "bash",
+  "shell_utilities": [
+    "awk",
+    "sed",
+    "realpath",
+    "grep",
+    "stat",
+    "cp",
+    "mv",
+    "mkdir",
+    "basename",
+    "dirname",
+    "find",
+    "sort",
+    "wc",
+    "cmp"
+  ],
+  "python_candidates": [
+    "python3",
+    "python"
+  ],
+  "hash_commands": [
+    "sha256sum",
+    "shasum"
+  ],
+  "lock_file_name": ".installer.lock",
+  "staging_prefix": ".installer-staging-",
+  "source_manifest_prefix": ".installer-source-manifest-",
+  "recovery_receipt_suffix": ".receipt",
+  "quarantine_directory_name": ".installer-quarantine",
+  "menu": {
+    "selection_source": "projection",
+    "confirmation_required": true
+  },
+  "transaction": {
+    "lock_required": true,
+    "same_volume_required": true,
+    "preserve_failure_evidence": true
+  },
+  "output": {
+    "format": "entrypoint-specific",
+    "stdout": "configured-per-entrypoint",
+    "shell_format": "prefixed-human",
+    "powershell_format": "machine-json"
+  },
+  "entrypoints": [
+    "install.ps1",
+    "install.sh",
+    "install.bat"
+  ],
+  "projection_columns": [
+    "platform_id",
+    "display_name",
+    "instruction_file",
+    "workspace_config_dir",
+    "generator_state_subdir",
+    "user_home_dir",
+    "skill_install_dir",
+    "home_env",
+    "home_env_mode",
+    "worker_support",
+    "skill_metadata"
+  ],
+  "catalog_sha256": "c4ba19e95ef5ad0d61acdae33a2202ea39a167ce02e167e9cc3ede4bb5522bf6",
+  "projection_sha256": "b37d466f3c65a106dd95403104ca29b0f92f6e32b460f3fd9ef3c55d4d5bb254"
+}

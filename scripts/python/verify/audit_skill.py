@@ -6,11 +6,16 @@ from __future__ import annotations
 # 导入 技能审计 所需的依赖模块。
 import argparse
 import ast
+
+# 动态导入和类型标注支撑延迟加载的运行时合同。
 import importlib
 import json
 import re
+
+# 路径与模块类型用于约束跨任务依赖的边界。
 from pathlib import Path
 import sys
+from types import ModuleType
 
 # 直接脚本执行时延迟登记兄弟任务目录，模块导入本身保持无副作用。
 def load_runtime_dependencies() -> None:
@@ -42,59 +47,61 @@ def load_runtime_dependencies() -> None:
             sys.path.insert(0, str_task_dir)
 
     # 公共 CLI 契约提供路径解析、JSON 输出和脚本登记表。
-    module_agents_common = importlib.import_module("agents_common")  # 公共 CLI 模块
+    module_type_agents_common: ModuleType = importlib.import_module("agents_common")  # 公共 CLI 模块
 
     # 项目事实模块提供分解计划位置和全局覆盖配置。
-    module_project_facts = importlib.import_module("agents_project_facts")  # 项目事实模块
+    module_type_project_facts: ModuleType = importlib.import_module("agents_project_facts")  # 项目事实模块
 
     # 源码治理模块负责验证默认输出策略配置。
-    module_source_governance = importlib.import_module(  # 源码治理配置模块
+    module_type_source_governance: ModuleType = importlib.import_module(  # 源码治理配置模块
         "source_governance_config"  # 输出策略治理模块入口
     )
 
     # 版本策略模块统一判断发布目录的语义版本合法性。
-    module_version_policy = importlib.import_module("version_policy")  # 版本策略模块
+    module_type_version_policy: ModuleType = importlib.import_module("version_policy")  # 版本策略模块
 
     # 延迟绑定保持既有模块级调用点兼容，同时避免 import-time 加载。
     global script_task_by_name
     global decomposition_plan_path
-    global emit_json
-    global load_global_rule_overrides
-    global resolve_project
+    global func_emit_json
+    global func_load_global_rule_overrides
+    global func_resolve_project
     global validate_script_output_policy_data
-    global version_policy_error
+    global func_version_policy_error
 
     # 脚本登记表驱动审计器检查每个入口是否位于声明的任务目录。
-    script_task_by_name = module_agents_common.SCRIPT_TASK_BY_NAME  # 脚本到任务目录映射
+    script_task_by_name = module_type_agents_common.SCRIPT_TASK_BY_NAME  # 脚本到任务目录映射
 
     # JSON 输出函数维护 CLI 的机器可读标准输出协议。
-    emit_json = module_agents_common.emit_json  # 结构化结果输出函数
+    func_emit_json = module_type_agents_common.emit_json  # 结构化结果输出函数
 
     # 项目解析函数拒绝越界路径并返回规范目标目录。
-    resolve_project = module_agents_common.resolve_project  # 项目路径解析函数
+    func_resolve_project = module_type_agents_common.resolve_project  # 项目路径解析函数
 
     # 分解计划定位器读取仓库治理配置中的计划根。
-    decomposition_plan_path = module_project_facts.decomposition_plan_path  # 分解计划路径函数
+    decomposition_plan_path = module_type_project_facts.decomposition_plan_path  # 分解计划路径函数
 
     # 全局覆盖加载器提供源码规模等仓库事实。
-    load_global_rule_overrides = module_project_facts.load_global_rule_overrides  # 全局规则覆盖加载函数
+    func_load_global_rule_overrides = (  # 全局规则覆盖加载函数
+        module_type_project_facts.load_global_rule_overrides  # 绑定共享配置实现
+    )
 
     # 默认输出策略验证器返回配置合同错误列表。
     validate_script_output_policy_data = (
-        module_source_governance.validate_script_output_policy_data  # 输出策略验证函数
+        module_type_source_governance.validate_script_output_policy_data  # 输出策略验证函数
     )
 
     # 版本校验函数为目录名和 VERSION 一致性提供同一规则来源。
-    version_policy_error = module_version_policy.version_policy_error  # 版本策略函数
+    func_version_policy_error = module_type_version_policy.version_policy_error  # 版本策略函数
 
     # 公开文件门禁复用发布策略的单一事实源，避免审计与打包分叉。
     global validate_public_skill_files
 
     # 发布策略模块提供受管理技能公开文件的唯一校验实现。
-    module_release_content_policy = importlib.import_module("release_content_policy")  # 发布内容策略模块
+    module_type_release_content_policy: ModuleType = importlib.import_module("release_content_policy")  # 发布内容策略模块
 
     # 将公开文件校验函数绑定到延迟加载的模块命名空间。
-    validate_public_skill_files = module_release_content_policy.validate_public_skill_files  # 公开文件校验函数
+    validate_public_skill_files = module_type_release_content_policy.validate_public_skill_files  # 公开文件校验函数
 
 # 所有被审计技能至少需要主说明文件。
 CORE_REQUIRED_FILES = [  # 通用技能必需文件
@@ -104,7 +111,8 @@ CORE_REQUIRED_FILES = [  # 通用技能必需文件
 # 自身技能额外要求完整产品、治理和验证资源。
 SELF_REQUIRED_FILES = [  # 自身技能必需资源
     Path("VERSION"),  # 自身技能版本文件
-    Path("agents") / "openai.yaml",  # OpenAI 产品界面配置
+    Path("config") / "agent-platforms.json",  # 平台目录
+    Path("config") / "render-manifest.json",  # 渲染产物清单
     Path("evals") / "evals.json",  # 效果测试案例配置
     Path("references") / "agents-md-guidance.md",  # AGENTS 规则编写指南
     Path("references") / "book-rules-coverage.md",  # 书籍规则覆盖说明
@@ -147,6 +155,7 @@ SELF_REQUIRED_FILES = [  # 自身技能必需资源
     Path("scripts") / "python" / "verify" / "source_governance_config.py",  # 源码治理配置验证模块
     Path("scripts") / "python" / "render" / "create_agent_shims.py",  # 兼容代理规则垫片入口
     Path("scripts") / "python" / "verify" / "audit_skill.py",  # 技能包完整审计入口
+    Path("scripts") / "python" / "verify" / "agent_platform_gate.py",  # 活动路径硬编码门禁
     Path("scripts") / "python" / "verify" / "evaluate_skill.py",  # 技能效果评估入口
 ]
 
@@ -233,6 +242,15 @@ COMMON_GROUP_LABELS = (  # 可识别的公共分组标签
     "Engineering development groups are",  # 工程开发分组标签
 )
 
+# 旧版入口可能仍携带问题组正文，审计必须识别其配置漂移而不复制当前编号。
+PROFILE_GROUP_LABELS: tuple[tuple[str, str, str], ...] = (
+    ("Skill development groups are", "SKILL_GROUPS", "skill"),  # 技能开发旧入口的组标签与变量名。
+    ("Engineering development groups are", "ENGINEERING_GROUPS", "engineering"),  # 工程开发旧入口的组标签与变量名。
+)
+
+# 当前入口只引用配置驱动组，由单一声明替代 SKILL.md 中易漂移的编号清单。
+PARAMETERIZED_GROUP_CONTRACT: str = "Skill and Engineering development groups come from the selected profile"  # 参数化问题组合同文本。
+
 # Markdown 内容预算防止入口和生成模板重新膨胀。
 GLOBAL_TEMPLATE_MAX_BYTES = 8 * 1024  # 全局受管基线预算。
 
@@ -256,7 +274,7 @@ REFERENCE_ALIGNMENT_RULES = {  # 参考文档单一职责锚点。
 LANGUAGE_SKILL_ROUTING_ALIGNMENT_RULES = {
     "references/coding-behavior-language-routing.md": (  # 语言路由说明对齐规则
         "shared",  # 共同门禁字段
-        "只渲染一次",  # 共同门禁单次渲染
+        "rendered as `Shared language gates` only once",  # 共同门禁单次渲染
         "Python",  # Python 目标语言声明
         "readable-python-generator",  # Python 可读性技能
         "readable-script-generator",  # 脚本可读性技能
@@ -264,10 +282,10 @@ LANGUAGE_SKILL_ROUTING_ALIGNMENT_RULES = {
         "shell/bash",  # POSIX 命令行脚本目标
         "PowerShell",  # PowerShell 脚本目标
         "Tcl",  # Tcl 文件路由范围
-        "调用 Python 外部命令的脚本包装器",  # Python 子命令不改变脚本归属
-        "不能把语句、注释、函数粘连到一起",  # 代码结构分隔要求
-        "严禁把代码压缩到一行",  # 禁止单行压缩代码要求
-        "炫技代码",  # 禁止晦涩代码表达
+        "A script wrapper that invokes an external Python command",  # Python 子命令不改变脚本归属
+        "do not join statements, comments, or functions together",  # 代码结构分隔要求
+        "compress code into one line",  # 禁止单行压缩代码要求
+        "obfuscated code",  # 禁止晦涩代码表达
     ),
 }
 
@@ -287,43 +305,9 @@ SKILL_TOKEN_USAGE_SNIPPETS = (  # 用于验证 SKILL.md 的 Token 统计命令�
     "If the user explicitly asks for Codex Token usage statistics",  # 技能正文限定显式统计请求。
     "registry instruction `detect.token-usage-review`",  # 技能正文路由到结构化注册指令。
     "do not enter the AGENTS design interview",  # 技能正文要求统计意图旁路访谈。
-    "only when `$CODEX_HOME/sessions` or `~/.codex/sessions` exists",  # 技能正文要求会话目录可用。
+    "only when the configured agent sessions directory exists",  # 技能正文要求会话目录可用。
     "keep any sessions-root override inside that active sessions tree",  # 技能正文限制统计参数边界。
 )
-
-# eval 集合必须覆盖技能设计合同规定的五类核心模式。
-REQUIRED_SKILL_DESIGN_PATTERNS = {  # 必需技能设计模式
-    "Tool Wrapper",  # 工具包装模式
-    "Generator",  # 生成器模式
-    "Reviewer",  # 审查器模式
-    "Inversion",  # 反转模式
-    "Pipeline",  # 流水线模式
-}
-
-# 必需案例主键锁定关键治理能力的效果测试覆盖。
-REQUIRED_EVAL_CASE_IDS = {  # 必需效果测试案例标识
-    "detect_missing_root_agents",  # 根规则缺失检测案例
-    "generator_version_takeover",  # 版本接管案例
-    "root_level_whitelist_gate",  # 根文件白名单案例
-    "root_workspace_artifact_gate",  # 根工作区产物案例
-    "evolution_removed_contract",  # 演进退役合同案例
-    "generic_audit_split",  # 通用与自身审计拆分案例
-    "evaluate_failure_classification",  # 评估失败分类案例
-    "install_release_completeness",  # 安装发布完整性案例
-    "release_content_evals_install_contract",  # 发布内容与安装合同案例
-    "review_governance_companion_checks",  # 治理伴随检查案例
-    "design_review_gate",  # 设计审查门禁案例
-    "source_governance_test_boundary",  # 源码治理测试边界案例
-    "source_governance_size_readability_contract",  # 源码规模与可读性案例
-    "language_skill_routing_contract",  # 语言技能路由合同案例
-    "codex_token_usage_review_contract",  # Codex Token 统计合同案例
-    "task_rating_gate_contract",  # 任务评级门禁合同案例
-    "global_review_agent_opt_in_contract",  # 审查智能体显式启用合同案例
-    "workspace_boundary_authorization_contract",  # 工作区外部写入授权合同案例
-    "memory_governance_gate",  # 项目记忆治理门禁案例
-    "governance_cli_entrypoint_smoke",  # 治理命令入口冒烟案例
-    "openai_metadata_standard_contract",  # OpenAI 技能元数据标准合同案例
-}
 
 # 旧 numbered shard 名称不得残留在运行时源码引用中。
 STALE_NUMBERED_SHARD_RE = re.compile(  # 陈旧 numbered shard 模式
@@ -345,10 +329,10 @@ def parse_frontmatter(text: str) -> dict[str, str]:
         return {}
 
     # 第二个分隔符限定元数据区间，避免扫描正文中的冒号。
-    end = text.find("\n---\n", 4)  # frontmatter 结束偏移
+    int_end: int = text.find("\n---\n", 4)  # frontmatter 结束偏移
 
     # 缺少闭合分隔符时拒绝解析不完整头部。
-    if end == -1:
+    if int_end == -1:
 
         # 不完整元数据不产生部分可信结果。
         return {}
@@ -363,7 +347,7 @@ def parse_frontmatter(text: str) -> dict[str, str]:
     list_current_multiline: list[str] = []  # 当前多行字段内容
 
     # 按物理行识别顶层字段和缩进续行。
-    for line in text[4:end].splitlines():
+    for line in text[4:int_end].splitlines():
 
         # 已进入多行字段时优先消费其缩进内容。
         if current_key is not None:
@@ -534,7 +518,7 @@ def skill_directory_name_matches(skill_dir: Path, name: str) -> bool:
     str_version_suffix = skill_dir.name[len(str_prefix) :]  # 目录声明版本
 
     # 非法语义版本不能通过发布目录兼容路径。
-    if version_policy_error(str_version_suffix):
+    if func_version_policy_error(str_version_suffix):
 
         # 版本策略错误使目录身份无效。
         return False
@@ -571,7 +555,7 @@ def parse_openai_interface(text: str) -> dict[str, str] | None:
     try:
 
         # 顶层 interface 行确定后续缩进字段的起点。
-        start = next(  # interface 声明行索引
+        int_start: int = next(  # interface 声明行索引
             index  # interface 顶层声明的物理行索引
             for index, line in enumerate(lines)  # 带物理行索引的配置行
             if line.strip() == "interface:"  # 仅定位顶层界面区块
@@ -587,7 +571,7 @@ def parse_openai_interface(text: str) -> dict[str, str] | None:
     dict_data: dict[str, str] = {}  # interface 配置字段
 
     # 从入口下一行开始读取其缩进子项。
-    for line in lines[start + 1 :]:
+    for line in lines[int_start + 1 :]:
 
         # 空行不结束 YAML 区块，也不产生字段。
         if not line.strip():
@@ -644,7 +628,10 @@ def parse_group_assignment(script_text: str, name: str) -> list[list[str]] | Non
     try:
 
         # 将赋值右侧转换为不执行代码的原生值。
-        raw_value = ast.literal_eval(match.group(1).strip())  # 问题组原始值
+        str_literal = match.group(1).split("#", 1)[0].strip()  # 去除赋值行尾的语义注释。
+
+        # 只把字面量转换成数据，禁止执行设计源码中的任意表达式。
+        raw_value = ast.literal_eval(str_literal)  # 设计问题组的未规范化字面量。
 
     # 非字面量或语法错误均视为不可审计结构。
     except (SyntaxError, ValueError):
@@ -687,6 +674,93 @@ def format_group_list(groups: list[list[str]]) -> str:
     # 每组内部不插入空格，以匹配技能文档的规范表示。
     return ", ".join(f"`[{','.join(group)}]`" for group in groups)
 
+# 公共问题组文案比较独立成 helper，避免主校验函数承担两类循环。
+def _validate_common_group_text(
+    str_formatted_common: str,
+    skill_text: str,
+    errors: list[str],
+) -> None:
+    """校验技能正文中的公共问题组文案。
+
+    参数：
+        str_formatted_common: 从设计问题源码解析出的公共组文本。
+        skill_text: 当前 SKILL.md 正文。
+        errors: 接收文档漂移诊断的列表。
+    返回：
+        无；漂移时向 errors 追加一条诊断。
+    """
+
+    # 技能开发和工程开发两处说明都必须引用权威公共组。
+    for str_label in COMMON_GROUP_LABELS:
+
+        # 从对应标签截取当前句的问题组内容。
+        object_match = re.search(  # 当前文档公共问题组段落。
+            rf"{re.escape(str_label)}\s+(.+?)\.",  # 标签后的公共组正文。
+            skill_text,  # 待对齐的技能说明正文。
+            flags=re.DOTALL,  # 允许文档组列表跨行。
+        )
+
+        # 参数化正文不需要重复展开易漂移的公共编号。
+        if object_match is None and PARAMETERIZED_GROUP_CONTRACT in skill_text:
+
+            # 当前配置驱动正文已声明问题组来源。
+            continue
+
+        # 标签存在时必须包含源码解析出的完整公共组列表。
+        if object_match is None or str_formatted_common not in object_match.group(1):
+
+            # 单条错误覆盖两个文档入口的共同对齐要求。
+            errors.append("SKILL.md common question groups must match collect_design_profile.py")
+
+            # 首个漂移已足够定位，无需产生重复错误。
+            break
+
+# 兼容旧正文的专属问题组比较独立成 helper，减少主流程分支复杂度。
+def _validate_profile_group_text(
+    group_text: str,
+    skill_text: str,
+    errors: list[str],
+) -> None:
+    """校验技能和工程专属问题组的旧版文案。
+
+    参数：
+        group_text: 设计问题源码全文。
+        skill_text: 当前 SKILL.md 正文。
+        errors: 接收文档漂移诊断的列表。
+    返回：
+        无；兼容旧正文漂移时向 errors 追加诊断。
+    """
+
+    # 兼容旧正文时仍校验技能/工程专属问题组。
+    for str_label, str_group_name, str_scope_name in PROFILE_GROUP_LABELS:
+
+        # 只有文档显式包含旧组正文时才比较具体编号。
+        object_match = re.search(  # 兼容文档中的专属问题组段落。
+            rf"{re.escape(str_label)}\s+(.+?)\.",  # 当前专属标签后的问题组正文。
+            skill_text,  # 待检查的技能说明正文。
+            flags=re.DOTALL,  # 允许旧版组列表跨行。
+        )
+
+        # 缺失旧版标签时由参数化正文承担问题组来源。
+        if object_match is None:
+
+            # 参数化正文由运行时设计配置提供问题组，不需要复制当前编号。
+            continue
+
+        # 读取文档正文对应的实际组，并与设计配置中的同名组比较。
+        list_profile_groups = parse_group_assignment(group_text, str_group_name) or []  # 源码中的专属问题组。
+
+        # 将专属问题组转换成文档比较使用的紧凑文本。
+        str_formatted_profile = format_group_list(list_profile_groups)  # 专属问题组规范文本。
+
+        # 组列表为空或文档正文未包含完整组序列时报告漂移。
+        if not list_profile_groups or str_formatted_profile not in object_match.group(1):
+
+            # 明确区分专属问题组漂移和公共组漂移。
+            errors.append(
+                f"SKILL.md {str_scope_name} question groups must match collect_design_profile.py"
+            )
+
 # 问题组对齐门禁保证文档、普通访谈和接管访谈使用同一序列。
 def validate_skill_contract_alignment(
     skill_dir: Path, skill_text: str, errors: list[str]
@@ -719,17 +793,17 @@ def validate_skill_contract_alignment(
     )
 
     # 普通生成流程声明基础问题组顺序。
-    common_groups = parse_group_assignment(  # 普通访谈问题组
+    list_common_groups: list[list[str]] = parse_group_assignment(  # 普通访谈问题组
         group_text, "COMMON_GROUPS"  # 普通访谈基础问题组
-    )
+    ) or []
 
     # 接管流程必须继承同一基础组，避免治理问题被跳过。
-    takeover_common_groups = parse_group_assignment(  # 接管访谈问题组
+    list_takeover_common_groups: list[list[str]] = parse_group_assignment(  # 接管访谈问题组
         group_text, "TAKEOVER_COMMON_GROUPS"  # 接管访谈基础问题组
-    )
+    ) or []
 
     # 任一声明无法解析时不能继续做内容比较。
-    if not common_groups or not takeover_common_groups:
+    if not list_common_groups or not list_takeover_common_groups:
 
         # 错误指向运行时事实来源，便于修复声明结构。
         errors.append(
@@ -741,7 +815,7 @@ def validate_skill_contract_alignment(
         return
 
     # 普通和接管入口不得因模式不同丢失基础治理问题。
-    if common_groups != takeover_common_groups:
+    if list_common_groups != list_takeover_common_groups:
 
         # 报告两个源码声明之间的直接漂移。
         errors.append(
@@ -749,28 +823,13 @@ def validate_skill_contract_alignment(
         )
 
     # 文档比较使用 SKILL.md 约定的紧凑代码标记形式。
-    str_formatted_common = format_group_list(common_groups)  # 规范问题组文本
+    str_formatted_common = format_group_list(list_common_groups)  # 规范问题组文本
 
-    # 技能开发和工程开发两处说明都必须引用权威公共组。
-    for label in COMMON_GROUP_LABELS:
+    # 让独立 helper 校验公共问题组文案。
+    _validate_common_group_text(str_formatted_common, skill_text, errors)
 
-        # 从对应标签截取当前句的问题组内容。
-        match = re.search(  # 当前文档问题组段落
-            rf"{re.escape(label)}\s+(.+?)\.",  # 当前标签后的问题组段落
-            skill_text,  # 待对齐技能说明正文
-            flags=re.DOTALL,  # 允许问题组段落跨行
-        )
-
-        # 标签缺失或组序列不同都表示文档合同陈旧。
-        if match is None or str_formatted_common not in match.group(1):
-
-            # 单条错误覆盖两个文档入口的共同对齐要求。
-            errors.append(
-                "SKILL.md common question groups must match collect_design_profile.py"
-            )
-
-            # 首个漂移已足够定位，无需产生重复错误。
-            break
+    # 让独立 helper 校验兼容旧正文的专属问题组。
+    _validate_profile_group_text(group_text, skill_text, errors)
 
 # 引用文档必须同步关键入口政策，防止 SKILL.md 与操作指南表达分叉。
 def validate_reference_alignment(skill_dir: Path, errors: list[str]) -> None:
@@ -970,10 +1029,10 @@ def validate_openai_yaml(path: Path, errors: list[str], *, self_skill: bool) -> 
     text = path.read_text(encoding="utf-8", errors="ignore")  # OpenAI 配置正文
 
     # 简化解析结果足以验证必填显示字段和默认提示词。
-    interface = parse_openai_interface(text)  # interface 字段映射
+    obj_object_interface: object = parse_openai_interface(text)  # interface 解析结果
 
     # 缺少整个 interface 区块时不能继续字段级检查。
-    if interface is None:
+    if obj_object_interface is None:
 
         # 报告产品界面入口缺失。
         errors.append("agents/openai.yaml: missing interface section")
@@ -981,8 +1040,110 @@ def validate_openai_yaml(path: Path, errors: list[str], *, self_skill: bool) -> 
         # 无字段映射时终止后续提示词验证。
         return
 
+    # 将已确认的映射收窄为字段合同使用的具体类型。
+    dict_interface: dict[str, str] = obj_object_interface if isinstance(obj_object_interface, dict) else {}  # interface 字段映射
+
     # 字段和提示词 helper 保持既有诊断顺序。
-    errors.extend(openai_yaml_contract_errors(interface))
+    errors.extend(openai_yaml_contract_errors(dict_interface))
+
+# 全局基线必须包含的跨仓库通用规则片段。
+def _required_baseline_snippets() -> tuple[str, ...]:
+    """返回全局基线必须包含的跨仓库规则片段。
+
+    参数：无。
+    返回：按审计顺序排列的必需规则片段。
+    """
+
+    # 使用返回值承载多行字符串集合，避免赋值注释要求污染规则正文。
+    return (
+    "AGENTS-GENERATED:META generator=agents-md-generator schema=1 "
+    "baseline=global-codex-baseline baseline_version=6",
+    "## Instruction Scope",
+    "## Managed Repository Entry",
+    "## Execution Mode",
+    "Prefer existing repository patterns, tools, libraries, templates",
+    "non-trivial enough for rating to affect execution mode",
+    "advisory",
+    "timed follow-up",
+    "must not compress code into one line",
+    "clever or obfuscated code",
+    "repository governance",
+    "Coding Behavior Baseline",
+    "Guidelines for avoiding common LLM coding mistakes",
+    "### 1. Think Before Coding",
+    (
+        "For difficult implementation problems, check library documentation and reuse "
+        "supported APIs before replacement code; avoid custom substitutes that add debugging cost"
+    ),
+    "Minimum code that solves the problem. Nothing speculative.",
+    "### 3. Surgical Changes",
+    "### 4. Work Toward Verifiable Goals",
+    "fabricating test cases, outputs, or verification evidence",
+    "### Done When",
+    "Every changed line must trace directly to the request",
+    "## Comments And Documentation",
+    "Comment public contracts",
+    "key invariants, non-obvious decisions, generation boundaries, and risk boundaries",
+    "do not restate obvious code",
+    "Update stale comments and documentation when behavior changes",
+    "readable-python-generator",
+    "readable-script-generator",
+    "Markdown documentation formulas",
+    "## Environment And Dependency Safety",
+    "isolated project environment",
+    "create an isolated environment under the remote workspace",
+    "Never install into system Python",
+    "conda `base`",
+    "sudo pip",
+    "pip install --user",
+    "installed skill directories",
+    "$CODEX_HOME/skills",
+    "Always obtain exactly one explicit user confirmation",
+    "Routine test-hash confirmation is prohibited.",
+    "## Scope Discipline",
+    "freeze `Goal`, `Success Criteria`, `In Scope`, and `Out of Scope`",
+    "Treat every other feature, refactor, abstraction",
+    "Reviewers may identify omissions, contradictions, risks, or unverifiable steps",
+    "## Governed Planning And Testing",
+    "Do not use non-testing subagents by default",
+    "request in the current task authorizes non-testing subagents",
+    "generic request to \"use multi-agent\"",
+    "use exactly three",
+    "explicit user-provided count overrides",
+    "New tests use `<work-folder>/tests/<feature>/test_<behavior>.<ext>` under one root `tests/`",
+    "Choose prose, tables, Mermaid flowcharts, or a combination",
+    "execution needs no new design choice",
+    "### Plan consistency review",
+    "Resolve directly actionable contradictions first",
+    "Never upload the whole work folder or a workspace bundle",
+    )
+
+# 全局基线必需规则片段集合。
+REQUIRED_BASELINE_SNIPPETS: tuple[str, ...] = _required_baseline_snippets()  # 规则片段事实源
+
+# 全局基线禁止出现的本仓库专属细节片段。
+def _forbidden_baseline_snippets() -> tuple[str, ...]:
+    """返回全局基线禁止出现的本仓库专属片段。
+
+    参数：无。
+    返回：按审计顺序排列的禁止泄漏片段。
+    """
+
+    # 使用独立返回值保持禁止清单可审查且不改变原有顺序。
+    return (
+    ".agents/script-governance-exceptions.json",
+    "docs/development/decomposition-plans",
+    "skills/agents-md-generator",
+    "64KB UTF-8 size limit",
+    "scripts/python/<function>/<name>.py",
+    "scripts/shell/<function>/<name>.sh",
+    "scripts/bat/<function>/<name>.bat",
+    "scripts/powershell/<function>/<name>.ps1",
+    "do not put formulas in fenced code blocks",
+    )
+
+# 全局基线禁止泄漏片段集合。
+FORBIDDEN_BASELINE_SNIPPETS: tuple[str, ...] = _forbidden_baseline_snippets()  # 禁止片段事实源
 
 # 全局基线模板必须保持跨仓库通用，不得泄漏本仓库实现细节。
 def validate_global_baseline_template(path: Path, errors: list[str]) -> None:
@@ -1025,72 +1186,8 @@ def validate_global_baseline_template(path: Path, errors: list[str]) -> None:
             f"({int_template_bytes})"
         )
 
-    # 必需片段覆盖元数据、执行模式、编码纪律和环境安全合同。
-    tuple_required_snippets = (  # 全局基线必需规则片段
-        "AGENTS-GENERATED:META generator=agents-md-generator schema=1 "
-        "baseline=global-codex-baseline baseline_version=5",
-        "## Instruction Scope",  # 指令作用域章节
-        "## Managed Repository Entry",  # 受管仓库入口章节
-        "## Execution Mode",  # 执行模式章节
-        "Prefer existing repository patterns, tools, libraries, templates",  # 既有能力复用规则
-        "non-trivial enough for rating to affect execution mode",  # 任务评级适用边界
-        "advisory",  # 任务评级建议性质
-        "timed follow-up",  # 定时跟进授权边界
-        "must not compress code into one line",  # 禁止单行压缩规则
-        "clever or obfuscated code",  # 禁止晦涩技巧规则
-        "repository governance",  # 仓库治理事实来源规则
-        "Coding Behavior Baseline",  # 编码行为基线章节
-        "Guidelines for avoiding common LLM coding mistakes",  # 常见编码错误指南
-        "### 1. Think Before Coding",  # 编码前思考章节
-        (
-            "For difficult implementation problems, check library documentation and reuse "
-            "supported APIs before replacement code; avoid custom substitutes that add debugging cost"
-        ),  # 复杂实现优先复用成熟 API
-        "Minimum code that solves the problem. Nothing speculative.",  # 最小实现原则
-        "### 3. Surgical Changes",  # 外科式修改章节
-        "### 4. Work Toward Verifiable Goals",  # 可验证目标章节
-        "fabricating test cases, outputs, or verification evidence",  # 禁止伪造验证证据
-        "### Done When",  # 完成判定章节
-        "Every changed line must trace directly to the request",  # 修改范围可追溯规则
-        "## Comments And Documentation",  # 注释与文档章节
-        "Comment public contracts",  # 公共合同注释规则
-        "key invariants, non-obvious decisions, generation boundaries, and risk boundaries",  # 关键语义注释范围
-        "Do not restate obvious code",  # 禁止复述显然代码
-        "Update stale comments and documentation when behavior changes",  # 行为变更同步文档规则
-        "readable-python-generator",  # Python 修改前置技能要求
-        "readable-script-generator",  # 脚本修改前置技能要求
-        "Markdown documentation formulas",  # Markdown 公式格式规则
-        "## Environment And Dependency Safety",  # 环境与依赖安全章节
-        "isolated project environment",  # 项目隔离环境要求
-        "create an isolated environment under the remote workspace",  # 远程工作区隔离环境要求
-        "Never install into system Python",  # 禁止系统 Python 安装
-        "conda `base`",  # 禁止基础 Conda 环境
-        "sudo pip",  # 禁止提权安装依赖
-        "pip install --user",  # 禁止用户级全局安装
-        "installed skill directories",  # 已安装技能目录边界
-        "$CODEX_HOME/skills",  # Codex 已安装技能根目录
-        "Always obtain exactly one explicit user confirmation",  # 已安装目录修改单次确认边界
-        "## Scope Discipline",  # 目标收紧章节
-        "freeze `Goal`, `Success Criteria`, `In Scope`, and `Out of Scope`",  # 冻结范围合同
-        "Treat every other feature, refactor, abstraction",  # 禁止未请求外扩
-        "Reviewers may identify omissions, contradictions, risks, or unverifiable steps",  # 审查职责边界
-        "## Governed Planning And Testing",  # 方案审查与隔离测试章节
-        "Do not use non-testing subagents by default",  # 非测试智能体默认禁用
-        "request in the current task authorizes non-testing subagents",  # 当前任务用户显式启用
-        "generic request to \"use multi-agent\"",  # 泛称多智能体不构成授权
-        "use exactly three",  # 未指定数量时默认三个
-        "explicit user-provided count overrides",  # 显式数量覆盖默认值
-        "When requested work has an executable test surface",  # 测试智能体触发边界
-        "fork_turns=none",  # 测试智能体的记忆隔离标记
-        "Only that `TESTER` may list, read, create, modify, or run anything under `tests/**`",  # 测试目录所有权
-        "same `TESTER` to re-run verification",  # 同一测试者复验
-        "Routine test-hash confirmation is prohibited.",  # 测试树哈希无需常规确认
-        "Choose prose, tables, Mermaid flowcharts, or a combination",  # 文档表现形式选择
-        "execution needs no new design choice",  # 决策完备计划要求
-    )
-
     # 逐项报告缺失片段，便于维护者直接定位基线合同缺口。
-    for snippet in tuple_required_snippets:
+    for snippet in REQUIRED_BASELINE_SNIPPETS:
 
         # 每个必需规则都必须出现在模板正文中。
         if snippet not in text:
@@ -1100,21 +1197,8 @@ def validate_global_baseline_template(path: Path, errors: list[str]) -> None:
                 f"assets/templates/global-codex-agents.md: missing global baseline rule snippet `{snippet}`"
             )
 
-    # 禁止片段代表不得进入跨仓库全局基线的项目专属细节。
-    tuple_forbidden_snippets = (  # 全局基线禁止的项目细节
-        ".agents/script-governance-exceptions.json",  # 项目脚本例外清单
-        "docs/development/decomposition-plans",  # 项目分解计划目录
-        "skills/agents-md-generator",  # 自身技能源码路径
-        "64KB UTF-8 size limit",  # 项目专属源码限额
-        "scripts/python/<function>/<name>.py",  # 项目专属 Python 布局
-        "scripts/shell/<function>/<name>.sh",  # 仓库脚本任务目录示例
-        "scripts/bat/<function>/<name>.bat",  # 仓库批处理任务目录示例
-        "scripts/powershell/<function>/<name>.ps1",  # 仓库 PowerShell 任务目录示例
-        "do not put formulas in fenced code blocks",  # 项目专属公式排版规则
-    )
-
     # 逐项检查仓库专属细节，避免全局规则污染其他项目。
-    for snippet in tuple_forbidden_snippets:
+    for snippet in FORBIDDEN_BASELINE_SNIPPETS:
 
         # 命中任一禁止片段都表示模板边界泄漏。
         if snippet in text:
@@ -1130,13 +1214,13 @@ def validate_eval_case(
     index: int,
     set_ids: set[str],
     set_duplicate_ids: set[str],
-    set_covered_patterns: set[str],
+    set_covered_patterns: set[str], set_allowed_patterns: set[str],
     errors: list[str],
 ) -> None:
     """校验一个 eval case 并累计全局覆盖事实。
 
-    参数：case 为原始案例，index 为位置，set_ids 累计唯一 ID，
-    set_duplicate_ids 累计重复 ID，set_covered_patterns 累计模式，errors 接收错误。
+    参数：case 为原始案例；index 为位置；set_ids 累计唯一 ID；
+    set_duplicate_ids 累计重复 ID；set_covered_patterns 与 set_allowed_patterns 管理模式覆盖；errors 接收错误。
     返回：无；案例错误和有效覆盖写入传入容器。
     """
 
@@ -1215,7 +1299,7 @@ def validate_eval_case(
 
     # 识别未在技能设计合同中声明的模式名称。
     unknown_patterns = sorted(  # 当前案例未知模式
-        normalized_patterns - REQUIRED_SKILL_DESIGN_PATTERNS  # 未声明设计模式差集
+        normalized_patterns - set_allowed_patterns  # 未声明设计模式差集
     )
 
     # 未知名称通常意味着拼写错误或未治理扩展。
@@ -1228,7 +1312,7 @@ def validate_eval_case(
 
     # 只有权威模式名称才能证明文件级覆盖。
     set_covered_patterns.update(
-        normalized_patterns & REQUIRED_SKILL_DESIGN_PATTERNS
+        normalized_patterns & set_allowed_patterns
     )
 
 # eval 合同验证自身技能的案例身份、结构与设计模式覆盖。
@@ -1245,6 +1329,47 @@ def validate_evals_contract(path: Path, errors: list[str], *, self_skill: bool) 
 
         # 结构缺失由必需文件门禁负责，避免重复错误。
         return
+
+    # 独立 evaluation contract 是必需覆盖和模式白名单的唯一来源。
+    path_contract = path.parent.parent / "config" / "evaluation" / "contract.json"  # 独立合同路径
+
+    # 读取独立合同并把文件错误转换为审计诊断。
+    try:
+
+        # 解析独立合同 JSON，作为必需案例和模式白名单来源。
+        dict_contract = json.loads(path_contract.read_text(encoding="utf-8"))  # 独立评估合同对象
+
+    # 合同不可读或 JSON 损坏时保持 fail-closed 审计结果。
+    except (OSError, UnicodeError, json.JSONDecodeError):
+
+        # 记录合同读取失败并结束本项检查。
+        errors.append("evaluation contract: unable to load independent contract")
+
+        # 没有白名单就不能继续比较案例集合。
+        return
+
+    # 合同根必须是对象，后续字段读取才有稳定语义。
+    if not isinstance(dict_contract, dict):
+
+        # 记录根形状错误并终止当前验证。
+        errors.append("evaluation contract: root must be a JSON object")
+
+        # 结构错误时不猜测 required_case_ids 或 allowed_patterns。
+        return
+
+    # 从合同读取必需案例 ID，避免实现维护当前案例枚举。
+    set_required_case_ids = {
+        str(item).strip()  # 规范化必需案例标识
+        for item in dict_contract.get("required_case_ids", [])  # 合同声明的必需案例
+        if str(item).strip()  # 丢弃空标识
+    }
+
+    # 从合同读取允许的设计模式名称，作为唯一白名单。
+    set_allowed_patterns = {
+        str(item).strip()  # 规范化允许模式名称
+        for item in dict_contract.get("allowed_patterns", [])  # 合同声明的允许模式
+        if str(item).strip()  # 丢弃空模式
+    }
 
     # JSON 解析错误需要转为稳定审计诊断。
     try:
@@ -1296,11 +1421,9 @@ def validate_evals_contract(path: Path, errors: list[str], *, self_skill: bool) 
 
         # 传入共享集合以累积唯一 ID、重复 ID 和设计模式覆盖。
         validate_eval_case(
-            case,
-            index,
-            set_ids,
-            set_duplicate_ids,
-            set_covered_patterns,
+            case, index,
+            set_ids, set_duplicate_ids,
+            set_covered_patterns, set_allowed_patterns,
             errors,
         )
 
@@ -1313,7 +1436,7 @@ def validate_evals_contract(path: Path, errors: list[str], *, self_skill: bool) 
         )
 
     # 必需案例差集表示关键治理能力没有效果测试。
-    missing_cases = sorted(REQUIRED_EVAL_CASE_IDS - set_ids)  # 缺失必需案例 ID
+    missing_cases = sorted(set_required_case_ids - set_ids)  # 缺失必需案例 ID
 
     # 非空差集作为发布阻断错误。
     if missing_cases:
@@ -1325,7 +1448,7 @@ def validate_evals_contract(path: Path, errors: list[str], *, self_skill: bool) 
 
     # 模式差集证明 eval 是否覆盖技能设计合同的全部类别。
     missing_patterns = sorted(  # 文件级缺失设计模式
-        REQUIRED_SKILL_DESIGN_PATTERNS - set_covered_patterns  # 文件级模式覆盖差集
+        set_allowed_patterns - set_covered_patterns  # 文件级模式覆盖差集
     )
 
     # 每个核心模式至少需要一个案例声明。
@@ -1472,14 +1595,14 @@ def validate_decomposition_plan(project_root: Path, relative_path: str) -> list[
     text = plan_path.read_text(encoding="utf-8", errors="ignore")  # 分解计划正文
 
     # 必需章节由仓库配置提供，禁止在审计器中复制业务枚举。
-    required_sections = load_global_rule_overrides(project_root)["data"][  # 必需计划章节
+    list_required_sections: list[str] = func_load_global_rule_overrides(project_root)["data"][  # 必需计划章节
         "source_file_limits"  # 源码规模治理配置区块
     ].get("required_plan_sections", [])
 
     # 计划必须包含配置声明的每个治理章节。
     missing = [  # 缺失分解计划章节
         section  # 计划正文缺失的治理章节
-        for section in required_sections  # 配置要求的计划章节
+        for section in list_required_sections  # 配置要求的计划章节
         if f"## {section}" not in text  # 仅保留正文缺失章节
     ]
 
@@ -1512,6 +1635,30 @@ def audit_required_layout(
     list_required_files = [Path(item) for item in CORE_REQUIRED_FILES] + (  # 当前身份要求的文件集合
         SELF_REQUIRED_FILES if bool_self_skill else []  # 自身技能额外必需文件
     )
+
+    # 平台 metadata 按已解析配置选择；通用发布包则要求目录声明的全部候选。
+    if bool_self_skill:
+
+        # 自身技能的平台配置决定发布包中的 metadata 文件清单。
+        from agent_platform import load_agent_config
+
+        # 读取发布平台清单，异常时保持统一布局错误。
+        try:
+
+            # 读取当前平台声明的技能 metadata 相对路径。
+            list_metadata: list[str] = list(load_agent_config(skill_dir).skill_metadata)  # 平台 metadata 路径
+
+        # 配置合同错误不能继续推导必需文件集合。
+        except ValueError as object_error:
+
+            # 将配置解析异常转换为可定位的审计错误。
+            list_errors.append(f"config/agent.json: {object_error}")
+
+            # 配置错误不应阻止通用和自身必需文件继续聚合报告。
+            list_metadata = []  # 配置不可用时不追加平台特有路径
+
+        # 将平台声明的相对路径加入统一检查集合。
+        list_required_files.extend(Path(str_metadata) for str_metadata in list_metadata)
 
     # 每个必需相对路径都进入覆盖清单并检查存在性。
     for path_relative in list_required_files:
@@ -1634,11 +1781,11 @@ def audit_skill_document(
         # 本地依赖会使安装后的技能不可移植。
         list_errors.append("SKILL.md must not depend on local reference folders")
 
-    # 自身技能额外核对问题组和入口硬化说明。
-    if bool_self_skill:
+    # 具备设计访谈源码的技能都需要核对问题组，不能只按技能目录名跳过。
+    validate_skill_contract_alignment(skill_dir, text, list_errors)
 
-        # 设计问题组必须与运行时源码一致。
-        validate_skill_contract_alignment(skill_dir, text, list_errors)
+    # 自身技能额外核对入口硬化说明。
+    if bool_self_skill:
 
         # 本地/远程边界与 Token 路由必须保留。
         validate_skill_rule_hardening(text, list_errors)
@@ -1671,7 +1818,7 @@ def audit_self_contracts(
             list_errors.append("VERSION must use semantic format vX.Y.Z")
 
         # 仓库版本策略进一步验证当前版本是否受支持。
-        str_version_error = version_policy_error(version_text)  # 版本策略诊断
+        str_version_error = func_version_policy_error(version_text)  # 版本策略诊断
 
         # 策略校验器以空值表示通过，仅追加真实错误。
         if str_version_error:
@@ -1679,10 +1826,50 @@ def audit_self_contracts(
             # 仅在策略返回真实错误时追加诊断。
             list_errors.append(str_version_error)
 
-    # OpenAI 界面文件对所有技能适用，自身技能另启严格字段合同。
-    validate_openai_yaml(
-        skill_dir / "agents" / "openai.yaml", list_errors, self_skill=bool_self_skill
-    )
+    # 平台 metadata 只验证当前投影选择；Codex 额外执行 OpenAI 界面合同。
+    if bool_self_skill:
+
+        # 自身技能的平台配置决定本轮要检查的 metadata 文件。
+        from agent_platform import load_agent_config
+
+        # 当前平台合同仅在读取成功后继续展开。
+        try:
+
+            # 读取平台配置对象，供后续选择 OpenAI 专属合同。
+            profile_agent = load_agent_config(skill_dir)  # 当前平台配置对象
+
+            # 保留平台声明顺序供逐项存在性检查。
+            list_metadata: list[str] = list(profile_agent.skill_metadata)  # 当前 metadata 路径
+
+        # 配置合同错误不能继续推导 metadata 文件。
+        except ValueError as object_error:
+
+            # 记录配置文件错误并结束本项平台检查。
+            list_errors.append(f"config/agent.json: {object_error}")
+
+            # 配置错误不应阻止后续 metadata 和 OpenAI interface 缺口聚合。
+            profile_agent = None  # 平台画像不可用时进入通用 interface 缺口检查
+
+            # 无法读取平台清单时不追加平台特有文件。
+            list_metadata = []  # 配置异常下的平台 metadata 空集合
+
+        # 逐项核对平台声明的 metadata 文件是否存在且非空。
+        for str_metadata in list_metadata:
+
+            # 组合技能根目录得到当前平台 metadata 文件。
+            path_metadata: Path = skill_dir / str_metadata  # 当前 metadata 文件路径
+
+            # 缺失或空文件都不能满足平台发布合同。
+            if not path_metadata.is_file() or not path_metadata.read_text(encoding="utf-8", errors="ignore").strip():
+
+                # 记录具体平台 metadata 相对路径。
+                list_errors.append(f"{str_metadata}: metadata file is missing or empty")
+
+        # Codex 平台额外要求 OpenAI 界面合同完整。
+        if profile_agent is None or profile_agent.agent == "codex":
+
+            # 复用统一 interface 校验器，避免平台分支漂移。
+            validate_openai_yaml(skill_dir / "agents" / "openai.yaml", list_errors, self_skill=True)
 
     # 通用技能审计到此结束，避免套用 agents-md-generator 私有资产合同。
     if not bool_self_skill:
@@ -1806,7 +1993,7 @@ def audit_script_sources(
         if byte_count > 65536 and has_repo_governance(path_project_root):
 
             # 源码目录位于项目内时使用项目相对路径查找计划。
-            relative_to_project = (  # 分解计划索引路径
+            str_relative_to_project: str = (  # 分解计划索引路径
                 script.relative_to(path_project_root).as_posix()  # 仓库内源码索引
                 if script.is_relative_to(path_project_root)  # 仓库内外路径分支
                 else rel_path  # 发布快照使用技能相对路径
@@ -1814,7 +2001,7 @@ def audit_script_sources(
 
             # 将计划缺失或章节不完整错误并入总审计结果。
             list_errors.extend(
-                validate_decomposition_plan(path_project_root, relative_to_project)
+                validate_decomposition_plan(path_project_root, str_relative_to_project)
             )
 
 # 文本资源审计器检查引用目录、占位符和本地路径。
@@ -1965,7 +2152,7 @@ def audit(skill_dir: Path) -> dict:
     skill_path = skill_dir / "SKILL.md"  # 技能主说明路径
 
     # 文件存在时解析受支持 frontmatter，否则保持空映射供缺失门禁使用。
-    frontmatter = (  # 技能元数据映射
+    dict_frontmatter: dict[str, str] = (  # 技能元数据映射
         parse_frontmatter(  # 解析存在的技能主说明元数据
             skill_path.read_text(encoding="utf-8", errors="ignore")  # 技能主说明正文
         )
@@ -1975,17 +2162,32 @@ def audit(skill_dir: Path) -> dict:
 
     # 自身技能身份启用产品、治理和运行时专属合同。
     bool_self_skill = is_agents_md_generator_skill(  # 是否审计自身技能
-        skill_dir, frontmatter  # 目录与声明共同决定自身身份
+        skill_dir, dict_frontmatter  # 目录与声明共同决定自身身份
     )  # 是否审计 agents-md-generator 自身
 
     # 第一阶段核对文件布局和技能根边界。
     audit_required_layout(skill_dir, bool_self_skill, list_checked, list_errors)
 
+    # 自身技能必须通过活动平台路径硬编码门禁并记录清单摘要。
+    if bool_self_skill:
+
+        # 平台硬编码门禁需要读取当前活动平台的投影结果。
+        from agent_platform_gate import active_platform_hardcoding_gate
+
+        # 执行平台路径检查并保存其机器可读结果。
+        dict_platform_gate: dict[str, list[str]] = active_platform_hardcoding_gate((skill_dir,))  # 平台硬编码门禁结果
+
+        # 把门禁实际覆盖的文件并入总检查清单。
+        list_checked.extend(dict_platform_gate["checked_files"])
+
+        # 把门禁发现的硬编码错误并入总错误集合。
+        list_errors.extend(str_error for str_error in dict_platform_gate["errors"])
+
     # 第二阶段验证技能入口元数据与内部引用。
     audit_skill_document(
         skill_dir,
         skill_path,
-        frontmatter,
+        dict_frontmatter,
         bool_self_skill,
         list_checked,
         list_errors,
@@ -2049,10 +2251,10 @@ def main() -> int:
     args = parser.parse_args()  # 已解析命令行参数
 
     # 保存技能审计载荷，确保输出内容与退出码依据同一结果。
-    dict_audit_result = audit(resolve_project(args.skill_dir))  # 当前技能审计的机器可读结果
+    dict_audit_result = audit(func_resolve_project(args.skill_dir))  # 当前技能审计的机器可读结果
 
     # 输出既有 JSON 协议，供上层治理工具继续解析。
-    emit_json(dict_audit_result)
+    func_emit_json(dict_audit_result)
 
     # 根据权威错误列表返回进程状态，阻止失败载荷伪装成成功。
     return 1 if dict_audit_result["errors"] else 0

@@ -181,26 +181,32 @@ def remote_route_mapping_step(
         )
 
     # 第四项来源
-    list_questions = [  # 第四项载荷
+    list_questions = [  # 生成远程路由问卷
         {
             "question_id": "remote-routes",  # 第二百二十二项结构字段
-            "answer_key": REMOTE_SERVER_TASK_ROUTES_KEY,  # 第二百四十五项结构字段
-            "required": True,  # 第二百六十八项结构字段
-            "branch": "all",  # 第二百八十九项结构字段
-            "ask": (  # 第三百四项结构字段
+            "answer_key": REMOTE_SERVER_TASK_ROUTES_KEY,  # 任务标识
+            "required": True,  # 必填标记
+            "branch": "all",  # 分支范围
+            "ask": (  # 询问文本
                 "请提交远程服务器任务主备路由表；每条路由至少包含 task_name 和 primary_server_id，可选 "
                 "fallback_server_ids。所有引用的服务器都会先做 check 和 workspace-check，只有校验通过的主备路由才能写入 "
                 "AGENTS.md。"
             ),
-            "options": list_server_options,  # 第三百十六项结构字段
+            "options": list_server_options,  # 可选路由
         }
     ]
 
-    # 第五项来源
-    review = review_summary(state.get("answers", {}), str(kind) if kind else None, [], list_confirmed_keys, final=False)  # 第五项载荷
+    # 复核远程路由
+    dict_review = review_summary(  # 复核结果
+        state.get("answers", {}),  # 答案快照
+        str(kind) if kind else None,  # 任务类型
+        [],  # 新确认为空
+        list_confirmed_keys,  # 确认字段
+        final=False,  # 预览模式
+    )
 
-    # 第六项来源
-    str_confirmation_question = (  # 第六项载荷
+    # 构造路由提交提示
+    str_confirmation_question = (
         "用 answer-file 提交 remote_server_task_routes JSON 数组，例如 task_name + "
         "primary_server_id + fallback_server_ids。"
     )
@@ -209,7 +215,7 @@ def remote_route_mapping_step(
     str_next_action = "map_remote_task_routes"  # 第七项载荷
 
     # 第六步返回载荷。
-    return list_current_group, list_questions, review, str_confirmation_question, str_next_action
+    return list_current_group, list_questions, dict_review, str_confirmation_question, str_next_action
 
 # 基础设施决策集中处理远程 SSH、知识图谱和服务器路由状态。
 def infrastructure_decision_request(
@@ -556,7 +562,7 @@ def codebase_memory_dependency_step(
     list_current_group: list[str] = []  # 知识图谱门禁的空问题组
 
     # 阶段复核保留此前答案与确认键的完整摘要。
-    review = stage_review(state, kind, list_confirmed_keys, False)  # 知识图谱门禁阶段复核
+    dict_review = stage_review(state, kind, list_confirmed_keys, False)  # 知识图谱门禁阶段复核
 
     # 首次缺依赖时询问是否按官方文档人工安装。
     if status == "awaiting_codebase_memory_install_confirmation":
@@ -609,7 +615,7 @@ def codebase_memory_dependency_step(
         str_next_action = "resume_after_codebase_memory_mcp_install"  # 安装后恢复动作
 
     # 统一五元组与其他状态处理器保持相同协议。
-    return list_current_group, list_questions, review, str_confirmation_question, str_next_action
+    return list_current_group, list_questions, dict_review, str_confirmation_question, str_next_action
 
 # 远程安装状态生成交互字段。
 def remote_installation_step(
@@ -851,7 +857,7 @@ def completion_step(
             list_questions = []  # 第六十六项载荷
 
             # 第六十七项来源
-            review = review_summary(  # 第六十七项载荷
+            dict_review = review_summary(  # 第六十七项载荷
                 state.get("answers", {}),  # 第二百九项结构字段
                 str(kind) if kind else None,  # 载荷片段阶段二十二
                 [],
@@ -890,7 +896,7 @@ def completion_step(
             list_questions = []  # 第七十三项载荷
 
             # 第七十四项来源
-            review = review_summary(  # 第七十四项载荷
+            dict_review = review_summary(  # 第七十四项载荷
                 state.get("answers", {}),  # 载荷片段阶段二十四
                 str(kind) if kind else None,  # 第二百三十一项载荷表达式
                 [],
@@ -908,7 +914,7 @@ def completion_step(
             str_next_action = "stay_read_only_or_enter_write_review"  # 第七十六项载荷
 
     # 返回完成阶段统一的交互字段。
-    return list_current_group, list_questions, review, str_confirmation_question, str_next_action
+    return list_current_group, list_questions, dict_review, str_confirmation_question, str_next_action
 
 # 为未知或未完成状态生成恢复访谈提示。
 def fallback_interview_step(
@@ -932,7 +938,7 @@ def fallback_interview_step(
     list_questions = question_rows(list_group_ids)  # 展开恢复时需要重新展示的问题
 
     # 恢复摘要区分当前问题键和已经确认的历史字段。
-    review = review_summary(  # 生成恢复链路的非最终摘要
+    dict_review = review_summary(  # 生成恢复链路的非最终摘要
         state.get("answers", {}),  # 提供当前答案快照
         str(kind) if kind else None,  # 提供可选项目类型
         question_ids_to_keys(list_group_ids),  # 标识当前待回答字段
@@ -944,7 +950,7 @@ def fallback_interview_step(
     return (
         list_group_ids,
         list_questions,
-        review,
+        dict_review,
         "检测到未完成的设计访谈，请先 resume 或 reset，不要静默开启新链路。",
         "resume_or_reset_interview",
     )
@@ -1004,7 +1010,7 @@ def design_review_step(
             ]
 
             # 第五十七项来源
-            review = stage_review(state, kind, list_confirmed_keys, True)  # 第五十七项载荷
+            dict_review = stage_review(state, kind, list_confirmed_keys, True)  # 第五十七项载荷
 
             # 第五十八项来源
             str_confirmation_question = "只有子智能体 approve、无待用户确认、且 hash 匹配时，访谈才能 completed。"  # 第五十八项载荷
@@ -1022,7 +1028,7 @@ def design_review_step(
             list_questions = []  # 第六十一项载荷
 
             # 第六十二项来源
-            review = stage_review(state, kind, list_confirmed_keys, True)  # 第六十二项载荷
+            dict_review = stage_review(state, kind, list_confirmed_keys, True)  # 第六十二项载荷
 
             # 第六十三项来源
             str_confirmation_question = (  # 第六十三项载荷
@@ -1034,7 +1040,7 @@ def design_review_step(
             str_next_action = "confirm_review_rework"  # 第六十四项载荷
 
     # 返回设计审查阶段统一的交互字段。
-    return list_current_group, list_questions, review, str_confirmation_question, str_next_action
+    return list_current_group, list_questions, dict_review, str_confirmation_question, str_next_action
 
 # 选择主状态机需要消费的实际分派状态。
 def resolved_dispatch_status(
@@ -1120,7 +1126,7 @@ def local_interview_step(
             list_questions = question_rows(list_group_ids)  # 第三十七项载荷
 
             # 第三十八项来源
-            review = review_summary(  # 第三十八项载荷
+            dict_review = review_summary(  # 第三十八项载荷
                 state.get("answers", {}),  # 第二百十五项结构字段
                 str(kind) if kind else None,  # 第二百三十八项载荷表达式
                 question_ids_to_keys(list_group_ids),  # 第二百六十一项载荷表达式
@@ -1141,7 +1147,7 @@ def local_interview_step(
             list_questions = question_rows(list_group_ids)  # 第四十一项载荷
 
             # 第四十二项来源
-            review = review_summary(  # 第四十二项载荷
+            dict_review = review_summary(  # 第四十二项载荷
                 state.get("answers", {}),  # 第二百十四项结构字段
                 str(kind) if kind else None,  # 第二百三十七项载荷表达式
                 question_ids_to_keys(list_group_ids),  # 问题键映射阶段十五
@@ -1205,7 +1211,7 @@ def local_interview_step(
             list_questions = [dict_extra_question]  # 第四十六项载荷
 
             # 第四十七项来源
-            review = stage_review(state, kind, list_confirmed_keys, False)  # 第四十七项载荷
+            dict_review = stage_review(state, kind, list_confirmed_keys, False)  # 第四十七项载荷
 
             # 第四十八项来源
             str_confirmation_question = "请提交 extra_requirements；没有补充也必须显式记录 none。"  # 第四十八项载荷
@@ -1233,7 +1239,7 @@ def local_interview_step(
             ]
 
             # 第五十二项来源
-            review = review_summary(  # 第五十二项载荷
+            dict_review = review_summary(  # 第五十二项载荷
                 state.get("answers", {}),  # 第二百十一项结构字段
                 str(kind) if kind else None,  # 第二百三十四项载荷表达式
                 [],
@@ -1248,7 +1254,7 @@ def local_interview_step(
             str_next_action = "confirm_final_alignment"  # 第五十四项载荷
 
     # 返回本地访谈阶段统一的交互字段。
-    return list_current_group, list_questions, review, str_confirmation_question, str_next_action
+    return list_current_group, list_questions, dict_review, str_confirmation_question, str_next_action
 
 # 状态处理器解析集中返回统一五元组，避免主载荷构造器重复解包分支。
 def resolve_interactive_step(
@@ -1346,7 +1352,7 @@ def build_interactive_payload(
     """
 
     # 第二十五项来源
-    status = status_override or str(state.get("status", "collecting_group"))  # 第二十五项载荷
+    str_status = status_override or str(state.get("status", "collecting_group"))  # 第二十五项载荷
 
     # 第二十六项来源
     str_mode = str(state.get("mode", "interactive"))  # 第二十六项载荷
@@ -1357,26 +1363,26 @@ def build_interactive_payload(
     # 第二十八项来源
     list_group_ids = current_group_ids(state)  # 第二十八项载荷
 
-    # 第二十九项来源
-    kind = state.get("kind") or state.get("inferred_kind")  # 第二十九项载荷
+    # 分派项目类型
+    value_kind = state.get("kind") or state.get("inferred_kind")  # 第二十九项载荷
 
     # 第三十项来源
     list_confirmed_keys = confirmed_keys_for_state(state)  # 第三十项载荷
 
     # 第三十六项来源
-    remote_gate = remote_gate_payload(state)  # 第三十六项载荷
+    dict_remote_gate = remote_gate_payload(state)  # 第三十六项载荷
 
     # 状态处理器统一解析为五元组，主函数只负责字段命名。
     tuple_step = resolve_interactive_step(  # 当前状态的统一交互步骤
         state,  # 统一步骤读取的状态记录
-        status,  # 统一步骤消费的分派状态
-        kind,  # 统一步骤使用的项目类型
+        str_status,  # 统一步骤消费的分派状态
+        value_kind,  # 统一步骤使用的项目类型
         str_mode,  # 当前执行模式
 
         # 问题组、确认键和远程门禁完成步骤解析上下文。
         list_group_ids,  # 当前问题组标识
         list_confirmed_keys,  # 阶段复核使用的确认键
-        remote_gate,  # 路由步骤使用的远程证据
+        dict_remote_gate,  # 路由步骤使用的远程证据
     )
 
     # 五元组首项是当前问题组标识。
@@ -1386,7 +1392,7 @@ def build_interactive_payload(
     list_questions = tuple_step[1]  # 当前问题集合
 
     # 第三项是已确认字段和待确认字段复核摘要。
-    review = tuple_step[2]  # 当前阶段复核摘要
+    dict_review = tuple_step[2]  # 当前阶段复核摘要
 
     # 第四项是当前状态的人类可读确认提示。
     str_confirmation_question = tuple_step[3]  # 当前确认提示
@@ -1399,15 +1405,15 @@ def build_interactive_payload(
         "project": str(project),  # 项目根路径阶段四十
         "mode": str_mode,  # 交互模式阶段四十一
         "intent": str_intent,  # 第二百四十七项结构字段
-        "status": status,  # 访谈状态阶段四十二
-        "kind": kind,  # 载荷片段阶段四十三
+        "status": str_status,  # 访谈状态阶段四十二
+        "kind": value_kind,  # 载荷片段阶段四十三
         "inferred_kind": state.get("inferred_kind"),  # 第三百五项结构字段
-        "review_policy": review_policy_for_state(state, status),  # 载荷片段阶段四十四
+        "review_policy": review_policy_for_state(state, str_status),  # 载荷片段阶段四十四
         "current_group": list_current_group,  # 载荷片段阶段四十五
         "questions": list_questions,  # 第三百三十四项结构字段
         "remaining_groups": remaining_groups_for_state(state),  # 载荷片段阶段四十六
-        "review_summary": review,  # 第三百四十一项结构字段
-        "confirmed_so_far": review["confirmed_fields"],  # 第三百四十三项结构字段
+        "review_summary": dict_review,  # 第三百四十一项结构字段
+        "confirmed_so_far": dict_review["confirmed_fields"],  # 第三百四十三项结构字段
         "confirmation_question": str_confirmation_question,  # 第三百四十四项结构字段
         "next_action": str_next_action,  # 第三百四十五项结构字段
         "session_state_path": str(state_path(project)),  # 第三百四十六项结构字段
@@ -1417,11 +1423,11 @@ def build_interactive_payload(
     # 第四十步更新载荷。
     enrich_interactive_payload(
         dict_payload,
-        status,
+        str_status,
         str_mode,
         state,
         list_questions,
-        remote_gate,
+        dict_remote_gate,
     )
 
     # 第四十一步返回载荷。

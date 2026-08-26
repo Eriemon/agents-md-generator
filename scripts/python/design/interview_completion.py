@@ -11,10 +11,10 @@ def answer_remote_server_route_mapping(project: Path, state: dict[str, Any], pay
     """
 
     # 保留原始选择以区分显式 false、缺失字段和其他非法类型。
-    remote_enabled = payload.get(USE_REMOTE_SERVER_KEY)  # 用户提交的远程服务器启用标志。
+    value_remote_enabled = payload.get(USE_REMOTE_SERVER_KEY)  # 用户提交的远程服务器启用标志。
 
     # 只有布尔 false 触发禁用分支，其他值继续由路由合同验证。
-    if isinstance(remote_enabled, bool) and not remote_enabled:
+    if isinstance(value_remote_enabled, bool) and not value_remote_enabled:
 
         # 禁用路径不需要解析服务器注册表。
         return disable_remote_gate_and_continue(project, state)
@@ -23,10 +23,10 @@ def answer_remote_server_route_mapping(project: Path, state: dict[str, Any], pay
     raw_routes = payload.get(REMOTE_SERVER_TASK_ROUTES_KEY, [])  # 用户提交的远程任务路由。
 
     # 规范化后每个条目都遵循稳定的任务路由 schema。
-    routes = normalize_remote_task_routes(raw_routes)  # 规范化任务路由列表。
+    list_routes = normalize_remote_task_routes(raw_routes)  # 规范化任务路由列表。
 
     # 启用远程执行时至少需要一条明确路由。
-    if not routes:
+    if not list_routes:
 
         # 返回缺失字段诊断而不改变现有门禁状态。
         emit_json(
@@ -41,13 +41,13 @@ def answer_remote_server_route_mapping(project: Path, state: dict[str, Any], pay
         raise SystemExit(1)
 
     # 当前门禁载荷包含发现阶段保存的服务器候选。
-    gate = remote_gate_payload(state)  # 当前远程服务器门禁状态。
+    dict_gate = remote_gate_payload(state)  # 当前远程服务器门禁状态。
 
     # 依赖摘要提供已安装状态和 skill 目录位置。
-    dependency = remote_dependency_summary()  # erie-remote-ssh 依赖事实。
+    dict_dependency = remote_dependency_summary()  # erie-remote-ssh 依赖事实。
 
     # 未安装远程技能时无法验证服务器身份和任务能力。
-    if not dependency["installed"]:
+    if not dict_dependency["installed"]:
 
         # 返回依赖缺失诊断，避免把未验证路由标记为成功。
         emit_json(
@@ -62,7 +62,7 @@ def answer_remote_server_route_mapping(project: Path, state: dict[str, Any], pay
         raise SystemExit(1)
 
     # 服务器候选来自前序发现门禁的 choices 字段。
-    list_records = gate.get("choices", {}).get("servers", [])  # 原始服务器注册记录。
+    list_records = dict_gate.get("choices", {}).get("servers", [])  # 原始服务器注册记录。
 
     # 畸形 choices 不应传入注册表规范化器。
     if not isinstance(list_records, list):
@@ -71,13 +71,13 @@ def answer_remote_server_route_mapping(project: Path, state: dict[str, Any], pay
         list_records = []  # 无可用服务器候选。
 
     # 远程技能目录用于解析服务器注册表和执行策略。
-    path_skill_dir = Path(str(dependency["skill_dir"]))  # 已安装远程技能根目录。
+    path_skill_dir = Path(str(dict_dependency["skill_dir"]))  # 已安装远程技能根目录。
 
     # 规范化注册记录以统一服务器 ID、账号、端口和能力字段。
-    registry = normalize_remote_server_registry(list_records)  # 标准服务器注册表。
+    dict_registry = normalize_remote_server_registry(list_records)  # 标准服务器注册表。
 
     # ID 索引支持快速验证主服务器与回退服务器引用。
-    registry_map = server_registry_map(registry)  # 服务器 ID 到注册记录的映射。
+    dict_registry_map = server_registry_map(dict_registry)  # 服务器 ID 到注册记录的映射。
 
     # 汇总全部路由诊断，避免用户逐条修复后重复提交。
     list_errors: list[str] = []  # 远程路由验证错误集合。
@@ -89,16 +89,16 @@ def answer_remote_server_route_mapping(project: Path, state: dict[str, Any], pay
     list_validation_results: list[dict[str, Any]] = []  # 每条路由的解析结果。
 
     # 每条任务路由独立验证引用并执行服务器选择解析。
-    for route in routes:
+    for route in list_routes:
 
         # 先验证路由引用的所有服务器 ID 均存在于注册表。
-        list_errors.extend(validate_route_server_ids(route, registry_map))
+        list_errors.extend(validate_route_server_ids(route, dict_registry_map))
 
         # 单路由门禁配置复用运行时解析器验证真实选择行为。
-        resolution = resolve_remote_server_for_task(  # 当前任务的服务器解析证据。
+        dict_resolution = resolve_remote_server_for_task(  # 当前任务的服务器解析证据。
             {
                 "enabled": True,  # 本分支已确认启用远程执行。
-                "server_registry": registry,  # 使用本轮规范化注册表。
+                "server_registry": dict_registry,  # 使用本轮规范化注册表。
                 "task_routes": [route],  # 每次仅验证当前路由。
                 "unmatched_task_policy": "block-and-update-agents",  # 未匹配任务必须补规则。
                 "failover_policy": "auto-fallback",  # 主服务器不可用时允许声明式回退。
@@ -108,27 +108,27 @@ def answer_remote_server_route_mapping(project: Path, state: dict[str, Any], pay
         )
 
         # 解析失败时保留失败明细并跳过标准路由构建。
-        if not resolution.get("ok"):
+        if not dict_resolution.get("ok"):
 
             # 优先返回结构化 failures，缺失时使用解析器消息。
             list_errors.extend(
-                resolution.get("failures", [])
-                or [str(resolution.get("message", "remote route validation failed"))]
+                dict_resolution.get("failures", [])
+                or [str(dict_resolution.get("message", "remote route validation failed"))]
             )
 
             # 当前失败路由不应进入已验证结果集合。
             continue
 
         # 主服务器能力用于补全未显式给出的任务和功能范围。
-        primary_server = registry_map.get(  # 当前路由引用的主服务器记录。
+        dict_primary_server = dict_registry_map.get(  # 当前路由引用的主服务器记录。
             str(route.get("primary_server_id", "")).strip(),  # 规范化主服务器 ID。
             {},  # 未知 ID 使用空记录并由前序诊断报告。
         )
 
         # 仅映射类型服务器记录能够公开 functions 字段。
-        primary_functions = (  # 主服务器规范化能力列表。
-            normalize_remote_task_list(primary_server.get("functions", []))  # 规范化声明能力。
-            if isinstance(primary_server, dict)  # 服务器记录必须是映射。
+        list_primary_functions = (  # 主服务器规范化能力列表。
+            normalize_remote_task_list(dict_primary_server.get("functions", []))  # 规范化声明能力。
+            if isinstance(dict_primary_server, dict)  # 服务器记录必须是映射。
             else []  # 畸形记录不提供能力回填。
         )
 
@@ -140,7 +140,7 @@ def answer_remote_server_route_mapping(project: Path, state: dict[str, Any], pay
 
             # 回填值保证最终规则明确该路由覆盖的任务集合。
             dict_normalized_route["route_tasks"] = (  # 路由覆盖的任务名称。
-                primary_functions  # 优先继承主服务器声明的能力范围。
+                list_primary_functions  # 优先继承主服务器声明的能力范围。
                 or [str(route.get("task_name", "")).strip()]  # 无能力声明时限定为当前任务。
             )
 
@@ -148,7 +148,7 @@ def answer_remote_server_route_mapping(project: Path, state: dict[str, Any], pay
         if not dict_normalized_route.get("route_functions"):
 
             # 功能范围用于后续运行时匹配具体远程能力。
-            dict_normalized_route["route_functions"] = primary_functions  # 路由允许的服务器功能。
+            dict_normalized_route["route_functions"] = list_primary_functions  # 路由允许的服务器功能。
 
         # 用户提交并通过解析后，路由选择才可标记为已确认。
         dict_normalized_route["selection_confirmed"] = True  # 服务器选择确认标志。
@@ -160,7 +160,7 @@ def answer_remote_server_route_mapping(project: Path, state: dict[str, Any], pay
         list_resolved_routes.append(dict_normalized_route)
 
         # 保存解析器证据用于审计实际服务器选择。
-        list_validation_results.append(resolution)
+        list_validation_results.append(dict_resolution)
 
     # 任一路由失败都会阻止整批配置写入，避免部分成功状态。
     if list_errors:
@@ -172,28 +172,28 @@ def answer_remote_server_route_mapping(project: Path, state: dict[str, Any], pay
         raise SystemExit(1)
 
     # 最终答案映射承载生成 AGENTS 远程策略所需字段。
-    answers = state.setdefault("answers", {})  # 当前访谈累计答案。
+    dict_answers = state.setdefault("answers", {})  # 当前访谈累计答案。
 
     # 写回全部通过验证的标准任务路由。
-    answers[REMOTE_SERVER_TASK_ROUTES_KEY] = list_resolved_routes  # 最终远程任务路由。
+    dict_answers[REMOTE_SERVER_TASK_ROUTES_KEY] = list_resolved_routes  # 最终远程任务路由。
 
     # 总体验证状态证明本轮路由已通过真实解析器。
-    answers[REMOTE_VALIDATION_STATUS_KEY] = "verified"  # 最终远程验证结论。
+    dict_answers[REMOTE_VALIDATION_STATUS_KEY] = "verified"  # 最终远程验证结论。
 
     # 门禁状态保留规范化注册表供后续恢复与展示。
-    gate["server_registry"] = registry  # 已验证路由使用的服务器注册表。
+    dict_gate["server_registry"] = dict_registry  # 已验证路由使用的服务器注册表。
 
     # 门禁状态与最终答案共享同一标准路由集合。
-    gate["task_routes"] = list_resolved_routes  # 门禁确认的任务路由。
+    dict_gate["task_routes"] = list_resolved_routes  # 门禁确认的任务路由。
 
     # 每条解析证据支持审计主服务器和回退选择。
-    gate["route_validation_results"] = list_validation_results  # 路由解析证据集合。
+    dict_gate["route_validation_results"] = list_validation_results  # 路由解析证据集合。
 
     # 门禁自身进入已验证状态，允许访谈继续。
-    gate["validation_status"] = "verified"  # 远程门禁验证状态。
+    dict_gate["validation_status"] = "verified"  # 远程门禁验证状态。
 
     # 将完整远程门禁载荷写回访谈状态。
-    set_remote_gate_payload(state, gate)
+    set_remote_gate_payload(state, dict_gate)
 
     # 远程门禁闭合后由统一推进器选择下一访谈阶段。
     return advance_after_remote_gate(project, state)
@@ -247,25 +247,25 @@ def confirm_regular_group(
         update_groups_after_common_confirmation(state)
 
         # 启用知识图谱时先完成本地依赖与 Codex MCP 配置问询。
-        command_result = refresh_codebase_memory_gate(project, state)  # 可选知识图谱门禁响应
+        dict_command_result = refresh_codebase_memory_gate(project, state)  # 可选知识图谱门禁响应
 
         # 依赖未就绪时返回人工安装或完成等待交互载荷。
-        if command_result is not None:
+        if dict_command_result is not None:
 
             # 当前门禁必须完成后才能进入远程服务器选择。
-            return command_result
+            return dict_command_result
 
         # 启用远程服务器时刷新服务器选择门禁。
         if use_remote_server_enabled(state.get("answers", {})):
 
             # 门禁可能直接返回需要用户交互的服务器载荷。
-            command_result = refresh_remote_gate(project, state)  # 可选远程门禁响应。
+            dict_command_result = refresh_remote_gate(project, state)  # 可选远程门禁响应。
 
             # 非空响应表示状态机应暂停在远程服务器确认。
-            if command_result is not None:
+            if dict_command_result is not None:
 
                 # 将远程门禁载荷直接交给调用方。
-                return command_result
+                return dict_command_result
 
     # takeover 模式完成最后一组后走专用接管收口。
     if str(state.get("mode", "interactive")) == "takeover" and int_index + 1 >= len(state.get("groups", [])):
@@ -421,10 +421,10 @@ def group_index_for_key_in_state(state: dict[str, Any], answer_key: str) -> int 
     """
 
     # 历史会话保存的分组是恢复交互位置的第一证据。
-    groups = state.get("groups", [])  # 会话创建时固化的问题组列表。
+    list_groups = state.get("groups", [])  # 会话创建时固化的问题组列表。
 
     # 非列表分组按空集合处理，避免畸形状态中断返工诊断。
-    for index, group in enumerate(groups if isinstance(groups, list) else []):
+    for index, group in enumerate(list_groups if isinstance(list_groups, list) else []):
 
         # 只接受列表组，并将持久化问题标识统一转换为字符串。
         if isinstance(group, list) and answer_key in question_ids_to_keys([str(item) for item in group]):
@@ -433,13 +433,13 @@ def group_index_for_key_in_state(state: dict[str, Any], answer_key: str) -> int 
             return index
 
     # 会话未保存匹配组时，从类型字段选择当前标准问题定义。
-    kind = str(state.get("kind") or state.get("answers", {}).get("development_type", "")).strip()  # 访谈开发类型。
+    str_kind = str(state.get("kind") or state.get("answers", {}).get("development_type", "")).strip()  # 访谈开发类型。
 
     # 只有受支持类型才能安全调用标准问题组查找器。
-    if kind in {"skill", "engineering"}:
+    if str_kind in {"skill", "engineering"}:
 
         # 标准定义为旧会话或缺失分组提供兼容回退。
-        return group_index_for_key(kind, answer_key)
+        return group_index_for_key(str_kind, answer_key)
 
     # 无有效类型时无法推导字段所属问题组。
     return None
@@ -454,12 +454,12 @@ def all_answer_keys_for_state(state: dict[str, Any]) -> set[str]:
     """
 
     # 开发类型决定需要加载 skill 还是 engineering 问题定义。
-    kind = str(state.get("kind") or state.get("answers", {}).get("development_type", "")).strip()  # 当前访谈类型。
+    str_kind = str(state.get("kind") or state.get("answers", {}).get("development_type", "")).strip()  # 当前访谈类型。
 
     # 未知类型不加载问题，防止把非法字段误判为可修正字段。
     set_keys = (
-        {item["answer_key"] for item in questions_for(kind)}  # 标准问题声明的答案字段。
-        if kind in {"skill", "engineering"}  # 仅支持两个受管开发分支。
+        {item["answer_key"] for item in questions_for(str_kind)}  # 标准问题声明的答案字段。
+        if str_kind in {"skill", "engineering"}  # 仅支持两个受管开发分支。
         else set()  # 缺失类型时从空集合开始。
     )
 
@@ -489,10 +489,10 @@ def answer_extra_requirements(project: Path, state: dict[str, Any], payload: dic
         raise SystemExit(1)
 
     # 将字符串或列表输入规范为稳定的附加需求结构。
-    extra = normalize_extra_requirements(payload.get(EXTRA_REQUIREMENTS_KEY))  # 规范化附加需求答案。
+    str_extra = normalize_extra_requirements(payload.get(EXTRA_REQUIREMENTS_KEY))  # 规范化附加需求答案。
 
     # 保存开放问题答案以参与最终画像构建。
-    state.setdefault("answers", {})[EXTRA_REQUIREMENTS_KEY] = extra  # 更新最终开放问题答案。
+    state.setdefault("answers", {})[EXTRA_REQUIREMENTS_KEY] = str_extra  # 更新最终开放问题答案。
 
     # 所有问题完成后等待用户确认完整答案摘要。
     state["status"] = "awaiting_final_alignment"  # 将状态机推进到对齐确认节点。
@@ -680,13 +680,13 @@ def finalize_alignment(project: Path, state: dict[str, Any], payload: dict[str, 
         raise SystemExit(1)
 
     # 从最终对齐提交中分离需要重新验证的答案字段。
-    correction_keys = [key for key in payload if key != ALIGNMENT_KEY]  # 对齐阶段修正字段。
+    list_correction_keys = [key for key in payload if key != ALIGNMENT_KEY]  # 对齐阶段修正字段。
 
     # 当前访谈问题定义限定允许修改的答案字段。
     set_all_keys = all_answer_keys_for_state(state)  # 合法最终答案字段集合。
 
     # 未知字段不能写入画像或用于定位返工问题组。
-    if any(key not in set_all_keys for key in correction_keys):
+    if any(key not in set_all_keys for key in list_correction_keys):
 
         # 返回未知字段范围诊断，要求调用方仅提交已定义答案。
         emit_json(
@@ -704,7 +704,7 @@ def finalize_alignment(project: Path, state: dict[str, Any], payload: dict[str, 
     if payload[ALIGNMENT_KEY]:
 
         # 最终确认必须是纯动作，不能与字段修正混合。
-        if correction_keys:
+        if list_correction_keys:
 
             # 最终确认不能和修正内容混合提交，需返回明确阻断原因。
             list_errors = [  # 最终确认混入修正字段的阻断原因。
@@ -725,13 +725,13 @@ def finalize_alignment(project: Path, state: dict[str, Any], payload: dict[str, 
         dict_final_answers[ALIGNMENT_KEY] = True  # 最终对齐完成证据。
 
         # 画像构建器执行全部设计字段和项目事实合同。
-        profile, errors = build_profile(project, dict_final_answers)  # 最终画像及构建诊断。
+        dict_profile, list_profile_errors = build_profile(project, dict_final_answers)  # 最终画像及构建诊断。
 
         # 构建错误必须在切换完成态或审查态前返回。
-        if errors:
+        if list_profile_errors:
 
             # 一次性公开全部画像合同错误。
-            emit_json(interactive_payload(project, state, errors=errors))
+            emit_json(interactive_payload(project, state, errors=list_profile_errors))
 
             # 无有效画像时保留最终对齐等待状态。
             raise SystemExit(1)
@@ -740,13 +740,13 @@ def finalize_alignment(project: Path, state: dict[str, Any], payload: dict[str, 
         if normalize_intent(state.get("intent")) == "read_only":
 
             # 专用完成器持久化只读完成证据。
-            return complete_read_only(project, state, dict_final_answers, profile)
+            return complete_read_only(project, state, dict_final_answers, dict_profile)
 
         # 默认写入不创建方案审查智能体，显式审查仍由专用入口触发。
-        return complete_without_review(project, state, dict_final_answers, profile)
+        return complete_without_review(project, state, dict_final_answers, dict_profile)
 
     # 否认最终对齐时必须说明至少一个需要修正的字段。
-    if not correction_keys:
+    if not list_correction_keys:
 
         # 返回可操作诊断，提示提交修正或重置访谈。
         emit_json(
@@ -761,10 +761,10 @@ def finalize_alignment(project: Path, state: dict[str, Any], payload: dict[str, 
         raise SystemExit(1)
 
     # 只复制已经通过字段名白名单的修正值。
-    corrections = {key: payload[key] for key in correction_keys}  # 合法最终对齐修正映射。
+    dict_corrections = {key: payload[key] for key in list_correction_keys}  # 合法最终对齐修正映射。
 
     # 逐项拒绝非可选字段的空值，保留原答案直至全部通过。
-    for key, raw_value in corrections.items():
+    for key, raw_value in dict_corrections.items():
 
         # 可选字段允许显式清空，因此跳过必填检查。
         if key in OPTIONAL_EMPTY_KEYS:
@@ -782,28 +782,28 @@ def finalize_alignment(project: Path, state: dict[str, Any], payload: dict[str, 
             raise SystemExit(1)
 
     # 附加需求支持字符串或列表输入，需要恢复为标准结构。
-    if EXTRA_REQUIREMENTS_KEY in corrections:
+    if EXTRA_REQUIREMENTS_KEY in dict_corrections:
 
         # 规范化后再写入，保证最终画像结构稳定。
-        corrections[EXTRA_REQUIREMENTS_KEY] = normalize_extra_requirements(  # 标准附加需求列表。
-            corrections[EXTRA_REQUIREMENTS_KEY]  # 用户提交的原始附加需求值。
+        dict_corrections[EXTRA_REQUIREMENTS_KEY] = normalize_extra_requirements(  # 标准附加需求列表。
+            dict_corrections[EXTRA_REQUIREMENTS_KEY]  # 用户提交的原始附加需求值。
         )
 
     # 全部修正合法后一次性覆盖对应答案。
-    state.setdefault("answers", {}).update(corrections)
+    state.setdefault("answers", {}).update(dict_corrections)
 
     # 任何答案修正都会使先前设计审查结论失效。
     state.setdefault("answers", {}).pop(DESIGN_REVIEW_KEY, None)
 
     # 标准问题字段映射回其问题组，附加需求没有组索引。
-    indices = [  # 受修正影响的标准问题组索引。
+    list_indices = [  # 受修正影响的标准问题组索引。
         group_index_for_key_in_state(state, key)  # 根据会话实际分组定位字段。
-        for key in correction_keys  # 遍历本次全部修正字段。
+        for key in list_correction_keys  # 遍历本次全部修正字段。
         if key != EXTRA_REQUIREMENTS_KEY  # 附加需求属于最终开放问题。
     ]
 
     # 仅修正附加需求时仍停留在最终对齐阶段。
-    if not indices:
+    if not list_indices:
 
         # 新摘要需要用户再次确认。
         state["status"] = "awaiting_final_alignment"  # 等待修正后最终确认。
@@ -815,7 +815,7 @@ def finalize_alignment(project: Path, state: dict[str, Any], payload: dict[str, 
         return interactive_payload(project, state)
 
     # 最早受影响组是重新确认流程的起点。
-    target_index = min(index for index in indices if index is not None)  # 首个返工问题组索引。
+    target_index = min(index for index in list_indices if index is not None)  # 首个返工问题组索引。
 
     # 将问题组游标回退到最早修正位置。
     state["current_group_index"] = target_index  # 当前返工问题组。
@@ -847,47 +847,47 @@ def submit_design_review(project: Path, state: dict[str, Any], payload: dict[str
     """
 
     # 审查对象由稳定字段名从本次提交中提取。
-    review = payload.get(DESIGN_REVIEW_KEY)  # 待验证的设计审查结果。
+    dict_review = payload.get(DESIGN_REVIEW_KEY)  # 待验证的设计审查结果。
 
     # 使用副本合并审查结论，避免验证失败污染持久化答案。
     dict_answers = dict(state.get("answers", {}))  # 当前最终答案副本。
 
     # 画像预览必须是映射；缺失时交由验证器报告。
-    profile = (  # 审查所针对的项目画像预览。
+    dict_profile = (  # 审查所针对的项目画像预览。
         state.get("profile_preview")  # 读取最终对齐阶段保存的画像。
         if isinstance(state.get("profile_preview"), dict)  # 仅接受映射画像。
         else None  # 缺失或畸形画像交给验证器报告。
     )
 
     # 首轮验证允许返工结论，因此不强制 approved。
-    errors = validate_design_review(  # 审查结构与项目一致性诊断。
+    list_errors = validate_design_review(  # 审查结构与项目一致性诊断。
         project,  # 绑定审查结果所属项目。
         dict_answers,  # 提供审查所依据的最终答案。
-        review,  # 校验本次提交的审查载荷。
-        profile,  # 对照当前画像检查审查一致性。
+        dict_review,  # 校验本次提交的审查载荷。
+        dict_profile,  # 对照当前画像检查审查一致性。
         require_approval=False,  # 首轮提交允许审查要求返工。
     )
 
     # 无效审查不得改变等待审查状态。
-    if errors:
+    if list_errors:
 
         # 一次性返回全部审查结构和一致性错误。
-        emit_json(interactive_payload(project, state, errors=errors))
+        emit_json(interactive_payload(project, state, errors=list_errors))
 
         # 终止当前提交并保留原画像预览。
         raise SystemExit(1)
 
     # 验证器成功后审查对象必须满足映射合同。
-    if not isinstance(review, dict):
+    if not isinstance(dict_review, dict):
 
         # 防御验证器合同回退，避免非映射对象进入审查状态机。
         raise TypeError("> ERR: [Python] validated design review must be a mapping")
 
     # 需要返工的审查保存待处理结论并进入修正状态。
-    if design_review_requires_rework(review):
+    if design_review_requires_rework(dict_review):
 
         # 待处理审查为后续修正字段和审阅意见提供来源。
-        state["pending_design_review"] = review  # 当前要求返工的审查结果。
+        state["pending_design_review"] = dict_review  # 当前要求返工的审查结果。
 
         # 返工完成前不能把审查结论写入最终答案。
         state.setdefault("answers", {}).pop(DESIGN_REVIEW_KEY, None)
@@ -902,10 +902,10 @@ def submit_design_review(project: Path, state: dict[str, Any], payload: dict[str
         return interactive_payload(project, state)
 
     # 通过审查的结论成为最终答案的一部分。
-    dict_answers[DESIGN_REVIEW_KEY] = review  # 已批准设计审查证据。
+    dict_answers[DESIGN_REVIEW_KEY] = dict_review  # 已批准设计审查证据。
 
     # 把批准审查合并进答案后重新构建可写入画像。
-    profile, profile_errors = build_profile(project, dict_answers)  # 审查完成画像及诊断。
+    dict_profile, profile_errors = build_profile(project, dict_answers)  # 审查完成画像及诊断。
 
     # 合并审查后产生的画像错误仍然阻止完成态。
     if profile_errors:
@@ -920,7 +920,7 @@ def submit_design_review(project: Path, state: dict[str, Any], payload: dict[str
     state["answers"] = dict_answers  # 可用于受管写入的完整答案。
 
     # 预览替换为重新构建后的最终画像。
-    state["profile_preview"] = profile  # 审查通过后的最终项目画像。
+    state["profile_preview"] = dict_profile  # 审查通过后的最终项目画像。
 
     # completed 表明访谈、对齐和设计审查均已闭合。
     state["status"] = "completed"  # 允许进入受管写入的完成态。
@@ -935,7 +935,7 @@ def submit_design_review(project: Path, state: dict[str, Any], payload: dict[str
     dict_payload_out = interactive_payload(project, state)  # 设计审查完成响应。
 
     # 将最终画像直接公开给调用方进行写入或展示。
-    dict_payload_out["profile_preview"] = profile  # 审查通过的画像预览。
+    dict_payload_out["profile_preview"] = dict_profile  # 审查通过的画像预览。
 
     # 返回可进入写入流程的完整响应。
     return dict_payload_out
@@ -969,29 +969,29 @@ def enter_write_review(project: Path, state: dict[str, Any]) -> dict[str, Any]:
     dict_answers = dict(state.get("answers", {}))  # 只读访谈最终答案副本。
 
     # 优先复用只读完成时已经构建并展示的画像。
-    profile = (  # 可复用的项目画像预览。
+    dict_profile = (  # 可复用的项目画像预览。
         state.get("profile_preview")  # 读取只读完成时固化的画像。
         if isinstance(state.get("profile_preview"), dict)  # 仅复用合法映射画像。
         else None  # 缺失或畸形时触发重新构建。
     )
 
     # 历史只读状态缺失画像时从最终答案重新构建。
-    if profile is None:
+    if dict_profile is None:
 
         # 构建器同时返回画像和全部合同诊断。
-        profile, errors = build_profile(project, dict_answers)  # 重建画像及错误集合。
+        dict_profile, list_profile_errors = build_profile(project, dict_answers)  # 重建画像及错误集合。
 
         # 构建错误必须在进入审查前反馈。
-        if errors:
+        if list_profile_errors:
 
             # 复用交互载荷格式返回完整画像构建诊断。
-            emit_json(interactive_payload(project, state, errors=errors))
+            emit_json(interactive_payload(project, state, errors=list_profile_errors))
 
             # 无有效画像时不能生成设计审查请求。
             raise SystemExit(1)
 
     # 统一审查入口负责持久化写入意图和审查请求。
-    return enter_design_review(project, state, dict_answers, profile)
+    return enter_design_review(project, state, dict_answers, dict_profile)
 
 # 审查返工处理器应用修正并回退到最早受影响的问题组。
 def answer_review_rework(project: Path, state: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
@@ -1004,10 +1004,10 @@ def answer_review_rework(project: Path, state: dict[str, Any], payload: dict[str
     """
 
     # 保存原始返工确认值以同时验证类型和值。
-    rework_confirmed = payload.get(REVIEW_REWORK_CONFIRMATION_KEY)  # 审查返工确认标志。
+    value_rework_confirmed = payload.get(REVIEW_REWORK_CONFIRMATION_KEY)  # 审查返工确认标志。
 
     # 只有显式布尔 true 才允许覆盖已经审查的答案。
-    if not isinstance(rework_confirmed, bool) or not rework_confirmed:
+    if not isinstance(value_rework_confirmed, bool) or not value_rework_confirmed:
 
         # 返回明确门禁诊断，要求调用方确认接受返工。
         emit_json(
@@ -1025,14 +1025,14 @@ def answer_review_rework(project: Path, state: dict[str, Any], payload: dict[str
         raise SystemExit(1)
 
     # 除确认标志外的字段均视为设计答案修正。
-    correction_keys = [  # 本次审查返工提交的答案字段。
+    list_correction_keys = [  # 本次审查返工提交的答案字段。
         key  # 保留需要重新验证并写回的设计字段。
         for key in payload  # 遍历返工提交的全部字段。
         if key != REVIEW_REWORK_CONFIRMATION_KEY  # 排除控制标志。
     ]
 
     # 返工提交必须包含至少一个实际修正字段。
-    if not correction_keys:
+    if not list_correction_keys:
 
         # 空返工无法消除审查发现项，因此返回阻断诊断。
         emit_json(
@@ -1050,7 +1050,7 @@ def answer_review_rework(project: Path, state: dict[str, Any], payload: dict[str
     set_all_keys = all_answer_keys_for_state(state)  # 合法设计答案字段集合。
 
     # 未知字段不能进入画像或问题组定位逻辑。
-    if any(key not in set_all_keys for key in correction_keys):
+    if any(key not in set_all_keys for key in list_correction_keys):
 
         # 返回字段范围诊断，避免静默接收拼写错误。
         emit_json(
@@ -1065,10 +1065,10 @@ def answer_review_rework(project: Path, state: dict[str, Any], payload: dict[str
         raise SystemExit(1)
 
     # 复制白名单内的返工值，全部验证成功后再写入状态。
-    corrections = {key: payload[key] for key in correction_keys}  # 待应用的审查返工映射。
+    dict_corrections = {key: payload[key] for key in list_correction_keys}  # 待应用的审查返工映射。
 
     # 逐项规范化可选字段并拒绝空的必填答案。
-    for key, raw_value in corrections.items():
+    for key, raw_value in dict_corrections.items():
 
         # 普通可选字段允许显式清空。
         if key in OPTIONAL_EMPTY_KEYS:
@@ -1080,7 +1080,7 @@ def answer_review_rework(project: Path, state: dict[str, Any], payload: dict[str
         if key == EXTRA_REQUIREMENTS_KEY:
 
             # 将审查返工中的开放需求恢复为画像要求的列表结构。
-            corrections[key] = normalize_extra_requirements(raw_value)  # 返工后的附加需求列表。
+            dict_corrections[key] = normalize_extra_requirements(raw_value)  # 返工后的附加需求列表。
 
             # 已完成专用规范化，无需执行普通空值检查。
             continue
@@ -1095,13 +1095,13 @@ def answer_review_rework(project: Path, state: dict[str, Any], payload: dict[str
             raise SystemExit(1)
 
     # 获取持久化答案映射，后续一次性应用已验证修正。
-    answers = state.setdefault("answers", {})  # 当前访谈最终答案映射。
+    dict_answers = state.setdefault("answers", {})  # 当前访谈最终答案映射。
 
     # 全部字段合法后覆盖对应答案。
-    answers.update(corrections)
+    dict_answers.update(dict_corrections)
 
     # 旧审查结论针对修正前画像，必须移除。
-    answers.pop(DESIGN_REVIEW_KEY, None)
+    dict_answers.pop(DESIGN_REVIEW_KEY, None)
 
     # 已处理的待返工审查不再作为活动状态保留。
     state.pop("pending_design_review", None)
@@ -1113,17 +1113,17 @@ def answer_review_rework(project: Path, state: dict[str, Any], payload: dict[str
     state.pop("profile_preview", None)
 
     # 将标准答案字段映射回问题组，附加需求没有组索引。
-    indices = [  # 返工影响的标准问题组索引。
+    list_indices = [  # 返工影响的标准问题组索引。
         group_index_for_key_in_state(state, key)  # 使用会话固化分组定位字段。
-        for key in correction_keys  # 遍历本次审查返工字段。
+        for key in list_correction_keys  # 遍历本次审查返工字段。
         if key != EXTRA_REQUIREMENTS_KEY  # 附加需求在最终对齐阶段确认。
     ]
 
     # 标准问题字段修正需要回退到最早受影响组。
-    if indices:
+    if list_indices:
 
         # 最小索引保证所有后续依赖组都会重新确认。
-        target_index = min(index for index in indices if index is not None)  # 首个返工问题组。
+        target_index = min(index for index in list_indices if index is not None)  # 首个返工问题组。
 
         # 更新交互游标指向最早返工组。
         state["current_group_index"] = target_index  # 当前返工问题组索引。
@@ -1241,10 +1241,10 @@ def ensure_design_review_approved_on_write(
     list_errors.extend(explicit_extra_requirements_error(answers))
 
     # 保存原始对齐值以同时验证布尔类型和值。
-    alignment_confirmed = answers.get(ALIGNMENT_KEY)  # 最终答案中的对齐确认标志。
+    value_alignment_confirmed = answers.get(ALIGNMENT_KEY)  # 最终答案中的对齐确认标志。
 
     # 最终对齐标志证明用户确认了完整答案摘要。
-    if not isinstance(alignment_confirmed, bool) or not alignment_confirmed:
+    if not isinstance(value_alignment_confirmed, bool) or not value_alignment_confirmed:
 
         # 未确认对齐时禁止生成受管项目规则。
         list_errors.append("alignment_confirmed must be true before --write")
@@ -1253,7 +1253,7 @@ def ensure_design_review_approved_on_write(
     if DESIGN_REVIEW_KEY in answers:
 
         # 已有审查载荷时验证其内容、批准状态和项目一致性。
-        review_errors = validate_design_review(  # 写入前设计审查诊断。
+        list_review_errors = validate_design_review(  # 写入前设计审查诊断。
             project,  # 将审查证据绑定到当前项目。
             answers,  # 提供完整访谈答案供交叉校验。
             answers.get(DESIGN_REVIEW_KEY),  # 读取待验证的审查载荷。
@@ -1262,7 +1262,7 @@ def ensure_design_review_approved_on_write(
         )
 
         # 将显式审查诊断并入其他写入门禁错误。
-        list_errors.extend(review_errors)
+        list_errors.extend(list_review_errors)
 
     # 调用方统一决定如何展示或终止这些诊断。
     return list_errors
@@ -1293,7 +1293,7 @@ def legacy_question_payload(project: Path, kind: str | None) -> dict[str, Any]:
     """
 
     # 先从仓库事实推断类型，供未选分支时展示建议。
-    inferred = infer_kind(project)  # 基于项目结构推断的开发类型。
+    str_inferred_kind = infer_kind(project)  # 基于项目结构推断的开发类型。
 
     # 未指定类型时只返回分支选择和公共问题。
     if not kind:
@@ -1302,13 +1302,13 @@ def legacy_question_payload(project: Path, kind: str | None) -> dict[str, Any]:
         return attach_alignment(
             {
                 "project": str(project),  # 当前问题所属项目根。
-                "inferred_kind": inferred,  # 供用户参考的自动推断类型。
+                "inferred_kind": str_inferred_kind,  # 供用户参考的自动推断类型。
                 "branch_options": ["skill", "engineering"],  # 旧入口支持的显式分支。
                 "questions": [with_options(item) for item in COMMON_QUESTIONS],  # 分支前公共问题。
                 "next": "Ask question 1, then rerun with --kind skill or --kind engineering.",  # 后续动作。
             },
-            {"development_type": inferred},  # 初始对齐答案仅含推断类型。
-            inferred,  # 摘要按推断分支选择标签。
+            {"development_type": str_inferred_kind},  # 初始对齐答案仅含推断类型。
+            str_inferred_kind,  # 摘要按推断分支选择标签。
         )
 
     # 已指定类型时返回该分支的完整问题与分组。
@@ -1316,7 +1316,7 @@ def legacy_question_payload(project: Path, kind: str | None) -> dict[str, Any]:
         {
             "project": str(project),  # 显式分支问题所属的项目根。
             "kind": kind,  # 调用方明确选择的开发类型。
-            "inferred_kind": inferred,  # 保留自动推断值供差异审阅。
+            "inferred_kind": str_inferred_kind,  # 保留自动推断值供差异审阅。
             "questions": questions_for(kind),  # 所选类型的完整问题列表。
             "question_groups": groups_for(kind),  # 交互展示使用的问题分组。
         },

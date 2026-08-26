@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "required": ["schema_version", "sha256_characters", "task_modes", "event_types", "worker_states", "root_authorization_states", "platform_contract", "communication", "path_bindings", "role_cards", "repair_config", "role_card_schema", "worker_runtime_config", "worker_runtime_schema", "zero_dispatch_verdict", "workers", "reports"],
+  "worker_required": ["task_kind", "phases", "allowed_read_roots", "allowed_write_roots", "forbidden_actions", "scope_rejection", "no_action_taken", "expected_output"],
+  "communication_required": ["actions", "required_fields", "target_reuse"],
+  "report_required": ["tester_failure_report_required_for", "rejection_report_required_for", "rejection_fields", "failure_fields", "failure_test_fields", "failure_evidence_anchors", "failure_modification_fields", "vague_failure_texts"]
+}

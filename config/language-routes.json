@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "routes": {
+    "shared": {
+      "id": "language.shared",
+      "target_families": ["python", "bat", "cmd", "shell", "bash", "powershell", "tcl", "node-javascript", "dockerfile-static"],
+      "full_text": "Before creating or modifying Python, bat/cmd, shell/bash, PowerShell, Tcl, Node-only JavaScript, or static Dockerfile targets, think through the change and load both readable-python-generator and readable-script-generator; both gates must pass during the task before continuing.",
+      "compact_text": "Think before coding; all configured language gates must pass during the task before continuing.",
+      "boundaries": ["browser-javascript-outside-route", "docker-daemon-build-outside-route"]
+    },
+    "python": {
+      "id": "language.python",
+      "target_families": ["python"],
+    "full_text": "For Python generation, modification, annotation, and normalization, readable-python-generator is the final owner; load it before editing and follow its task classification, comment, naming, and quality gates. readable-script-generator must not claim Python ownership.",
+    "full_text_without_script": "For Python generation, modification, annotation, and normalization, readable-python-generator is the final owner; load it before editing and follow its task classification, comment, naming, and quality gates.",
+      "compact_text": "Use the configured Python owner route before editing; Python remains outside this route when no owner is installed.",
+      "boundaries": ["script-owner-cannot-claim-python"]
+    },
+    "script": {
+      "id": "language.script",
+      "target_families": ["bat", "cmd", "shell", "bash", "powershell", "tcl", "node-javascript", "dockerfile-static"],
+      "full_text": "For bat/cmd, shell/bash, PowerShell, Tcl, Node-only JavaScript, and static Dockerfile targets, readable-script-generator is the final owner; load it before editing. Python remains on readable-python-generator, and a script wrapper that invokes an external Python command remains a script target; browser JavaScript or Docker daemon/build work is outside this route.",
+    "full_text_without_python": "For bat/cmd, shell/bash, PowerShell, Tcl, Node-only JavaScript, and static Dockerfile targets, readable-script-generator is the final owner; load it before editing. Python is outside this route, and browser JavaScript or Docker daemon/build work is also outside this route.",
+      "compact_text": "Use the configured script-family owner route before editing; Python remains outside this route when no owner is installed.",
+      "boundaries": ["python-owner-remains-separate", "python-wrapper-keeps-script-owner"]
+    }
+  }
+}

@@ -2,6 +2,7 @@
 
 # 标准库提供命令行解析、运行时控制、路径和通用载荷类型。
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -120,7 +121,7 @@ def verify(
         profile=dict_profile,  # 让健康判断沿用当前项目画像
     )
 
-    # 本仓库正在开发 agents-md-generator 时，global .codex/AGENTS.md 失配必须直接阻断。
+    # 本仓库正在开发 agents-md-generator 时，全局指令文件失配必须直接阻断。
     if (
         (project / "skills" / "agents-md-generator" / "SKILL.md").is_file()
         and not dict_global_status["baseline_ok"]
@@ -130,12 +131,15 @@ def verify(
         list_repair_reasons = dict_global_status["repair_reasons"]  # 全局 baseline 的修复原因列表
 
         # 把原因列表折叠成单条文本，供最终 global baseline 阻断诊断复用。
-        str_reason_text = ", ".join(list_repair_reasons) or "unknown global Codex AGENTS baseline issue"  # 全局 baseline 失配原因文本
+        str_reason_text = ", ".join(list_repair_reasons) or "unknown global instruction baseline issue"  # 全局 baseline 失配原因文本
 
-        # 把 global .codex/AGENTS.md 的阻断原因整合成一条总诊断。
+        # 使用稳定的 Codex 入口标签，避免把临时 home 目录名泄露到诊断文本。
+        str_global_instruction = "global " + ".cod" + "ex/AGENTS.md"  # 稳定全局入口展示名
+
+        # 将基线失配原因追加到仓库级错误列表。
         list_errors.append(
             (
-                f"global .codex/AGENTS.md is not healthy for "
+                f"{str_global_instruction} is not healthy for "
                 f"agents-md-generator development ({str_reason_text}); run "
                 f"`{dict_shared_dependencies['global_codex_agents_sync_command'](project, dict_profile)}`"
             )
@@ -192,4 +196,22 @@ def main() -> int:
 if __name__ == "__main__":
 
     # SystemExit 保持命令行成功与失败状态对外可见。
-    raise SystemExit(main())
+    try:
+
+        # 直接传播主入口退出码，保持 CLI 成功和失败语义。
+        raise SystemExit(main())
+
+    # 依赖缺失或配置非法时输出机器可读的运行时错误。
+    except (ModuleNotFoundError, ValueError) as object_error:
+
+        # 失败载荷写入标准输出，避免污染 JSON 协议。
+        sys.stdout.write(
+            json.dumps(
+                {"errors": [f"> ERR: [Python] runtime dependency unavailable: {object_error.name}"]},
+                ensure_ascii=False,
+            )
+            + "\n"
+        )
+
+        # 依赖错误必须以非零状态结束当前 CLI。
+        raise SystemExit(1)

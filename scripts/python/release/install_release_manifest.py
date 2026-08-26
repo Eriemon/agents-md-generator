@@ -10,12 +10,16 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import stat
 
 # 兼容导出供尚未完成解耦的发布验证分片使用。
 import shutil
 import subprocess
 import sys
 from typing import Any
+
+# common 目录提供安装平台目录解析；安装入口负责准备其导入路径。
+from agent_platform import CONFIG_FILE_NAME, load_catalog, resolve_agent_profile
 
 # 发布内容策略版本保持收据合同稳定。
 POLICY_VERSION = "2026-05-26-v2"  # 当前收据记录的发布内容策略版本。
@@ -395,9 +399,9 @@ def parse_release_dir(path_release_dir: Path) -> tuple[str, str]:
     # 正则和路径叶节点策略均通过后返回发布身份。
     return str_skill_name, match_release_name.group(2)
 
-# Codex 主目录解析器遵循显式参数、环境变量、默认目录的优先级。
+# 平台主目录解析器遵循显式参数、环境变量、目录默认值的优先级。
 def default_codex_home(str_raw_home: str | None) -> Path:
-    """解析本地 Codex 主目录。
+    """兼容旧名称并解析当前技能配置的平台主目录。
 
     参数：str_raw_home 为可选命令行覆盖值。
     返回：展开并规范化后的 Codex 主目录绝对路径。
@@ -409,8 +413,8 @@ def default_codex_home(str_raw_home: str | None) -> Path:
         # 用户目录符号在规范化前展开。
         return Path(str_raw_home).expanduser().resolve()
 
-    # 未提供参数时读取标准 CODEX_HOME 环境变量。
-    str_environment_home = os.environ.get("CODEX_HOME")  # 环境中的 Codex 主目录覆盖值。
+    # 未提供参数时读取平台通用环境变量，旧变量仅保留兼容性。
+    str_environment_home = os.environ.get("AGENT_HOME") or os.environ.get("CODEX_HOME")  # 平台环境主目录
 
     # 有效环境变量优先于用户主目录默认值。
     if str_environment_home:
@@ -418,8 +422,11 @@ def default_codex_home(str_raw_home: str | None) -> Path:
         # 环境值同样需要展开并规范化。
         return Path(str_environment_home).expanduser().resolve()
 
-    # 最终默认值与 Codex 标准本地布局一致。
-    return (Path.home() / ".codex").resolve()
+    # 通用发布包移除了单平台 config，默认值必须直接来自已校验的 catalog。
+    profile = resolve_agent_profile("codex")  # Codex 平台配置档案
+
+    # 由平台档案拼接默认用户主目录。
+    return (Path.home() / profile.user_home_dir).resolve()
 
 # 交互安装选项由单一函数提供给确认请求。
 def install_options() -> list[dict[str, Any]]:
@@ -438,9 +445,9 @@ def install_options() -> list[dict[str, Any]]:
             "recommended": True,  # 安全默认项。
         },
         {
-            "label": "安装到 Codex",  # 默认 Codex 目录选项名称。
+            "label": "安装到当前 Agent",  # 当前平台目录选项名称。
             "value": "codex",  # 默认目录对应的目标标识。
-            "description": "复制到 $CODEX_HOME/skills/<skill-name> 或 ~/.codex/skills/<skill-name>。",  # 默认目录解析规则说明。
+            "description": "复制到 config/agent.json 选择的平台用户 skills 目录。",  # 默认目录解析规则说明。
             "recommended": False,  # 需要显式确认。
         },
         {
@@ -573,6 +580,96 @@ def file_manifest(path_release_dir: Path, *, exclude: set[str] | None = None) ->
         list_manifest.append({"path": str_relative_path, "sha256": sha256_file(path_member)})
 
     # 完整列表可直接与收据 files 字段比较。
+    return list_manifest
+
+# 构造包含目录、隐藏项、字节数和节点类型的源树清单。
+def source_tree_manifest(path_source_root: Path, *, exclude: set[str] | None = None) -> list[dict[str, object]]:
+    """返回不跟随符号链接的源树事实清单。
+
+    参数:
+        path_source_root: 待扫描的源目录根。
+        exclude: 不纳入清单的相对路径集合。
+    返回:
+        包含节点类型、字节数和摘要的稳定清单。
+    异常:
+        路径包含控制字符时抛出带有 Python 错误前缀的 ValueError。
+    """
+
+    # 根或祖先链接不能作为可信源树参与安装事务。
+    if path_has_symbolic_component(path_source_root):
+
+        # 调用方根据空清单阻断复制，而不是猜测真实源目录。
+        return []
+
+    # 排除集合用于移除发布收据等自描述成员。
+    set_excluded = exclude or set()  # 源树清单排除路径。
+
+    # 清单列表承载目录、隐藏项和普通文件的统一节点结构。
+    list_manifest: list[dict[str, object]] = []  # 源树节点清单。
+
+    # lstat 保留隐藏文件、链接和特殊节点的真实类型。
+    for path_member in sorted(path_source_root.rglob("*")):
+
+        # 统一记录 POSIX 相对路径，避免平台分隔符漂移。
+        str_relative_path = path_member.relative_to(path_source_root).as_posix()  # 当前源节点路径
+
+        # 控制字符会破坏清单序列化和安装收据的可审计性。
+        if any(ord(str_character) < 32 or ord(str_character) == 127 for str_character in str_relative_path):
+
+            # 以统一前缀报告非法源树路径，便于人类日志和自动收据同时识别。
+            raise ValueError(
+                "> ERR: [Python] source tree contains a control-character path: "
+                + repr(str_relative_path)
+            )
+
+        # 排除项不参与源摘要，避免收据把自描述文件再次纳入输入。
+        if str_relative_path in set_excluded:
+
+            # 调用方明确排除的成员不进入源摘要。
+            continue
+
+        # 不跟随链接读取目标，避免外部内容进入源清单。
+        object_stat = path_member.lstat()  # 当前源节点 lstat 结果。
+
+        # 单独保存模式位，后续分支不会重复读取文件系统元数据。
+        int_mode = object_stat.st_mode  # 当前节点模式位。
+
+        # 链接节点的类型必须先于目录和文件分支判定。
+        if stat.S_ISLNK(int_mode):
+
+            # 链接只记录目标类型，后续安装门禁负责拒绝。
+            list_manifest.append({"path": str_relative_path, "kind": "symlink", "bytes": 0, "sha256": ""})
+
+            # 链接条目已完整记录，不再落入其他节点分支。
+            continue
+
+        # 目录节点保留空目录和隐藏目录的存在事实。
+        if stat.S_ISDIR(int_mode):
+
+            # 目录条目保存空目录和隐藏目录的存在事实。
+            list_manifest.append({"path": str_relative_path, "kind": "directory", "bytes": 0, "sha256": ""})
+
+            # 目录条目已经完成记录，继续扫描下一个节点。
+            continue
+
+        # 普通文件节点同时绑定字节数和内容摘要。
+        if stat.S_ISREG(int_mode):
+
+            # 当前节点字典保留路径、类型和内容证据。
+            list_manifest.append({
+                "path": str_relative_path,
+                "kind": "file",
+                "bytes": object_stat.st_size,
+                "sha256": sha256_file(path_member),
+            })
+
+            # 普通文件条目已经完成记录，继续扫描下一个节点。
+            continue
+
+        # 设备、管道和其他特殊节点不能被安装事务隐式跟随。
+        list_manifest.append({"path": str_relative_path, "kind": "special", "bytes": 0, "sha256": ""})
+
+    # 稳定路径排序保证同一源树生成同一摘要。
     return list_manifest
 
 # 引用提取器只接受 SKILL.md 代码标记中的发布内部路径。
@@ -739,6 +836,9 @@ def validate_release_completeness(path_release_dir: Path, dict_receipt: dict[str
     # 技能声明以宽容解码读取，完整性判断只依赖可识别路径文本。
     str_skill_text = path_skill_file.read_text(encoding="utf-8", errors="ignore")  # 用于资源引用提取的声明文本。
 
+    # 通用发布包不携带平台解析后的配置；安装投影会从目录生成该路径。
+    set_projected_paths = {"config/" + CONFIG_FILE_NAME}  # 安装投影阶段重新生成的配置路径
+
     # 每个受管引用都必须安全且实际存在于发布包内。
     for str_reference in sorted(referenced_release_paths(str_skill_text)):
 
@@ -752,6 +852,12 @@ def validate_release_completeness(path_release_dir: Path, dict_receipt: dict[str
             list_errors.append(f"release directory SKILL.md referenced path escapes the release root: {str_reference}")
 
             # 不安全引用不得进入后续文件系统判断。
+            continue
+
+        # 仅允许明确登记的安装投影文件在通用包中缺席。
+        if str_reference in set_projected_paths:
+
+            # 投影收据会在安装阶段证明该生成文件的完整内容。
             continue
 
         # 精确文件条目已经证明引用存在。

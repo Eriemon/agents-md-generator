@@ -19,4 +19,4 @@
 ## Exit Criteria
 - The current module drops below `65536` bytes.
 - Release preparation, package intent propagation, branch cleanup, receipt, and immutable-history checks pass unchanged.
-- Strict current-project Python quality, source governance, release gates, and remote regression pytest remain green.
+- Strict current-project Python quality, source governance, release gates, and the complete pytest receipt remain green.

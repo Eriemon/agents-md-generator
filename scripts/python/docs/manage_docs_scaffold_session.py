@@ -39,6 +39,7 @@ from manage_docs_shared import (
     git_history_root,
     git_manager_doc,
     handoff_paths,
+    path_stays_inside_project,
 
     # 共享状态、文本和时间处理函数。
     install_configuration_doc,
@@ -196,12 +197,31 @@ def preflight_docs(project: Path) -> dict[str, Any]:
 def rotate_current_development_if_needed(project: Path) -> str:
     """按需将当前开发记录移动到带时间戳的历史目录。
 
-    参数：project 为项目根目录。
-    返回：归档文件的项目相对路径；无需归档时返回空字符串。
+    参数:
+        project: 项目根目录。
+
+    返回:
+        归档文件的项目相对路径；无需归档时返回空字符串。
+
+    异常:
+        RuntimeError: 当前记录或历史目录越出项目边界时抛出。
     """
 
     # 当前开发记录是判断是否需要轮换的唯一正式入口。
     path_current = project / "docs" / "development" / "DEVELOPMENT.md"  # 当前开发记录
+
+    # 当前记录和历史目录不能通过链接改写归档边界。
+    path_history_root = project / "docs" / "development" / "history_development"  # 开发历史归档根目录。
+
+    # 当前记录与历史根必须同时通过项目边界和符号链接检查。
+    if not path_stays_inside_project(project, path_current) or not path_stays_inside_project(
+        project, path_history_root
+    ):
+
+        # 归档目标不安全时停止，不读取或移动外部文件。
+        raise RuntimeError(
+            "> ERR: [Python] development history path contains a symbolic link or escapes the project"
+        )
 
     # 首次初始化尚无开发记录，因此没有归档对象。
     if not path_current.exists():
@@ -219,7 +239,15 @@ def rotate_current_development_if_needed(project: Path) -> str:
         return ""
 
     # 每次轮换使用独立时间戳目录，避免覆盖旧开发记录。
-    path_history_dir = project / "docs" / "development" / "history_development" / stamp()  # 本次归档目录
+    path_history_dir = path_history_root / stamp()  # 本次归档目录
+
+    # 时间戳子目录创建前再次确认其路径边界。
+    if not path_stays_inside_project(project, path_history_dir):
+
+        # 竞态或异常路径不进入移动操作。
+        raise RuntimeError(
+            "> ERR: [Python] development history target contains a symbolic link or escapes the project"
+        )
 
     # 父目录可能尚未由脚手架创建，需要递归补齐。
     path_history_dir.mkdir(parents=True, exist_ok=True)
@@ -317,12 +345,26 @@ def migrate_legacy_docs(project: Path) -> list[str]:
 def scaffold(project: Path, refresh_existing_state: bool = True) -> dict[str, Any]:
     """幂等初始化文档治理结构并同步目录与记忆状态。
 
-    参数：project 为项目根目录。
-    参数：refresh_existing_state 控制是否强制刷新目录管理资产。
-    返回：包含创建、迁移、清理、记忆和错误信息的结果映射。
+    参数:
+        project: 项目根目录。
+        refresh_existing_state: 是否强制刷新目录管理资产。
+
+    返回:
+        包含创建、迁移、清理、记忆和错误信息的结果映射。
+
+    异常:
+        RuntimeError: docs 或状态路径越出项目边界时抛出。
 
     数组契约：本函数不处理数值数组；shape、dtype 和 unit 均不适用。
     """
+
+    # 脚手架的所有文档写入必须位于真实项目目录树内。
+    if not path_stays_inside_project(project, docs_root(project)):
+
+        # docs 根由链接承载时不能创建或覆盖任何治理文件。
+        raise RuntimeError(
+            "> ERR: [Python] docs root contains a symbolic link or escapes the project"
+        )
 
     # 所有新建路径统一收集，供 CLI 和测试确认幂等结果。
     list_created: list[str] = []  # 本次创建或刷新路径
@@ -335,6 +377,14 @@ def scaffold(project: Path, refresh_existing_state: bool = True) -> dict[str, An
 
         # 当前目录路径由项目根和治理合同中的相对路径组成。
         path_directory = project / rel_path  # 待检查的受管目录
+
+        # 每个目录节点独立检查，防止已有子目录链接绕过 docs 根检查。
+        if not path_stays_inside_project(project, path_directory):
+
+            # 不安全目录不进入 mkdir 或后续文档写入流程。
+            raise RuntimeError(
+                f"> ERR: [Python] docs directory contains a symbolic link: {rel_path}"
+            )
 
         # 已存在目录保持不变，避免幂等调用重复报告创建。
         if not path_directory.exists():
@@ -372,6 +422,14 @@ def scaffold(project: Path, refresh_existing_state: bool = True) -> dict[str, An
         # 文件绝对路径用于存在性判断和 UTF-8 写入。
         path_document = project / rel_path  # 当前默认文档路径
 
+        # 默认文件写入前重新检查其完整父级路径。
+        if not path_stays_inside_project(project, path_document):
+
+            # 任何子路径链接都必须阻断脚手架写入。
+            raise RuntimeError(
+                f"> ERR: [Python] docs file contains a symbolic link: {rel_path}"
+            )
+
         # 已存在文件始终由用户或既有流程拥有，不在脚手架中覆盖。
         if not path_document.exists():
 
@@ -385,7 +443,18 @@ def scaffold(project: Path, refresh_existing_state: bool = True) -> dict[str, An
     dict_state = load_state(project)  # docs 治理状态
 
     # 在加载缺省值后单独记录文件是否原本缺失。
-    bool_state_missing = not (project / STATE_PATH).exists()  # 状态文件原先是否缺失
+    path_state = project / STATE_PATH  # docs 治理状态文件路径。
+
+    # 状态文件路径必须保持在项目真实目录树内。
+    if not path_stays_inside_project(project, path_state):
+
+        # 状态文件链接会把后续 save_state 导向项目外部。
+        raise RuntimeError(
+            "> ERR: [Python] docs state path contains a symbolic link or escapes the project"
+        )
+
+    # 记录状态文件是否缺失，供后续决定是否写入默认治理值。
+    bool_state_missing = not path_state.exists()  # 状态文件原先是否缺失。
 
     # 旧状态没有计数字段时从零开始，保留已有计数。
     dict_state.setdefault("handoff_count", 0)
@@ -1164,10 +1233,13 @@ def repair_history_handoff_candidates(
             continue
 
         # 优先使用文档自身记录的生成时间，缺失时采用文件修改时间。
-        datetime_moment = parse_handoff_generated_at(str_text) or datetime.fromtimestamp(path_entry.stat().st_mtime)  # 命名时间依据
+        datetime_handoff_time: datetime = (  # 命名时间依据
+            parse_handoff_generated_at(str_text)  # 文档生成时间优先
+            or datetime.fromtimestamp(path_entry.stat().st_mtime)  # 文件修改时间回退
+        )
 
         # 唯一路径生成器避免同一秒历史文件互相覆盖。
-        path_target = unique_handoff_history_path(path_history_dir, datetime_moment)  # 规范历史目标
+        path_target = unique_handoff_history_path(path_history_dir, datetime_handoff_time)  # 规范历史目标
 
         # 路径生成结果与当前文件相同表示无需修改。
         if path_target == path_entry:
@@ -1463,7 +1535,7 @@ def sync_git_manager_version(project: Path, version: str) -> str:
     str_current = path_git_manager.read_text(encoding="utf-8")  # Git Manager 当前正文
 
     # 二级标题边界确保只替换 Current Version 受管章节。
-    pattern_current_version = re.compile(  # Current Version 章节模式
+    pattern_current_version: re.Pattern[str] = re.compile(  # Current Version 章节模式
         r"^## Current Version\s*$.*?(?=^## |\Z)",  # 从目标标题匹配到下一二级标题
         flags=re.MULTILINE | re.DOTALL,  # 跨行识别完整章节
     )

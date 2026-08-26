@@ -3,14 +3,18 @@
 # 延迟注解解析，保持直接脚本执行兼容。
 from __future__ import annotations
 
-# 标准库负责命令行、模块加载、环境、正则、子进程和路径处理。
+# 标准库负责命令行、模块加载、环境、正则和路径处理。
 import argparse
 import importlib
 import os
 from pathlib import Path
 import re
+
+# SQLite、子进程和模块类型支撑可选文档门禁与运行时输出。
+import sqlite3
 import subprocess
 import sys
+from types import ModuleType
 from typing import Any
 
 # 旧 numbered shard 名称表示源码拆分迁移未完成。
@@ -140,13 +144,13 @@ def document_registry_errors(path_skill_dir: Path) -> list[str]:
     """
 
     # registry 任务目录已由 load_common_module 加入模块搜索路径。
-    module_document_registry = importlib.import_module("document_registry_common")  # 文档治理共享模块。
+    module_type_module_document_registry: ModuleType = importlib.import_module("document_registry_common")  # 文档治理共享模块。
 
     # 配置缺失或 enabled 非真时可选门禁保持关闭。
     try:
 
         # 持久配置是唯一启用来源。
-        dict_status = module_document_registry.document_governance_status(path_skill_dir)  # 当前文档门禁状态。
+        dict_status = module_type_module_document_registry.document_governance_status(path_skill_dir)  # 当前文档门禁状态。
 
     # 配置存在但损坏时必须阻断而不是按未启用处理。
     except (OSError, ValueError) as object_error:
@@ -161,25 +165,30 @@ def document_registry_errors(path_skill_dir: Path) -> list[str]:
         return []
 
     # 联合注册表模块提供数据库领域异常和当前性检查。
-    module_registry = importlib.import_module("registry_common")  # 联合注册表共享模块。
+    module_type_module_registry: ModuleType = importlib.import_module("registry_common")  # 联合注册表共享模块。
 
     # 文档治理 current 检查和数据库当前性必须共同通过。
     try:
 
         # 职责、重复裁决、接口映射与正文摘要使用同一完整门禁。
-        module_document_registry.validate_document_governance(  # 当前文档治理验证结果。
+        module_type_module_document_registry.validate_document_governance(  # 当前文档治理验证结果。
             path_skill_dir,
             bool_require_current=True,
         )
 
         # 命令与知识联合索引必须与全部 JSON 源同步。
-        connection_database, _ = module_registry.ensure_database_current(path_skill_dir)  # 已验证只读数据库连接。
+        tuple_database_result: tuple[sqlite3.Connection, object] = (  # 数据库当前性检查结果
+            module_type_module_registry.ensure_database_current(path_skill_dir)  # 已验证的数据库连接和附加结果
+        )
 
         # Windows 上后续构建需要及时释放只读句柄。
+        connection_database: sqlite3.Connection = tuple_database_result[0]  # 已验证只读数据库连接
+
+        # 及时释放只读数据库句柄，避免阻塞 Windows 后续构建。
         connection_database.close()
 
     # 文档、JSON、文件和 SQLite 领域错误统一成为预检诊断。
-    except (OSError, ValueError, module_registry.RegistryError) as object_error:
+    except (OSError, ValueError, module_type_module_registry.RegistryError) as object_error:
 
         # 具体底层消息保留给维护者定位。
         return [f"document registry gate failed: {object_error}"]
@@ -229,19 +238,36 @@ def quick_validate_path() -> Path:
     path_skill_root = Path(__file__).resolve().parents[3]  # 当前 agents-md-generator 技能根
 
     # CODEX_HOME 优先保证隔离验证和实际安装使用同一主目录。
-    str_codex_home = os.environ.get("CODEX_HOME", "").strip()  # Codex 主目录覆盖文本
+    from agent_platform import load_agent_config, resolve_agent_home
 
-    # 显式主目录优先于用户默认主目录。
-    path_codex_home = (  # 当前验证使用的 Codex 主目录
-        Path(str_codex_home).expanduser()  # 展开隔离主目录
-        if str_codex_home  # 使用显式 CODEX_HOME
-        else Path.home() / ".codex"  # 回退用户默认主目录
-    )
+    # 读取当前技能对应的平台安装档案。
+    profile_agent = load_agent_config(path_skill_root)  # 当前平台配置档案
+
+    # 环境变量只覆盖平台用户根，不改变技能安装目录规则。
+    str_raw_home = os.environ.get("AGENT_HOME", "").strip() or os.environ.get("CODEX_HOME", "").strip()  # 用户根覆盖文本
+
+    # 解析平台用户根以构造安装态候选位置。
+    path_agent_home = resolve_agent_home(path_skill_root, str_raw_home, profile_agent.agent)  # 平台用户根目录
 
     # 候选顺序先保证 source-bound 验证可复现，再回退用户安装位置。
-    list_candidates = [  # 系统 quick_validate 候选路径
-        path_skill_root.parent / ".system" / "skill-creator" / "scripts" / "quick_validate.py",  # 源码旁隔离系统技能
-        path_codex_home / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py",  # 用户 Codex 安装
+    list_candidates: list[Path] = [  # 系统 quick_validate 候选路径
+        (  # 源码旁隔离系统技能候选
+            path_skill_root.parent  # 源码旁系统技能父目录
+            / ".system"  # 隔离系统技能目录
+            / "skill-creator"  # 通用技能名称
+            / "scripts"  # 系统工具脚本目录
+            / "quick_validate.py"  # 通用快速验证入口
+        ),
+        # 远程环境没有 skill-creator 时使用技能内已通过的结构审计作为安全回退。
+        path_skill_root / "scripts" / "python" / "verify" / "audit_skill.py",  # 技能内结构审计回退入口
+        (  # 用户平台安装候选
+            path_agent_home  # 平台安装候选的用户根起点
+            / profile_agent.skill_install_dir  # 平台技能安装目录
+            / ".system"  # 安装态系统技能目录
+            / "skill-creator"  # 安装态通用技能名称
+            / "scripts"  # 安装态工具脚本目录
+            / "quick_validate.py"  # 安装态快速验证入口
+        ),
     ]
 
     # 首个真实文件成为当前评估使用的通用校验器。
@@ -319,6 +345,15 @@ def main() -> None:
         path_skill_dir,  # 当前 agents-md-generator 源码或发布目录。
         module_agents_common_context.SCRIPT_TASK_BY_NAME,  # 公共脚本任务登记表。
     )
+
+    # 活动路径硬编码门禁必须先于通用校验器执行。
+    from agent_platform_gate import active_platform_hardcoding_gate
+
+    # 当前技能树作为唯一输入执行平台路径硬编码门禁。
+    dict_platform_gate: dict[str, Any] = active_platform_hardcoding_gate((path_skill_dir,))  # 活动平台门禁结果
+
+    # 将平台门禁错误追加到专用预检诊断集合。
+    list_preflight_errors.extend(str_error for str_error in dict_platform_gate["errors"])
 
     # 任一专用诊断都必须在调用外部验证器前阻断。
     if list_preflight_errors:

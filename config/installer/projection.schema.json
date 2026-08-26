@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema_version", "record_classes", "required_columns"],
+  "properties": {
+    "schema_version": {"type": "integer", "minimum": 1},
+    "record_classes": {
+      "type": "array",
+      "const": ["META", "SOURCE", "RUNTIME", "MENU", "TRANSACTION", "OUTPUT", "BATCH_ENTRY", "PLATFORM"]
+    },
+    "required_columns": {
+      "type": "array",
+      "const": ["platform_id", "display_name", "instruction_file", "workspace_config_dir", "generator_state_subdir", "user_home_dir", "skill_install_dir", "home_env", "home_env_mode", "worker_support", "skill_metadata"]
+    }
+  },
+  "additionalProperties": false
+}

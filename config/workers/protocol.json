@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "sha256_characters": "0123456789abcdef",
+  "task_modes": ["read_only", "documentation", "implementation", "release"],
+  "event_types": [
+    "IMPLEMENTATION_START",
+    "CONTROL_BOUNDARY",
+    "CORRECTION_APPLIED",
+    "COMPLETION_REQUESTED",
+    "TEST_RED",
+    "TEST_GREEN",
+    "TEST_FINAL",
+    "GIT_COMMIT_CREATED",
+    "AGENTS_REFRESH_VERIFIED"
+  ],
+  "worker_states": [
+    "not_started",
+    "active",
+    "waiting_receipt",
+    "completed",
+    "scope_rejected",
+    "failed",
+    "disabled",
+    "unconfigured"
+  ],
+  "root_authorization_states": ["enabled", "disabled", "unconfigured"],
+  "platform_contract": {
+    "native_agent": "codex",
+    "required_worker_support": "codex-native"
+  },
+  "canonical_roles": {
+    "tester": "tester_worker",
+    "reviewer": "reviewer_worker",
+    "gardener": "gardener_worker"
+  },
+  "lifecycle_phases": ["INITIAL", "PERIODIC", "CORRECTION", "FINAL"],
+  "phase_roles": {
+    "initial": "INITIAL",
+    "periodic": "PERIODIC",
+    "correction": "CORRECTION",
+    "final": "FINAL"
+  },
+  "phase_by_event": {
+    "IMPLEMENTATION_START": "INITIAL",
+    "CONTROL_BOUNDARY": "PERIODIC",
+    "CORRECTION_APPLIED": "CORRECTION",
+    "COMPLETION_REQUESTED": "FINAL"
+  },
+  "event_roles": {
+    "commit": "GIT_COMMIT_CREATED",
+    "agents_refresh": "AGENTS_REFRESH_VERIFIED",
+    "control_boundary": "CONTROL_BOUNDARY",
+    "implementation_start": "IMPLEMENTATION_START"
+  },
+  "communication": {
+    "actions": ["spawn", "followup"],
+    "required_fields": ["target", "payload"],
+    "target_reuse": "followup_only_after_initial_spawn"
+  },
+  "path_bindings": {
+    "skill_root": "skills/agents-md-generator",
+    "tests_root": "tests",
+    "root_agents": "AGENTS.md",
+    "governance_root": ".agents",
+    "docs_root": "docs",
+    "worker_config_root": "config/workers"
+  },
+  "role_cards": {
+    "tester_worker": "tester.role.json",
+    "reviewer_worker": "reviewer.role.json",
+    "gardener_worker": "gardener.role.json"
+  },
+  "repair_config": "repair.json",
+  "role_card_schema": "role-card.schema.json",
+  "worker_runtime_config": "worker-runtime.json",
+  "worker_runtime_schema": "worker-runtime.schema.json",
+  "zero_dispatch_verdict": "NO_DISPATCH_REQUIRED",
+  "workers": {
+    "tester_worker": {},
+    "reviewer_worker": {},
+    "gardener_worker": {}
+  },
+  "reports": {
+    "tester_failure_report_required_for": ["RED", "BLOCKED"],
+    "rejection_report_required_for": ["SCOPE_REJECTED"],
+    "failure_fields": ["failure_stage", "failure_kind", "first_error", "failure_summary", "failure_count", "failure_tests", "expected_actual", "root_cause_class", "minimal_fix", "evidence", "residual_jobs", "modification_status"],
+    "failure_test_fields": ["test_id", "expected", "actual", "observed", "source"],
+    "failure_evidence_anchors": ["receipt_path", "command_id", "job_id", "request_id", "source_paths", "tests_tree_sha256", "source_manifest_sha256", "exit_code"],
+    "failure_modification_fields": ["product_source_modified", "tests_modified", "git_modified"],
+    "vague_failure_texts": ["failed", "failure", "test failed", "pytest failed", "pytest full suite failed", "测试失败", "失败", "未知错误"],
+    "rejection_fields": [
+      "failure_stage",
+      "failure_kind",
+      "first_error",
+      "failure_summary",
+      "failure_count",
+      "failure_tests",
+      "expected_actual",
+      "root_cause_class",
+      "minimal_fix",
+      "evidence",
+      "residual_jobs",
+      "modification_status",
+      "rejection_stage",
+      "reason_code",
+      "summary",
+      "violations",
+      "allowed_request",
+      "retry_guidance"
+    ]
+  }
+}

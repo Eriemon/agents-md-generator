@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "allowed_project_kind",
+    "bundle_root_relative",
+    "catalog_relative_path",
+    "overrides_relative_path",
+    "projection_relative_path",
+    "projection_schema_relative_path",
+    "projection_generator_relative_path",
+    "projection_record_classes",
+    "projection_required_columns",
+    "manifest_env_relative_path",
+    "manifest_json_relative_path",
+    "manifest_projection_relative_path",
+    "env_projection",
+    "env_path_bases",
+    "source_root_relative",
+    "backend_relative_path",
+    "runtime_relative_path",
+    "backup_directory_name",
+    "batch_entry",
+    "powershell_candidates",
+    "shell_runtime",
+    "shell_utilities",
+    "python_candidates",
+    "hash_commands",
+    "lock_file_name",
+    "staging_prefix",
+    "source_manifest_prefix",
+    "recovery_receipt_suffix",
+    "quarantine_directory_name",
+    "menu",
+    "transaction",
+    "output",
+    "entrypoints",
+    "projection_columns",
+    "catalog_sha256",
+    "projection_sha256"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "minimum": 1},
+    "allowed_project_kind": {"type": "string", "minLength": 1},
+    "bundle_root_relative": {"type": "string", "minLength": 1},
+    "catalog_relative_path": {"type": "string", "minLength": 1},
+    "overrides_relative_path": {"type": "string", "minLength": 1},
+    "projection_relative_path": {"type": "string", "minLength": 1},
+    "projection_schema_relative_path": {"type": "string", "minLength": 1},
+    "projection_generator_relative_path": {"type": "string", "minLength": 1},
+    "projection_record_classes": {"type": "array", "minItems": 8, "items": {"type": "string", "minLength": 1}},
+    "projection_required_columns": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "manifest_env_relative_path": {"type": "string", "minLength": 1},
+    "manifest_json_relative_path": {"type": "string", "minLength": 1},
+    "manifest_projection_relative_path": {"type": "string", "minLength": 1},
+    "env_projection": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"type": "string", "minLength": 1}
+    },
+    "env_path_bases": {
+      "type": "object",
+      "required": ["skill_root", "bundle_root", "bundle_local", "source_root"],
+      "properties": {
+        "skill_root": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "bundle_root": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "bundle_local": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "source_root": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      },
+      "additionalProperties": false
+    },
+    "source_root_relative": {"type": "string", "minLength": 1},
+    "backend_relative_path": {"type": "string", "minLength": 1},
+    "runtime_relative_path": {"type": "string", "minLength": 1},
+    "backup_directory_name": {"type": "string", "minLength": 1},
+    "batch_entry": {"type": "string", "minLength": 1},
+    "powershell_candidates": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "shell_runtime": {"type": "string", "minLength": 1},
+    "shell_utilities": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "python_candidates": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "hash_commands": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "lock_file_name": {"type": "string", "minLength": 1},
+    "staging_prefix": {"type": "string", "minLength": 1},
+    "source_manifest_prefix": {"type": "string", "minLength": 1},
+    "recovery_receipt_suffix": {"type": "string", "minLength": 1},
+    "quarantine_directory_name": {"type": "string", "minLength": 1},
+    "menu": {
+      "type": "object",
+      "required": ["selection_source", "confirmation_required"],
+      "properties": {
+        "selection_source": {"type": "string", "minLength": 1},
+        "confirmation_required": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "transaction": {
+      "type": "object",
+      "required": ["lock_required", "same_volume_required", "preserve_failure_evidence"],
+      "properties": {
+        "lock_required": {"type": "boolean"},
+        "same_volume_required": {"type": "boolean"},
+        "preserve_failure_evidence": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "output": {
+      "type": "object",
+      "required": ["format", "stdout", "shell_format", "powershell_format"],
+      "properties": {
+        "format": {"type": "string", "minLength": 1},
+        "stdout": {"type": "string", "minLength": 1},
+        "shell_format": {"type": "string", "minLength": 1},
+        "powershell_format": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "entrypoints": {"type": "array", "minItems": 3, "items": {"type": "string", "minLength": 1}},
+    "projection_columns": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "catalog_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "projection_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "additionalProperties": false
+}

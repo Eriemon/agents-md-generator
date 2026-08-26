@@ -14,6 +14,9 @@ from typing import Any
 # 受管前缀区分本工具生成的 shim 与用户手写文件。
 MANAGED_PREFIX = "<!-- Managed by agents-md-generator:"  # 兼容文件所有权标记。
 
+# 无符号链接平台使用此最小文本作为可识别的受管入口。
+FALLBACK_SHIM_TEXT = "AGENTS.md\n"  # 无符号链接能力时的最小原生入口。
+
 # 公共模块在 main 执行期加载，导入本模块不会修改 sys.path。
 def load_common_module() -> Any:
     """加载 agents_common 公共模块。
@@ -57,11 +60,20 @@ def is_managed(path_candidate: Path) -> bool:
     返回：符号链接或带受管标记的文件返回 True。
     """
 
-    # 任意符号链接都可由本工具安全重建为 AGENTS.md 入口。
+    # 只有本工具创建的相对 AGENTS.md 链接才具有可替换所有权。
     if path_candidate.is_symlink():
 
-        # 链接目标即使暂时失效也仍属于可替换 shim。
-        return True
+        # 读取链接目标，确认它确实指向本目录的 AGENTS.md。
+        try:
+
+            # 相对链接目标是本工具创建链接的所有权凭据。
+            return os.readlink(path_candidate) == "AGENTS.md"
+
+        # 读取链接失败时必须保守视为非受管文件。
+        except OSError:
+
+            # 无法确认所有权时禁止删除候选路径。
+            return False
 
     # 缺失路径和目录都不属于受管普通文件。
     if not path_candidate.exists() or not path_candidate.is_file():
@@ -75,8 +87,8 @@ def is_managed(path_candidate: Path) -> bool:
         # 只有文件首部的生成器标记能证明所有权。
         str_file_text = path_candidate.read_text(encoding="utf-8", errors="ignore")  # 候选文件文本。
 
-        # 前缀匹配避免把正文中偶然出现的标记当作所有权证明。
-        return str_file_text.startswith(MANAGED_PREFIX)
+        # 前缀匹配或精确的回退入口都能证明文件由本工具管理。
+        return str_file_text.startswith(MANAGED_PREFIX) or str_file_text == FALLBACK_SHIM_TEXT
 
     # 权限、锁定或瞬时文件系统错误均采用保守保留策略。
     except OSError:
@@ -92,18 +104,23 @@ def create_link_or_shim(
 ) -> None:
     """创建或刷新单个代理兼容入口。
 
-    参数：path_target 为兼容文件路径；list_warnings 收集保留或降级信息；list_actions 收集成功链接动作。
-    返回：无；文件系统结果通过两个列表反馈。
+    参数:
+        path_target: 待创建或刷新的兼容文件路径。
+        list_warnings: 收集用户文件保留和链接降级信息。
+        list_actions: 收集成功创建的链接动作。
+    返回:
+        无；文件系统结果通过两个列表反馈。
+    异常:
+        RuntimeError: 目标存在且不属于本工具管理时抛出。
     """
 
-    # 用户手写的同名文件不属于本工具所有，必须原样保留。
+    # 用户手写的同名文件不属于本工具所有，必须 fail closed。
     if path_target.exists() and not is_managed(path_target):
 
-        # 警告进入机器 JSON，不直接污染标准输出协议。
-        list_warnings.append(f"Preserved existing non-managed {path_target.name}")
-
-        # 保留完成后不再尝试链接或覆盖。
-        return
+        # 未托管文件不能被覆盖，避免删除用户内容。
+        raise RuntimeError(
+            f"> ERR: [Python] unmanaged platform shim conflict: {path_target.name}"
+        )
 
     # 旧受管文件或链接先移除，确保目标类型可以切换。
     if path_target.exists() or path_target.is_symlink():
@@ -123,14 +140,112 @@ def create_link_or_shim(
     # 链接不可用时使用显式受管文本，后续运行仍能识别所有权。
     except OSError:
 
-        # 文本 shim 使用 Codex 兼容引用语法指向同目录 AGENTS.md。
-        path_target.write_text(
-            f"{MANAGED_PREFIX} shim -->\n@AGENTS.md\n",
-            encoding="utf-8",
-        )
+        # 文本 shim 只保留目标文件名，兼容不解释特殊引用语法的平台。
+        path_target.write_text(FALLBACK_SHIM_TEXT, encoding="utf-8")
 
         # 降级原因进入 warnings，调用者可区分链接与文本入口。
         list_warnings.append(f"Symlink unavailable; wrote managed shim {path_target.name}")
+
+# 保存单个 shim 的原始类型和内容，供失败事务回滚。
+def _snapshot_path(path_target: Path) -> tuple[str, bytes | str | None]:
+    """保存单个 shim 的原始字节或链接目标。
+
+    参数:
+        path_target: 待保存快照的兼容入口路径。
+    返回:
+        类型标识与原始字节或链接目标组成的二元组。
+    """
+
+    # 符号链接必须保留链接目标，回滚时不能读取其指向文件。
+    if path_target.is_symlink():
+
+        # 保存相对链接目标，确保恢复后仍保持原入口形态。
+        return "symlink", os.readlink(path_target)
+
+    # 普通文件需要保留原始字节，避免编码转换损坏用户内容。
+    if path_target.is_file():
+
+        # 读取文件字节作为事务快照。
+        return "file", path_target.read_bytes()
+
+    # 目标既不是链接也不是普通文件，回滚时应保持缺失。
+    return "missing", None
+
+# 按事务快照恢复单个 shim 的原始状态。
+def _restore_path(
+    path_target: Path,
+    tuple_snapshot: tuple[str, bytes | str | None],
+) -> None:
+    """把 shim 恢复到事务开始时的状态。
+
+    参数:
+        path_target: 需要恢复的兼容入口路径。
+        tuple_snapshot: `_snapshot_path` 保存的类型与内容二元组。
+    返回:
+        无；目标路径恢复为事务开始时的状态。
+    """
+
+    # 清除本轮可能已经写入的受管入口。
+    if path_target.exists() or path_target.is_symlink():
+
+        # 目标已存在时先删除，再按快照类型重建。
+        path_target.unlink()
+
+    # 解包快照，分别处理普通文件和符号链接。
+    str_kind, object_value = tuple_snapshot  # 快照类型和原始内容值。
+
+    # 普通文件使用原始字节恢复，避免重新编码。
+    if str_kind == "file" and isinstance(object_value, bytes):
+
+        # 写回事务开始时保存的文件内容。
+        path_target.write_bytes(object_value)
+
+    # 符号链接使用原始目标恢复链接语义。
+    elif str_kind == "symlink" and isinstance(object_value, str):
+
+        # 重建原始相对链接。
+        os.symlink(object_value, path_target)
+
+# 预检所有会被 shim 事务阻断的用户文件。
+def unmanaged_shim_conflicts(
+    project: Path,
+    set_skip_dirs: set[str],
+) -> list[Path]:
+    """在任何根文件写入前列出会被 shim 事务阻断的用户文件。
+
+    参数:
+        project: 需要递归扫描的项目根目录。
+        set_skip_dirs: 默认跳过的目录名称集合。
+    返回:
+        不属于本工具管理范围、会阻断写入的兼容文件路径列表。
+    """
+
+    # 保存预检发现的用户文件冲突，调用方在写入前统一处理。
+    list_conflicts: list[Path] = []  # 未托管兼容文件冲突列表。
+
+    # 递归查找项目内的所有 AGENTS.md 根文件。
+    for path_agents_file in sorted(project.rglob("AGENTS.md")):
+
+        # 跳过公共排除目录，避免触碰依赖和构建产物。
+        if should_skip(path_agents_file, project, set_skip_dirs):
+
+            # 被排除的根文件不参与冲突预检。
+            continue
+
+        # 每个根文件都需要检查两种兼容入口名称。
+        for str_shim_name in ("CLAUDE.md", "GEMINI.md"):
+
+            # 将兼容入口名称映射到根文件所在目录。
+            path_target = path_agents_file.parent / str_shim_name  # 当前根文件对应的兼容入口。
+
+            # 只报告存在且不属于本工具的目标文件。
+            if (path_target.exists() or path_target.is_symlink()) and not is_managed(path_target):
+
+                # 记录冲突路径，调用方稍后以 fail-closed 方式返回。
+                list_conflicts.append(path_target)
+
+    # 返回稳定顺序的冲突列表，便于机器输出和测试比较。
+    return list_conflicts
 
 # 跳过判定复用公共排除目录，同时允许显式覆盖扫描范围。
 def should_skip(
@@ -170,8 +285,12 @@ def should_skip(
 def main() -> None:
     """执行代理兼容入口创建命令。
 
-    参数：无；命令行可指定项目根和 include-skipped 开关。
-    返回：无；结果通过标准输出 JSON 协议返回。
+    参数:
+        无；命令行可指定项目根和 include-skipped 开关。
+    返回:
+        无；结果通过标准输出 JSON 协议返回。
+    异常:
+        SystemExit: 未托管冲突存在时以非零状态结束。
     """
 
     # 公共模块提供项目校验、跳过目录和 JSON 序列化能力。
@@ -204,7 +323,13 @@ def main() -> None:
     # 警告包含用户文件保留和符号链接降级情况。
     list_warnings: list[str] = []  # 未覆盖文件或文本 shim 摘要。
 
-    # 排序确保跨文件系统运行的动作顺序稳定。
+    # 未托管冲突必须保留原文件，并以 warning 记录而不是覆盖或伪造写入成功。
+    list_errors: list[str] = []  # 未托管文件冲突列表。
+
+    # 先收集全部候选，确保后续冲突预检不会在已写入文件后才发现。
+    list_targets: list[Path] = []  # 待创建兼容入口的完整路径列表。
+
+    # 递归扫描项目根内的所有 AGENTS.md 文件。
     for path_agents_file in sorted(path_project.rglob("AGENTS.md")):
 
         # 默认排除依赖、参考材料和构建产物目录。
@@ -219,21 +344,73 @@ def main() -> None:
             continue
 
         # 每个 AGENTS.md 对应两种外部代理兼容入口。
-        for str_shim_name in ("CLAUDE.md", "GEMINI.md"):
+        list_targets.extend(
+            path_agents_file.parent / str_shim_name
+            for str_shim_name in ("CLAUDE.md", "GEMINI.md")
+        )
 
-            # 入口与 AGENTS.md 保持同目录，内部引用使用相对目标。
-            path_shim_target = path_agents_file.parent / str_shim_name  # 当前待创建的兼容文件。
+    # 冲突预检完成后，缺失或受管 shim 仍可继续处理，且不会出现后置冲突半写入。
+    set_conflict_paths = {  # 预检发现的未托管冲突路径集合。
+        path_target  # 当前候选的目标路径。
+        for path_target in list_targets  # 遍历全部候选入口。
+        if (path_target.exists() or path_target.is_symlink()) and not is_managed(path_target)  # 只保留用户文件。
+    }
 
-            # 所有权检查和平台降级由单文件函数统一处理。
-            create_link_or_shim(path_shim_target, list_warnings, list_actions)
+    # 将预检冲突转换为稳定的非阻断 warning 文本。
+    list_warnings.extend(
+        f"> WARNING: [Python] preserved unmanaged platform shim: {path_target.as_posix()}"  # 用户文件保留事实。
+        for path_target in sorted(set_conflict_paths)  # 按路径稳定输出 warning。
+    )
+
+    # 只为可安全处理的目标保存事务前快照。
+    dict_snapshots = {  # 目标路径到原始状态快照的映射。
+        path_target: _snapshot_path(path_target)  # 保存当前目标的原始状态。
+        for path_target in list_targets  # 遍历全部待处理目标。
+        if path_target not in set_conflict_paths  # 排除未托管冲突路径。
+    }
+
+    # 链接创建事务失败时必须恢复所有已经改写的目标。
+    try:
+
+        # 按候选顺序创建或刷新兼容入口。
+        for path_target in list_targets:
+
+            # 冲突目标保持原样，不进入写入事务。
+            if path_target in set_conflict_paths:
+
+                # 预检已经记录冲突错误，继续处理其它安全目标。
+                continue
+
+            # 创建单个受管链接或文本 shim。
+            create_link_or_shim(path_target, list_warnings, list_actions)
+
+    # 任一文件系统异常都触发统一回滚和错误记录。
+    except Exception as object_error:
+
+        # 恢复本轮已经处理的每个安全目标。
+        for path_target, tuple_snapshot in dict_snapshots.items():
+
+            # 使用事务开始时保存的类型和内容恢复目标。
+            _restore_path(path_target, tuple_snapshot)
+
+        # 保留原始错误文本，供机器结果诊断。
+        list_errors.append(str(object_error))
 
     # 标准输出保持单个 JSON 对象，供其它治理命令组合使用。
     module_agents_common_context.emit_json(
         {
+            "ok": not list_errors,
+            "errors": list_errors,
             "actions": list_actions,  # 已完成链接动作列表。
             "warnings": list_warnings,  # 保留和降级警告列表。
         }
     )
+
+    # 只有真实事务异常才使命令失败，用户文件保留本身不是失败。
+    if list_errors:
+
+        # 结构化错误已经输出，CLI 以非零状态通知调用方。
+        raise SystemExit(1)
 
 # 直接执行脚本时启动 CLI，模块导入保持无文件系统副作用。
 if __name__ == "__main__":

@@ -1,435 +1,63 @@
 """把项目治理配置转换为 AGENTS.md 中可执行的精简规则。"""
 
 # 根级门禁压缩已拆分到同目录模块，避免合同聚合分片超过源码尺寸门禁。
+from pathlib import Path
+
+# 合同渲染器依赖的规则压缩和 worker 配置来源。
 from render_gate_compaction import compact_task_gate_text
+from render_foundation import RELEASE_CORE_WORKTREE_RULE, Rule
 from tester_worker_profile import SINGLE_TASK_AUTHORIZATION_RECEIPT
-
-# 远程工作文件夹状态从画像字段推导为稳定可审计标签。
-def _remote_workspace_state(profile: dict | None) -> str:
-    """从画像状态推导可审计的远程工作文件夹状态标签。
-
-    参数：profile 为可选项目设计画像。
-    返回：profile-missing、disabled、enabled 或 takeover-compressed。
-    """
-
-    # 未提供画像时必须显式显示配置缺失，而不是假设本地或远程已就绪。
-    if not profile:
-
-        # 缺失画像保持 fail-closed 状态标签。
-        return "profile-missing"
-
-    # 远程合同缺失或关闭都归入 fail-closed 的禁用状态。
-    value_contract = profile.get("remote_server_contract", {})  # 原始远程合同
-
-    # 非映射合同按空映射处理，避免读取异常字段。
-    dict_contract = value_contract if isinstance(value_contract, dict) else {}  # 规范化远程合同
-
-    # 关闭状态不允许继续假设远程工作区已验证。
-    if not dict_contract.get("enabled"):
-
-        # 禁用画像保持本地可审计状态。
-        return "disabled"
-
-    # 读取画像提供的显式接管模式值。
-    value_takeover_mode = profile.get("takeover_mode")  # 画像接管模式原始值
-
-    # 读取远程合同提供的显式接管模式值。
-    value_contract_takeover_mode = dict_contract.get("takeover_mode")  # 合同接管模式原始值
-
-    # 合并两个来源的严格布尔接管开关。
-    bool_takeover_mode = (  # 显式接管开关
-        isinstance(value_takeover_mode, bool) and bool(value_takeover_mode)  # 画像布尔接管开关
-        or isinstance(value_contract_takeover_mode, bool) and bool(value_contract_takeover_mode)  # 合同布尔接管开关
-    )  # 是否显式启用接管模式
-
-    # 接管模式配合压缩策略时必须显示压缩接管状态。
-    str_compression_policy = str(profile.get("compression_policy", "")).lower()  # 画像压缩策略文本
-
-    # 该组合是接管压缩的明确画像信号，不会误判普通 enabled。
-    if bool_takeover_mode and "compression" in str_compression_policy:
-
-        # 兼容状态字段命中时保留 fail-closed 远程工作区入口。
-        return "takeover-compressed"
-
-    # 兼容其他字符串或布尔状态字段。
-    list_state_values = [  # 远程状态候选值
-        profile.get("remote_workspace_state"),  # 画像远程工作区状态
-        profile.get("remote_state"),  # 兼容远程状态字段
-        profile.get("mode"),  # 画像运行模式
-        profile.get("takeover"),  # 接管开关
-        profile.get("takeover_mode"),  # 接管模式字段
-        profile.get("takeover_required"),  # 接管要求字段
-        profile.get("compressed"),  # 压缩状态字段
-        profile.get("compression_state"),  # 压缩状态枚举
-        profile.get("takeover_compressed"),  # 接管压缩字段
-        dict_contract.get("workspace_state"),  # 合同远程工作区状态
-        dict_contract.get("mode"),  # 合同运行模式
-        dict_contract.get("takeover"),  # 合同接管开关
-        dict_contract.get("takeover_mode"),  # 合同接管模式
-        dict_contract.get("takeover_required"),  # 合同接管要求
-        dict_contract.get("compressed"),  # 合同压缩状态
-        dict_contract.get("compression_state"),  # 合同压缩状态枚举
-        dict_contract.get("takeover_compressed"),  # 合同接管压缩
-    ]  # 兼容状态字段集合
-
-    # 字符串状态用于识别接管或压缩模式，普通 compression_policy 不在候选中。
-    str_state = " ".join(  # 规范化远程状态文本
-        str(value).strip().lower()  # 单个状态标准化
-        for value in list_state_values  # 遍历状态候选
-        if value is not None  # 排除缺失状态
-    )  # 远程状态文本
-
-    # 接管或压缩状态必须明确显示专用标签。
-    if "takeover" in str_state or "compressed" in str_state:
-
-        # 接管压缩状态保留 fail-closed 远程工作区入口。
-        return "takeover-compressed"
-
-    # 其余启用状态继续要求运行时检查 verified workspace。
-    return "enabled"
-
-# 远程工作文件夹合同在所有画像状态下都保留。
-def remote_workspace_management_rule(profile: dict | None) -> Rule:
-    """渲染所有画像状态都必须保留的远程工作文件夹合同。
-
-    参数：profile 为可选项目设计画像。
-    返回：可写入 Task-specific gates 的 Rule 对象。
-    """
-
-    # 固定三句同时覆盖状态感知、精确路由和规划结构生命周期。
-    str_state = _remote_workspace_state(profile)  # 可审计远程状态标签
-
-    # 规则正文保持固定句子，避免四种画像状态出现语义漂移。
-    str_text = (  # 远程工作文件夹合同正文
-        "- **Remote workspace management:** Remote workspace management is state-aware "
-        "and fail-closed.\n"
-        "- Before remote file operations, resolve the exact task route and require a "
-        "verified workspace; unmatched or unverified states stop.\n"
-        "- Keep deployment, conda/runtime, backup, and archive artifact lifecycle details "
-        "in `docs/dir_manager/planned_structure.json`.\n"
-        f"- Remote workspace state: {str_state}"
-    )  # 远程合同固定正文
-
-    # 低优先级让工作区和唯一测试智能体规则先于普通合同输出。
-    return Rule("remote.workspace-management", "Task-specific gates", str_text, 8)
-
-# 唯一 tester_worker 合同同时声明树哈希、命名和单次授权收据。
-def tester_worker_rule() -> Rule:
-    """渲染唯一 tester_worker、哈希自主确认和命名合同。
-
-    参数：无。
-    返回：可写入 Task-specific gates 的 Rule 对象。
-    """
-
-    # 根 AGENTS 必须指向唯一 TOML，不允许调用方临时替换测试智能体。
-    str_text = (  # 唯一测试智能体合同正文
-        "- **Unique TESTER:** Only the canonical `tester_worker` may own tests/**; "
-        "`~/.codex/agents/tester_worker.toml`. "
-        "Do not delegate tests/** to a generic or second test agent. "
-        "Routine test-hash confirmation is prohibited. "
-        "Agent autonomously confirms when the canonical tester result agrees "
-        "with the authoritative current tests tree or receipt. "
-        "A report-only hash mismatch is corrected to the authoritative value. "
-        "Conflicting or insufficient provenance stops for user review without "
-        "an autonomous rerun. New test files use functional or behavioral "
-        "semantic names; filename stems must not contain digits, including v1, "
-        "v2, 1, 2, part1, and part2.\n"
-        f"- **Task authorization:** {SINGLE_TASK_AUTHORIZATION_RECEIPT}"
-    )  # 唯一测试智能体合同文本
-
-    # 唯一 worker 规则应紧随远程状态合同输出。
-    return Rule("testing.unique-worker", "Task-specific gates", str_text, 9)
-
-# 远程服务器合同只渲染路由入口与失败回退边界。
-def remote_server_contract(profile: dict | None) -> str:
-    """渲染远程服务器路由合同。
-
-    参数:
-        profile: 项目设计配置；为空时不启用远程服务器合同。
-
-    返回:
-        适合写入 AGENTS.md 的远程服务器规则文本，未启用时为空字符串。
-    """
-
-    # 校验 remote_server_contract 的渲染分支条件。
-    if not profile:
-
-        # 返回 remote_server_contract 的 AGENTS 渲染载荷。
-        return ""
-
-    # 整理 remote_server_contract 需要的 contract 渲染片段。
-    contract = profile.get("remote_server_contract", {})  # AGENTS 受管段落渲染输入值
-
-    # 缺少远程合同配置时保持对应受管段落为空。
-    if not contract:
-
-        # 空字符串让上层聚合器自然跳过该合同。
-        return ""
-
-    # 显式 enabled 开关决定是否公开远程路由规则。
-    if not contract.get("enabled"):
-
-        # 关闭状态不应向 AGENTS.md 泄露未启用配置。
-        return ""
-
-    # 返回 compact 入口规则，完整 registry 和 route 表只保留在机器可读 profile。
-    return "\n".join([
-        "- Remote server usage: enabled.",
-        "- Route source: `.agents/agents-control.json` field `remote_server_contract`.",
-        "- Resolve primary and fallback servers from the route source at execution time. "
-        "Do not copy server registry, functions, runner, or absolute remote paths into "
-        "root AGENTS.md.",
-        "- If the matched primary remote server fails `check` or `workspace-check`, "
-        "automatically try registered fallback servers in route order.",
-        "- If no registered task route matches the requested task, stop and update the "
-        "current work folder AGENTS.md/profile before continuing.",
-        "- If the user wants a different task-to-server mapping, update the profile "
-        "through agents-md-generator first; do not bypass the route table ad hoc.",
-    ])
-
-# 发布合同聚合分支、安装来源、历史包和推送限制。
-def release_contract(profile: dict | None, project: Path) -> str:
-    """渲染仓库发布与 Git 管理合同。
-
-    参数:
-        profile: 项目设计配置；为空时不输出发布合同。
-        project: 用于判断脚本指南是否存在的项目根目录。
-
-    返回:
-        适合写入 AGENTS.md 的发布规则文本，缺少配置时为空字符串。
-    """
-
-    # 没有项目配置时，上层不应生成推测性的发布规则。
-    if not profile:
-
-        # 空文本表示发布合同未配置。
-        return ""
-
-    # 分支策略提供受保护分支集合。
-    policy = profile.get("git_branch_policy", {})  # 项目 Git 分支策略
-
-    # 缺省保护主分支和发布分支，避免生成宽松合同。
-    protected = policy.get("protected_branches", ["master", "release"])  # 受保护分支名称
-
-    # Markdown 代码样式让分支名称在规则文本中保持清晰。
-    protected_text = ", ".join(f"`{item}`" for item in protected)  # 渲染后的分支列表
-
-    # 指向当前仓库存在的脚本指南；外部项目只保留安装版指南描述，避免虚构本地路径。
-    path_script_guide = (
-        project / "skills" / "agents-md-generator" / "references" / "script-guide.md"  # 仓库内指南组成路径
-    )  # 仓库内脚本指南候选路径
-
-    # 最终指南文本在源码路径和安装版引用之间选择。
-    str_script_guide = (  # 最终脚本指南引用文本
-        "skills/agents-md-generator/references/script-guide.md"  # 源码仓库内指南引用
-        if path_script_guide.is_file()  # 源码仓库含脚本指南
-        else "the installed agents-md-generator script-guide reference"  # 安装版指南引用
-    )  # 可在目标项目中解析的指南描述
-
-    # 发布规则按稳定顺序输出，便于受管段落漂移检查。
-    return "\n".join([
-        f"- Git management: {git_management_text(profile.get('git_management', 'not specified'))}.",
-        f"- Branch model: {profile.get('branch_model', 'not specified')}; protected branches: {protected_text}.",
-        "- Development branches are allowed only as temporary local work branches.",
-        f"- {RELEASE_CORE_WORKTREE_RULE}",
-        f"- Release details live in `.agents/agents-control.json`, `docs/git_manager/`, "
-        f"and `{str_script_guide}`; root AGENTS.md keeps only blocking rules.",
-        "- Install only from a versioned `dist/<name>-vX.Y.Z/` release directory "
-        "containing a validated `RELEASE_RECEIPT.json`; source directory installs "
-        "are forbidden.",
-        "- Different-version release directories and matching zip files are immutable history by default.",
-        "- Keep the release commit and current `docs/git_manager/CHANGELOG.md` entry together.",
-        "- Do not push to a remote unless the user explicitly asks.",
-    ])
-
-# Git 管理枚举在这里转换为面向执行者的完整描述。
-def git_management_text(value: str) -> str:
-    """把 Git 管理模式转换为可读策略文本。
-
-    参数:
-        value: 配置中的 Git 管理模式。
-
-    返回:
-        已知模式的规范描述；未知值保持原文本。
-    """
-
-    # 保存 mapping 映射，维持 git_management_text 的字段关系。
-    dict_mapping = {
-        "yes-local-only": (  # 本地提交但默认不推送
-            "enabled locally; allow local branches and commits, but do not push "
-            "remotely by default"
-        ),  # 本地 Git 管理模式
-        "no-git-management": (  # 不参与 Git 操作的工作流
-            "disabled for this workflow; do not treat git operations as part of the "
-            "normal execution path"
-        ),  # 禁用 Git 管理模式
-        "read-only": (  # 禁止 Git 写入的兼容模式
-            "legacy read-only mode; do not execute git writes and limit the workflow "
-            "to planning/documentation unless the user overrides"
-        ),  # 只读兼容模式
-        "remote-allowed": "enabled with remote collaboration allowed when the user explicitly asks",  # 用户授权后允许远程协作
-    }
-
-    # 未知模式原样返回，保留前向兼容并避免静默改写配置。
-    return dict_mapping.get(str(value), str(value))
-
-# 工程规则合同只保留会改变代理决策的压缩字段。
-def engineering_rule_contract(profile: dict | None) -> str:
-    """渲染工程规则集选择与压缩策略。
-
-    参数:
-        profile: 项目设计配置；为空时输出安全的未配置合同。
-
-    返回:
-        工程规则集、模式、作用域和兼容策略文本。
-    """
-
-    # 无配置时输出明确的 none 合同，而不是推断工程规则集。
-    if not profile:
-
-        # 安全缺省值要求后续添加工程偏好前先征询用户。
-        return "\n".join([
-            "- Primary rule set: none.",
-            "- Mode: none.",
-            "- Ask the user before adding any book-derived engineering bias to AGENTS.md.",
-            "- Do not paste full book rules into AGENTS.md.",
-        ])
-
-    # 工程合同承载规则集、模式、范围和压缩策略。
-    contract = profile.get("engineering_rule_contract", {})  # 工程规则合同配置
-
-    # 主规则集缺失时明确渲染 none。
-    primary = contract.get("primary", "none")  # 主工程规则集
-
-    # 模式描述规则集如何参与代理决策。
-    mode = contract.get("mode", "none")  # 工程规则启用模式
-
-    # 作用域限制工程规则影响的任务范围。
-    scope = contract.get("scope", "on-demand")  # 工程规则适用范围
-
-    # 汇总 lines，作为 AGENTS 受管段落拼装顺序。
-    list_lines = [
-        f"- Primary rule set: {primary}.",  # 当前主工程规则集
-        f"- Mode: {mode}.",  # 工程规则运行模式
-        f"- Scope: {scope}.",  # 工程规则作用范围
-        f"- Compatibility: {contract.get('compatibility_policy', 'one primary active rule set')}.",  # 规则集兼容策略
-        f"- Compression: {contract.get('compression_policy', 'keep only decision-changing rules')}.",  # 规则压缩策略
-        "- Do not paste full book rules into AGENTS.md; keep full material reference-only.",  # 完整材料引用边界
-    ]
-
-    # 可选备注只在配置存在时追加，避免空行噪声。
-    notes = contract.get("notes")  # 工程规则补充说明
-
-    # 备注作为最后一条规则，不改变核心字段顺序。
-    if notes:
-
-        # 追加 engineering_rule_contract 的 AGENTS 渲染行。
-        list_lines.append(f"- Notes: {notes}.")
-
-    # 聚合后的文本直接进入任务专用门禁段落。
-    return "\n".join(list_lines)
-
-# Skill 项目需要额外公开触发、资源和验证边界。
-def skill_design_contract(profile: dict | None, project: Path) -> str:
-    """渲染 Codex Skill 的设计与验证合同。
-
-    参数:
-        profile: 项目设计配置；非 Skill 项目不会输出该合同。
-        project: 当前项目根目录，保留给路径相关合同扩展使用。
-
-    返回:
-        Skill 触发、资源、渐进披露和验证规则文本。
-    """
-
-    # 该合同只适用于明确标记为 Skill 的项目。
-    if not profile or profile.get("kind") != "skill":
-
-        # 普通项目不渲染 Skill 专属规则。
-        return ""
-
-    # Skill 合同提供触发、资源和验证策略。
-    contract = profile.get("skill_design_contract", {})  # Skill 设计合同配置
-
-    # patterns 同时兼容既有字符串和结构化列表格式。
-    patterns = contract.get("patterns", [])  # Skill 设计模式配置
-
-    # 旧版字符串配置无需再次拼接。
-    if isinstance(patterns, str):
-
-        # 字符串形式已经是最终可展示文本。
-        patterns_text = patterns  # 兼容旧版模式文本
-
-    # 列表配置清理空元素后转为稳定展示文本。
-    else:
-
-        # 列表模式过滤空值后按声明顺序连接。
-        patterns_text = ", ".join(  # 设计模式列表文本
-            str(item) for item in patterns if str(item).strip()  # 有效设计模式条目
-        )  # 列表形式的设计模式文本
-
-    # Skill 合同优先覆盖项目级验证方法。
-    validation_method = contract.get(  # 最终验证方法
-        "validation_method",  # Skill 合同验证方法字段
-        profile.get("validation_method", "not specified"),  # 项目级验证方法回退
-    )  # Skill 验证方法
-
-    # Skill 合同优先覆盖项目级验证粒度。
-    validation_granularity = contract.get(  # 最终验证粒度
-        "validation_granularity",  # Skill 合同验证粒度字段
-        profile.get("validation_granularity", "not specified"),  # 项目级验证粒度回退
-    )  # Skill 验证粒度
-
-    # 空白前向测试策略回退为明确的未配置文本。
-    str_forward_policy = (
-        str(contract.get("forward_testing_policy", "not specified")).strip()  # 原始前向测试策略
-        or "not specified"  # 空策略的显式回退值
-    )  # 前向测试策略
-
-    # Skill 设计字段按执行流程顺序输出。
-    list_lines = [
-        f"- Trigger scenarios: {contract.get('trigger_scenarios', 'not specified')}.",  # 触发场景
-        f"- Design patterns: {patterns_text or 'not specified'}.",  # 设计模式
-        f"- Resource boundaries: {contract.get('resource_plan', 'not specified')}.",  # 资源边界
-        f"- Progressive disclosure: {contract.get('progressive_disclosure_policy', 'not specified')}.",  # 渐进披露策略
-        f"- Validation gates: {contract.get('validation_gates', 'not specified')}.",  # 验证门禁
-        f"- Forward testing: {str_forward_policy}.",  # 前向测试要求
-        f"- Validation method: {validation_method}; granularity: {validation_granularity}.",  # 验证方法与粒度
-        f"- Reference material policy: {contract.get('reference_material_policy', 'temporary inputs only')}.",  # 参考材料保留策略
-    ]
-
-    # Skill 合同字段按声明顺序拼装为 Markdown 列表。
-    return "\n".join(list_lines)
-
-# 会话完成合同固定工作闭环和自然语言默认值。
-def conversation_completion_contract(profile: dict | None) -> str:
-    """渲染开发会话的完成与阻塞报告合同。
-
-    参数:
-        profile: 可选项目配置，用于读取默认会话语言。
-
-    返回:
-        会话完成、验证和阻塞报告规则文本。
-    """
-
-    # profile 缺失时沿用项目默认中文会话约定。
-    default_language = (
-        profile.get("default_conversation_language", "中文")  # profile 会话语言
-        if profile  # 优先读取项目配置
-        else "中文"  # 无 profile 时的默认语言
-    )  # 自然语言回复默认语言
-
-    # 三条规则覆盖完成、语言和证据，不重复全局执行基线。
-    return "\n".join([
-        (
-            f"- Natural-language replies, including `<proposed_plan>` content, use `{default_language}` "
-            "unless the user switches languages; keep technical literals unchanged."
-        ),
-        "- Finish feasible requested work; preserve user changes and the directory contract.",
-        (
-            "- Run narrow then final checks; report blockers, completed files, assumptions, "
-            "skipped checks, and next steps."
-        ),
-    ])
+from agent_platform import load_agent_config
+
+# 双技能路由由独立合同模块提供，渲染器只消费其真实安装态结果。
+from routing_contract import (
+    DEFAULT_LANGUAGE_SKILL_ROUTING_PYTHON,
+    DEFAULT_LANGUAGE_SKILL_ROUTING_SCRIPT,
+    DEFAULT_LANGUAGE_SKILL_ROUTING_SHARED,
+    build_language_skill_routes,
+    readable_skill_is_installed,
+)
+
+# 修改前阅读规则的稳定优先级和样例数量上限。
+READ_RULE_CONFIG = {  # 修改前阅读规则配置。
+    "decisions_priority": 20,  # 决策文档最高优先级。
+    "state_priority": 40,  # 项目状态普通优先级。
+    "hooks_priority": 30,  # hook 与平台治理优先级。
+    "directory_priority": 50,  # 目录覆盖提示优先级。
+    "utility_limit": 6,  # 最多读取六个工具入口。
+    "sample_limit": 4,  # 最多读取四个黄金样例。
+}
+# 从 render_remote_contracts 导入拆分后的公共合同函数。
+from render_remote_contracts import (
+    _remote_workspace_state,
+    remote_workspace_management_rule,
+    remote_upload_boundary_rule,
+    remote_server_contract,
+)
+
+from render_remote_contracts import (
+    remote_gate_rules,
+    workspace_boundary_rule,
+    fast_convergence_rule,
+)
+
+# 从 render_tester_contracts 导入拆分后的公共合同函数。
+from render_tester_contracts import (
+    canonical_worker_state_rule,
+    tester_worker_rule,
+    gardener_worker_rule,
+    reviewer_worker_rule,
+    conversation_completion_contract,
+)
+from manage_worker_state import canonical_worker_id, read_authorized_worker_states
+
+# 从 render_project_contracts 导入拆分后的公共合同函数。
+from render_project_contracts import (
+    release_contract,
+    git_management_text,
+    engineering_rule_contract,
+    skill_design_contract,
+)
 
 # 记忆合同公开权威路径、读写门禁与历史引导命令。
 def memory_contract(profile: dict | None, project: Path) -> str:
@@ -453,13 +81,13 @@ def memory_contract(profile: dict | None, project: Path) -> str:
     value_memory_contract = profile.get("memory_contract", {})  # 原始记忆合同配置
 
     # 非映射合同按空映射处理。
-    contract = (
+    dict_contract = (
         value_memory_contract if isinstance(value_memory_contract, dict) else {}  # 记忆合同映射
     )  # 规范化后的记忆合同映射
 
     # 标记 enabled 判断，控制 memory_contract 的分支走向。
     bool_enabled = bool(  # 兼容新旧记忆启用字段
-        contract.get("enabled", profile.get("memory_enabled", False))  # 新旧启用字段
+        dict_contract.get("enabled", profile.get("memory_enabled", False))  # 新旧启用字段
     )  # 记忆功能启用状态
 
     # enabled 和旧版 memory_enabled 均未开启时跳过渲染。
@@ -468,15 +96,17 @@ def memory_contract(profile: dict | None, project: Path) -> str:
         # 禁用状态不公开记忆命令。
         return ""
 
+    # 构造项目记忆指南的默认相对路径。
+    str_default_guide = (Path("docs") / "memory" / "MEMORY.md").as_posix()  # 记忆指南默认路径
+
     # 指南路径指向项目记忆的人工入口。
-    guide = contract.get("guide", "docs/memory/MEMORY.md")  # 记忆指南路径
+    str_guide = dict_contract.get("guide", str_default_guide)  # 记忆指南路径
 
     # 后端名称让执行者知道权威数据形态。
-    backend = contract.get("storage_backend", "sqlite-plus-jsonl")  # 记忆存储后端
+    str_backend = dict_contract.get("storage_backend", "sqlite-plus-jsonl")  # 记忆存储后端
 
-    # 长版缺省策略压缩为适合根规则的短文本。
-    # 读取策略控制新工作开始前需要加载的记忆范围。
-    str_read_policy = contract.get(  # 最终记忆读取策略
+    # 读取策略控制新工作开始前需要加载的记忆范围，并压缩长版缺省文本。
+    str_read_policy = dict_contract.get(  # 最终记忆读取策略
         "read_policy",  # 读取策略字段名
         "read latest handoff plus relevant docs/memory summaries before implementation",  # 缺省读取策略
     )  # 记忆读取策略
@@ -489,9 +119,8 @@ def memory_contract(profile: dict | None, project: Path) -> str:
             "latest handoff + relevant memory summaries before work"  # 精简读取策略
         )  # 根规则中的压缩读取策略
 
-    # 敏感信息策略明确禁止写入持久记忆的内容。
-    # 敏感性策略决定持久记忆禁止记录的内容。
-    str_sensitivity = contract.get(  # 最终敏感信息策略
+    # 敏感性策略明确禁止写入持久记忆的内容。
+    str_sensitivity = dict_contract.get(  # 最终敏感信息策略
         "sensitivity_policy",  # 敏感信息策略字段名
         "do not store secrets, credentials, or raw local private paths",  # 缺省敏感性策略
     )  # 记忆敏感信息策略
@@ -528,7 +157,7 @@ def memory_contract(profile: dict | None, project: Path) -> str:
 
     # 记忆合同按路径、读取、门禁、历史、查询和敏感性排序。
     return "\n".join([
-        f"- Root: `{contract.get('folder', 'docs/memory')}`; guide: `{guide}`; backend: `{backend}`.",
+        f"- Root: `{dict_contract.get('folder', 'docs/memory')}`; guide: `{str_guide}`; backend: `{str_backend}`.",
         f"- Read {str_read_policy}.",
         f"- Gate with `{str_gate_command}`; if missing, ask before `{str_init_command}`.",
         f"- Historical work runs `{str_bootstrap_command}` for exact-cwd sessions in timestamp order.",
@@ -555,17 +184,20 @@ def documentation_governance_contract(profile: dict | None, project: Path) -> st
         return ""
 
     # 文档合同定义根目录、handoff 和目录管理入口。
-    contract = profile.get("docs_contract", {})  # 文档治理合同配置
+    dict_contract = profile.get("docs_contract", {})  # 文档治理合同配置
 
     # handoff 子合同提供当前交接文件路径。
-    handoff = contract.get("handoff", {})  # 交接文档配置
+    dict_handoff = dict_contract.get("handoff", {})  # 交接文档配置
 
     # 目录管理子合同提供详细文档位置。
-    dir_manager = contract.get("dir_manager", {})  # 目录治理文档配置
+    dict_dir_manager = dict_contract.get("dir_manager", {})  # 目录治理文档配置
+
+    # 构造当前 handoff 文档的默认相对路径。
+    str_default_handoff = (Path("docs") / "handoff" / "HANDOFF.md").as_posix()  # handoff 默认路径
 
     # 当前 handoff 路径在开始与完成规则中复用。
-    str_handoff_path = handoff.get(  # 当前交接文档路径
-        "current", "docs/handoff/HANDOFF.md"  # handoff 当前文件字段
+    str_handoff_path = dict_handoff.get(  # 当前交接文档路径
+        "current", str_default_handoff  # handoff 当前文件字段
     )  # 交接文档的实际读取路径
 
     # 恢复检查用于识别上次会话是否中断。
@@ -599,7 +231,7 @@ def documentation_governance_contract(profile: dict | None, project: Path) -> st
 
     # 文档治理规则保持生命周期顺序，便于执行者逐项遵循。
     list_lines = [
-        f"- Docs root: `{contract.get('root', 'docs')}`; latest handoff is "
+        f"- Docs root: `{dict_contract.get('root', 'docs')}`; latest handoff is "
         f"`{str_handoff_path}`.",
         (
             f"- Before new work: read `{str_handoff_path}`; run `{str_resume_check}`. "
@@ -623,7 +255,7 @@ def documentation_governance_contract(profile: dict | None, project: Path) -> st
             f"handoff."
         ),
         (
-            f"- Dir manager details live in `{dir_manager.get('folder', 'docs/dir_manager')}/`; "
+            f"- Dir manager details live in `{dict_dir_manager.get('folder', 'docs/dir_manager')}/`; "
             f"review outcomes decide whether folder mutation may proceed."
         ),
     ]
@@ -718,17 +350,23 @@ def directory_gate_rules(profile: dict, project: Path) -> tuple[list[Rule], dict
     # 私有设置目录为本地与远程文件提供共同前缀。
     str_settings_folder = dict_settings.get("folder", ".settings")  # 私有设置目录
 
+    # 本地设置默认路径只从 workspace policy 读取，不猜测文件名。
+    str_default_local_settings = ""  # 未配置时保持显式未配置状态
+
     # 本地设置文件缺省落在私有设置目录下。
     str_local_settings = str(  # 最终本地设置路径
         dict_settings.get(  # 本地设置文件配置
-            "local_default_file", f"{str_settings_folder}/project.local.json"  # 本地设置回退
+            "local_default_file", str_default_local_settings  # 本地设置配置值
         )
     ).strip()  # 本地设置文件
+
+    # 远程设置默认路径只从 workspace policy 读取，不猜测文件名。
+    str_default_remote_settings = ""  # remote policy 缺失时保持未配置而不猜测文件名
 
     # 远程设置文件与本地敏感配置保持分离。
     str_remote_settings = str(  # 最终远程设置路径
         dict_settings.get(  # 远程设置文件配置
-            "remote_default_file", f"{str_settings_folder}/project.remote.json"  # 远程设置回退
+            "remote_default_file", str_default_remote_settings  # 远程设置配置值
         )
     ).strip()  # 远程设置文件
 
@@ -745,8 +383,7 @@ def directory_gate_rules(profile: dict, project: Path) -> tuple[list[Rule], dict
     str_settings_rule = (  # 工作区私有设置阻断文本
         f"- **Workspace settings:** keep local config in `{str_local_settings}`, remote "
         f"config in `{str_remote_settings}`, and never copy "
-        f"`{str_settings_folder}/*.local.json` such as "
-        f"`{str_settings_folder}/server_list.local.json` to remote servers."
+        f"`{str_settings_folder}/*.local.json` or other local-only files to remote servers."
     )  # 私有设置不得外传的规则
 
     # 目录变更规则保留审查入口和治理指南位置。
@@ -777,8 +414,7 @@ def directory_gate_rules(profile: dict, project: Path) -> tuple[list[Rule], dict
             Rule(
                 "directory.primary-root",
                 "Task-specific gates",
-                f"- **Project root:** keep feature work inside `{str_primary_root}` "
-                "unless the directory contract is updated.",
+                f"- **Project root:** primary project root `{str_primary_root}`; keep feature work inside it.",
                 10,
             )
         )
@@ -786,144 +422,193 @@ def directory_gate_rules(profile: dict, project: Path) -> tuple[list[Rule], dict
     # 同时返回目录合同，避免通过 profile 写入临时渲染状态。
     return list_rules, dict_directory
 
-# 远程规则聚合器只保留部署边界、结构索引和路由合同。
-def remote_gate_rules(profile: dict, dict_directory: dict) -> list[Rule]:
-    """构建远程部署与服务器路由规则。
+# 仅 Codex 配置允许渲染三类 worker 合同。
+def _codex_worker_rules_enabled(agent_profile: object | None = None) -> bool:
+    """
+    按本次解析的平台画像决定是否生成 Codex worker 合同。
 
     参数:
-        profile: 已确认存在的项目设计配置。
-        dict_directory: 已规范化的目录合同。
-
+        agent_profile: 可选平台画像；为空时从当前技能配置读取。
     返回:
-        远程部署、规划结构和路由入口规则。
+        当前平台是否声明 codex-native worker 支持。
     """
 
-    # 远程规则随启用的部署和路由合同累积。
-    list_rules: list[Rule] = []  # 远程阻断规则
+    # 已有平台画像优先，避免重复读取技能配置文件。
+    if agent_profile is not None:
 
-    # Skill 开发源码默认不能作为部署内容同步到服务器。
-    if str(profile.get("kind", "")).strip().lower() == "skill":
+        # 渲染测试和兼容调用方可能以字典传入平台画像。
+        if isinstance(agent_profile, dict):
 
-        # 部署规则区分开发内容和明确的运行时产物。
-        list_rules.append(
+            # 字典画像同样必须明确声明 Codex-native worker 支持。
+            return agent_profile.get("worker_support", "unsupported") == "codex-native"
+
+        # 只有明确声明 codex-native 才生成 worker 合同。
+        return getattr(agent_profile, "worker_support", "unsupported") == "codex-native"
+
+    # 无显式画像时定位当前技能根目录。
+    path_skill_root = Path(__file__).resolve().parents[3]  # 当前技能配置根目录
+
+    # 读取默认平台配置并判断 worker 支持能力。
+    return load_agent_config(path_skill_root).worker_support == "codex-native"
+
+# 组合所有画像状态都必须保留的基础任务门禁。
+def _base_task_rules(
+    profile: dict | None,
+    agent_profile: object | None = None,
+    project: Path | None = None,
+) -> list[Rule]:
+    """构造不受项目画像关闭影响的基础任务规则。
+
+    参数:
+        profile: 可选项目设计画像。
+        agent_profile: 可选平台画像，用于决定是否加入 worker 合同。
+        project: 可选目标工作文件夹，用于继承根级 worker 授权状态。
+    返回:
+        基础工作区、远程、测试、reviewer 和上传边界规则列表。
+    """
+
+    # 固定边界先进入候选集合，任何画像状态都不能关闭最低保护。
+    list_base_rules = [  # 基础任务门禁集合。
+        workspace_boundary_rule(),  # 所有受管根共享的基础门禁。
+        fast_convergence_rule(),  # 所有受管根共享的快速收束门禁。
+        remote_workspace_management_rule(profile),  # 远程工作文件夹合同。
+        remote_upload_boundary_rule(),  # 逐项远程上传硬门禁。
+    ]
+
+    # 非 Codex 平台不声明不存在的 worker 运行时。
+    if _codex_worker_rules_enabled(agent_profile):
+
+        # 项目配置决定哪些 canonical worker 合同可以进入根文档。
+        dict_worker_states = read_authorized_worker_states(project or Path("."))  # 项目 worker 授权状态
+
+        # 先收集 enabled 角色对应的最小合同，disabled 角色完全省略。
+        list_worker_rules: list[Rule] = []  # 当前启用角色的渲染规则
+
+        # 状态规则只在至少一个角色显式 enabled 时出现。
+        obj_state_rule = canonical_worker_state_rule(project)  # enabled worker 状态规则
+
+        # 只有非空状态规则才需要加入根门禁集合。
+        if obj_state_rule is not None:
+
+            # 记录 enabled worker 的状态摘要，不写入 disabled 角色。
+            list_worker_rules.append(obj_state_rule)
+
+        # tester 合同只在 tester 角色显式 enabled 时渲染。
+        if dict_worker_states.get(canonical_worker_id("tester")) == "enabled":
+
+            # 插入唯一隔离测试智能体合同。
+            list_worker_rules.append(tester_worker_rule())
+
+        # 方案审查合同只接受 reviewer 的显式授权。
+        if dict_worker_states.get(canonical_worker_id("reviewer")) == "enabled":
+
+            # 插入唯一只读方案审查合同。
+            list_worker_rules.append(reviewer_worker_rule())
+
+        # 冗余审查合同只接受 gardener 的显式授权。
+        if dict_worker_states.get(canonical_worker_id("gardener")) == "enabled":
+
+            # 插入唯一只读冗余审查合同。
+            list_worker_rules.append(gardener_worker_rule())
+
+        # 在远程上传规则之前插入已授权角色合同。
+        list_base_rules[3:3] = list_worker_rules  # 插入已授权角色合同
+
+    # 未确认强控制时保留边界，并追加配置缺失停止线。
+    if not profile:
+
+        # 画像收集提示与固定边界通过同一规则渲染器排序和去重。
+        list_base_rules.append(  # 画像缺失提示规则。
             Rule(
-                "remote.no-skill-dev-sync",
-                "Task-specific gates",
-                "- **Remote deployment:** do not sync local skill-development content "
-                "to servers; deploy only explicit runtime/deployment artifacts unless "
-                "the user overrides.",
-                10,
+                "agents-generation.profile-required",  # 无画像提示稳定标识。
+                "Task-specific gates",  # 提示所属章节。
+                "- AGENTS generation: collect a confirmed design profile before claiming "
+                "strict controlled output.",  # 未配置画像时的事实停止线。
+                50,  # 固定边界之后再输出画像收集提示。
             )
         )
 
-    # 远程环境策略决定是否公开规划结构入口。
-    value_environment = dict_directory.get("remote_environment_policy", {})  # 远程环境策略
+    # 返回所有必需的基础任务门禁。
+    return list_base_rules
 
-    # 非映射环境策略按空映射处理。
-    dict_environment = (
-        value_environment if isinstance(value_environment, dict) else {}  # 远程环境映射
-    )  # 规范化环境策略
-
-    # 远程归档策略同样依赖规划结构文件。
-    value_runtime = dict_directory.get("remote_runtime_archive_policy", {})  # 远程归档策略
-
-    # 非映射归档策略按空映射处理。
-    dict_runtime = (
-        value_runtime if isinstance(value_runtime, dict) else {}  # 远程归档映射
-    )  # 规范化归档策略
-
-    # 任一远程策略启用都要求输出规划结构索引。
-    bool_planned_structure = (
-        dict_environment.get("status") == "enabled"  # 远程环境已启用
-        or dict_runtime.get("status") == "enabled"  # 远程归档已启用
-    )  # 是否需要远程规划结构入口
-
-    # 启用任一远程目录策略时要求以 planned_structure 为权威来源。
-    if bool_planned_structure:
-
-        # 根规则只保留结构索引，不复制具体服务器路径。
-        list_rules.append(
-            Rule(
-                "remote.planned-structure",
-                "Task-specific gates",
-                "- **Remote structure:** keep deployment, conda/runtime, backup, and "
-                "archive path details in `docs/dir_manager/planned_structure.json`; root "
-                "AGENTS.md is only the entry rule index.",
-                15,
-            )
-        )
-
-    # 路由合同只在 profile 明确启用时返回文本。
-    str_remote_contract = remote_server_contract(profile)  # 远程服务器路由合同
-
-    # 远程合同启用时作为单个紧凑规则加入。
-    if str_remote_contract:
-
-        # 完整路由表仍留在 profile，根文件只承载入口文本。
-        list_rules.append(
-            Rule("remote.routes", "Task-specific gates", str_remote_contract, 10)
-        )
-
-    # 返回与当前 profile 匹配的远程规则。
-    return list_rules
-
-# 工作区边界由生成器直接拥有，所有受管根都必须继承且不能由画像关闭。
-def workspace_boundary_rule() -> Rule:
-    """构造受管根固定生成的工作区修改边界。
+# 聚合画像启用时需要筛选的详细合同组。
+def _task_contract_groups(
+    profile: dict,
+    project: Path,
+    agent_profile: object | None = None,
+) -> list[tuple[str, str, tuple[str, ...], int]]:
+    """构造发布、工程、文档、记忆和 skill 合同筛选组。
 
     参数:
-        无外部业务参数；规则不读取项目画像开关。
-
+        profile: 已确认的项目设计画像。
+        project: 当前项目根目录。
+        agent_profile: 当前平台解析后的运行时画像。
     返回:
-        包含工作区与外部写入授权边界的根级规则。
+        合同文本、规则前缀、筛选片段和优先级组成的列表。
     """
 
-    # 单条规则完整承载最低保护，避免多个画像分支产生不一致授权语义。
-    return Rule(
-        "workspace-boundary",  # 工作区边界稳定规则标识
-        "Task-specific gates",  # 规则归属任务专用门禁章节
-        "- **Workspace boundary:** current work folder; verified remote-server work folder. "
-        "Changes inside either work folder require no additional confirmation; remote changes require the "
-        "configured task route. Codebase-memory start, index refresh, rebuild, or recovery for either folder and "
-        "its project cache/artifact also needs no additional confirmation. Necessary external reads are "
-        "side-effect-free; every other external write requires one explicit confirmation naming the normalized "
-        "target, action, scope, risks, alternatives, and recovery limits. Target/scope changes invalidate "
-        "confirmation; installed-skill writes always need one.",  # 外部写入单次确认
-        1,  # 最低保护应先于所有画像专用门禁输出
-    )
+    # 每个详细合同声明其根级筛选片段与优先级。
+    return [
+        (
+            release_contract(profile, project),  # 发布合同文本。
+            "release",  # 发布规则 ID 前缀。
+            (
+                "Install only",
+                "Do not push",
+                RELEASE_CORE_WORKTREE_RULE,
+                "Release details live",
+                "Different-version release",
+            ),  # 发布阻断片段。
+            20,  # 发布阻断规则优先级。
+        ),
+        (
+            engineering_rule_contract(profile),  # 工程规则合同文本。
+            "engineering",  # 工程规则 ID 前缀。
+            ("Primary rule set:", "Mode:", "Do not paste full book rules"),  # 工程合同筛选片段。
+            25,  # 工程规则优先级。
+        ),
+        (
+            documentation_governance_contract(profile, project),  # 文档治理合同文本。
+            "docs",  # 文档规则 ID 前缀。
+            ("Before new work", "Start work", "Every completed"),  # 文档阻断片段。
+            20,  # 文档治理优先级。
+        ),
+        (
+            memory_contract(profile, project),  # 记忆合同文本。
+            "memory",  # 记忆规则 ID 前缀。
+            ("Root:", "Read ", "Gate with", "Historical", "Query with"),  # 记忆入口片段。
+            30,  # 记忆规则优先级。
+        ),
+        (
+            skill_design_contract(profile, project, agent_profile),  # Skill 设计合同文本。
+            "skill",  # Skill 规则 ID 前缀。
+            ("Validation gates:", "Forward testing:"),  # Skill 完成门禁片段。
+            25,  # Skill 规则优先级。
+        ),
+    ]
 
 # 任务专用门禁从完整 profile 中筛选高影响执行入口。
-def task_specific_gates(profile: dict | None, project: Path) -> str:
+def task_specific_gates(
+    profile: dict | None,
+    project: Path,
+    agent_profile: object | None = None,
+) -> str:
     """生成会改变执行行为的仓库级阻断入口。
 
     参数:
         profile: 项目设计配置；为空时返回配置缺失提示。
         project: 用于生成仓库内治理命令的项目根目录。
+        agent_profile: 可选平台画像，用于筛选 worker 相关合同。
 
     返回:
         按优先级去重后的任务专用门禁文本。
     """
 
-    # 固定边界先进入候选集合，任何画像状态都不能关闭最低保护。
-    list_base_rules = [
-        workspace_boundary_rule(),  # 所有受管根共享的基础门禁
-        remote_workspace_management_rule(profile),  # 所有状态共享的远程工作文件夹合同
-        tester_worker_rule(),  # 唯一隔离测试智能体和单次授权合同
-    ]
+    # 取得候选规则，不在此处重复展开基础边界。
+    list_base_rules = _base_task_rules(profile, agent_profile, project)  # 规则聚合输入。
 
-    # 未确认强控制时保留边界，并追加不能被误解为已完成治理的入口提示。
+    # 未确认强控制时只压缩基础边界和配置缺失提示。
     if not profile:
-
-        # 画像收集提示与固定边界通过同一规则渲染器排序和去重。
-        list_base_rules.append(
-            Rule(
-                "agents-generation.profile-required",  # 无画像提示稳定标识
-                "Task-specific gates",  # 提示仍归属于任务专用门禁
-                "- AGENTS generation: collect a confirmed design profile before claiming "
-                "strict controlled output.",  # 未配置画像时的事实停止线
-                50,  # 固定边界之后再输出画像收集提示
-            )
-        )
 
         # 压缩流程必须保留完整固定边界和无画像提示。
         return compact_task_gate_text(render_rule_list(list_base_rules))
@@ -970,49 +655,18 @@ def task_specific_gates(profile: dict | None, project: Path) -> str:
             Rule(
                 "codebase-memory.disabled",
                 "Task-specific gates",
-                "- **Codebase memory MCP:** disabled; do not detect, configure, index, or query the MCP; "
-                "keep root `/.codebase-memory/` ignored and untracked.",
+                "- **Codebase memory MCP:** disabled; do not detect, configure, index, or query the graph; "
+                "root `/.codebase-memory/` stays ignored.",
                 5,
             )
         )
 
-    # 每个详细合同声明其根级筛选片段与优先级。
-    list_contract_groups = [
-        (
-            release_contract(profile, project),  # 发布合同文本
-            "release",  # 发布规则 ID 前缀
-            ("Install only", "Do not push", RELEASE_CORE_WORKTREE_RULE,  # 发布阻断片段
-             "Release details live", "Different-version release"),  # 发布来源与历史包片段
-            20,  # 发布阻断规则优先级
-        ),
-        (
-            engineering_rule_contract(profile),  # 工程规则合同文本
-            "engineering",  # 工程规则 ID 前缀
-            ("Primary rule set:", "Mode:", "Do not paste full book rules"),  # 工程合同筛选片段
-            25,  # 工程规则优先级
-        ),
-        (
-            documentation_governance_contract(profile, project),  # 文档治理合同文本
-            "docs",  # 文档规则 ID 前缀
-            ("Before new work", "Start work", "Every completed"),  # 文档阻断片段
-            20,  # 文档治理优先级
-        ),
-        (
-            memory_contract(profile, project),  # 记忆合同文本
-            "memory",  # 记忆规则 ID 前缀
-            ("Root:", "Read ", "Gate with", "Historical", "Query with"),  # 记忆入口片段
-            30,  # 记忆规则优先级
-        ),
-        (
-            skill_design_contract(profile, project),  # Skill 设计合同文本
-            "skill",  # Skill 规则 ID 前缀
-            ("Validation gates:", "Forward testing:"),  # Skill 完成门禁片段
-            25,  # Skill 规则优先级
-        ),
-    ]  # 合同文本、规则类别、筛选片段和优先级
-
     # 同一筛选器保证各合同类别采用一致的根级压缩逻辑。
-    for text, rule_prefix, fragments, priority in list_contract_groups:
+    for text, rule_prefix, fragments, priority in _task_contract_groups(
+        profile,
+        project,
+        agent_profile,
+    ):
 
         # 当前合同的阻断行追加到统一规则集合。
         list_rules.extend(
@@ -1021,6 +675,29 @@ def task_specific_gates(profile: dict | None, project: Path) -> str:
 
     # 根文件只保留阻断条件和入口；完整命令手册留在其权威文档。
     return compact_task_gate_text(render_rule_list(list_rules))
+
+# 将一条修改前阅读事实转换成稳定规则对象。
+def _append_read_rule(
+    list_rules: list[Rule],
+    str_rule_id: str,
+    str_line: str,
+    int_priority: int,
+) -> None:
+    """向修改前阅读规则列表追加一条事实。
+
+    参数:
+        list_rules: 接收规则对象的列表。
+        str_rule_id: 规则稳定标识。
+        str_line: 规则正文。
+        int_priority: 规则排序优先级。
+    返回:
+        None；规则直接追加到 list_rules。
+    """
+
+    # 统一使用同一章节名称和优先级协议构造规则。
+    list_rules.append(  # 追加一条修改前阅读规则。
+        Rule(str_rule_id, "Read before changing", str_line, int_priority)
+    )
 
 # 修改前阅读清单只选取当前项目真实存在的事实。
 def read_before_changing(context: dict) -> str:
@@ -1040,34 +717,59 @@ def read_before_changing(context: dict) -> str:
     for index, str_line in enumerate(key_decisions(context).splitlines()):
 
         # 每个关键决策行保留独立 ID，便于稳定去重。
-        list_rules.append(Rule(f"read.decisions.{index}", "Read before changing", str_line, 20))
+        _append_read_rule(
+            list_rules,
+            f"read.decisions.{index}",
+            str_line,
+            READ_RULE_CONFIG["decisions_priority"],
+        )
 
     # 自动化脚本、质量配置和平台文件帮助代理复用现有入口。
     for index, str_line in enumerate(codebase_state(context).splitlines()):
 
         # 项目状态行在架构决策之后输出。
-        list_rules.append(Rule(f"read.state.{index}", "Read before changing", str_line, 40))
+        _append_read_rule(
+            list_rules,
+            f"read.state.{index}",
+            str_line,
+            READ_RULE_CONFIG["state_priority"],
+        )
 
     # hook 和 GitHub 设置只有被发现时才输出。
     for index, str_line in enumerate(hook_policy(context).splitlines()):
 
         # 钩子规则提醒修改者复用现有提交治理。
-        list_rules.append(Rule(f"read.hooks.{index}", "Read before changing", str_line, 30))
+        _append_read_rule(
+            list_rules,
+            f"read.hooks.{index}",
+            str_line,
+            READ_RULE_CONFIG["hooks_priority"],
+        )
 
     # GitHub 设置作为平台侧治理入口单独排列。
     for index, str_line in enumerate(github_settings(context).splitlines()):
 
         # 平台规则与本地钩子使用相同优先级。
-        list_rules.append(Rule(f"read.github.{index}", "Read before changing", str_line, 30))
+        _append_read_rule(
+            list_rules,
+            f"read.github.{index}",
+            str_line,
+            READ_RULE_CONFIG["hooks_priority"],
+        )
 
     # 目录覆盖提示在具体工具和样例之后生效。
     for index, str_line in enumerate(directory_coverage(context).splitlines()):
 
         # 缺少局部规则的目录以最低优先级提示。
-        list_rules.append(Rule(f"read.directory.{index}", "Read before changing", str_line, 50))
+        _append_read_rule(
+            list_rules,
+            f"read.directory.{index}",
+            str_line,
+            READ_RULE_CONFIG["directory_priority"],
+        )
 
     # 真实 utilities 和 golden samples 以普通 bullet 形式写入，避免裸表格行。
-    for index, str_path in enumerate(context.get("utilities", [])[:6]):
+    for index, str_path in enumerate(context.get("utilities", [])[:READ_RULE_CONFIG["utility_limit"]]):
 
         # 工具入口提醒代理先阅读现有自动化实现。
         list_rules.append(Rule(
@@ -1075,11 +777,11 @@ def read_before_changing(context: dict) -> str:
             "Read before changing",
             f"- Inspect existing automation `{str_path}` before adding new project "
             "tooling.",
-            40,
+            READ_RULE_CONFIG["state_priority"],
         ))
 
     # 黄金样例提供最接近的实现与测试模式。
-    for index, str_path in enumerate(context.get("golden_samples", [])[:4]):
+    for index, str_path in enumerate(context.get("golden_samples", [])[:READ_RULE_CONFIG["sample_limit"]]):
 
         # 样例规则避免代理在已有模式时重新发明结构。
         list_rules.append(Rule(
@@ -1087,7 +789,7 @@ def read_before_changing(context: dict) -> str:
             "Read before changing",
             f"- Use `{str_path}` as the nearest implementation/test pattern before "
             "inventing a new one.",
-            40,
+            READ_RULE_CONFIG["state_priority"],
         ))
 
     # 统一渲染器负责最终排序、过滤和去重。
@@ -1148,9 +850,18 @@ def coding_behavior_baseline(project: Path, profile: dict | None, facts: dict | 
     dict_overrides = load_global_rule_overrides(project, profile)["data"]  # 当前项目规则覆盖
 
     # 读取注释、格式和语言路由策略。
-    policy = dict_overrides.get(  # 编码行为策略
+    dict_policy = dict_overrides.get(  # 编码行为策略
         "coding_behavior", {}  # 编码行为策略字段
     )  # 编码行为策略映射
+
+    # 语言路由文案从当前治理配置读取，避免渲染器复制业务规则枚举。
+    dict_language_routes = dict_policy.get("language_skill_routing", {})  # 语言技能路由配置
+
+    # 非对象配置按空覆盖处理，继续使用受管默认路由。
+    if not isinstance(dict_language_routes, dict):
+
+        # 保持渲染入口对旧配置的兼容，并在验证阶段报告配置缺口。
+        dict_language_routes = {}  # 缺失路由配置的安全回退
 
     # 读取文件命名合同。
     dict_naming = dict_overrides.get("source_governance", {}).get(  # 文件命名治理配置
@@ -1158,43 +869,91 @@ def coding_behavior_baseline(project: Path, profile: dict | None, facts: dict | 
     )
 
     # 保留注释质量规则。
-    comment_quality = str(policy.get("comment_quality", "")).strip()  # 注释质量规则
+    comment_quality = str(dict_policy.get("comment_quality", "")).strip()  # 注释质量规则
 
     # 保留源码格式规则。
-    formatting = str(policy.get("formatting", "")).strip()  # 源码格式规则
+    str_formatting = str(dict_policy.get("formatting", "")).strip()  # 源码格式规则
 
-    # 读取原始语言路由。
-    value_routing = policy.get("language_skill_routing", {})  # 原始语言技能路由
+    # 渲染正文保留 verifier 需要的最小注释与单行压缩合同，即使旧配置缺少兼容短语。
+    str_required_comment = "Comments must explain"  # 注释最小合同
 
-    # 非映射路由按空配置处理。
-    routing = value_routing if isinstance(value_routing, dict) else {}  # 最终语言路由映射
+    # 缺失兼容短语时才扩展当前配置文本。
+    if str_required_comment not in comment_quality:
 
-    # 读取跨语言共同门禁。
-    shared_route = str(routing.get("shared", "")).strip()  # 语言技能共同门禁
+        # 追加兼容短语而不覆盖用户配置的其他注释策略。
+        comment_quality = f"{comment_quality}; {str_required_comment}".strip("; ")  # 兼容后的注释规则
 
-    # 读取 Python 最终所有权。
-    python_route = str(routing.get("python", "")).strip()  # Python 技能路由规则
+    # 评估和根合同都要求显式禁止未经要求的批量 AI 注释。
+    str_batch_comment_rule = "without explicit request"  # 批量注释禁止合同
 
-    # 读取脚本语言路由。
-    script_route = str(routing.get("script", "")).strip()  # 脚本技能路由规则
+    # 缺少批量注释禁止语义时追加稳定的 exact-fragment。
+    if str_batch_comment_rule not in comment_quality:
 
-    # 从 canonical routing contract 读取当前进程真实的四态安装路由。
-    from routing_contract import build_language_skill_routes, readable_skill_is_installed
+        # 只补充缺失门禁，不改写配置提供的其他注释策略。
+        comment_quality = f"{comment_quality}; {str_batch_comment_rule}".strip("; ")  # 补齐批量注释禁止规则
 
-    # 配置文件保存默认合同，运行时安装事实决定实际可执行 owner。
-    tuple_runtime_routes = build_language_skill_routes(  # 调用运行时路由构造器
-        readable_skill_is_installed("readable-python-generator"),  # Python 技能安装事实
-        readable_skill_is_installed("readable-script-generator"),  # 脚本技能安装事实
-    )  # 当前进程的语言技能路由元组
+    # 格式策略同样必须公开不可压缩代码的稳定短语。
+    if "compress code into one line" not in str_formatting:
 
-    # 运行时路由覆盖配置默认值，供后续渲染保留真实所有权。
-    shared_route, python_route, script_route = tuple_runtime_routes  # 当前安装路由
+        # 仅补齐缺失硬门禁，不改变现有格式策略正文。
+        str_formatting = f"{str_formatting}; compress code into one line".strip("; ")  # 兼容后的格式规则
+
+    # 技能项目开发强制保留双技能门禁；普通项目仍按真实安装态渲染。
+    str_profile_kind = str(  # 当前 profile 的项目类型
+        (profile or {}).get(  # 读取标准项目类型字段
+            "kind",  # 标准项目类型键
+            (profile or {}).get("development_type", ""),  # 兼容设计档案类型字段
+        )
+    ).strip().lower()
+
+    # 检查 profile 是否声明了 Skill 专属设计合同。
+    bool_has_skill_contract = bool(  # Skill 合同存在性
+        (profile or {}).get("skill_design_contract")  # Skill 设计合同字段
+    )  # Skill 合同存在状态
+
+    # 具备 Skill 类型或 Skill 合同配置时使用严格双技能投影。
+    bool_skill_project = str_profile_kind == "skill" or bool_has_skill_contract  # 技能项目判定结果
+
+    # 技能项目同样由结构化 route records 生成三条唯一语言合同。
+    if bool_skill_project:
+
+        # Skill 也显式声明两个 owner 可用，避免回到旧版字符串 fallback。
+        tuple_language_routes: tuple[str, str, str] = build_language_skill_routes(  # Skill 项目的三条语言路由。
+            True,  # Skill 项目启用 Python owner。
+            True,  # Skill 项目启用脚本 owner。
+            dict_language_routes,  # 当前 profile 的结构化路由覆盖。
+        )
+
+        # 共同门禁路由控制两个 readable 技能的前置加载要求。
+        str_shared_route: str = tuple_language_routes[0]  # Skill 项目的共同语言门禁。
+
+        # Python 路由固定 Python 代码的最终 owner。
+        str_python_route: str = tuple_language_routes[1]  # Skill 项目的 Python 所有权路由。
+
+        # 脚本路由固定六类脚本目标的最终 owner。
+        str_script_route: str = tuple_language_routes[2]  # Skill 项目的脚本所有权路由。
+
+    # 普通项目根据当前安装态生成可执行路由。
+    else:
+
+        # 检查 Python 可读性技能是否实际安装。
+        bool_python_installed = readable_skill_is_installed("readable-python-generator")  # Python 技能安装状态
+
+        # 查询本地是否具备脚本路由的实际实现。
+        bool_script_installed = readable_skill_is_installed("readable-script-generator")  # 本地脚本技能可用标志
+
+        # 按两个安装状态生成共同门禁及各自语言路由。
+        str_shared_route, str_python_route, str_script_route = build_language_skill_routes(  # 普通项目路由三项结果
+            bool_python_installed,  # 路由构建器收到的 Python 可用性
+            bool_script_installed,  # 路由构建器收到的脚本可用性
+            dict_language_routes,  # 当前项目治理路由文案
+        )  # 当前安装态路由三元组
 
     # 初始化 AGENTS 编码行为行。
     list_lines = [
-        f"- 编码行为配置来源：`{str_config_path}`；用户可手动修改该 JSON 后重新渲染。",  # 配置来源
-        f"- 注释质量：{comment_quality}",  # 注释语义边界
-        f"- {formatting}",  # 源码格式边界
+        f"- Coding behavior source: `{str_config_path}`; edit the JSON and rerender when policy changes.",  # 配置来源
+        f"- Comment quality: {comment_quality}",  # 注释语义边界
+        f"- Formatting: {str_formatting}",  # 源码格式边界
     ]
 
     # 启用命名门禁时把代理执行所需的硬规则直接投影到根规则。
@@ -1204,39 +963,43 @@ def coding_behavior_baseline(project: Path, profile: dict | None, facts: dict | 
         int_max_chars = dict_naming.get("max_stem_chars", 30)  # 文件名词干长度上限
 
         # 固定入口按配置顺序渲染为行内代码。
-        str_exemptions = "、".join(  # Markdown 文件名列表
+        str_exemptions = ", ".join(  # Markdown 文件名列表
             f"`{str(item)}`" for item in dict_naming.get("exemptions", [])  # 按配置遍历例外。
         )
 
         # 命名语法规则追加到编码行为段落。
         list_lines.append(
-            f"- 文件命名：除 {str_exemptions} 外，禁止数字和下划线开头；名称必须总结文件功能，"
-            f"不超过 {int_max_chars} 个英文字符。"
+            f"- File naming: names except {str_exemptions} must not start with digits "
+            f"or underscores; names must describe their function and stay within "
+            f"{int_max_chars} English characters."
         )
 
         # 语义复核不能由正则替代，必须保留独立 Agent 判断证据。
         if dict_naming.get("semantic_review_required"):
 
             # 独立规则明确正则检查之外的 Agent 责任。
-            list_lines.append("- 文件命名语义：变更文件必须通过 Agent 语义复核并保留匹配修订与路径哈希的证据。")
+            list_lines.append(
+                "- File naming semantics: changed files require Agent semantic review "
+                "with matching revision and path-hash evidence."
+            )
 
     # 仅在配置存在时输出共同门禁，避免空标题进入根规则。
-    if shared_route:
+    if str_shared_route:
 
         # 共同门禁追加一次，后续语言路由不得重复该正文。
-        list_lines.append(f"- 语言技能共同门禁：{shared_route}")
+        list_lines.append(f"- Shared language-skill gate: {str_shared_route}")
 
     # 仅在配置存在时输出 Python 路由，避免空规则。
-    if python_route:
+    if str_python_route:
 
         # Python 路由追加在通用编码行为规则之后。
-        list_lines.append(f"- 语言技能路由（Python）：{python_route}")
+        list_lines.append(f"- Language-skill route (Python): {str_python_route}")
 
     # 脚本路由独立判断，允许项目只配置一种语言族。
-    if script_route:
+    if str_script_route:
 
         # 脚本路由作为编码行为段落的最后一项。
-        list_lines.append(f"- 语言技能路由（脚本）：{script_route}")
+        list_lines.append(f"- Language-skill route (scripts): {str_script_route}")
 
     # 按配置顺序连接规则。
     return "\n".join(list_lines)
@@ -1257,43 +1020,46 @@ def script_output_policy(project: Path, profile: dict | None) -> str:
     str_config_path = local_rule_config_path(project, profile)  # 输出策略配置路径
 
     # 脚本输出格式和 Python quiet 行为来自同一策略块。
-    policy = load_global_rule_overrides(project, profile)["data"].get(  # 脚本输出策略
+    dict_policy = load_global_rule_overrides(project, profile)["data"].get(  # 脚本输出策略
         "script_output_policy", {}  # 脚本输出策略字段
     )  # 脚本输出策略映射
 
     # 非映射格式配置按空映射处理并使用安全缺省值。
-    value_formats = policy.get("format", {})  # 原始输出格式配置
+    value_formats = dict_policy.get("format", {})  # 原始输出格式配置
 
     # 格式配置类型异常时采用各通道缺省前缀。
-    formats = value_formats if isinstance(value_formats, dict) else {}  # 最终输出格式映射
+    dict_formats = value_formats if isinstance(value_formats, dict) else {}  # 最终输出格式映射
 
     # Python 子策略控制过程性 INFO 的静默开关。
-    value_python_policy = policy.get("python", {})  # 原始 Python 输出策略
+    value_python_policy = dict_policy.get("python", {})  # 原始 Python 输出策略
 
     # Python 输出配置类型异常时使用 quiet 缺省约定。
-    python_policy = (  # 最终 Python 输出策略
+    dict_python_policy = (  # 最终 Python 输出策略
         value_python_policy if isinstance(value_python_policy, dict) else {}  # Python 输出映射
     )  # 规范化 Python 输出策略
 
     # 过程性日志前缀来自治理 JSON，渲染时只做默认值兜底。
-    info_prefix = formats.get("info", "> INFO: [{kind}]")  # INFO 日志前缀模板
+    str_info_prefix = dict_formats.get("info", "> INFO: [{kind}]")  # INFO 日志前缀模板
 
     # 非致命问题沿用策略配置中的 warning 格式。
-    warning_prefix = formats.get("warning", "> WARNING: [{kind}]")  # 可恢复风险消息格式
+    warning_prefix = dict_formats.get("warning", "> WARNING: [{kind}]")  # 可恢复风险消息格式
 
     # 阻断失败采用 error 格式并保留动态 Kind。
-    error_prefix = formats.get("error", "> ERR: [{kind}]")  # 阻断失败消息格式
+    str_error_prefix = dict_formats.get("error", "> ERR: [{kind}]")  # 阻断失败消息格式
 
     # quiet 开关来自 Python 输出策略，缺省沿用脚本约定。
-    quiet_flag = python_policy.get("quiet_flag", "--quiet")  # Python 静默开关文本
+    str_quiet_flag = dict_python_policy.get("quiet_flag", "--quiet")  # Python 静默开关文本
 
     # 输出合同同时说明配置来源和各通道行为。
     return "\n".join([
-        f"- 配置来源：`{str_config_path}`；`Kind` 列表只从该 JSON 读取，代码不得内置业务枚举。",
+        (
+            f"- Configuration source: `{str_config_path}`; the `Kind` catalog is read "
+            "from this JSON and must not be embedded in code."
+        ),
         (
             f"- "
-            f"格式：`{info_prefix}`、`{warning_prefix}`、`{error_prefix}`；Python "
-            f"过程性 INFO 默认打印，`{quiet_flag}` 关闭 "
-            f"INFO/progress，WARNING 和 ERR 继续可见；机器可读输出不套前缀。"
+            f"Format: `{str_info_prefix}`, `{warning_prefix}`, `{str_error_prefix}`; Python "
+            f"process INFO is enabled by default, `{str_quiet_flag}` disables "
+            f"INFO/progress, WARNING and ERR remain visible, and machine-readable output has no prefix."
         ),
     ])

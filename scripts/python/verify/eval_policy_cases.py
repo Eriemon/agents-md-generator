@@ -31,13 +31,13 @@ PATH_WORKTREE_POLICY_RELATIVE = Path("scripts/python/common/git_worktree_policy.
 
 # 脚本输出策略片段覆盖配置来源、可扩展 Kind 和三类输出格式。
 REQUIRED_SCRIPT_OUTPUT_SNIPPETS = (  # 根规则必须生成的输出策略语义
-    "配置来源：`.agents/global-rule-overrides.json`",  # 输出策略配置来源
-    "`Kind` 列表只从该 JSON 读取",  # Kind 扩展边界
+    "Configuration source:",  # 输出策略配置来源
+    "the `Kind` catalog is read",  # Kind 扩展边界
     "`> INFO: [{kind}]`",  # 过程信息格式
     "`> WARNING: [{kind}]`",  # 警告格式
     "`> ERR: [{kind}]`",  # 错误格式
     "`--quiet`",  # 过程信息静默开关
-    "机器可读输出不套前缀",  # 机器输出例外
+    "machine-readable output has no prefix",  # 机器输出例外
 )
 
 # 解析公开命令输出时统一保留结构化错误，避免空 stdout 隐藏诊断。
@@ -66,11 +66,62 @@ def parse_verify_process(tuple_process: tuple[int, str, str]) -> dict[str, Any]:
     # 空输出路径保留 stderr，确保失败详情不会在评估结果中丢失。
     return {"errors": [str_standard_error]}
 
+# 输出策略评估自建最小 Codex home，避免宿主全局治理状态改变案例结果。
+def isolated_script_policy_environment(path_temporary_root: Path) -> dict[str, str]:
+    """创建脚本输出策略案例使用的隔离代理环境。
+
+    Args:
+        path_temporary_root: 当前案例可自动清理的临时根目录。
+
+    Returns:
+        仅覆盖 CODEX_HOME 的子进程环境映射。
+    """
+
+    # 隔离 Codex home 承载全局基线和可读语言技能存在性证据。
+    path_codex_home = path_temporary_root / "codex-home"  # 当前评估专用 Codex home。
+
+    # 技能目录一次创建后供两个最小入口共同使用。
+    path_skills_root = path_codex_home / "skills"  # 隔离技能发现根目录。
+
+    # 父级目录必须先存在，后续写入不会访问真实用户 home。
+    path_skills_root.mkdir(parents=True)
+
+    # 当前技能发布的全局模板是 verify_agents 正向验证的唯一基线来源。
+    path_global_template = SKILL_DIR / "assets" / "templates" / "global-codex-agents.md"  # 当前全局基线模板。
+
+    # 复制受管模板到隔离 home，不修改真实全局 AGENTS。
+    (path_codex_home / "AGENTS.md").write_text(  # 隔离全局 AGENTS 文件。
+        path_global_template.read_text(encoding="utf-8"),  # 当前技能发布的全局基线正文。
+        encoding="utf-8",  # 隔离规则文件统一编码。
+    )
+
+    # 两个语言技能的根入口足以证明路由能力存在，不复制真实安装内容。
+    for str_skill_name in ("readable-python-generator", "readable-script-generator"):
+
+        # 每个最小技能使用标准 Codex skill 目录布局。
+        path_readable_skill = path_skills_root / str_skill_name  # 当前可读语言技能夹具目录。
+
+        # 创建独立目录后写入根 SKILL.md 存在性证据。
+        path_readable_skill.mkdir()
+
+        # 最小入口只用于安装态发现，不参与技能行为执行。
+        (path_readable_skill / "SKILL.md").write_text(  # 当前可读技能入口文件。
+            f"---\nname: {str_skill_name}\ndescription: isolated eval fixture\n---\n",  # 最小技能元数据。
+            encoding="utf-8",  # 技能入口统一编码。
+        )
+
+    # 同时覆盖两个平台用户根变量，避免宿主 AGENT_HOME 抢占隔离 CODEX_HOME。
+    return {
+        "CODEX_HOME": str(path_codex_home),
+        "AGENT_HOME": str(path_codex_home),
+    }
+
 # 缺失输出策略场景只篡改渲染文本并执行一次验证器。
 def verify_missing_script_output_policy(
     path_agents: Path,
     str_agents_text: str,
     path_project: Path,
+    dict_environment: dict[str, str],
 ) -> tuple[int, dict[str, Any]]:
     """验证删除 Kind 配置来源后根规则会被拒绝。
 
@@ -78,6 +129,7 @@ def verify_missing_script_output_policy(
         path_agents: 待篡改的根 AGENTS 文件。
         str_agents_text: 渲染器生成的完整原始规则文本。
         path_project: verify_agents 检查的隔离项目根。
+        dict_environment: 正向与负向验证共享的隔离环境。
 
     Returns:
         验证器退出码与结构化拒绝报告。
@@ -85,8 +137,8 @@ def verify_missing_script_output_policy(
 
     # 单点替换 Kind 来源规则以隔离缺失策略诊断。
     str_missing_text = str_agents_text.replace(  # 缺少 Kind 来源约束的根规则
-        "`Kind` 列表只从该 JSON 读取",  # 必需配置来源语义
-        "Kind 列表规则已移除",  # 故意不满足合同的替代文本
+        "the `Kind` catalog is read from this JSON",  # 必需配置来源语义
+        "the Kind catalog source is missing",  # 故意不满足合同的替代文本
     )
 
     # 写入篡改规则供真实验证器检查。
@@ -97,6 +149,7 @@ def verify_missing_script_output_policy(
         "verify_agents.py",  # Kind 来源缺失测试的验证入口
         path_project,  # 已删除 Kind 来源语义的项目
         cwd=REPO_ROOT,  # 以当前验证器检查 Kind 来源删除
+        env=dict_environment,  # 缺失 Kind 场景沿用已种入的全局基线
     )
 
     # 返回退出码和统一解析的错误报告。
@@ -109,6 +162,7 @@ def verify_weakened_script_output_config(
     path_config: Path,
     dict_config: dict[str, Any],
     path_project: Path,
+    dict_environment: dict[str, str],
 ) -> tuple[int, dict[str, Any]]:
     """验证移除 warning 引用前缀后配置源会被拒绝。
 
@@ -118,6 +172,7 @@ def verify_weakened_script_output_config(
         path_config: 脚本输出策略配置源路径。
         dict_config: 渲染器写出的原始配置载荷。
         path_project: verify_agents 检查的隔离项目根。
+        dict_environment: 正向与负向验证共享的隔离环境。
 
     Returns:
         验证器退出码与结构化拒绝报告。
@@ -147,6 +202,7 @@ def verify_weakened_script_output_config(
         "verify_agents.py",  # warning 格式弱化测试的验证入口
         path_project,  # 含弱化 warning 格式的项目
         cwd=REPO_ROOT,  # 以当前验证器检查 warning 模板破坏
+        env=dict_environment,  # warning 格式场景沿用同一可读技能发现状态
     )
 
     # 输出格式负向证据同时保留进程状态和配置诊断。
@@ -166,8 +222,14 @@ def collect_script_output_policy_evidence() -> dict[str, Any]:
     # 临时工作区隔离生成规则与两次故意策略弱化。
     with tempfile.TemporaryDirectory() as str_temporary_directory:
 
+        # 临时根同时承载隔离项目和不依赖宿主的 Codex home。
+        path_temporary_root = Path(str_temporary_directory)  # 当前输出策略案例临时根。
+
+        # 所有渲染与验证子进程共享同一最小全局治理环境。
+        dict_environment = isolated_script_policy_environment(path_temporary_root)  # 当前案例隔离环境。
+
         # workspace 子目录模拟含 Python 源码的普通项目。
-        path_project = Path(str_temporary_directory) / "workspace"  # 输出策略评估项目根
+        path_project = path_temporary_root / "workspace"  # 输出策略评估项目根
 
         # 创建项目根后补充用于语言发现的源码目录。
         path_project.mkdir()
@@ -187,6 +249,7 @@ def collect_script_output_policy_evidence() -> dict[str, Any]:
             path_project,  # 等待生成输出政策的隔离项目
             "--write",  # 落盘输出策略规则与配置
             cwd=REPO_ROOT,  # 加载当前输出策略渲染实现
+            env=dict_environment,  # 渲染阶段使用隔离全局治理环境
         )
 
         # 根规则路径服务原文读取与缺失策略篡改。
@@ -204,6 +267,7 @@ def collect_script_output_policy_evidence() -> dict[str, Any]:
             "verify_agents.py",  # 原始输出策略的验证入口
             path_project,  # 尚未执行负向篡改的项目
             cwd=REPO_ROOT,  # 以当前验证器建立正向基线
+            env=dict_environment,  # 正向验证使用隔离全局治理环境
         )
 
         # 删除 Kind 来源语义后固化退出码和拒绝报告。
@@ -211,6 +275,7 @@ def collect_script_output_policy_evidence() -> dict[str, Any]:
             path_agents,  # 删除 Kind 来源语义的规则位置
             str_agents_text,  # 保留全部输出格式的原文
             path_project,  # 缺失策略验证目标
+            dict_environment,  # 负向文本验证复用同一隔离环境
         )
 
         # 配置路径承载渲染器写出的可扩展 Kind 与格式合同。
@@ -230,6 +295,7 @@ def collect_script_output_policy_evidence() -> dict[str, Any]:
             path_config,  # 待改写 warning 模板的配置文件
             dict_config,  # 保留可扩展 Kind 的原始配置
             path_project,  # 弱化配置验证目标
+            dict_environment,  # 负向配置验证复用同一隔离环境
         )
 
     # 临时目录释放后返回纯文本、整数与结构化报告。
@@ -288,7 +354,7 @@ def case_script_output_policy_contract(
         and "Verilator" in dict_script_output_config.get("kinds", []),  # 是否保留可扩展示例 Kind
         "verify_accepts_policy": dict_evidence["verify"].get("errors") == [],  # 原始策略是否被接受
         "verify_rejects_missing_policy": bool(list_missing_errors)  # 删除 Kind 来源后是否产生错误
-        and any("Script Output Policy" in str_item for str_item in list_missing_errors),  # 是否命中输出策略诊断
+        and any("script output policy" in str_item.casefold() for str_item in list_missing_errors),  # 是否命中输出策略诊断
         "verify_rejects_weakened_policy": bool(list_weakened_errors)  # 弱化 warning 格式后是否产生错误
         and any("script_output_policy" in str_item for str_item in list_weakened_errors),  # 是否命中配置键诊断
     }
@@ -356,6 +422,16 @@ def collect_missing_plan_language_report() -> dict[str, Any]:
     # 当前技能版本使负向夹具不会因无关元数据漂移而失败。
     str_current_version = (SKILL_DIR / "VERSION").read_text(encoding="utf-8").strip()  # 当前生成器版本
 
+    # 负向夹具的默认语言从 catalog 读取，避免硬编码 locale alias。
+    dict_language_catalog = json.loads(  # 语言 catalog 权威对象
+        (SKILL_DIR / "config" / "languages.json").read_text(encoding="utf-8")  # 读取技能语言配置
+    )
+
+    # 负向根夹具使用 catalog 默认语言触发 Plan Mode 缺失检查。
+    str_default_language = str(  # 负向夹具 conversation 默认语言 ID
+        dict_language_catalog["defaults"]["conversation"]  # 读取负向夹具默认语言
+    )
+
     # 临时工作区隔离故意不完整的根规则和控制档案。
     with tempfile.TemporaryDirectory() as str_temporary_directory:
 
@@ -371,7 +447,7 @@ def collect_missing_plan_language_report() -> dict[str, Any]:
         # 工程配置声明中文，但不自动补写缺失的根规则文本。
         dict_control_profile = {  # Plan Mode 负向项目控制档案
             "kind": "engineering",  # 工程项目类型
-            "default_conversation_language": "中文",  # 触发中文 proposed_plan 专项校验
+            "default_conversation_language": str_default_language,  # 触发默认语言 proposed_plan 专项校验
         }
 
         # 写入控制档案供验证器读取默认语言要求。
@@ -383,10 +459,10 @@ def collect_missing_plan_language_report() -> dict[str, Any]:
         # 根规则只包含通用自然语言锁，故意缺少 proposed_plan 约束。
         list_agents_lines = [  # Plan Mode 负向根规则文本行
             f"<!-- AGENTS-METADATA: agents_version={str_current_version}; "  # 当前 agents 版本元数据
-            f"generator_version={str_current_version}; default_language=中文 -->",  # 当前生成器与语言元数据
+            f"generator_version={str_current_version}; default_language={str_default_language} -->",  # 当前生成器与语言元数据
             "# AGENTS.md",  # 负向夹具根规则标题
             "## Conversation Completion Contract",  # 通用对话合同标题
-            "- All natural-language responses must use the configured default language (`中文`) "  # 通用语言锁起始片段
+            f"- All natural-language responses must use the configured default language (`{str_default_language}`) "  # 通用语言锁起始片段
             "unless the user explicitly switches languages.",  # 通用语言锁结束片段
             "",  # 负向根规则结尾换行
         ]
@@ -431,8 +507,20 @@ def case_plan_mode_language_lock_contract(
     # 错误列表用于精确匹配专项默认语言规则诊断。
     list_verify_errors = dict_verify.get("errors", [])  # 缺失 Plan Mode 规则错误
 
-    # 一条合并规则同时约束普通回复和 proposed_plan 内容。
-    str_language_lock = "Natural-language replies, including `<proposed_plan>` content, use `中文`"  # 合并语言锁锚点
+    # 正向语言锁单独解析 catalog，避免复用负向夹具的对象状态。
+    dict_language_catalog = json.loads(  # 正向语言合同 catalog 对象
+        (SKILL_DIR / "config" / "languages.json").read_text(encoding="utf-8")  # 读取正向语言合同配置
+    )
+
+    # 正向根语言锁使用同一 catalog ID 对齐现场 AGENTS 元数据。
+    str_default_language = str(  # 正向语言锁 conversation 默认语言 ID
+        dict_language_catalog["defaults"]["conversation"]  # 读取正向语言锁默认值
+    )
+
+    # 合并规则同时约束普通回复与 proposed_plan 的默认语言。
+    str_language_lock = (  # 合并语言锁字符串
+        f"Natural-language replies, including `<proposed_plan>` content, use `{str_default_language}`"  # 现场根语言锁文本
+    )
 
     # 正向检查覆盖通用规则、专项规则、参考文档和扫描实现。
     dict_with_checks = {  # Plan Mode 默认语言合同检查

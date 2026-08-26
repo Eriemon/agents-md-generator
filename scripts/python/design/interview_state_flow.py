@@ -38,6 +38,7 @@ from design_questions import (
     OPTIONAL_EMPTY_KEYS,
     REMOTE_CONFIGURATION_MODE_KEY,
     REMOTE_DIRECTORY_POLICY_KEYS,
+    remote_directory_policy_required,
     REMOTE_INSTALL_CONFIRM_KEY,
     REMOTE_SERVER_TASK_ROUTES_KEY,
 
@@ -76,7 +77,6 @@ from design_remote_gate import (
     remote_choices,
     remote_configure_command_hint,
     remote_dependency_summary,
-    remote_directory_policy_required,
     remote_discover,
 
     # 分隔远程配置导入清单尾段，降低状态机依赖密度。
@@ -116,10 +116,10 @@ def normalize_intent(value: Any) -> str:
     """
 
     # 先做字符串归一化，避免 None、空白和大小写差异污染状态文件。
-    intent = str(value or "write").strip().lower()  # 访谈流程意图
+    str_intent = str(value or "write").strip().lower()  # 访谈流程意图
 
     # 只读流程是唯一的特殊分支，其余输入都回落到写入流程。
-    return "read_only" if intent == "read_only" else "write"
+    return "read_only" if str_intent == "read_only" else "write"
 
 # 执行意图归一：公开该职责的状态转换入口
 def review_policy_for_state(state: dict[str, Any], status: str | None = None) -> str:
@@ -141,28 +141,28 @@ def review_policy_for_state(state: dict[str, Any], status: str | None = None) ->
     """
 
     # 使用显式覆盖状态支持预览分支，不提前修改持久化状态。
-    resolved_status = status or str(state.get("status", "collecting_group"))  # 当前状态名
+    str_resolved_status = status or str(state.get("status", "collecting_group"))  # 当前状态名
 
     # 已完成的只读流程不能再要求写入式复核。
-    if resolved_status == "completed_read_only":
+    if str_resolved_status == "completed_read_only":
 
         # 返回 review_policy_for_state 的访谈状态载荷。
         return "read_only_no_subagent_review"
 
     # 只有显式进入设计复核的状态才要求子智能体审查。
-    if resolved_status in {"awaiting_design_review", "awaiting_review_rework"}:
+    if str_resolved_status in {"awaiting_design_review", "awaiting_review_rework"}:
 
         # 审查策略选择：为用户显式请求的复核状态选择子智能体审查。
         return "subagent_review_required"
 
     # 已完成写入仅在携带本轮设计审查证据时标记为显式审查流程。
-    if resolved_status == "completed" and DESIGN_REVIEW_KEY in state.get("answers", {}):
+    if str_resolved_status == "completed" and DESIGN_REVIEW_KEY in state.get("answers", {}):
 
         # 审查策略选择：保留用户显式请求审查的完成证据。
         return "user_requested_subagent_review"
 
     # 默认完成态不因任务复杂度或写入意图自动要求审查智能体。
-    if resolved_status == "completed":
+    if str_resolved_status == "completed":
 
         # 审查策略选择：写入已完成且未请求子智能体审查。
         return "write_no_subagent_review"
@@ -180,12 +180,62 @@ def review_policy_for_state(state: dict[str, Any], status: str | None = None) ->
 def state_path(project: Path) -> Path:
     """返回设计访谈状态文件在项目内的固定位置。
 
-    参数：project 为项目根目录。
-    返回：项目根下的状态文件路径。
+    参数:
+        project: 项目根目录。
+
+    返回:
+        项目根下的状态文件路径。
+
+    异常:
+        RuntimeError: 项目根为符号链接或状态路径越界、含符号链接时抛出。
     """
 
+    # 项目根和状态路径必须保持在同一真实目录树内。
+    path_project_absolute = project.absolute()  # 当前项目的绝对路径锚点。
+
+    # 解析项目根，供后续路径边界比较使用。
+    path_project_resolved = path_project_absolute.resolve()  # 当前项目的真实路径锚点。
+
+    # 项目根本身若是符号链接，无法证明后续写入目标仍属于当前项目。
+    if path_project_absolute != path_project_resolved:
+
+        # 符号链接项目根不能作为状态写入的可信边界。
+        raise RuntimeError("> ERR: [Python] interview state project root must not be a symbolic link")
+
     # 状态文件路径由共享常量控制，避免 CLI 和恢复流程写入不同位置。
-    return project / STATE_PATH
+    path_state = path_project_absolute / STATE_PATH  # 项目内的访谈状态文件路径。
+
+    # 解析后的目标必须落在项目根下，拒绝常量或目录结构越界。
+    try:
+
+        # 通过真实路径相对关系验证状态文件没有越出项目根。
+        path_state.resolve(strict=False).relative_to(path_project_resolved)
+
+    # 越界路径必须转换为带治理前缀的明确错误。
+    except ValueError as error:
+
+        # 记录状态路径越界，阻止后续任何写入动作。
+        raise RuntimeError("> ERR: [Python] interview state path escapes project root") from error
+
+    # 已存在的每一级目录都不能通过符号链接跳出项目边界。
+    path_cursor = path_project_resolved  # 逐级检查时使用的真实路径游标。
+
+    # 逐级检查状态路径的既有目录组件。
+    for str_part in path_state.relative_to(path_project_absolute).parts:
+
+        # 把当前相对组件加入真实路径游标。
+        path_cursor /= str_part  # 将当前路径组件并入边界检查游标。
+
+        # 发现符号链接组件时立即阻断状态写入。
+        if path_cursor.is_symlink():
+
+            # 公开具体组件名称，便于定位不可信边界。
+            raise RuntimeError(
+                f"> ERR: [Python] interview state path contains symbolic component: {str_part}"
+            )
+
+    # 返回经过项目根和符号链接检查的状态文件路径。
+    return path_state
 
 # 状态路径定位：公开该职责的状态转换入口
 def read_state(project: Path) -> dict[str, Any] | None:
@@ -244,10 +294,13 @@ def write_state(project: Path, state: dict[str, Any]) -> Path:
     """
 
     # 状态目录可能在首次访谈时尚未创建。
-    path_state = state_path(project)  # 状态快照写入：保存当前分支产生的数据
+    path_state = state_path(project)  # 状态快照写入：保存当前分支产生的数据。
 
     # 创建父目录只影响治理状态目录，不改变项目源码结构。
     path_state.parent.mkdir(exist_ok=True)
+
+    # mkdir 后重新确认目录未被替换，避免把状态写入外部链接目标。
+    path_state = state_path(project)  # mkdir 后重新确认的状态文件路径。
 
     # 每次持久化都刷新时间戳，用于恢复流程识别最新进度。
     state["updated_at"] = now_iso()  # 访谈状态值
@@ -866,28 +919,28 @@ def update_groups_after_common_confirmation(state: dict[str, Any]) -> None:
     """
 
     # 明确该赋值在设计访谈状态流程中的业务用途。
-    kind = str(state.get("answers", {}).get("development_type", "")).strip()  # 项目类型确认：承载跨轮次累积的用户回答
+    str_kind = str(state.get("answers", {}).get("development_type", "")).strip()  # 项目类型确认：承载跨轮次累积的用户回答
 
     # 接管访谈使用异常仓库问题组，普通访谈使用标准问题组。
-    if kind not in {"skill", "engineering"}:
+    if str_kind not in {"skill", "engineering"}:
 
         # 项目类型确认：拒绝继续处理已经确认的非法状态
         raise ValueError("> ERR: [Python] development_type must be skill or engineering after common confirmation")
 
     # 项目类型确认：建立后续状态判定所需的具体中间量
-    state["kind"] = kind  # 项目类型确认：预留等待用户确认的项目类型
+    state["kind"] = str_kind  # 项目类型确认：预留等待用户确认的项目类型
 
     # 项目类型确认：依据当前合同条件选择后续状态分支
     if str(state.get("mode", "interactive")) == "takeover":
 
         # 根据已确认类型装载接管模式专用问题组。
-        state["groups"] = takeover_groups_for(kind)  # 项目类型确认：保存当前分支产生的数据
+        state["groups"] = takeover_groups_for(str_kind)  # 项目类型确认：保存当前分支产生的数据
 
     # 普通访谈选择对应项目类型的标准问题组。
     else:
 
         # 标准模式按工程类型装载常规问题组。
-        state["groups"] = groups_for(kind)  # 用户类型对应的普通问题组序列
+        state["groups"] = groups_for(str_kind)  # 用户类型对应的普通问题组序列
 
 # 项目类型确认：公开该职责的状态转换入口
 def validate_group_answers(payload: dict[str, Any], expected_keys: list[str]) -> list[str]:
@@ -925,16 +978,16 @@ def validate_group_answers_with_optional(
     list_errors: list[str] = []  # 可选回答校验：汇总本次回答校验发现的错误
 
     # 先识别合同之外的额外字段。
-    extra = sorted(set_provided_keys - set_expected)  # 实际字段减去允许字段后的稳定排序结果
+    list_extra = sorted(set_provided_keys - set_expected)  # 实际字段减去允许字段后的稳定排序结果
 
     # 再识别完全没有提交的必填字段。
     missing = sorted(set_required - set_provided_keys)  # 必填字段减去实际字段后的稳定排序结果
 
     # 可选回答校验：依据当前合同条件选择后续状态分支
-    if extra:
+    if list_extra:
 
         # 追加 validate_group_answers_with_optional 的访谈诊断。
-        list_errors.append(f"out-of-group answers are not allowed for this step: {', '.join(extra)}")
+        list_errors.append(f"out-of-group answers are not allowed for this step: {', '.join(list_extra)}")
 
     # 逐项检查 validate_group_answers_with_optional 访谈候选。
     for key in missing:
@@ -974,7 +1027,7 @@ def answer_group(project: Path, state: dict[str, Any], payload: dict[str, Any]) 
     list_group_ids = current_group_ids(state)  # 问题组回答提交：取得当前问题组的问题标识列表
 
     # 问题标识先转换为载荷字段合同。
-    expected_keys = question_ids_to_keys(list_group_ids)  # 当前问题组允许提交的回答键
+    list_expected_keys = question_ids_to_keys(list_group_ids)  # 当前问题组允许提交的回答键
 
     # 合并历史回答仅用于计算条件必填规则，尚不修改持久化状态。
     dict_merged_answers = dict(state.get("answers", {}))  # 问题组回答提交：承载跨轮次累积的用户回答
@@ -983,21 +1036,21 @@ def answer_group(project: Path, state: dict[str, Any], payload: dict[str, Any]) 
     dict_merged_answers.update(payload)
 
     # 默认所有当前问题都必填，随后按远程策略收窄。
-    list_required_keys = list(expected_keys)  # 问题组回答提交：把问题标识转换为允许提交的回答键
+    list_required_keys = list(list_expected_keys)  # 问题组回答提交：把问题标识转换为允许提交的回答键
 
     # 问题组回答提交：依据当前合同条件选择后续状态分支
     if (
-        any(key in expected_keys for key in REMOTE_DIRECTORY_POLICY_KEYS)
+        any(key in list_expected_keys for key in REMOTE_DIRECTORY_POLICY_KEYS)
         and not remote_directory_policy_required(dict_merged_answers)
     ):
 
         # 未启用远程目录治理时排除相应条件字段。
-        list_required_keys = [key for key in expected_keys if key not in REMOTE_DIRECTORY_POLICY_KEYS]  # 过滤后的实际必填键
+        list_required_keys = [key for key in list_expected_keys if key not in REMOTE_DIRECTORY_POLICY_KEYS]  # 过滤后的实际必填键
 
     # 在写入状态前完整校验本轮回答载荷。
     list_errors = validate_group_answers_with_optional(  # 当前问题组的完整回答诊断
         payload,  # 本轮原始回答
-        expected_keys,  # 当前组允许字段
+        list_expected_keys,  # 当前组允许字段
         list_required_keys,  # 条件过滤后的必填字段
     )
 
@@ -1011,28 +1064,28 @@ def answer_group(project: Path, state: dict[str, Any], payload: dict[str, Any]) 
         raise SystemExit(1)
 
     # 问题组回答提交：为未启用的远程目录项填入禁用默认值
-    answers = state.setdefault("answers", {})  # 可原位合并本轮结果的累计回答字典
+    dict_answers = state.setdefault("answers", {})  # 可原位合并本轮结果的累计回答字典
 
     # 校验通过后才把回答合并进持久化对象。
-    answers.update(payload)
+    dict_answers.update(payload)
 
     # 远程目录策略未启用时补齐四个兼容禁用值。
     if (
-        any(key in expected_keys for key in REMOTE_DIRECTORY_POLICY_KEYS)
-        and not remote_directory_policy_required(answers)
+        any(key in list_expected_keys for key in REMOTE_DIRECTORY_POLICY_KEYS)
+        and not remote_directory_policy_required(dict_answers)
     ):
 
         # Conda 环境目录不参与远程治理。
-        answers.setdefault("remote_conda_environment_layout", "disabled")
+        dict_answers.setdefault("remote_conda_environment_layout", "disabled")
 
         # 活跃运行产物目录采用禁用占位值。
-        answers.setdefault("remote_run_artifact_active_layout", "disabled")
+        dict_answers.setdefault("remote_run_artifact_active_layout", "disabled")
 
         # 备份运行产物目录同步保持关闭。
-        answers.setdefault("remote_run_artifact_backup_layout", "disabled")
+        dict_answers.setdefault("remote_run_artifact_backup_layout", "disabled")
 
         # 自动归档触发器在关闭策略下不可启用。
-        answers.setdefault("remote_run_archive_trigger", "disabled")
+        dict_answers.setdefault("remote_run_archive_trigger", "disabled")
 
     # 提交完成后等待用户对整组回答进行确认。
     state["status"] = "awaiting_group_confirmation"  # 问题组回答提交：等待用户确认刚提交的问题组
@@ -1072,10 +1125,10 @@ def answer_remote_install_confirmation(project: Path, state: dict[str, Any], pay
     """
 
     # 说明该控制语句在设计访谈状态流程中的分支职责。
-    remote_enabled = payload.get(USE_REMOTE_SERVER_KEY)  # 用户提交的远程能力开关原值
+    value_remote_enabled = payload.get(USE_REMOTE_SERVER_KEY)  # 用户提交的远程能力开关原值
 
     # 仅布尔 false 表示用户明确关闭远程能力。
-    if isinstance(remote_enabled, bool) and not remote_enabled:
+    if isinstance(value_remote_enabled, bool) and not value_remote_enabled:
 
         # 远程安装确认：用户关闭远程能力后继续本地访谈
         return disable_remote_gate_and_continue(project, state)
@@ -1099,13 +1152,13 @@ def answer_remote_install_confirmation(project: Path, state: dict[str, Any], pay
     if payload[REMOTE_INSTALL_CONFIRM_KEY]:
 
         # 用户同意安装时更新门禁确认标志。
-        gate = remote_gate_payload(state)  # 远程安装确认：读取远程门禁的持久化载荷
+        dict_gate = remote_gate_payload(state)  # 远程安装确认：读取远程门禁的持久化载荷
 
         # 远程安装确认：建立后续状态判定所需的具体中间量
-        gate["install_confirmed"] = True  # 远程安装确认：确认用户已授权安装远程依赖
+        dict_gate["install_confirmed"] = True  # 远程安装确认：确认用户已授权安装远程依赖
 
         # 将更新后的安装授权写回状态载荷。
-        set_remote_gate_payload(state, gate)
+        set_remote_gate_payload(state, dict_gate)
 
         # 安装授权完成后等待外部安装完成信号。
         state["status"] = "awaiting_remote_install_completion"  # 远程安装确认：等待远程依赖安装完成证据
@@ -1143,19 +1196,19 @@ def answer_remote_configuration_confirmation(
     """
 
     # 显式关闭远程能力时立即返回本地访谈路径。
-    remote_enabled = payload.get(USE_REMOTE_SERVER_KEY)  # 配置阶段收到的远程能力开关
+    value_remote_enabled = payload.get(USE_REMOTE_SERVER_KEY)  # 配置阶段收到的远程能力开关
 
     # 明确禁用时清理门禁，缺失值仍由配置合同处理。
-    if isinstance(remote_enabled, bool) and not remote_enabled:
+    if isinstance(value_remote_enabled, bool) and not value_remote_enabled:
 
         # 远程配置确认：用户关闭远程能力后继续本地访谈
         return disable_remote_gate_and_continue(project, state)
 
     # 远程配置确认：建立后续状态判定所需的具体中间量
-    mode = str(payload.get(REMOTE_CONFIGURATION_MODE_KEY, "")).strip().lower()  # 远程配置确认：记录用户选择的远程配置方式
+    str_mode = str(payload.get(REMOTE_CONFIGURATION_MODE_KEY, "")).strip().lower()  # 远程配置确认：记录用户选择的远程配置方式
 
     # cancel 仅取消本次配置，不等价于关闭远程能力。
-    if mode not in {"guided", "manual", "cancel"}:
+    if str_mode not in {"guided", "manual", "cancel"}:
 
         # 远程配置确认：将校验错误输出到机器可读协议
         emit_json(
@@ -1170,7 +1223,7 @@ def answer_remote_configuration_confirmation(
         raise SystemExit(1)
 
     # 远程配置确认：依据当前合同条件选择后续状态分支
-    if mode == "cancel":
+    if str_mode == "cancel":
 
         # 取消配置时构造可恢复的阻断说明。
         list_errors = [  # 远程配置未完成时返回给交互层的阻断原因
@@ -1185,13 +1238,13 @@ def answer_remote_configuration_confirmation(
         raise SystemExit(1)
 
     # 读取现有门禁载荷以保留发现和候选证据。
-    gate = remote_gate_payload(state)  # 远程配置确认：读取远程门禁的持久化载荷
+    dict_gate = remote_gate_payload(state)  # 远程配置确认：读取远程门禁的持久化载荷
 
     # 在原载荷中登记 guided 或 manual 选择。
-    gate["configuration_mode"] = mode  # 后续配置步骤采用的执行模式
+    dict_gate["configuration_mode"] = str_mode  # 后续配置步骤采用的执行模式
 
     # 将配置模式与已有门禁证据一并写回主状态。
-    set_remote_gate_payload(state, gate)
+    set_remote_gate_payload(state, dict_gate)
 
     # 模式确认完成后等待实际配置完成证据。
     state["status"] = "awaiting_remote_configuration_completion"  # 远程配置确认：等待远程服务器配置完成证据
